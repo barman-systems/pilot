@@ -7,7 +7,6 @@ on:
       - main
     paths:
       - 'test/ai-full-customer-journey-v2.mjs'
-      - 'test/run-ai-full-customer-journey-v2.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -31,7 +30,7 @@ permissions:
 
 concurrency:
   group: dabbir-ai-full-customer-journey
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   full-customer-journey:
@@ -45,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -58,7 +57,7 @@ jobs:
           npx playwright install --with-deps webkit
 
       - name: Run AI full customer journey against production
-        run: node test/run-ai-full-customer-journey-v2.mjs
+        run: node test/ai-full-customer-journey-v2.mjs
 
       - name: Publish journey summary
         if: always()
@@ -82,7 +81,7 @@ jobs:
 
       - name: Upload journey evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dabbir-ai-customer-journey-evidence
           path: |
