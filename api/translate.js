@@ -2,7 +2,9 @@ import { generateText } from 'ai';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, requireSameOrigin } from './_auth-core.js';
 import { attachCorrelation, classifyFailure, correlationId, logEvent } from './_observability.js';
 
-const MODEL = process.env.DABBIR_TRANSLATION_MODEL || 'minimax/minimax-m2.7-free';
+const PRIMARY_MODEL = process.env.DABBIR_TRANSLATION_MODEL || 'minimax/minimax-m2.7-free';
+const FALLBACK_MODEL = process.env.DABBIR_TRANSLATION_FALLBACK_MODEL || 'minimax/minimax-m2.7-free';
+const TRANSLATION_MODELS = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL].map(value => String(value || '').trim()).filter(Boolean))];
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12000;
@@ -33,7 +35,7 @@ async function requireIdentity(req) {
   return { user, memberships };
 }
 
-async function translate(messages, targetLanguage) {
+async function translateWithModel(messages, targetLanguage, model) {
   const targetName = targetLanguage === 'ar' ? 'Arabic' : 'English';
   const payload = JSON.stringify(messages);
   const prompt = [
@@ -47,13 +49,13 @@ async function translate(messages, targetLanguage) {
   ].join('\n');
 
   const { text } = await generateText({
-    model: MODEL,
+    model,
     prompt,
     providerOptions: {
       gateway: {
         disallowPromptTraining: true,
-        user: 'pilot-authenticated-translation',
-        tags: ['product:pilot', 'feature:conversation-translation', 'mode:authenticated-runtime'],
+        user: 'dabbir-authenticated-translation',
+        tags: ['product:dabbir', 'feature:conversation-translation', 'mode:authenticated-runtime'],
       },
     },
   });
@@ -64,6 +66,19 @@ async function translate(messages, targetLanguage) {
   return messages.map((message) => ({ id: message.id, text: byId.get(message.id) || message.text }));
 }
 
+async function translate(messages, targetLanguage) {
+  let lastError = null;
+  for (const model of TRANSLATION_MODELS) {
+    try {
+      const translations = await translateWithModel(messages, targetLanguage, model);
+      return { translations, model, fallback_used: model !== PRIMARY_MODEL };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('TRANSLATION_MODEL_UNAVAILABLE');
+}
+
 function recordTranslationFailure(cid, error) {
   const failureClass = classifyFailure(error, 'AI');
   logEvent('warn', {
@@ -72,7 +87,7 @@ function recordTranslationFailure(cid, error) {
     operation: 'conversation_translation',
     outcome: 'DEGRADED',
     failure_class: failureClass,
-    model: MODEL,
+    models: TRANSLATION_MODELS.join(','),
     persisted: false,
   });
   return failureClass;
@@ -103,17 +118,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    const translations = await translate(messages, targetLanguage);
-    logEvent('info', { correlation_id: cid, component: 'translation', operation: 'conversation_translation', outcome: 'VERIFIED_SUCCESS', model: MODEL, message_count: messages.length, persisted: false });
+    const result = await translate(messages, targetLanguage);
+    logEvent('info', {
+      correlation_id: cid,
+      component: 'translation',
+      operation: 'conversation_translation',
+      outcome: 'VERIFIED_SUCCESS',
+      model: result.model,
+      fallback_used: result.fallback_used,
+      message_count: messages.length,
+      persisted: false,
+    });
     return json(res, 200, {
       ok: true,
       state: 'AVAILABLE',
-      service: 'pilot-translation',
+      service: 'dabbir-translation',
       targetLanguage,
-      translations,
+      translations: result.translations,
+      model: result.model,
+      fallback_used: result.fallback_used,
       persisted: false,
       original_preserved: true,
-      cost_mode: 'FREE_TIER_ONLY',
+      cost_mode: result.model.includes('-free') ? 'FREE_TIER' : 'CONFIGURED_MODEL',
       correlation_id: cid,
     });
   } catch (error) {
