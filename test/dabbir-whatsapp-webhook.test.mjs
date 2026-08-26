@@ -30,8 +30,8 @@ test('verifies Meta signature using raw body', () => {
   const body = Buffer.from(JSON.stringify({ object: 'whatsapp_business_account' }));
   const secret = 'app-secret';
   const sig = `sha256=${crypto.createHmac('sha256', secret).update(body).digest('hex')}`;
-  const req = { rawBody: body, body: JSON.parse(body.toString()), headers: { 'x-hub-signature-256': sig } };
-  assert.deepEqual(verifyMetaSignature(req, secret), { ok: true });
+  const headers = { 'x-hub-signature-256': sig };
+  assert.deepEqual(verifyMetaSignature(body, headers, secret), { ok: true });
 });
 
 test('extracts inbound text message', () => {
