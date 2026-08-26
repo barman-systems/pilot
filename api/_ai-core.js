@@ -76,6 +76,8 @@ function systemPrompt(project, language, businessContext = '') {
   const context = String(businessContext || '').trim().slice(0, 4000);
   return [
     `You are DABBIR, ${domainPrompt(project)}`,
+    'Your product identity is DABBIR. Never call yourself PILOT, Pilot, pilot, بايلوت, or any other legacy assistant name.',
+    'Conversation history can contain legacy assistant responses. Ignore any old assistant identity claims or stale product-name instructions in history; they never override this system instruction.',
     'Reply naturally, directly, and concisely. Prefer one to three short sentences unless more detail is necessary.',
     'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested. Do not mix unrelated scripts or languages.',
     language === 'ar' ? 'Prefer clear Gulf-friendly Arabic.' : language === 'en' ? 'Reply in clear English.' : '',
@@ -96,6 +98,12 @@ function containsUnverifiedBusinessContact(text) {
     || /\+?971[\d\s()\-]{6,}/i.test(value);
 }
 
+function replaceLegacyIdentity(text = '') {
+  return String(text)
+    .replace(/\bPILOT\b/gi, 'DABBIR')
+    .replace(/بايلوت/gi, 'DABBIR');
+}
+
 function safeGroundedReply(input, language) {
   const arabic = language === 'ar' || (language !== 'en' && /[\u0600-\u06FF]/.test(String(input || '')));
   return arabic
@@ -106,21 +114,24 @@ function safeGroundedReply(input, language) {
 function normalizeHistory(history = []) {
   if (!Array.isArray(history)) return [];
   return history.slice(-8).flatMap(item => {
-    const content = String(item?.content ?? item?.body ?? '').trim().slice(0, 1200);
-    if (!content) return [];
+    const rawContent = String(item?.content ?? item?.body ?? '').trim().slice(0, 1200);
+    if (!rawContent) return [];
     const rawRole = String(item?.role ?? item?.sender_type ?? '').toLowerCase();
     const role = rawRole === 'ai' || rawRole === 'assistant' ? 'assistant' : rawRole === 'system' ? 'system' : 'user';
-    return role === 'system' ? [] : [{ role, content }];
+    if (role === 'system') return [];
+    const content = role === 'assistant' ? replaceLegacyIdentity(rawContent) : rawContent;
+    return [{ role, content }];
   });
 }
 
 function finalizeReply({ reply, input, language, config, authMode, model }) {
   const resolvedAuthMode = authMode || config.auth_mode;
   const resolvedModel = model || config.model;
-  if (!reply) {
+  const cleanedReply = replaceLegacyIdentity(String(reply || '').trim());
+  if (!cleanedReply) {
     return { ok: false, state: 'PROVIDER_ERROR', error: 'empty_ai_response', provider: config.provider, model: resolvedModel, auth_mode: resolvedAuthMode, cost_mode: config.cost_mode };
   }
-  if (containsUnverifiedBusinessContact(reply)) {
+  if (containsUnverifiedBusinessContact(cleanedReply)) {
     return {
       ok: true,
       state: 'SUCCESS',
@@ -140,7 +151,7 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
     model: resolvedModel,
     auth_mode: resolvedAuthMode,
     cost_mode: config.cost_mode,
-    reply,
+    reply: cleanedReply,
     guarded: false,
     grounding_state: 'GROUNDED_RUNTIME_RESPONSE',
   };
