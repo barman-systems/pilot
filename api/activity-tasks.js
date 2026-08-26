@@ -29,7 +29,7 @@ const profiles={
   real_estate:{name_ar:'عقارات',name_en:'Real estate',customer_ar:'العملاء المحتملون',customer_en:'Leads',appointments_ar:'المعاينات',appointments_en:'Viewings',tasks_ar:'مهام العقارات',tasks_en:'Real-estate tasks',dashboard_ar:'تشغيل العقارات',dashboard_en:'Real-estate operations',show_appointments:true,show_services:false,show_operations:false},
   creator:{name_ar:'مشهور / صانع محتوى',name_en:'Creator / Influencer',customer_ar:'جهات التعاون',customer_en:'Collaboration leads',appointments_ar:'الجدول',appointments_en:'Schedule',tasks_ar:'مهام التعاون',tasks_en:'Collaboration tasks',dashboard_ar:'إدارة التعاون والجدول',dashboard_en:'Collaboration & schedule',show_appointments:true,show_services:false,show_operations:false},
   services:{name_ar:'خدمات',name_en:'Services',customer_ar:'العملاء',customer_en:'Customers',appointments_ar:'الحجوزات / الطلبات',appointments_en:'Bookings / requests',tasks_ar:'مهام الخدمات',tasks_en:'Service tasks',dashboard_ar:'تشغيل الخدمات',dashboard_en:'Service operations',show_appointments:true,show_services:true,show_operations:false},
-  other:{name_ar:'نشاط',name_en:'Business',customer_ar:'العملاء',customer_en:'Customers',appointments_ar:'المواعيد',appointments_en:'Appointments',tasks_ar:'مهام النشاط',tasks_en:'Business tasks',dashboard_ar:'تشغيل النشاط',dashboard_en:'Business operations',show_appointments:true,show_services:true,show_operations:false},
+  other:{name_ar:'نشاط',name_en:'Business',customer_ar:'العملاء',customer_en:'Customers',appointments_ar:'المواعيد',appointments_en:'Appointments',tasks_ar:'مهام النشاط',tasks_en:'Business tasks',dashboard_ar:'تشغيل النشاط',dashboard_en:'Business operations',show_appointments:true,show_services:false,show_operations:false},
 };
 
 async function context(req,res){
@@ -48,12 +48,8 @@ export default async function handler(req,res){
       const businessId=safeId(req.query?.business_id);
       const membership=membershipFor(ctx.memberships,businessId);
       if(!businessId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
-      const businesses=await rest(ctx.token,`dabbir_businesses?select=id,name,business_type&business_id=eq.${businessId}`,'BUSINESS_LOOKUP_FAILED').catch(()=>null);
-      let business=Array.isArray(businesses)?businesses[0]:null;
-      if(!business){
-        const rows=await rest(ctx.token,`dabbir_businesses?select=id,name,business_type&id=eq.${businessId}&limit=1`,'BUSINESS_LOOKUP_FAILED');
-        business=rows?.[0]||null;
-      }
+      const rows=await rest(ctx.token,`dabbir_businesses?select=id,name,business_type&id=eq.${businessId}&limit=1`,'BUSINESS_LOOKUP_FAILED');
+      const business=rows?.[0]||null;
       if(!business)return json(res,404,{ok:false,error:'BUSINESS_NOT_FOUND'});
       const type=String(business.business_type||'other').toLowerCase();
       const tasks=await rest(ctx.token,`dabbir_tasks?select=id,task_key,category,title_ar,title_en,priority,status,due_at,source,metadata,created_at,updated_at&business_id=eq.${businessId}&order=priority.desc,created_at.asc&limit=100`,'TASKS_LOOKUP_FAILED');
