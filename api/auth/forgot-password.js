@@ -1,7 +1,7 @@
 import { json, readJsonBody, requireSameOrigin, supabaseAuth } from '../_auth-core.js';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CANONICAL_RECOVERY_REDIRECT = 'https://pilot-taupe.vercel.app/?password_recovery=1';
+const CANONICAL_RECOVERY_REDIRECT = 'https://pilot-taupe.vercel.app/';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
@@ -15,16 +15,15 @@ export default async function handler(req, res) {
       return json(res, 400, { ok: false, error: 'INVALID_RECOVERY_INPUT' });
     }
 
-    // Password recovery must always return to the single authoritative PILOT
-    // production URL. Supabase Auth still requires this exact destination to be
-    // configured in Auth > URL Configuration; otherwise it falls back to Site URL.
+    // Password recovery always returns to the one authoritative PILOT production
+    // root. The recovery token itself arrives in the URL fragment and the UI
+    // detects type=recovery, so no special query string is required.
     const upstream = await supabaseAuth(`/auth/v1/recover?redirect_to=${encodeURIComponent(CANONICAL_RECOVERY_REDIRECT)}`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     }).catch(() => null);
 
     // Do not reveal whether an account exists. Preserve enumeration resistance.
-    // Expose only a non-sensitive configuration hint for server diagnostics.
     if (upstream && !upstream.ok) {
       console.warn('pilot_password_recovery_upstream_rejected', { status: upstream.status });
     }
