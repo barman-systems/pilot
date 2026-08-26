@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "date": "2026-08-26",
+  "authority": "PILOT_WORLD_CLASS_REVIEW",
+  "evidence_policy": ["VERIFIED", "STRONG_EVIDENCE", "PARTIAL_EVIDENCE", "UNVERIFIED", "FAILED"],
+  "standards": {
+    "accessibility": "WCAG 2.2 AA",
+    "application_security": "OWASP ASVS 5.0.0",
+    "ai_risk": "NIST AI RMF 1.0 + NIST AI 600-1; monitor active NIST revision",
+    "ai_management": "ISO/IEC 42001:2023",
+    "uae_privacy": "Federal Decree-Law No. 45 of 2021"
+  },
+  "release_gates": {
+    "build": true,
+    "tests": true,
+    "bilingual_parity": true,
+    "truthful_runtime_states": true,
+    "security_headers": true,
+    "gulf_arabic_golden_tests": true,
+    "no_partial_owner_preview": true
+  },
+  "scoring": {
+    "pqi_weights": {
+      "product_utility": 15,
+      "ai_quality": 15,
+      "ux_simplicity": 12,
+      "automation": 10,
+      "reliability": 10,
+      "performance": 8,
+      "security": 8,
+      "privacy": 5,
+      "bilingual_quality": 7,
+      "integrations": 5,
+      "cost_efficiency": 3,
+      "accessibility": 2
+    },
+    "rule": "No score receives operational credit for synthetic or unverified capability."
+  },
+  "operational_truth": {
+    "preview": "VERIFIED",
+    "production_preview_deployment": "VERIFIED",
+    "arabic_english_ui": "VERIFIED",
+    "external_channels": "UNVERIFIED",
+    "real_customer_persistence": "UNVERIFIED",
+    "live_automations": "UNVERIFIED",
+    "production_rbac": "UNVERIFIED",
+    "live_business_analytics": "UNVERIFIED",
+    "clinic_patient_data": "DISABLED_SYNTHETIC_ONLY"
+  }
+}
