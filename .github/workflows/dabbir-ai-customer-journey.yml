@@ -6,9 +6,10 @@ on:
     branches:
       - main
     paths:
-      - 'test/ai-full-customer-journey.mjs'
+      - 'test/ai-full-customer-journey-oidc.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
+      - 'supabase/functions/barman-qa-suite-runner/**'
       - 'api/auth/**'
       - 'api/team/**'
       - 'api/chat*.js'
@@ -25,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: dabbir-ai-full-customer-journey
@@ -38,9 +40,6 @@ jobs:
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
 
     steps:
@@ -50,7 +49,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Install WebKit journey runner
         run: |
@@ -58,7 +57,7 @@ jobs:
           npx playwright install --with-deps webkit
 
       - name: Run AI full customer journey against production
-        run: node test/ai-full-customer-journey.mjs
+        run: node test/ai-full-customer-journey-oidc.mjs
 
       - name: Publish journey summary
         if: always()
@@ -73,6 +72,9 @@ jobs:
             echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '### Cleanup' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.cleanup[]? | "- \(.status): \(.detail // .item // "cleanup")"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'DABBIR journey report was not produced.' >> "$GITHUB_STEP_SUMMARY"
           fi
