@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const requiredScreens = ['dashboard','conversations','appointments','customers','tasks','automations','analytics','integrations','notifications','settings','help'];
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('main PILOT interface retains complete product navigation', () => {
+test('main DABBIR interface retains complete product navigation', () => {
   for (const screen of requiredScreens) assert.match(html, new RegExp(`id="screen-${screen}"`), `missing ${screen} screen`);
   assert.match(html, /id="arBtn"/);
   assert.match(html, /id="enBtn"/);
@@ -14,7 +14,7 @@ test('main PILOT interface retains complete product navigation', () => {
 });
 
 test('root workspace is authenticated and operational instead of hard-coded preview data', () => {
-  assert.match(html, /\/api\/pilot-runtime/);
+  assert.match(html, /\/api\/dabbir-runtime/);
   assert.match(html, /\/api\/auth\/login/);
   assert.match(html, /action:'create_business'/);
   assert.match(html, /action:'start_conversation'/);

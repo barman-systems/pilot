@@ -8,7 +8,7 @@ import {
   supabaseRest,
   supabaseRpc,
 } from './_auth-core.js';
-import { generatePilotAiReply } from './_ai-core.js';
+import { generateDABBIRAiReply } from './_ai-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
@@ -102,8 +102,8 @@ function instantGroundedReply({ message, language, intent, business, knowledge }
   const asksContact = /(كيف اتواصل|تواصل مع|رقم|واتساب|whatsapp|contact|phone|email|ايميل)/i.test(text);
   if (asksContact && !containsContactKnowledge(knowledge)) {
     return ar
-      ? 'ما عندي وسيلة تواصل موثقة لهذا النشاط داخل PILOT حاليًا، لذلك ما بعطيك رقم أو رابط غير مؤكد. أقدر أساعدك من هنا بالطلب أو الاستفسار.'
-      : 'I do not have a verified contact method for this business in PILOT yet, so I will not invent a number or link. I can still help you here with the request.';
+      ? 'ما عندي وسيلة تواصل موثقة لهذا النشاط داخل DABBIR حاليًا، لذلك ما بعطيك رقم أو رابط غير مؤكد. أقدر أساعدك من هنا بالطلب أو الاستفسار.'
+      : 'I do not have a verified contact method for this business in DABBIR yet, so I will not invent a number or link. I can still help you here with the request.';
   }
 
   if (business.business_type === 'store' && !hasKnowledge && /(توصيل|شحن|توصلون|delivery|shipping|ship)/i.test(text)) {
@@ -222,7 +222,7 @@ export default async function handler(req, res) {
     }
 
     const aiStarted = Date.now();
-    const aiResult = await generatePilotAiReply({
+    const aiResult = await generateDABBIRAiReply({
       project: projectFor(business.business_type),
       message,
       language,

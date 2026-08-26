@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "producer": "PILOT",
+  "producer": "DABBIR",
   "control_plane": "barman-systems/barman-control-plane",
   "target_source_repository": "barman-systems/pilot",
   "status": "ACTIVE_STANDALONE_REPOSITORY",

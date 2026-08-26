@@ -15,7 +15,7 @@ export default async function handler(req, res) {
       return json(res, 400, { ok: false, error: 'INVALID_RECOVERY_INPUT' });
     }
 
-    // Password recovery always returns to the one authoritative PILOT production
+    // Password recovery always returns to the one authoritative DABBIR production
     // root. The recovery token itself arrives in the URL fragment and the UI
     // detects type=recovery, so no special query string is required.
     const upstream = await supabaseAuth(`/auth/v1/recover?redirect_to=${encodeURIComponent(CANONICAL_RECOVERY_REDIRECT)}`, {
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       ok: true,
       accepted: true,
       message: 'RECOVERY_EMAIL_IF_ACCOUNT_EXISTS',
-      redirect_target: 'CANONICAL_PILOT_PRODUCTION',
+      redirect_target: 'CANONICAL_DABBIR_PRODUCTION',
     });
   } catch (error) {
     if (error?.code === 413) return json(res, 413, { ok: false, error: 'PAYLOAD_TOO_LARGE' });
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       ok: true,
       accepted: true,
       message: 'RECOVERY_EMAIL_IF_ACCOUNT_EXISTS',
-      redirect_target: 'CANONICAL_PILOT_PRODUCTION',
+      redirect_target: 'CANONICAL_DABBIR_PRODUCTION',
     });
   }
 }

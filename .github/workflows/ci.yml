@@ -1,9 +1,9 @@
-name: PILOT CI
+name: DABBIR CI
 
 on:
   pull_request:
   push:
-    branches: [main, pilot/isolated-export]
+    branches: [main, dabbir/isolated-export]
 
 permissions:
   contents: read
@@ -18,13 +18,13 @@ jobs:
         with:
           node-version-file: package.json
           package-manager-cache: false
-      - name: Run PILOT tests
+      - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE --exclude-dir=.git --exclude='ci.yml' '(sk_live_|sb_secret_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|VERCEL_TOKEN[[:space:]]*=|PILOT_WHATSAPP_APP_SECRET[[:space:]]*=)' .; then
+          if grep -RInE --exclude-dir=.git --exclude='ci.yml' '(sk_live_|sb_secret_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|VERCEL_TOKEN[[:space:]]*=|(DABBIR|PILOT)_WHATSAPP_APP_SECRET[[:space:]]*=)' .; then
             echo 'Potential secret material detected.'
             exit 1
           fi

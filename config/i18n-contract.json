@@ -1,6 +1,6 @@
 {
   "status": "MANDATORY",
-  "product": "PILOT",
+  "product": "DABBIR",
   "supported_locales": ["ar", "en"],
   "default_locale": "ar",
   "fallback_locale": "en",

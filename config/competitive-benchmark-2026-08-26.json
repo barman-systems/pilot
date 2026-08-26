@@ -1,7 +1,7 @@
 {
   "date": "2026-08-26",
   "pilot_commit": "a31d4cf2669f793fec7d6d3909da3484b8adfec6",
-  "scope": "PILOT full bilingual synthetic preview and current repository/runtime contracts",
+  "scope": "DABBIR full bilingual synthetic preview and current repository/runtime contracts",
   "evidence_policy": "No operational credit for synthetic, configured-only, or unverified capability.",
   "scores": {
     "pqi": {
@@ -44,7 +44,7 @@
   "competitive_position": {
     "operational_maturity": "WEAK",
     "product_direction": "STRONGER_AFTER_REMEDIATION",
-    "reason": "Mature competitors have verified live omnichannel inboxes, WhatsApp/Instagram operation, team permissions, APIs/webhooks, production automation/agents, bookings and analytics; PILOT currently exposes these as synthetic or unverified where applicable."
+    "reason": "Mature competitors have verified live omnichannel inboxes, WhatsApp/Instagram operation, team permissions, APIs/webhooks, production automation/agents, bookings and analytics; DABBIR currently exposes these as synthetic or unverified where applicable."
   },
   "competitors": [
     {

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "date": "2026-08-26",
-  "authority": "PILOT_WORLD_CLASS_REVIEW",
+  "authority": "DABBIR_WORLD_CLASS_REVIEW",
   "evidence_policy": ["VERIFIED", "STRONG_EVIDENCE", "PARTIAL_EVIDENCE", "UNVERIFIED", "FAILED"],
   "standards": {
     "accessibility": "WCAG 2.2 AA",

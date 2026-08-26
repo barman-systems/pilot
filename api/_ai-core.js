@@ -5,12 +5,12 @@ const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities', 'pilot_businesses']);
 
-export function getPilotAiConfig(env = process.env) {
+export function getDABBIRAiConfig(env = process.env) {
   if (env.GROQ_API_KEY) {
     return {
       provider: 'groq',
       endpoint: GROQ_ENDPOINT,
-      model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
+      model: String(env.DABBIR_AI_MODEL || DEFAULT_MODEL),
       configured: true,
       auth_mode: 'API_KEY',
       cost_mode: 'FREE_TIER_ONLY',
@@ -22,7 +22,7 @@ export function getPilotAiConfig(env = process.env) {
     return {
       provider: 'vercel-ai-gateway',
       endpoint: GATEWAY_ENDPOINT,
-      model: String(env.PILOT_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
+      model: String(env.DABBIR_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
       configured: Boolean(gatewayCredential || env.VERCEL_ENV),
       auth_mode: env.AI_GATEWAY_API_KEY
         ? 'API_KEY'
@@ -36,7 +36,7 @@ export function getPilotAiConfig(env = process.env) {
   return {
     provider: 'groq',
     endpoint: GROQ_ENDPOINT,
-    model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
+    model: String(env.DABBIR_AI_MODEL || DEFAULT_MODEL),
     configured: false,
     auth_mode: 'MISSING',
     cost_mode: 'FREE_TIER_ONLY',
@@ -75,7 +75,7 @@ function domainPrompt(project) {
 function systemPrompt(project, language, businessContext = '') {
   const context = String(businessContext || '').trim().slice(0, 4000);
   return [
-    `You are PILOT, ${domainPrompt(project)}`,
+    `You are DABBIR, ${domainPrompt(project)}`,
     'Reply naturally, directly, and concisely. Prefer one to three short sentences unless more detail is necessary.',
     'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested. Do not mix unrelated scripts or languages.',
     language === 'ar' ? 'Prefer clear Gulf-friendly Arabic.' : language === 'en' ? 'Reply in clear English.' : '',
@@ -205,14 +205,14 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
   return { ok: false, ...last };
 }
 
-export async function generatePilotAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter } = {}) {
+export async function generateDABBIRAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) return { ok: false, state: 'REJECTED', error: 'unsupported_project' };
 
   const input = String(message || '').trim().slice(0, 2000);
   if (!input) return { ok: false, state: 'REJECTED', error: 'message_required' };
 
-  const config = getPilotAiConfig(env);
+  const config = getDABBIRAiConfig(env);
   const groqKey = String(env.GROQ_API_KEY || '');
   const messages = [
     { role: 'system', content: systemPrompt(normalizedProject, language, businessContext) },
