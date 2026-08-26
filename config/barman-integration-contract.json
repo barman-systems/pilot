@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "producer": "PILOT",
+  "control_plane": "barman-systems/barman-control-plane",
+  "target_source_repository": "barman-systems/pilot",
+  "status": "STAGED_FOR_REPOSITORY_CREATION",
+  "integration_mode": "API_EVENTS_ONLY",
+  "rules": {
+    "source_code_imports_across_boundary": false,
+    "shared_raw_secrets": false,
+    "direct_cross_product_database_reads": false,
+    "authenticated_requests_required": true,
+    "separate_deployment_identity": true,
+    "separate_environment_configuration": true,
+    "separate_ci_release_lifecycle": true
+  }
+}
