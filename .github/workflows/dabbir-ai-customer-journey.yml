@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/run-ai-full-customer-journey-v2.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -57,7 +58,7 @@ jobs:
           npx playwright install --with-deps webkit
 
       - name: Run AI full customer journey against production
-        run: node test/ai-full-customer-journey-v2.mjs
+        run: node test/run-ai-full-customer-journey-v2.mjs
 
       - name: Publish journey summary
         if: always()
