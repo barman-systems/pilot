@@ -19,6 +19,105 @@ const script = String.raw`(()=>{
 
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.content='#0B0D12';
+
+  function uiText(key,fallback){
+    try{
+      if(typeof T==='function') return T()[key]||fallback;
+    }catch{}
+    return fallback;
+  }
+
+  function notify(message){
+    try{if(typeof toast==='function') return toast(message)}catch{}
+  }
+
+  function installIdempotentConversationStart(){
+    const form=document.querySelector('#newChatForm');
+    if(!form||form.dataset.dabbirConversationStart==='v2') return;
+    form.dataset.dabbirConversationStart='v2';
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      const input=document.querySelector('#newCustomerName');
+      const button=document.querySelector('#createChatBtn');
+      const name=String(input?.value||'').trim();
+      if(!name||typeof workspace==='undefined'||!workspace?.business?.id) return;
+      if(button) button.disabled=true;
+      try{
+        const response=await fetch('/api/start-conversation',{
+          method:'POST',
+          cache:'no-store',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({business_id:workspace.business.id,display_name:name})
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(response.status===401){
+          try{if(typeof showGate==='function')showGate('auth')}catch{}
+          notify(uiText('authRequired','Session expired. Log in again.'));
+          return;
+        }
+        if(!response.ok||!payload.ok||!payload.conversation?.id){
+          notify(payload.error||uiText('invalid','تعذر إنشاء المحادثة'));
+          return;
+        }
+        document.querySelector('#newChatModal')?.classList.remove('open');
+        if(input) input.value='';
+        if(typeof loadRuntime==='function') await loadRuntime(workspace.business.id,payload.conversation.id);
+        if(typeof showScreen==='function') showScreen('conversations');
+      }catch{
+        notify(uiText('invalid','تعذر إنشاء المحادثة'));
+      }finally{
+        if(button) button.disabled=false;
+      }
+    };
+  }
+
+  const repairAttempted=new Set();
+  let repairInFlight=false;
+  async function repairActionRequiredChats(){
+    if(repairInFlight||typeof workspace==='undefined'||!workspace?.business?.id) return;
+    const candidates=(Array.isArray(workspace.conversations)?workspace.conversations:[])
+      .filter(item=>item?.state==='action_required'&&!repairAttempted.has(item.id))
+      .slice(0,4);
+    if(!candidates.length) return;
+
+    repairInFlight=true;
+    let recovered=false;
+    try{
+      for(const conversation of candidates){
+        repairAttempted.add(conversation.id);
+        try{
+          const response=await fetch('/api/chat-recover',{
+            method:'POST',
+            cache:'no-store',
+            headers:{'content-type':'application/json'},
+            body:JSON.stringify({business_id:workspace.business.id,conversation_id:conversation.id})
+          });
+          const payload=await response.json().catch(()=>({}));
+          if(response.ok&&payload.ok&&payload.recovered) recovered=true;
+        }catch{}
+      }
+      if(recovered&&typeof loadRuntime==='function'){
+        const selected=(typeof selectedConversationId!=='undefined'&&selectedConversationId)||null;
+        await loadRuntime(workspace.business.id,selected);
+      }
+    }finally{
+      repairInFlight=false;
+    }
+  }
+
+  installIdempotentConversationStart();
+
+  if(typeof renderAll==='function'&&!window.__dabbirBrandRenderWrapped){
+    window.__dabbirBrandRenderWrapped=true;
+    const renderBeforeBrandChatFix=renderAll;
+    renderAll=function(){
+      const result=renderBeforeBrandChatFix.apply(this,arguments);
+      setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats()},30);
+      return result;
+    };
+  }
+
+  setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats()},500);
 })();`;
 
 export default function handler(req,res){
@@ -29,7 +128,7 @@ export default function handler(req,res){
   }
   res.statusCode=200;
   res.setHeader('content-type','application/javascript; charset=utf-8');
-  res.setHeader('cache-control','public, max-age=300, stale-while-revalidate=86400');
+  res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
   return res.end(script);
 }
