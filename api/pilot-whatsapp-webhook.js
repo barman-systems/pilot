@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './pilot-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
+import { processWhatsAppOperationalEvent, whatsappRuntimeReadiness } from './_whatsapp-operations.js';
+
+const MAX_EVENTS = 100;
 
 function json(res, status, body, cid) {
   attachCorrelation(res, cid);
@@ -49,18 +52,19 @@ function normalizeBody(req) {
 
 export function extractWhatsAppEvents(payload = {}) {
   const events = [];
-  for (const entry of payload.entry || []) {
+  outer: for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       if (change.field !== 'messages') continue;
       const value = change.value || {};
       const phoneNumberId = value.metadata?.phone_number_id || null;
-      const displayPhoneNumber = value.metadata?.display_phone_number || null;
       for (const message of value.messages || []) {
         const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
-        events.push({ type: 'message', messageId: message.id || null, from: message.from || null, timestamp: message.timestamp || null, messageType: message.type || null, text: String(text || '').slice(0, 4000), phoneNumberId, displayPhoneNumber });
+        events.push({ type: 'message', messageId: message.id || null, from: message.from || null, timestamp: message.timestamp || null, messageType: message.type || null, text: String(text || '').slice(0, 4000), phoneNumberId });
+        if (events.length >= MAX_EVENTS) break outer;
       }
       for (const status of value.statuses || []) {
-        events.push({ type: 'status', messageId: status.id || null, recipientId: status.recipient_id || null, status: status.status || null, timestamp: status.timestamp || null, phoneNumberId, displayPhoneNumber });
+        events.push({ type: 'status', messageId: status.id || null, status: status.status || null, timestamp: status.timestamp || null, phoneNumberId });
+        if (events.length >= MAX_EVENTS) break outer;
       }
     }
   }
@@ -78,6 +82,12 @@ export function classifyPilotEvent(event, project = 'generic') {
     return { classification, workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
   }
   return { classification: 'GENERAL_INQUIRY', workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK'] };
+}
+
+function operationalFailureStatus(code) {
+  if (code === 'PATIENT_DATA_GATE_CLOSED') return 200; // policy-blocked data is deliberately not persisted or retried.
+  if (code === 'UNSUPPORTED_DELIVERY_STATE') return 200;
+  return 503;
 }
 
 export default async function handler(req, res) {
@@ -115,35 +125,70 @@ export default async function handler(req, res) {
   const messageCount = routed.filter(e => e.type === 'message').length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
+  const readiness = whatsappRuntimeReadiness(process.env);
 
-  // Never log or echo message text, sender/recipient IDs, phone numbers, message IDs, or raw payloads.
+  if (!readiness.runtime_enabled) {
+    logEvent('info', {
+      correlation_id: cid, component: 'whatsapp_webhook', operation: 'signed_inbound_normalization',
+      outcome: 'PARTIAL', project, event_count: routed.length, message_count: messageCount, status_count: statusCount,
+      classifications, persisted: false, outbound_messages_sent: false, runtime_enabled: false,
+    });
+    return json(res, 200, {
+      ok: true, service: 'pilot-whatsapp-webhook', project, state: 'CONFIGURED_NOT_OPERATIONAL',
+      signature_verified: true, event_count: routed.length, message_count: messageCount, status_count: statusCount,
+      classifications, persisted: false, outbound_messages_sent: false, external_side_effects: false,
+      correlation_id: cid, timestamp: new Date().toISOString(),
+    }, cid);
+  }
+
+  const results = [];
+  try {
+    for (const event of routed) {
+      results.push(await processWhatsAppOperationalEvent(event, event.classification, process.env));
+    }
+  } catch (error) {
+    const code = String(error?.code || error?.message || 'WHATSAPP_OPERATION_FAILED').slice(0, 80);
+    const policyBlocked = code === 'PATIENT_DATA_GATE_CLOSED';
+    logEvent(policyBlocked ? 'warn' : 'error', {
+      correlation_id: cid, component: 'whatsapp_webhook', operation: 'operational_ingest',
+      outcome: policyBlocked ? 'FAILED' : 'UNKNOWN',
+      failure_class: policyBlocked ? 'POLICY' : code.includes('CREDENTIAL') || code.includes('HMAC') ? 'AUTH' : code.includes('CONNECTION') ? 'DATA' : 'API',
+      reason: code, event_count: routed.length,
+    });
+    return json(res, operationalFailureStatus(code), {
+      ok: false,
+      service: 'pilot-whatsapp-webhook',
+      state: policyBlocked ? 'BLOCKED_BY_POLICY' : 'DEGRADED',
+      error: code,
+      signature_verified: true,
+      persisted: false,
+      outbound_messages_sent: false,
+      correlation_id: cid,
+    }, cid);
+  }
+
+  const persistedCount = results.filter(r => r.persisted).length;
+  const updatedCount = results.filter(r => r.updated).length;
+  const duplicateCount = results.filter(r => r.duplicate).length;
   logEvent('info', {
-    correlation_id: cid,
-    component: 'whatsapp_webhook',
-    operation: 'signed_inbound_normalization',
-    outcome: 'PARTIAL',
-    project,
-    event_count: routed.length,
-    message_count: messageCount,
-    status_count: statusCount,
-    classifications,
-    persisted: false,
-    outbound_messages_sent: false,
+    correlation_id: cid, component: 'whatsapp_webhook', operation: 'operational_ingest',
+    outcome: 'VERIFIED_SUCCESS', project, event_count: routed.length, persisted_count: persistedCount,
+    status_updated_count: updatedCount, duplicate_count: duplicateCount,
   });
-
   return json(res, 200, {
     ok: true,
     service: 'pilot-whatsapp-webhook',
     project,
-    state: 'CONFIGURED_NOT_OPERATIONAL',
+    state: 'OPERATIONAL_INGEST_VERIFIED',
     signature_verified: true,
     event_count: routed.length,
     message_count: messageCount,
     status_count: statusCount,
     classifications,
-    persisted: false,
+    persisted_count: persistedCount,
+    status_updated_count: updatedCount,
+    duplicate_count: duplicateCount,
     outbound_messages_sent: false,
-    external_side_effects: false,
     correlation_id: cid,
     timestamp: new Date().toISOString(),
   }, cid);
