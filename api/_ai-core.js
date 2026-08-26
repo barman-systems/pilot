@@ -1,5 +1,3 @@
-import { generateText } from 'ai';
-
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_GATEWAY_MODEL = 'inclusionai/ling-3.0-tiny-free';
@@ -112,7 +110,7 @@ export async function generatePilotAiReply({
   language = 'auto',
   env = process.env,
   fetchImpl = fetch,
-  gatewayGenerateImpl = generateText,
+  gatewayGenerateImpl,
 } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) {
@@ -138,7 +136,12 @@ export async function generatePilotAiReply({
 
   if (!apiKey && env.VERCEL_ENV) {
     try {
-      const { text } = await gatewayGenerateImpl({
+      let generate = gatewayGenerateImpl;
+      if (!generate) {
+        const ai = await import('ai');
+        generate = ai.generateText;
+      }
+      const { text } = await generate({
         model: config.model,
         system: systemPrompt(normalizedProject, language),
         prompt: input,
