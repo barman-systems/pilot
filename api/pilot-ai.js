@@ -36,6 +36,7 @@ export default async function handler(req, res) {
       provider: config.provider,
       model: config.model,
       configured: config.configured,
+      auth_mode: config.auth_mode,
       cost_mode: config.cost_mode,
       data_mode: 'SYNTHETIC_ONLY',
       external_side_effects: false,
