@@ -2,9 +2,13 @@ import { generateText } from 'ai';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, requireSameOrigin } from './_auth-core.js';
 import { attachCorrelation, classifyFailure, correlationId, logEvent } from './_observability.js';
 
-const PRIMARY_MODEL = process.env.DABBIR_TRANSLATION_MODEL || 'minimax/minimax-m2.7-free';
-const FALLBACK_MODEL = process.env.DABBIR_TRANSLATION_FALLBACK_MODEL || 'minimax/minimax-m2.7-free';
-const TRANSLATION_MODELS = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL].map(value => String(value || '').trim()).filter(Boolean))];
+const DEFAULT_FREE_MODEL = 'minimax/minimax-m2.7-free';
+const PRIMARY_MODEL = process.env.DABBIR_TRANSLATION_MODEL || DEFAULT_FREE_MODEL;
+const FALLBACK_MODEL = process.env.DABBIR_TRANSLATION_FALLBACK_MODEL || DEFAULT_FREE_MODEL;
+const isFreeTierModel = model => String(model || '').trim().includes('-free');
+const configuredModels = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL].map(value => String(value || '').trim()).filter(Boolean))];
+const TRANSLATION_MODELS = configuredModels.filter(isFreeTierModel);
+if (!TRANSLATION_MODELS.length) TRANSLATION_MODELS.push(DEFAULT_FREE_MODEL);
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12000;
@@ -36,6 +40,7 @@ async function requireIdentity(req) {
 }
 
 async function translateWithModel(messages, targetLanguage, model) {
+  if (!isFreeTierModel(model)) throw new Error('PAID_TRANSLATION_MODEL_BLOCKED');
   const targetName = targetLanguage === 'ar' ? 'Arabic' : 'English';
   const payload = JSON.stringify(messages);
   const prompt = [
@@ -139,7 +144,7 @@ export default async function handler(req, res) {
       fallback_used: result.fallback_used,
       persisted: false,
       original_preserved: true,
-      cost_mode: result.model.includes('-free') ? 'FREE_TIER' : 'CONFIGURED_MODEL',
+      cost_mode: 'FREE_TIER_ONLY',
       correlation_id: cid,
     });
   } catch (error) {
