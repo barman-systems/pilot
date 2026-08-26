@@ -14,7 +14,7 @@ test('production AI is reached only through authenticated tenant runtime', () =>
   assert.match(runtime, /getVerifiedUser/);
   assert.match(runtime, /getBusinessMemberships/);
   assert.match(runtime, /generateDABBIRAiReply/);
-  assert.match(runtime, /pilot_business_knowledge/);
+  assert.match(runtime, /dabbir_business_knowledge/);
   assert.match(runtime, /simulated:\s*false/);
   assert.doesNotMatch(runtime, /synthetic_mode_required/);
 });

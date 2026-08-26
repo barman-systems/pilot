@@ -48,9 +48,9 @@ test('web conversations persist customer and AI messages as real non-simulated r
 });
 
 test('AI runtime is grounded in business data and supports general businesses', () => {
-  assert.match(aiSource, /pilot_businesses/);
+  assert.match(aiSource, /dabbir_businesses/);
   assert.match(aiSource, /VERIFIED BUSINESS CONTEXT/);
-  assert.match(runtimeSource, /pilot_business_knowledge/);
+  assert.match(runtimeSource, /dabbir_business_knowledge/);
   assert.match(runtimeSource, /buildBusinessContext/);
   assert.match(runtimeSource, /history/);
   assert.match(aiSource, /businessContext/);
@@ -59,9 +59,9 @@ test('AI runtime is grounded in business data and supports general businesses', 
 
 test('appointments and followups are persisted through tenant RLS instead of preview-only state', () => {
   assert.match(runtimeSource, /action === 'create_appointment'/);
-  assert.match(runtimeSource, /pilot_appointments\?select=/);
+  assert.match(runtimeSource, /dabbir_appointments\?select=/);
   assert.match(runtimeSource, /action === 'create_followup'/);
-  assert.match(runtimeSource, /pilot_followups\?select=/);
+  assert.match(runtimeSource, /dabbir_followups\?select=/);
   assert.match(runtimeSource, /verified_persisted/);
 });
 

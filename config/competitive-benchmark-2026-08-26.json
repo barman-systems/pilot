@@ -1,6 +1,6 @@
 {
   "date": "2026-08-26",
-  "pilot_commit": "a31d4cf2669f793fec7d6d3909da3484b8adfec6",
+  "dabbir_commit": "a31d4cf2669f793fec7d6d3909da3484b8adfec6",
   "scope": "DABBIR full bilingual synthetic preview and current repository/runtime contracts",
   "evidence_policy": "No operational credit for synthetic, configured-only, or unverified capability.",
   "scores": {

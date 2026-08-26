@@ -19,7 +19,7 @@ test('UI cannot promote external channels into verified state', async () => {
   const registry = JSON.parse(registryRaw);
   assert.equal(registry.channels.web, 'OPERATIONAL');
   assert.match(registry.channels.whatsapp, /^NOT_OPERATIONAL/);
-  assert.equal(registry.projects.pilot_clinics.external_channels, 'UNVERIFIED');
+  assert.equal(registry.projects.dabbir_clinics.external_channels, 'UNVERIFIED');
   assert.match(html, /function externalVerified\(\)\{return false\}/);
   assert.match(html, /Meta authorization/);
   assert.doesNotMatch(html, /WhatsApp channel healthy/i);

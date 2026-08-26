@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const businessId = String(req.query?.business_id || '').trim();
     if (!businessId) return json(res, 400, { ok:false, error:'BUSINESS_REQUIRED' });
-    const response = await supabaseRpc('pilot_list_team', token, { p_business_id: businessId });
+    const response = await supabaseRpc('dabbir_list_team', token, { p_business_id: businessId });
     const payload = await readRpcJson(response);
     if (!response.ok) return json(res, 403, { ok:false, error:rpcErrorCode(payload, 'TEAM_LIST_FAILED') });
     return json(res, 200, { ok:true, members:Array.isArray(payload) ? payload : [] });
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       const role = String(body.role || '').trim().toLowerCase();
       if (!roles.has(role)) return json(res, 400, { ok:false, error:'INVALID_ROLE' });
       const memberPermissions = normalizePermissions(body.permissions);
-      const response = await supabaseRpc('pilot_update_employee_access', token, { p_business_id:businessId, p_user_id:userId, p_role:role, p_permissions:memberPermissions });
+      const response = await supabaseRpc('dabbir_update_employee_access', token, { p_business_id:businessId, p_user_id:userId, p_role:role, p_permissions:memberPermissions });
       const payload = await readRpcJson(response);
       if (!response.ok) {
         const code = rpcErrorCode(payload, 'MEMBERSHIP_UPDATE_FAILED');
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
 
     const nextStatus = action === 'suspend' ? 'suspended' : action === 'reactivate' ? 'active' : action === 'remove' ? 'removed' : null;
     if (!nextStatus) return json(res, 400, { ok:false, error:'INVALID_ACTION' });
-    const response = await supabaseRpc('pilot_set_employee_status', token, { p_business_id:businessId, p_user_id:userId, p_status:nextStatus });
+    const response = await supabaseRpc('dabbir_set_employee_status', token, { p_business_id:businessId, p_user_id:userId, p_status:nextStatus });
     const payload = await readRpcJson(response);
     if (!response.ok) {
       const code = rpcErrorCode(payload, 'MEMBERSHIP_STATUS_FAILED');

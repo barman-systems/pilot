@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const businessId = String(req.query?.business_id || '').trim();
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
-    const query = `pilot_employee_invitations?business_id=eq.${encodeURIComponent(businessId)}&select=id,email,display_name,role,permissions,status,delivery_status,delivery_attempts,expires_at,accepted_at,created_at&order=created_at.desc`;
+    const query = `dabbir_employee_invitations?business_id=eq.${encodeURIComponent(businessId)}&select=id,email,display_name,role,permissions,status,delivery_status,delivery_attempts,expires_at,accepted_at,created_at&order=created_at.desc`;
     const response = await supabaseRest(query, accessToken);
     if (!response.ok) return json(res, response.status === 403 ? 403 : 502, { ok: false, error: 'INVITATION_LIST_FAILED' });
     return json(res, 200, { ok: true, invitations: await response.json() });
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     const token = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-    const response = await supabaseRpc('pilot_create_employee_invitation', accessToken, {
+    const response = await supabaseRpc('dabbir_create_employee_invitation', accessToken, {
       p_business_id: businessId,
       p_email: email,
       p_display_name: displayName || null,

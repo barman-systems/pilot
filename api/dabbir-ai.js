@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const config = getDABBIRAiConfig();
     if (String(req.query?.synthetic || '') === '1') {
       const result = await generateDABBIRAiReply({
-        project: 'pilot_clinics',
+        project: 'dabbir_clinics',
         message: 'هلا، ابا موعد باجر العصر',
         language: 'ar',
       });

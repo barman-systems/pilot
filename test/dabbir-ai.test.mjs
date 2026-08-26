@@ -9,7 +9,7 @@ test('free Groq AI is fail-closed when key is missing outside Vercel', async () 
   assert.equal(config.configured, false);
   assert.equal(config.cost_mode, 'FREE_TIER_ONLY');
 
-  const result = await generateDABBIRAiReply({ project: 'pilot_clinics', message: 'أريد موعد غداً', env: {} });
+  const result = await generateDABBIRAiReply({ project: 'dabbir_clinics', message: 'أريد موعد غداً', env: {} });
   assert.equal(result.ok, false);
   assert.equal(result.state, 'UNCONFIGURED');
   assert.equal(result.error, 'groq_api_key_missing');
@@ -23,7 +23,7 @@ test('Vercel AI Gateway uses OIDC environment token when present', async () => {
   };
 
   const result = await generateDABBIRAiReply({
-    project: 'pilot_clinics',
+    project: 'dabbir_clinics',
     message: 'ابا موعد باجر العصر',
     language: 'ar',
     env: { VERCEL_ENV: 'production', VERCEL_OIDC_TOKEN: 'test-oidc-token' },
@@ -45,7 +45,7 @@ test('Vercel AI Gateway resolves Project OIDC token at runtime when env token is
   };
 
   const result = await generateDABBIRAiReply({
-    project: 'pilot_clinics',
+    project: 'dabbir_clinics',
     message: 'هلا، ابا موعد باجر العصر',
     language: 'ar',
     env: { VERCEL_ENV: 'production' },
@@ -65,7 +65,7 @@ test('Vercel AI Gateway resolves Project OIDC token at runtime when env token is
 test('Vercel Gateway fails closed when Project OIDC resolution returns no token', async () => {
   let providerCalled = false;
   const result = await generateDABBIRAiReply({
-    project: 'pilot_clinics',
+    project: 'dabbir_clinics',
     message: 'هلا',
     env: { VERCEL_ENV: 'production' },
     oidcGetter: async () => undefined,
@@ -86,7 +86,7 @@ test('free Groq AI uses configured model and returns provider output', async () 
   };
 
   const result = await generateDABBIRAiReply({
-    project: 'pilot_clinics',
+    project: 'dabbir_clinics',
     message: 'أريد موعد غداً',
     language: 'ar',
     env: { GROQ_API_KEY: 'test-only-key', DABBIR_AI_MODEL: 'openai/gpt-oss-20b' },
@@ -102,7 +102,7 @@ test('free Groq AI uses configured model and returns provider output', async () 
 
 test('invented business contact details are blocked after model generation', async () => {
   const fakeFetch = async () => ({ ok: true, status: 200, async json() { return { choices: [{ message: { content: 'اتصل على +971 4 123 4567 أو احجز عبر www.fakeclinic.ae وسنؤكد الموعد.' } }] }; } });
-  const result = await generateDABBIRAiReply({ project: 'pilot_clinics', message: 'أريد حجز موعد', language: 'ar', env: { GROQ_API_KEY: 'test-only-key' }, fetchImpl: fakeFetch });
+  const result = await generateDABBIRAiReply({ project: 'dabbir_clinics', message: 'أريد حجز موعد', language: 'ar', env: { GROQ_API_KEY: 'test-only-key' }, fetchImpl: fakeFetch });
   assert.equal(result.ok, true);
   assert.equal(result.guarded, true);
   assert.doesNotMatch(result.reply, /971|fakeclinic/);

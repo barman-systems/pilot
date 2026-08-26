@@ -69,11 +69,11 @@ export function extractWhatsAppEvents(payload = {}) {
 
 export function classifyDABBIREvent(event, project = 'generic') {
   if (event.type !== 'message') return { classification: 'MESSAGE_STATUS', workflow: ['STATUS_UPDATE'] };
-  if (project === 'pilot_clinics') {
+  if (project === 'dabbir_clinics') {
     const classification = classifyClinicMessage(event.text);
     return { classification, workflow: classification === 'APPOINTMENT_REQUEST' ? ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'BOOKING', 'TASK', 'FOLLOW_UP'] : ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
   }
-  if (project === 'pilot_celebrities') {
+  if (project === 'dabbir_celebrities') {
     const classification = classifyCelebrityMessage(event.text);
     return { classification, workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
   }

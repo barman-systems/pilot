@@ -2,12 +2,12 @@
 
 Authoritative baseline before this tranche: `ee1713ffe529634a603582e4028ddfa5a6f0170f`.
 
-This tranche closes the temporary database→GitHub drift created when `pilot_phase2_operational_outcomes_v3` was applied before its source branch was merged.
+This tranche closes the temporary database→GitHub drift created when `dabbir_phase2_operational_outcomes_v3` was applied before its source branch was merged.
 
 Verified database facts before PR:
-- migration `pilot_phase2_operational_outcomes_v3` is applied
-- `pilot_operation_outcomes` exists
-- `pilot_business_outcomes` exists
+- migration `dabbir_phase2_operational_outcomes_v3` is applied
+- `dabbir_operation_outcomes` exists
+- `dabbir_business_outcomes` exists
 - row level security and FORCE RLS are enabled
 - anonymous grants are zero
 - authenticated INSERT/UPDATE/DELETE/TRUNCATE grants are zero
