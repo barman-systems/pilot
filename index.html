@@ -115,7 +115,20 @@ function renderMessages(){const box=$('#messages');if(!box)return;box.innerHTML=
 async function requestTranslation(items,target){try{const r=await fetch('/api/translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({targetLanguage:target,messages:items.map(m=>({id:m.id,text:m.original}))})});const j=await r.json();if(!r.ok||!j.ok)throw new Error('translation_unavailable');return j.translations}catch{return items.map(m=>({id:m.id,text:m.fb[target]}))}}
 async function translateOne(m){if(m.translated){delete m.translated;renderMessages();return}const out=await requestTranslation([m],lang);m.translated=out[0]?.text||m.fb[lang];renderMessages()}
 $('#translateAll').onclick=async()=>{if(translatedAll){messages.forEach(m=>delete m.translated);translatedAll=false;renderMessages();return}const out=await requestTranslation(messages,lang),map=new Map(out.map(x=>[x.id,x.text]));messages.forEach(m=>m.translated=map.get(m.id)||m.fb[lang]);translatedAll=true;renderMessages();toast('تمت الترجمة مع حفظ الأصل','Translation completed with original preserved')};
-$('#sendBtn').onclick=()=>{const i=$('#composer');if(!i.value.trim())return;toast('هذه معاينة ولا يتم إرسال رسالة حقيقية','This is a preview; no real message was sent');i.value=''};$$('.toggle').forEach(b=>b.onclick=()=>{b.classList.toggle('on');toast('تم تحديث حالة المعاينة فقط','Preview state updated only')});$('#markAll').onclick=()=>{$$('#noticeList .notice').forEach(n=>n.classList.remove('unseen'));toast('تم تحديد الإشعارات كمقروءة','Notifications marked as read')};
+function sendPreviewMessage(){
+  const input=$('#composer');
+  const text=String(input?.value||'').trim();
+  if(!text)return;
+  const nextId=String(Math.max(0,...messages.map(m=>Number(m.id)||0))+1);
+  messages.push({id:nextId,side:'out',original:text,fb:{ar:text,en:text},previewOnly:true});
+  input.value='';
+  renderMessages();
+  const box=$('#messages');
+  if(box)box.scrollTop=box.scrollHeight;
+  toast('تمت إضافة الرسالة داخل معاينة المحادثة فقط — لم تُرسل إلى قناة خارجية','Message added to the conversation preview only — it was not sent to an external channel');
+}
+$('#sendBtn').onclick=sendPreviewMessage;
+$('#composer').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPreviewMessage()}});$$('.toggle').forEach(b=>b.onclick=()=>{b.classList.toggle('on');toast('تم تحديث حالة المعاينة فقط','Preview state updated only')});$('#markAll').onclick=()=>{$$('#noticeList .notice').forEach(n=>n.classList.remove('unseen'));toast('تم تحديد الإشعارات كمقروءة','Notifications marked as read')};
 $$('[data-modal]').forEach(b=>b.onclick=()=>{$('#modalTitle').textContent=b.dataset.modal==='appointment'?t('appointments.new'):t('tasks.new');$('#formModal').classList.add('open')});$('#modalCancel').onclick=()=>$('#formModal').classList.remove('open');$('#modalSave').onclick=()=>{$('#formModal').classList.remove('open');toast('تم الحفظ في المعاينة فقط','Saved in preview only')};$('#onboardingBtn').onclick=()=>$('#onboardingModal').classList.add('open');$('#onboardingClose').onclick=()=>$('#onboardingModal').classList.remove('open');
 (async()=>{try{await Promise.all([loadLocale(lang),loadRegistry()]);applyLocale();showScreen('dashboard')}catch{document.body.textContent='PILOT preview failed to load'}})();
 </script>
