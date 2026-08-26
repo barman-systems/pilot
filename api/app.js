@@ -9,6 +9,44 @@ const teamBottom = '<a data-pilot-team-mobile="true" href="/team.html" style="bo
 const legacyTeamLanguageWrite = "$('#teamLink').textContent=t.team;";
 const safeTeamLanguageWrite = "$('#teamLink')&&($('#teamLink').textContent=t.team);";
 
+const businessAdaptiveUi = String.raw`
+<style>
+@media(max-width:700px){.bottomNav.pilot-store-nav{grid-template-columns:repeat(5,1fr)!important}}
+</style>
+<script>
+(()=>{
+  function applyBusinessProfile(){
+    if(!workspace?.business) return;
+    const isStore=String(workspace.business.business_type||'').toLowerCase()==='store';
+    document.body.classList.toggle('pilot-store',isStore);
+    if(!isStore) return;
+
+    document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display='none'});
+    document.querySelector('#bottomNav')?.classList.add('pilot-store-nav');
+
+    if(current==='appointments') showScreen('dashboard');
+
+    const cards=document.querySelectorAll('#dashCards .card.metric');
+    if(cards[1]){
+      const label=cards[1].querySelector('span');
+      const value=cards[1].querySelector('strong');
+      if(label) label.textContent=lang==='ar'?'المتابعات':'Follow-ups';
+      if(value) value.textContent=String((workspace.followups||[]).length);
+    }
+
+    const state=document.querySelector('#workspaceState');
+    if(state) state.textContent=lang==='ar'?'متجر • تشغيلي':'Store • Operational';
+  }
+
+  const baseRenderAll=renderAll;
+  renderAll=function(){
+    baseRenderAll();
+    applyBusinessProfile();
+  };
+  setTimeout(applyBusinessProfile,0);
+})();
+</script>`;
+
 export default function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
@@ -27,6 +65,7 @@ export default function handler(req, res) {
   }
   html = html.replace(legacyTeamLanguageWrite, safeTeamLanguageWrite);
   html = html.replace(legacyTeamLink, '');
+  html = html.replace('</body>', `${businessAdaptiveUi}\n</body>`);
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
