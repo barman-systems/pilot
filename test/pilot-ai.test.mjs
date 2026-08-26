@@ -44,9 +44,43 @@ test('free Groq AI uses configured model and returns provider output', async () 
   assert.equal(result.provider, 'groq');
   assert.equal(result.model, 'openai/gpt-oss-20b');
   assert.match(result.reply, /الموعد/);
+  assert.equal(result.guarded, false);
   assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal(request.body.model, 'openai/gpt-oss-20b');
   assert.equal(request.options.headers.authorization, 'Bearer test-only-key');
+  assert.match(request.body.messages[0].content, /Never invent or guess phone numbers/);
+});
+
+test('invented business contact details are blocked after model generation', async () => {
+  const fakeFetch = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        choices: [{
+          message: {
+            content: 'اتصل على +971 4 123 4567 أو احجز عبر www.fakeclinic.ae وسنؤكد الموعد.',
+          },
+        }],
+      };
+    },
+  });
+
+  const result = await generatePilotAiReply({
+    project: 'pilot_clinics',
+    message: 'أريد حجز موعد',
+    language: 'ar',
+    env: { GROQ_API_KEY: 'test-only-key' },
+    fetchImpl: fakeFetch,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state, 'SUCCESS');
+  assert.equal(result.guarded, true);
+  assert.equal(result.grounding_state, 'UNVERIFIED_BUSINESS_CONTACT_BLOCKED');
+  assert.doesNotMatch(result.reply, /971/);
+  assert.doesNotMatch(result.reply, /fakeclinic/);
+  assert.match(result.reply, /لن أخترع/);
 });
 
 test('unsupported PILOT project is rejected before provider call', async () => {
