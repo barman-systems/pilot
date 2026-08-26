@@ -145,6 +145,34 @@ const script = String.raw`(()=>{
     hideReset();
   });
 
+  let chatRecoveryInFlight=false;
+  async function recoverOrphanedChat(){
+    if(chatRecoveryInFlight||typeof workspace==='undefined'||!workspace?.business||typeof selectedConversation!=='function') return;
+    const conversation=selectedConversation();
+    const messages=Array.isArray(workspace.messages)?workspace.messages:[];
+    const latest=messages[messages.length-1];
+    if(conversation?.state!=='action_required'||latest?.sender_type!=='customer') return;
+    chatRecoveryInFlight=true;
+    try{
+      const response=await fetch('/api/chat-recover',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:workspace.business.id,conversation_id:conversation.id})});
+      const payload=await response.json().catch(()=>({}));
+      if(response.ok&&payload.ok&&payload.recovered&&typeof loadRuntime==='function'){
+        await loadRuntime(workspace.business.id,conversation.id);
+      }
+    }catch{}
+    finally{chatRecoveryInFlight=false}
+  }
+
+  if(typeof renderAll==='function'){
+    const renderAllBeforeChatRecovery=renderAll;
+    renderAll=function(){
+      const result=renderAllBeforeChatRecovery.apply(this,arguments);
+      setTimeout(recoverOrphanedChat,0);
+      return result;
+    };
+  }
+  setTimeout(recoverOrphanedChat,500);
+
   new MutationObserver(setRecoveryLanguage).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
   setRecoveryLanguage();
 })();`;
