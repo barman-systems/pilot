@@ -9,6 +9,26 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const config = getPilotAiConfig();
+    if (String(req.query?.synthetic || '') === '1') {
+      const result = await generatePilotAiReply({
+        project: 'pilot_clinics',
+        message: 'هلا، ابا موعد باجر العصر',
+        language: 'ar',
+      });
+      const status = result.ok ? 200
+        : result.state === 'UNCONFIGURED' ? 503
+        : result.state === 'RATE_LIMITED' ? 429
+        : 502;
+      return json(res, status, {
+        ...result,
+        service: 'pilot-ai',
+        environment,
+        data_mode: 'SYNTHETIC_ONLY',
+        external_side_effects: false,
+        synthetic_probe: true,
+      });
+    }
+
     return json(res, 200, {
       ok: true,
       service: 'pilot-ai',
