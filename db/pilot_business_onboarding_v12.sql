@@ -1,0 +1,46 @@
+-- PILOT business onboarding v12
+-- Allows the designated owner to read the business row during first-owner bootstrap
+-- while preserving tenant RLS, and keeps external channels unconfigured until real authorization.
+
+drop policy if exists pilot_businesses_owner_select on public.pilot_businesses;
+create policy pilot_businesses_owner_select
+on public.pilot_businesses
+for select
+to authenticated
+using ((select auth.uid()) is not null and owner_id = (select auth.uid()));
+
+create or replace function public.pilot_create_business(
+  p_name text,
+  p_business_type text,
+  p_locale text default 'ar-AE'::text
+)
+returns table(business_id uuid, business_slug text)
+language plpgsql
+security invoker
+set search_path to 'public', 'pg_temp'
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_id uuid := gen_random_uuid();
+  v_slug text;
+begin
+  if v_user is null then raise exception 'AUTH_REQUIRED'; end if;
+  if nullif(trim(p_name),'') is null then raise exception 'BUSINESS_NAME_REQUIRED'; end if;
+  if p_business_type not in ('store','clinic','creator','salon','real_estate','services','other') then
+    raise exception 'UNSUPPORTED_BUSINESS_TYPE';
+  end if;
+
+  v_slug := 'pilot-' || substr(replace(v_id::text,'-',''),1,16);
+
+  insert into public.pilot_businesses(id,slug,name,business_type,owner_id,locale,demo_mode)
+  values(v_id,v_slug,left(trim(p_name),120),p_business_type,v_user,coalesce(nullif(trim(p_locale),''),'ar-AE'),false);
+
+  insert into public.pilot_memberships(business_id,user_id,role,status,accepted_at)
+  values(v_id,v_user,'owner','active',now());
+
+  return query select v_id,v_slug;
+end;
+$function$;
+
+revoke all on function public.pilot_create_business(text,text,text) from public, anon;
+grant execute on function public.pilot_create_business(text,text,text) to authenticated, service_role;
