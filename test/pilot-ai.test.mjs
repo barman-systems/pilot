@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generatePilotAiReply, getPilotAiConfig } from '../api/_ai-core.js';
 
-test('free Groq AI is fail-closed when key is missing', async () => {
+test('free Groq AI is fail-closed when key is missing outside Vercel', async () => {
   const config = getPilotAiConfig({});
   assert.equal(config.provider, 'groq');
   assert.equal(config.model, 'openai/gpt-oss-20b');
@@ -17,6 +17,29 @@ test('free Groq AI is fail-closed when key is missing', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.state, 'UNCONFIGURED');
   assert.equal(result.error, 'groq_api_key_missing');
+});
+
+test('Vercel AI Gateway fallback works when Groq secret is absent', async () => {
+  let request;
+  const result = await generatePilotAiReply({
+    project: 'pilot_clinics',
+    message: 'ابا موعد باجر العصر',
+    language: 'ar',
+    env: { VERCEL_ENV: 'production' },
+    gatewayGenerateImpl: async (options) => {
+      request = options;
+      return { text: 'أكيد، أقدر أساعدك في تجهيز طلب موعد باجر العصر، لكن ما أقدر أؤكد التوفر قبل التحقق من التقويم.' };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'vercel-ai-gateway');
+  assert.equal(result.model, 'inclusionai/ling-3.0-tiny-free');
+  assert.match(result.reply, /موعد/);
+  assert.equal(result.guarded, false);
+  assert.equal(request.model, 'inclusionai/ling-3.0-tiny-free');
+  assert.match(request.system, /Gulf-friendly Arabic/);
+  assert.equal(request.providerOptions.gateway.disallowPromptTraining, true);
 });
 
 test('free Groq AI uses configured model and returns provider output', async () => {
