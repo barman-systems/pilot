@@ -574,7 +574,28 @@ async function runJourney() {
     return { status: update.status, detail: 'Order confirmed and recognized-sales metric includes AED 125.' };
   });
 
-  await step('25_mobile_webkit_owner_journey', browserJourney);
+  await step('24b_authenticated_translation_fallback', async () => {
+  const original = 'مرحبا، المنتج متوفر اليوم';
+  const result = await ownerSession.request('/api/translate', {
+    method: 'POST',
+    body: {
+      business_id: businessId,
+      targetLanguage: 'en',
+      messages: [{ id: 'qa-translation', text: original }],
+    },
+  });
+  const translated = String(result.json?.translations?.[0]?.text || '').trim();
+  assert(result.ok && result.json?.ok, `TRANSLATION_FAILED_${result.status}:${small(result.text)}`);
+  assert(result.json?.service === 'dabbir-translation', 'TRANSLATION_SERVICE_IDENTITY_WRONG');
+  assert(result.json?.original_preserved === true, 'TRANSLATION_ORIGINAL_PRESERVATION_MISSING');
+  assert(translated && translated !== original && /[A-Za-z]/.test(translated), 'TRANSLATION_OUTPUT_INVALID');
+  return {
+    status: result.status,
+    detail: `Authenticated translation succeeded via ${result.json?.model || 'unknown-model'}${result.json?.fallback_used ? ' fallback' : ''}.`,
+  };
+});
+
+await step('25_mobile_webkit_owner_journey', browserJourney);
 
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
