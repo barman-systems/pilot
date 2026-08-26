@@ -5,6 +5,7 @@ const ALLOWED = new Set([
   'poolside/laguna-s-2.1-free',
   'nvidia/nemotron-3.5-lightning-free',
   'minimax/minimax-m2.7-free',
+  'minimax/minimax-m3-free',
 ]);
 
 export default async function handler(req, res) {
