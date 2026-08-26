@@ -15,17 +15,11 @@ test('free Groq AI is fail-closed when key is missing outside Vercel', async () 
   assert.equal(result.error, 'groq_api_key_missing');
 });
 
-test('Vercel AI Gateway uses OIDC when Groq secret is absent', async () => {
+test('Vercel AI Gateway uses OIDC environment token when present', async () => {
   let request;
   const fakeFetch = async (url, options) => {
     request = { url, options, body: JSON.parse(options.body) };
-    return {
-      ok: true,
-      status: 200,
-      async json() {
-        return { choices: [{ message: { content: 'أكيد، أقدر أساعدك في تجهيز طلب موعد باجر العصر، لكن ما أقدر أؤكد التوفر قبل التحقق من التقويم.' } }] };
-      },
-    };
+    return { ok: true, status: 200, async json() { return { choices: [{ message: { content: 'أكيد، أقدر أساعدك في تجهيز طلب موعد باجر العصر.' } }] }; } };
   };
 
   const result = await generatePilotAiReply({
@@ -38,36 +32,57 @@ test('Vercel AI Gateway uses OIDC when Groq secret is absent', async () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'vercel-ai-gateway');
-  assert.equal(result.model, 'minimax/minimax-m2.7-free');
-  assert.match(result.reply, /موعد/);
-  assert.equal(request.url, 'https://ai-gateway.vercel.sh/v1/chat/completions');
+  assert.equal(result.auth_mode, 'OIDC_ENV');
   assert.equal(request.options.headers.authorization, 'Bearer test-oidc-token');
+});
+
+test('Vercel AI Gateway resolves Project OIDC token at runtime when env token is absent', async () => {
+  let request;
+  let oidcCalls = 0;
+  const fakeFetch = async (url, options) => {
+    request = { url, options, body: JSON.parse(options.body) };
+    return { ok: true, status: 200, async json() { return { choices: [{ message: { content: 'هلا، حاضر. أقدر أساعدك في طلب الموعد بدون ادعاء أن الحجز تم.' } }] }; } };
+  };
+
+  const result = await generatePilotAiReply({
+    project: 'pilot_clinics',
+    message: 'هلا، ابا موعد باجر العصر',
+    language: 'ar',
+    env: { VERCEL_ENV: 'production' },
+    oidcGetter: async () => { oidcCalls += 1; return 'runtime-project-oidc-token'; },
+    fetchImpl: fakeFetch,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.auth_mode, 'VERCEL_PROJECT_OIDC');
+  assert.equal(oidcCalls, 1);
+  assert.equal(request.url, 'https://ai-gateway.vercel.sh/v1/chat/completions');
+  assert.equal(request.options.headers.authorization, 'Bearer runtime-project-oidc-token');
   assert.equal(request.body.model, 'minimax/minimax-m2.7-free');
   assert.match(request.body.messages[0].content, /Gulf-friendly Arabic/);
 });
 
-test('Vercel Gateway fails closed when no OIDC or API key exists', async () => {
+test('Vercel Gateway fails closed when Project OIDC resolution returns no token', async () => {
+  let providerCalled = false;
   const result = await generatePilotAiReply({
     project: 'pilot_clinics',
     message: 'هلا',
     env: { VERCEL_ENV: 'production' },
+    oidcGetter: async () => undefined,
+    fetchImpl: async () => { providerCalled = true; throw new Error('provider must not be called'); },
   });
   assert.equal(result.ok, false);
   assert.equal(result.state, 'UNCONFIGURED');
   assert.equal(result.error, 'gateway_credential_missing');
+  assert.equal(result.auth_mode, 'MISSING');
+  assert.equal(providerCalled, false);
 });
 
 test('free Groq AI uses configured model and returns provider output', async () => {
   let request;
   const fakeFetch = async (url, options) => {
     request = { url, options, body: JSON.parse(options.body) };
-    return {
-      ok: true,
-      status: 200,
-      async json() {
-        return { choices: [{ message: { content: 'أكيد، أقدر أساعدك في طلب الموعد.' } }] };
-      },
-    };
+    return { ok: true, status: 200, async json() { return { choices: [{ message: { content: 'أكيد، أقدر أساعدك في طلب الموعد.' } }] }; } };
   };
 
   const result = await generatePilotAiReply({
