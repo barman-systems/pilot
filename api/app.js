@@ -6,6 +6,8 @@ const teamNav = '<a class="navBtn" data-pilot-team-nav="true" href="/team.html" 
 const legacyTeamLink = '<div class="sideFoot"><a class="secondary" href="/team.html" style="display:block;text-align:center;text-decoration:none" id="teamLink"></a></div>';
 const settingsBottom = '<button data-screen="settings">⚙<br><span data-label="settings"></span></button>';
 const teamBottom = '<a data-pilot-team-mobile="true" href="/team.html" style="border:0;background:transparent;color:#9298a1;font-size:8px;border-radius:10px;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center">♟<br><span data-label="team"></span></a>';
+const legacyTeamLanguageWrite = "$('#teamLink').textContent=t.team;";
+const safeTeamLanguageWrite = "$('#teamLink')&&($('#teamLink').textContent=t.team);";
 
 export default function handler(req, res) {
   if (req.method !== 'GET') {
@@ -23,6 +25,7 @@ export default function handler(req, res) {
     html = html.replace(settingsBottom, `${teamBottom}${settingsBottom}`);
     html = html.replace('grid-template-columns:repeat(5,1fr);bottom:0', 'grid-template-columns:repeat(6,1fr);bottom:0');
   }
+  html = html.replace(legacyTeamLanguageWrite, safeTeamLanguageWrite);
   html = html.replace(legacyTeamLink, '');
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
