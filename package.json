@@ -1,10 +1,13 @@
 {
   "name": "pilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "ai": "^6.0.0"
   },
   "engines": {
     "node": "24.x"
