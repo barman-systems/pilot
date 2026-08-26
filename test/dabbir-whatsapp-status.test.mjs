@@ -64,6 +64,15 @@ test('WhatsApp UI reads live status instead of trusting the stale static red car
   assert.match(brandUi, /Linked/);
 });
 
+test('WhatsApp integrations UI explicitly shows the active Meta phone number', async () => {
+  const brandUi = await read('api/brand-ui.js');
+  assert.match(brandUi, /display_phone_number/);
+  assert.match(brandUi, /رقم WhatsApp المفعّل/);
+  assert.match(brandUi, /Active WhatsApp number/);
+  assert.match(brandUi, /verified_name/);
+  assert.match(brandUi, /Waiting for Meta verification/);
+});
+
 test('webhook accepts both DABBIR and legacy PILOT credential names', async () => {
   const webhook = await read('api/dabbir-whatsapp-webhook.js');
   assert.match(webhook, /DABBIR_WHATSAPP_VERIFY_TOKEN/);
