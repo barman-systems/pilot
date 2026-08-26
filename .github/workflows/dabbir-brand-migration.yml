@@ -26,7 +26,7 @@ jobs:
 
           root = Path('.')
           allowed = {'.js','.mjs','.cjs','.json','.html','.md','.sql','.yml','.yaml','.txt','.css','.ts','.tsx','.jsx'}
-          skip_parts = {'.git','node_modules','.vercel'}
+          skip_parts = {'.git','node_modules','.vercel','.github'}
 
           replacements = [
               ('PILOT', 'DABBIR'),
