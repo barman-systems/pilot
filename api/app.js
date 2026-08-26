@@ -91,9 +91,9 @@ const conversationPerformanceUi = String.raw`
     renderFastMessages();
 
     try{
-      const {r,j={}}=await api('/api/chat-send',{
+      const {r,j={}}=await api('/api/dabbir-runtime',{
         method:'POST',
-        body:JSON.stringify({business_id:workspace.business.id,conversation_id:selectedConversationId,message:text})
+        body:JSON.stringify({action:'send_message',business_id:workspace.business.id,conversation_id:selectedConversationId,message:text})
       });
 
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==tempId&&m.id!==typingId);
@@ -155,6 +155,6 @@ export default function handler(req, res) {
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
   res.setHeader('x-dabbir-interface', 'operational-runtime-v1');
-  res.setHeader('x-dabbir-chat-path', 'lightweight-v1');
+  res.setHeader('x-dabbir-chat-path', 'runtime-send-message-v2');
   return res.status(200).send(html);
 }
