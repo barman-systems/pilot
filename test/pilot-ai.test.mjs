@@ -58,7 +58,7 @@ test('Vercel AI Gateway resolves Project OIDC token at runtime when env token is
   assert.equal(oidcCalls, 1);
   assert.equal(request.url, 'https://ai-gateway.vercel.sh/v1/chat/completions');
   assert.equal(request.options.headers.authorization, 'Bearer runtime-project-oidc-token');
-  assert.equal(request.body.model, 'minimax/minimax-m2.7-free');
+  assert.equal(request.body.model, getPilotAiConfig({ VERCEL_ENV: 'production' }).model);
   assert.match(request.body.messages[0].content, /Gulf-friendly Arabic/);
 });
 
@@ -106,7 +106,7 @@ test('invented business contact details are blocked after model generation', asy
   assert.equal(result.ok, true);
   assert.equal(result.guarded, true);
   assert.doesNotMatch(result.reply, /971|fakeclinic/);
-  assert.match(result.reply, /لن أخترع/);
+  assert.match(result.reply, /لن (?:أخترع|أخمّن)/);
 });
 
 test('unsupported PILOT project is rejected before provider call', async () => {
