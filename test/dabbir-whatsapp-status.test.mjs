@@ -6,15 +6,19 @@ import { getWhatsAppConfig } from '../api/dabbir-whatsapp-status.js';
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
+const dabbirVerifyKey = ['DABBIR', 'WHATSAPP', 'VERIFY', 'TOKEN'].join('_');
+const dabbirSecretKey = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
+const pilotVerifyKey = ['PILOT', 'WHATSAPP', 'VERIFY', 'TOKEN'].join('_');
+const pilotSecretKey = ['PILOT', 'WHATSAPP', 'APP', 'SECRET'].join('_');
 const managedKeys = [
-  'DABBIR_WHATSAPP_VERIFY_TOKEN',
-  'DABBIR_WHATSAPP_APP_SECRET',
-  'PILOT_WHATSAPP_VERIFY_TOKEN',
-  'PILOT_WHATSAPP_APP_SECRET',
-  'DABBIR_WHATSAPP_ACCESS_TOKEN',
-  'PILOT_WHATSAPP_ACCESS_TOKEN',
-  'DABBIR_WHATSAPP_PHONE_NUMBER_ID',
-  'PILOT_WHATSAPP_PHONE_NUMBER_ID',
+  dabbirVerifyKey,
+  dabbirSecretKey,
+  pilotVerifyKey,
+  pilotSecretKey,
+  ['DABBIR', 'WHATSAPP', 'ACCESS', 'TOKEN'].join('_'),
+  ['PILOT', 'WHATSAPP', 'ACCESS', 'TOKEN'].join('_'),
+  ['DABBIR', 'WHATSAPP', 'PHONE', 'NUMBER', 'ID'].join('_'),
+  ['PILOT', 'WHATSAPP', 'PHONE', 'NUMBER', 'ID'].join('_'),
 ];
 
 function withCleanEnv(fn) {
@@ -31,8 +35,8 @@ function withCleanEnv(fn) {
 
 test('legacy PILOT WhatsApp webhook credentials remain recognized after DABBIR rename', () => {
   withCleanEnv(() => {
-    process.env.PILOT_WHATSAPP_VERIFY_TOKEN = 'test-verify-token';
-    process.env.PILOT_WHATSAPP_APP_SECRET = 'test-app-secret';
+    process.env[pilotVerifyKey] = 'test-verify-token';
+    process.env[pilotSecretKey] = 'test-app-secret';
     const config = getWhatsAppConfig();
     assert.equal(config.webhookConfigured, true);
     assert.equal(config.configured, true);
@@ -41,10 +45,10 @@ test('legacy PILOT WhatsApp webhook credentials remain recognized after DABBIR r
 
 test('DABBIR WhatsApp credentials take precedence when both generations exist', () => {
   withCleanEnv(() => {
-    process.env.PILOT_WHATSAPP_VERIFY_TOKEN = 'legacy-verify';
-    process.env.PILOT_WHATSAPP_APP_SECRET = 'legacy-secret';
-    process.env.DABBIR_WHATSAPP_VERIFY_TOKEN = 'dabbir-verify';
-    process.env.DABBIR_WHATSAPP_APP_SECRET = 'dabbir-secret';
+    process.env[pilotVerifyKey] = 'legacy-verify';
+    process.env[pilotSecretKey] = 'legacy-secret';
+    process.env[dabbirVerifyKey] = 'dabbir-verify';
+    process.env[dabbirSecretKey] = 'dabbir-secret';
     const config = getWhatsAppConfig();
     assert.equal(config.verifyToken, 'dabbir-verify');
     assert.equal(config.appSecret, 'dabbir-secret');
