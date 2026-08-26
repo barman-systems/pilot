@@ -39,9 +39,9 @@ function languageFor(message, locale = 'ar-AE') {
 }
 
 function projectFor(type) {
-  if (type === 'clinic') return 'pilot_clinics';
-  if (type === 'creator') return 'pilot_celebrities';
-  return 'pilot_businesses';
+  if (type === 'clinic') return 'dabbir_clinics';
+  if (type === 'creator') return 'dabbir_celebrities';
+  return 'dabbir_businesses';
 }
 
 function normalizeLocal(value = '') {
@@ -140,12 +140,12 @@ function failureFallbackReply({ language, intent, business }) {
 
 async function persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply }) {
   const [aiRows] = await Promise.all([
-    rest(accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
+    rest(accessToken, 'dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
       method: 'POST',
       headers: { prefer: 'return=representation' },
       body: JSON.stringify({ business_id: businessId, conversation_id: conversationId, sender_type: 'ai', body: reply, intent, simulated: false }),
     }, 'AI_MESSAGE_PERSIST_FAILED'),
-    rest(accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
+    rest(accessToken, `dabbir_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
       method: 'PATCH',
       headers: { prefer: 'return=minimal' },
       body: JSON.stringify({ state: 'waiting_customer', updated_at: new Date().toISOString() }),
@@ -178,11 +178,11 @@ export default async function handler(req, res) {
 
     const lookupStarted = Date.now();
     const [conversations, businesses, knowledge, historyDesc, mayReply] = await Promise.all([
-      rest(accessToken, `pilot_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED'),
-      rest(accessToken, `pilot_businesses?select=id,name,business_type,locale,demo_mode&id=eq.${businessId}&limit=1`, {}, 'BUSINESS_LOOKUP_FAILED'),
-      rest(accessToken, `pilot_business_knowledge?select=knowledge_key,knowledge_type,value,source,status&business_id=eq.${businessId}&order=updated_at.desc&limit=12`, {}, 'KNOWLEDGE_LOOKUP_FAILED'),
-      rest(accessToken, `pilot_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.desc&limit=8`, {}, 'MESSAGE_HISTORY_FAILED'),
-      rpc(accessToken, 'pilot_ai_may_reply', { p_business_id: businessId, p_conversation_id: conversationId }, 'AI_POLICY_CHECK_FAILED'),
+      rest(accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_businesses?select=id,name,business_type,locale,demo_mode&id=eq.${businessId}&limit=1`, {}, 'BUSINESS_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_business_knowledge?select=knowledge_key,knowledge_type,value,source,status&business_id=eq.${businessId}&order=updated_at.desc&limit=12`, {}, 'KNOWLEDGE_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.desc&limit=8`, {}, 'MESSAGE_HISTORY_FAILED'),
+      rpc(accessToken, 'dabbir_ai_may_reply', { p_business_id: businessId, p_conversation_id: conversationId }, 'AI_POLICY_CHECK_FAILED'),
     ]);
     const lookupMs = Date.now() - lookupStarted;
 
@@ -195,7 +195,7 @@ export default async function handler(req, res) {
 
     const language = languageFor(message, business.locale);
     const intent = intentFor(business.business_type, message);
-    const customerRows = await rest(accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
+    const customerRows = await rest(accessToken, 'dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
       method: 'POST',
       headers: { prefer: 'return=representation' },
       body: JSON.stringify({ business_id: businessId, conversation_id: conversationId, sender_type: 'customer', body: message, intent, simulated: false }),
@@ -208,7 +208,7 @@ export default async function handler(req, res) {
       const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fastReply });
       const finalMs = Date.now() - finalStarted;
       const totalMs = Date.now() - started;
-      console.info('pilot_chat_fast_path', { intent, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
+      console.info('dabbir_chat_fast_path', { intent, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
         provider: 'dabbir-local-fastpath',
@@ -237,7 +237,7 @@ export default async function handler(req, res) {
       const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fallbackReply });
       const finalMs = Date.now() - finalStarted;
       const totalMs = Date.now() - started;
-      console.warn('pilot_chat_ai_degraded', { state: aiResult.state, error: aiResult.error, model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
+      console.warn('dabbir_chat_ai_degraded', { state: aiResult.state, error: aiResult.error, model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
         provider: 'dabbir-local-fallback',
@@ -257,7 +257,7 @@ export default async function handler(req, res) {
     const finalMs = Date.now() - finalStarted;
     const totalMs = Date.now() - started;
 
-    console.info('pilot_chat_completed', { model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
+    console.info('dabbir_chat_completed', { model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
     return json(res, 200, {
       ok: true,
       provider: aiResult.provider,
@@ -270,7 +270,7 @@ export default async function handler(req, res) {
   } catch (error) {
     const status = Number(error?.status || 500);
     const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(status) ? status : 500;
-    console.error('pilot_chat_failed', { error: cleanText(error?.message || 'CHAT_SEND_FAILED', 120), status: safeStatus, total_ms: Date.now() - started });
+    console.error('dabbir_chat_failed', { error: cleanText(error?.message || 'CHAT_SEND_FAILED', 120), status: safeStatus, total_ms: Date.now() - started });
     return json(res, safeStatus, { ok: false, error: cleanText(error?.message || 'CHAT_SEND_FAILED', 120), detail: error?.detail || undefined });
   }
 }

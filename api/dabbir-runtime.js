@@ -76,9 +76,9 @@ function cleanText(value, max = 500) {
 }
 
 function projectForBusinessType(type) {
-  if (type === 'clinic') return 'pilot_clinics';
-  if (type === 'creator') return 'pilot_celebrities';
-  return 'pilot_businesses';
+  if (type === 'clinic') return 'dabbir_clinics';
+  if (type === 'creator') return 'dabbir_celebrities';
+  return 'dabbir_businesses';
 }
 
 function intentForBusiness(type, message) {
@@ -136,7 +136,7 @@ function requireMembership(identity, businessId) {
 async function getBusiness(accessToken, businessId) {
   const rows = await rest(
     accessToken,
-    `pilot_businesses?select=id,slug,name,business_type,locale,demo_mode,created_at,updated_at&id=eq.${businessId}&limit=1`,
+    `dabbir_businesses?select=id,slug,name,business_type,locale,demo_mode,created_at,updated_at&id=eq.${businessId}&limit=1`,
     {},
     'BUSINESS_LOOKUP_FAILED',
   );
@@ -146,7 +146,7 @@ async function getBusiness(accessToken, businessId) {
 async function getKnowledge(accessToken, businessId) {
   const rows = await rest(
     accessToken,
-    `pilot_business_knowledge?select=knowledge_key,knowledge_type,value,source,confidence,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=40`,
+    `dabbir_business_knowledge?select=knowledge_key,knowledge_type,value,source,confidence,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=40`,
     {},
     'KNOWLEDGE_LOOKUP_FAILED',
   );
@@ -196,11 +196,11 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
   if (!business) throw Object.assign(new Error('BUSINESS_NOT_FOUND'), { status: 404 });
 
   const [conversations, customers, appointments, handoffs, followups] = await Promise.all([
-    rest(identity.accessToken, `pilot_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&order=updated_at.desc&limit=30`, {}, 'CONVERSATIONS_LOOKUP_FAILED'),
-    rest(identity.accessToken, `pilot_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'CUSTOMERS_LOOKUP_FAILED'),
-    rest(identity.accessToken, `pilot_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
-    rest(identity.accessToken, `pilot_handoffs?select=id,conversation_id,customer_id,route_class,reason,state,priority,summary,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'HANDOFFS_LOOKUP_FAILED'),
-    rest(identity.accessToken, `pilot_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,blocked_reason,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'FOLLOWUPS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&order=updated_at.desc&limit=30`, {}, 'CONVERSATIONS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'CUSTOMERS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_handoffs?select=id,conversation_id,customer_id,route_class,reason,state,priority,summary,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'HANDOFFS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,blocked_reason,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'FOLLOWUPS_LOOKUP_FAILED'),
   ]);
 
   let conversationId = requestedConversationId && safeId(requestedConversationId);
@@ -208,7 +208,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
   if (!conversationId) conversationId = conversations?.[0]?.id || null;
 
   const messages = conversationId
-    ? await rest(identity.accessToken, `pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.asc&limit=100`, {}, 'MESSAGES_LOOKUP_FAILED')
+    ? await rest(identity.accessToken, `dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.asc&limit=100`, {}, 'MESSAGES_LOOKUP_FAILED')
     : [];
 
   const aiConfig = getDABBIRAiConfig();
@@ -246,7 +246,7 @@ async function createBusiness(identity, body) {
   if (!name) throw Object.assign(new Error('BUSINESS_NAME_REQUIRED'), { status: 400 });
   if (!BUSINESS_TYPES.has(businessType)) throw Object.assign(new Error('UNSUPPORTED_BUSINESS_TYPE'), { status: 400 });
 
-  const result = await rpc(identity.accessToken, 'pilot_create_business', {
+  const result = await rpc(identity.accessToken, 'dabbir_create_business', {
     p_name: name,
     p_business_type: businessType,
     p_locale: locale,
@@ -254,7 +254,7 @@ async function createBusiness(identity, body) {
   const businessId = result?.[0]?.business_id || result?.business_id;
   if (!safeId(businessId)) throw Object.assign(new Error('BUSINESS_CREATE_FAILED'), { status: 502 });
 
-  await rest(identity.accessToken, `pilot_businesses?id=eq.${businessId}`, {
+  await rest(identity.accessToken, `dabbir_businesses?id=eq.${businessId}`, {
     method: 'PATCH',
     headers: { prefer: 'return=minimal' },
     body: JSON.stringify({ demo_mode: false, updated_at: new Date().toISOString() }),
@@ -268,20 +268,20 @@ async function startConversation(identity, body) {
   if (!businessId || !requireMembership(identity, businessId)) throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'), { status: 403 });
   const displayName = cleanText(body.display_name || 'Web Customer', 120) || 'Web Customer';
 
-  const customers = await rest(identity.accessToken, 'pilot_customers?select=id,display_name,lead_status,created_at', {
+  const customers = await rest(identity.accessToken, 'dabbir_customers?select=id,display_name,lead_status,created_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
       business_id: businessId,
       display_name: displayName,
       lead_status: 'new',
-      metadata: { source: 'pilot_web_runtime' },
+      metadata: { source: 'dabbir_web_runtime' },
     }),
   }, 'CUSTOMER_CREATE_FAILED');
   const customer = customers?.[0];
   if (!customer?.id) throw Object.assign(new Error('CUSTOMER_CREATE_FAILED'), { status: 502 });
 
-  const conversations = await rest(identity.accessToken, 'pilot_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at', {
+  const conversations = await rest(identity.accessToken, 'dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
@@ -313,12 +313,12 @@ async function sendMessage(identity, body) {
   if (!businessId || !conversationId || !message) throw Object.assign(new Error('MESSAGE_INPUT_REQUIRED'), { status: 400 });
   if (!requireMembership(identity, businessId)) throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'), { status: 403 });
 
-  const conversations = await rest(identity.accessToken, `pilot_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED');
+  const conversations = await rest(identity.accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED');
   const conversation = conversations?.[0];
   if (!conversation || conversation.channel_type !== 'web') throw Object.assign(new Error('WEB_CONVERSATION_NOT_FOUND'), { status: 404 });
   if (conversation.demo_mode) throw Object.assign(new Error('REAL_RUNTIME_REQUIRES_NON_DEMO_CONVERSATION'), { status: 409 });
 
-  const mayReply = await rpc(identity.accessToken, 'pilot_ai_may_reply', {
+  const mayReply = await rpc(identity.accessToken, 'dabbir_ai_may_reply', {
     p_business_id: businessId,
     p_conversation_id: conversationId,
   }, 'AI_POLICY_CHECK_FAILED');
@@ -327,12 +327,12 @@ async function sendMessage(identity, body) {
   const [business, knowledge, history] = await Promise.all([
     getBusiness(identity.accessToken, businessId),
     getKnowledge(identity.accessToken, businessId),
-    rest(identity.accessToken, `pilot_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.asc&limit=30`, {}, 'MESSAGE_HISTORY_FAILED'),
+    rest(identity.accessToken, `dabbir_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.asc&limit=30`, {}, 'MESSAGE_HISTORY_FAILED'),
   ]);
   if (!business) throw Object.assign(new Error('BUSINESS_NOT_FOUND'), { status: 404 });
 
   const intent = intentForBusiness(business.business_type, message);
-  const insertedCustomer = await rest(identity.accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
+  const insertedCustomer = await rest(identity.accessToken, 'dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
@@ -355,7 +355,7 @@ async function sendMessage(identity, body) {
   });
 
   if (!aiResult.ok) {
-    await rest(identity.accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
+    await rest(identity.accessToken, `dabbir_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
       method: 'PATCH',
       headers: { prefer: 'return=minimal' },
       body: JSON.stringify({ state: 'action_required', updated_at: new Date().toISOString() }),
@@ -371,7 +371,7 @@ async function sendMessage(identity, body) {
     };
   }
 
-  const insertedAi = await rest(identity.accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
+  const insertedAi = await rest(identity.accessToken, 'dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
@@ -384,7 +384,7 @@ async function sendMessage(identity, body) {
     }),
   }, 'AI_MESSAGE_PERSIST_FAILED');
 
-  await rest(identity.accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
+  await rest(identity.accessToken, `dabbir_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
     method: 'PATCH',
     headers: { prefer: 'return=minimal' },
     body: JSON.stringify({ state: 'waiting_customer', updated_at: new Date().toISOString() }),
@@ -419,20 +419,20 @@ async function createAppointment(identity, body) {
 
   if (!customerId) {
     const customerName = cleanText(body.customer_name || 'Customer', 120) || 'Customer';
-    const customers = await rest(identity.accessToken, 'pilot_customers?select=id,display_name,lead_status,created_at', {
+    const customers = await rest(identity.accessToken, 'dabbir_customers?select=id,display_name,lead_status,created_at', {
       method: 'POST',
       headers: { prefer: 'return=representation' },
       body: JSON.stringify({
         business_id: businessId,
         display_name: customerName,
         lead_status: 'new',
-        metadata: { source: 'pilot_appointment_runtime' },
+        metadata: { source: 'dabbir_appointment_runtime' },
       }),
     }, 'CUSTOMER_CREATE_FAILED');
     customerId = customers?.[0]?.id || null;
   }
 
-  const rows = await rest(identity.accessToken, 'pilot_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at', {
+  const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
@@ -462,11 +462,11 @@ async function createFollowup(identity, body) {
   const due = body.due_at ? new Date(String(body.due_at)) : null;
   if (due && Number.isNaN(due.getTime())) throw Object.assign(new Error('INVALID_FOLLOWUP_TIME'), { status: 400 });
 
-  const conversations = await rest(identity.accessToken, `pilot_conversations?select=id,customer_id,channel_type&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED');
+  const conversations = await rest(identity.accessToken, `dabbir_conversations?select=id,customer_id,channel_type&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED');
   const conversation = conversations?.[0];
   if (!conversation) throw Object.assign(new Error('CONVERSATION_NOT_FOUND'), { status: 404 });
 
-  const rows = await rest(identity.accessToken, 'pilot_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,created_at,updated_at', {
+  const rows = await rest(identity.accessToken, 'dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,created_at,updated_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
@@ -478,7 +478,7 @@ async function createFollowup(identity, body) {
       status: 'candidate',
       due_at: due ? due.toISOString() : null,
       recommended_message: cleanText(body.recommended_message, 1000) || null,
-      metadata: { source: 'pilot_web_runtime' },
+      metadata: { source: 'dabbir_web_runtime' },
     }),
   }, 'FOLLOWUP_CREATE_FAILED');
 

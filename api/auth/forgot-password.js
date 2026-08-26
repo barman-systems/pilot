@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
     // Do not reveal whether an account exists. Preserve enumeration resistance.
     if (upstream && !upstream.ok) {
-      console.warn('pilot_password_recovery_upstream_rejected', { status: upstream.status });
+      console.warn('dabbir_password_recovery_upstream_rejected', { status: upstream.status });
     }
 
     return json(res, 200, {

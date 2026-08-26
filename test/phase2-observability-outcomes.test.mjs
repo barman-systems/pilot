@@ -8,7 +8,7 @@ import { classifyFailure, correlationId, FAILURE_CLASSES } from '../api/_observa
 const root = new URL('../', import.meta.url);
 const read = async path => readFile(new URL(path, root), 'utf8');
 
-const migration = await read('db/pilot_phase2_operational_outcomes_v3.sql');
+const migration = await read('db/dabbir_phase2_operational_outcomes_v3.sql');
 const translation = await read('api/translate.js');
 const whatsapp = await read('api/dabbir-whatsapp-webhook.js');
 const appSecretEnv = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
@@ -48,7 +48,7 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
   const oldSecret = process.env[appSecretEnv];
   const oldProject = process.env[projectEnv];
   process.env[appSecretEnv] = 'synthetic-test-app-key';
-  process.env[projectEnv] = 'pilot_clinics';
+  process.env[projectEnv] = 'dabbir_clinics';
 
   try {
     const sensitive = {

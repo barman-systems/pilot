@@ -16,21 +16,21 @@
     "calendar": "UNVERIFIED"
   },
   "projects": {
-    "pilot_clinics": {
+    "dabbir_clinics": {
       "status": "AUTHENTICATED_WEB_RUNTIME_READY",
       "data_mode": "REAL_TENANT_RLS_DATA",
       "external_channels": "UNVERIFIED",
       "whatsapp": "NOT_OPERATIONAL",
       "payment_live": false
     },
-    "pilot_celebrities": {
+    "dabbir_celebrities": {
       "status": "AUTHENTICATED_WEB_RUNTIME_READY",
       "data_mode": "REAL_TENANT_RLS_DATA",
       "external_channels": "UNVERIFIED",
       "whatsapp": "NOT_OPERATIONAL",
       "payment_live": false
     },
-    "pilot_businesses": {
+    "dabbir_businesses": {
       "status": "AUTHENTICATED_WEB_RUNTIME_READY",
       "data_mode": "REAL_TENANT_RLS_DATA",
       "external_channels": "UNVERIFIED",

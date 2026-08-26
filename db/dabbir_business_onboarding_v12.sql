@@ -2,14 +2,14 @@
 -- Allows the designated owner to read the business row during first-owner bootstrap
 -- while preserving tenant RLS, and keeps external channels unconfigured until real authorization.
 
-drop policy if exists pilot_businesses_owner_select on public.pilot_businesses;
-create policy pilot_businesses_owner_select
-on public.pilot_businesses
+drop policy if exists dabbir_businesses_owner_select on public.dabbir_businesses;
+create policy dabbir_businesses_owner_select
+on public.dabbir_businesses
 for select
 to authenticated
 using ((select auth.uid()) is not null and owner_id = (select auth.uid()));
 
-create or replace function public.pilot_create_business(
+create or replace function public.dabbir_create_business(
   p_name text,
   p_business_type text,
   p_locale text default 'ar-AE'::text
@@ -32,15 +32,15 @@ begin
 
   v_slug := 'pilot-' || substr(replace(v_id::text,'-',''),1,16);
 
-  insert into public.pilot_businesses(id,slug,name,business_type,owner_id,locale,demo_mode)
+  insert into public.dabbir_businesses(id,slug,name,business_type,owner_id,locale,demo_mode)
   values(v_id,v_slug,left(trim(p_name),120),p_business_type,v_user,coalesce(nullif(trim(p_locale),''),'ar-AE'),false);
 
-  insert into public.pilot_memberships(business_id,user_id,role,status,accepted_at)
+  insert into public.dabbir_memberships(business_id,user_id,role,status,accepted_at)
   values(v_id,v_user,'owner','active',now());
 
   return query select v_id,v_slug;
 end;
 $function$;
 
-revoke all on function public.pilot_create_business(text,text,text) from public, anon;
-grant execute on function public.pilot_create_business(text,text,text) to authenticated, service_role;
+revoke all on function public.dabbir_create_business(text,text,text) from public, anon;
+grant execute on function public.dabbir_create_business(text,text,text) to authenticated, service_role;

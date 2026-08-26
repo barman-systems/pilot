@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const response = await supabaseRest(
-        'pilot_privacy_requests?select=id,business_id,customer_id,request_type,status,requested_at,completed_at&order=requested_at.desc&limit=100',
+        'dabbir_privacy_requests?select=id,business_id,customer_id,request_type,status,requested_at,completed_at&order=requested_at.desc&limit=100',
         context.accessToken,
       );
       if (!response.ok) {
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       correlation_id: cid,
       request_scope: requestScope,
     };
-    const response = await supabaseRest('pilot_privacy_requests?select=id,business_id,customer_id,request_type,status,requested_at', context.accessToken, {
+    const response = await supabaseRest('dabbir_privacy_requests?select=id,business_id,customer_id,request_type,status,requested_at', context.accessToken, {
       method: 'POST',
       headers: { prefer: 'return=representation' },
       body: JSON.stringify(payload),

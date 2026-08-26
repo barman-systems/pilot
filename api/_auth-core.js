@@ -2,8 +2,8 @@ const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
 
-export const ACCESS_COOKIE = '__Host-pilot_access';
-export const REFRESH_COOKIE = '__Host-pilot_refresh';
+export const ACCESS_COOKIE = '__Host-dabbir_access';
+export const REFRESH_COOKIE = '__Host-dabbir_refresh';
 
 export function json(res, status, body, extraHeaders = {}) {
   res.statusCode = status;
@@ -101,7 +101,7 @@ export async function getVerifiedUser(accessToken) {
 }
 
 export async function getBusinessMemberships(accessToken) {
-  const response = await supabaseRest('pilot_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active', accessToken);
+  const response = await supabaseRest('dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active', accessToken);
   if (!response.ok) throw new Error('MEMBERSHIP_LOOKUP_FAILED');
   return response.json();
 }

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const token = String(body.token || '').trim();
     if (token.length < 32 || token.length > 256) return json(res, 400, { ok: false, error: 'INVALID_INVITATION' });
 
-    const response = await supabaseRpc('pilot_accept_employee_invitation', accessToken, { p_token: token });
+    const response = await supabaseRpc('dabbir_accept_employee_invitation', accessToken, { p_token: token });
     const payload = await readRpcJson(response);
     if (!response.ok) {
       const code = rpcErrorCode(payload, 'INVITATION_ACCEPT_FAILED');

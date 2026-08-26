@@ -3,7 +3,7 @@ const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
-const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities', 'pilot_businesses']);
+const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
 export function getDABBIRAiConfig(env = process.env) {
   if (env.GROQ_API_KEY) {
@@ -67,8 +67,8 @@ async function resolveGatewayCredential(env = process.env, oidcGetter) {
 }
 
 function domainPrompt(project) {
-  if (project === 'pilot_clinics') return 'a UAE clinic assistant. Help with appointments, clinic information, follow-up and routine customer questions. Never diagnose, prescribe, or invent medical facts.';
-  if (project === 'pilot_celebrities') return 'a UAE celebrity/influencer assistant. Help with collaboration requests, advertising inquiries, invitations, meetings and routine coordination. Never invent commitments, prices, approvals or availability.';
+  if (project === 'dabbir_clinics') return 'a UAE clinic assistant. Help with appointments, clinic information, follow-up and routine customer questions. Never diagnose, prescribe, or invent medical facts.';
+  if (project === 'dabbir_celebrities') return 'a UAE celebrity/influencer assistant. Help with collaboration requests, advertising inquiries, invitations, meetings and routine coordination. Never invent commitments, prices, approvals or availability.';
   return 'a UAE business assistant. Help with customer service, leads, products/services, follow-up and routine coordination. Never invent inventory, prices, policies, commitments or availability.';
 }
 

@@ -44,7 +44,7 @@ test('extracts inbound text message', () => {
   const events = extractWhatsAppEvents(payload);
   assert.equal(events.length, 1);
   assert.equal(events[0].text, 'اريد موعد');
-  const routed = classifyDABBIREvent(events[0], 'pilot_clinics');
+  const routed = classifyDABBIREvent(events[0], 'dabbir_clinics');
   assert.equal(routed.classification, 'APPOINTMENT_REQUEST');
   assert.ok(routed.workflow.includes('BOOKING'));
 });

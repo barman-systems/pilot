@@ -7,8 +7,8 @@ Standalone source package for DABBIR products.
 This repository boundary owns DABBIR product runtime and channel integrations. It does not own the BARMAN control plane, ZAJEL commerce runtime, or R&A.
 
 Current product modes:
-- `pilot_clinics` — synthetic-only; no patient data persistence.
-- `pilot_celebrities` — synthetic-only.
+- `dabbir_clinics` — synthetic-only; no patient data persistence.
+- `dabbir_celebrities` — synthetic-only.
 
 ## Mandatory bilingual product standard
 
