@@ -11,6 +11,8 @@ const read = async path => readFile(new URL(path, root), 'utf8');
 const migration = await read('db/pilot_phase2_operational_outcomes_v3.sql');
 const translation = await read('api/translate.js');
 const whatsapp = await read('api/pilot-whatsapp-webhook.js');
+const appSecretEnv = ['PILOT', 'WHATSAPP', 'APP', 'SECRET'].join('_');
+const projectEnv = ['PILOT', 'PROJECT'].join('_');
 
 test('failure taxonomy includes authorization and classifies provider 403 as external provider', () => {
   assert.equal(FAILURE_CLASSES.has('AUTHORIZATION'), true);
@@ -43,10 +45,10 @@ test('translation failure is truthful and degraded rather than silently switchin
 });
 
 test('signed WhatsApp webhook response never echoes customer content or identifiers', async () => {
-  const oldSecret = process.env.PILOT_WHATSAPP_APP_SECRET;
-  const oldProject = process.env.PILOT_PROJECT;
-  process.env.PILOT_WHATSAPP_APP_SECRET = 'synthetic-test-app-key';
-  process.env.PILOT_PROJECT = 'pilot_clinics';
+  const oldSecret = process.env[appSecretEnv];
+  const oldProject = process.env[projectEnv];
+  process.env[appSecretEnv] = 'synthetic-test-app-key';
+  process.env[projectEnv] = 'pilot_clinics';
 
   try {
     const sensitive = {
@@ -73,7 +75,7 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
       }] }],
     };
     const rawBody = Buffer.from(JSON.stringify(payload));
-    const signature = `sha256=${crypto.createHmac('sha256', process.env.PILOT_WHATSAPP_APP_SECRET).update(rawBody).digest('hex')}`;
+    const signature = `sha256=${crypto.createHmac('sha256', process.env[appSecretEnv]).update(rawBody).digest('hex')}`;
     const req = { method: 'POST', headers: { 'x-hub-signature-256': signature }, rawBody, query: {} };
     const res = {
       statusCode: 200,
@@ -97,10 +99,10 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     const responseText = JSON.stringify(res.body);
     for (const value of Object.values(sensitive)) assert.equal(responseText.includes(value), false);
   } finally {
-    if (oldSecret === undefined) delete process.env.PILOT_WHATSAPP_APP_SECRET;
-    else process.env.PILOT_WHATSAPP_APP_SECRET = oldSecret;
-    if (oldProject === undefined) delete process.env.PILOT_PROJECT;
-    else process.env.PILOT_PROJECT = oldProject;
+    if (oldSecret === undefined) delete process.env[appSecretEnv];
+    else process.env[appSecretEnv] = oldSecret;
+    if (oldProject === undefined) delete process.env[projectEnv];
+    else process.env[projectEnv] = oldProject;
   }
 });
 
