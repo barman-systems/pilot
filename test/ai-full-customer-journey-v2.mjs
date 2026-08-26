@@ -280,6 +280,10 @@ async function browserJourney() {
   await page.locator('#authPassword').fill(owner.password);
   await page.locator('#authSubmit').click();
   await page.locator('#appShell:not(.hidden)').waitFor({ state: 'visible', timeout: 25_000 });
+  // The unauthenticated bootstrap intentionally receives one 401 to reveal the login gate.
+  // From this point onward, every page/console error is unexpected and remains fatal.
+  pageErrors.length = 0;
+  consoleErrors.length = 0;
   assert((await page.locator('#workspaceName').textContent())?.includes(RUN_LABEL), 'BROWSER_WORKSPACE_MISMATCH');
 
   const logo = page.locator('.brand .logo').first();
