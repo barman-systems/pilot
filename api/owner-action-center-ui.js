@@ -1,5 +1,16 @@
-const script=String.raw`
+const css=String.raw`
+.dabbir-action-center{margin-bottom:12px;border-color:#343a31;background:linear-gradient(180deg,#171b17,#101311)}
+.dac-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.dac-head strong{font-size:15px}.dac-status{font-size:9px;color:var(--muted);margin-top:4px}.dac-brief{margin:12px 0;color:#dfe4e7;font-size:11px;line-height:1.75}.dac-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.dac-metric{border:1px solid #2b3031;background:#121518;border-radius:13px;padding:10px}.dac-metric strong{display:block;font-size:20px}.dac-metric span{font-size:8px;color:var(--muted)}.dac-metric.critical strong{color:var(--red)}.dac-metric.warning strong{color:var(--yellow)}.dac-items{display:flex;flex-direction:column;gap:7px;margin-top:10px}.dac-item{display:flex;align-items:center;gap:9px;border:1px solid #292e31;background:#15181a;border-radius:13px;padding:10px}.dac-item.critical{border-inline-start:3px solid var(--red)}.dac-item.warning{border-inline-start:3px solid var(--yellow)}.dac-item.info{border-inline-start:3px solid var(--blue)}.dac-item-body{flex:1;min-width:0}.dac-item-body b{display:block;font-size:10px}.dac-item-body span{display:block;color:#b6bcc3;font-size:9px;line-height:1.55;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dac-item-body small{display:block;color:#777f87;font-size:8px;margin-top:4px}.dac-open{min-width:62px;padding:7px 9px;font-size:9px}.dac-empty{padding:16px;text-align:center;color:var(--green);font-size:10px;border:1px dashed #314034;border-radius:12px}@media(max-width:700px){.dac-metrics{gap:6px}.dac-metric{padding:9px}.dac-item{align-items:flex-start}.dac-open{min-height:40px}.dac-item-body span{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+`;
+
+const client=String.raw`
 (()=>{
+  if(document.querySelector('style[data-dabbir-action-center]'))return;
+  const style=document.createElement('style');
+  style.dataset.dabbirActionCenter='v1';
+  style.textContent=${JSON.stringify(css)};
+  document.head.append(style);
+
   const CACHE_MS=20000;
   let lastBusinessId=null;
   let lastLoadedAt=0;
@@ -158,11 +169,5 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
   res.setHeader('x-dabbir-owner-action-center-ui','v1');
-  return res.status(200).send(String.raw`
-<style>
-.dabbir-action-center{margin-bottom:12px;border-color:#343a31;background:linear-gradient(180deg,#171b17,#101311)}
-.dac-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.dac-head strong{font-size:15px}.dac-status{font-size:9px;color:var(--muted);margin-top:4px}.dac-brief{margin:12px 0;color:#dfe4e7;font-size:11px;line-height:1.75}.dac-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.dac-metric{border:1px solid #2b3031;background:#121518;border-radius:13px;padding:10px}.dac-metric strong{display:block;font-size:20px}.dac-metric span{font-size:8px;color:var(--muted)}.dac-metric.critical strong{color:var(--red)}.dac-metric.warning strong{color:var(--yellow)}.dac-items{display:flex;flex-direction:column;gap:7px;margin-top:10px}.dac-item{display:flex;align-items:center;gap:9px;border:1px solid #292e31;background:#15181a;border-radius:13px;padding:10px}.dac-item.critical{border-inline-start:3px solid var(--red)}.dac-item.warning{border-inline-start:3px solid var(--yellow)}.dac-item.info{border-inline-start:3px solid var(--blue)}.dac-item-body{flex:1;min-width:0}.dac-item-body b{display:block;font-size:10px}.dac-item-body span{display:block;color:#b6bcc3;font-size:9px;line-height:1.55;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dac-item-body small{display:block;color:#777f87;font-size:8px;margin-top:4px}.dac-open{min-width:62px;padding:7px 9px;font-size:9px}.dac-empty{padding:16px;text-align:center;color:var(--green);font-size:10px;border:1px dashed #314034;border-radius:12px}@media(max-width:700px){.dac-metrics{gap:6px}.dac-metric{padding:9px}.dac-item{align-items:flex-start}.dac-open{min-height:40px}.dac-item-body span{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
-</style>
-<script>${script.replaceAll('</script>','<\\/script>')}</script>
-`);
+  return res.status(200).send(client);
 }
