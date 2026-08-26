@@ -56,6 +56,10 @@ const script=String.raw`(()=>{
       if(q('#newApptBtn'))q('#newApptBtn').textContent=ar()?('إضافة '+appointmentLabel):('Add '+appointmentLabel.toLowerCase());
     }else if(current==='appointments'&&typeof showScreen==='function')showScreen('dashboard');
 
+    const serviceNav=q('#dabbirServicesNav');
+    if(serviceNav)serviceNav.style.display=p.show_services?'':'none';
+    if(!p.show_services&&!p.show_operations&&current==='operations'&&typeof showScreen==='function')showScreen('dashboard');
+
     let identity=q('#activityIdentity');
     if(!identity&&q('#screen-dashboard .hero>div')){
       identity=document.createElement('div');identity.id='activityIdentity';identity.className='activityIdentity';
