@@ -9,6 +9,7 @@ const script = String.raw`(()=>{
     '.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}',
     '#loading{font-size:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important;background-image:url("/api/dabbir-approved-icon")!important;background-repeat:no-repeat!important;background-position:center!important;background-size:96px 96px!important}',
     '.dabbirMobileBrand{display:none!important}',
+    '.dabbirWhatsAppIdentity{margin-top:10px;padding:9px 10px;border:1px solid #2a2e33;border-radius:11px;background:#101214;font-size:10px;line-height:1.55;color:#f7f8f9}.dabbirWhatsAppIdentity b{display:block;font-size:9px;color:#979da5;margin-bottom:2px}.dabbirWhatsAppIdentity .number{font-weight:900;font-size:12px;direction:ltr;unicode-bidi:embed}.dabbirWhatsAppIdentity .verifiedName{display:block;margin-top:2px;color:#979da5;font-size:9px}',
     '@media(max-width:700px){#loading{background-size:88px 88px!important}body.dabbirAppActive>.dabbirMobileBrand{display:flex!important;position:fixed;top:11px;inset-inline-start:66px;z-index:19;align-items:center;gap:8px;height:44px;pointer-events:none}.dabbirMobileBrand .logo{width:36px!important;height:36px!important;border-radius:10px!important}.dabbirMobileBrand b{font-size:12px!important;letter-spacing:.02em}.dabbirMobileBrand small{display:none!important}}'
   ].join('');
   document.head.appendChild(style);
@@ -156,6 +157,36 @@ const script = String.raw`(()=>{
     return Boolean(status&&(status.operational||status.state==='OPERATIONAL'));
   }
 
+  function renderWhatsAppIdentity(card,status,ar,connected){
+    let identity=card.querySelector('[data-dabbir-whatsapp-identity]');
+    if(!identity){
+      identity=document.createElement('div');
+      identity.className='dabbirWhatsAppIdentity';
+      identity.setAttribute('data-dabbir-whatsapp-identity','true');
+      card.appendChild(identity);
+    }
+
+    const phone=String(status?.phone?.display_phone_number||'').trim();
+    const verifiedName=String(status?.phone?.verified_name||'').trim();
+    identity.replaceChildren();
+
+    const label=document.createElement('b');
+    label.textContent=ar?'رقم WhatsApp المفعّل':'Active WhatsApp number';
+    identity.appendChild(label);
+
+    const number=document.createElement('span');
+    number.className='number';
+    number.textContent=phone||(connected?(ar?'بانتظار تحقق Meta':'Waiting for Meta verification'):(ar?'غير متاح':'Not available'));
+    identity.appendChild(number);
+
+    if(verifiedName){
+      const name=document.createElement('span');
+      name.className='verifiedName';
+      name.textContent=(ar?'الاسم الموثق: ':'Verified name: ')+verifiedName;
+      identity.appendChild(name);
+    }
+  }
+
   function applyWhatsAppCardState(){
     if(typeof workspace==='undefined'||!workspace) return;
     const status=workspace.whatsapp||{};
@@ -193,6 +224,7 @@ const script = String.raw`(()=>{
             description.textContent=ar?'لم يعثر DABBIR في هذا التشغيل على إعدادات WhatsApp الفعلية.':'DABBIR did not find the WhatsApp connection settings in this runtime.';
           }
         }
+        renderWhatsAppIdentity(card,status,ar,connected);
       }
     }
 
