@@ -1,0 +1,89 @@
+name: DABBIR AI Full Customer Journey
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'test/ai-full-customer-journey.mjs'
+      - '.github/workflows/dabbir-ai-customer-journey.yml'
+      - 'supabase/migrations/*dabbir*'
+      - 'api/auth/**'
+      - 'api/team/**'
+      - 'api/chat*.js'
+      - 'api/dabbir-runtime*.js'
+      - 'api/owner-operations*.js'
+      - 'api/app*.js'
+      - 'api/brand-ui.js'
+      - 'api/timezone-ui.js'
+      - 'api/dabbir-approved-icon.js'
+      - 'index.html'
+      - 'team.html'
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-ai-full-customer-journey
+  cancel-in-progress: false
+
+jobs:
+  full-customer-journey:
+    name: Owner + customer + employee + AI + operations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install WebKit journey runner
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps webkit
+
+      - name: Run AI full customer journey against production
+        run: node test/ai-full-customer-journey.mjs
+
+      - name: Publish journey summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f dabbir-ai-customer-journey-report.json ]; then
+            echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'DABBIR journey report was not produced.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload journey evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-ai-customer-journey-evidence
+          path: |
+            dabbir-ai-customer-journey-report.json
+            dabbir-ai-customer-journey-screenshot.png
+          if-no-files-found: warn
+          retention-days: 14
