@@ -26,8 +26,8 @@ test('root workspace is authenticated and operational instead of hard-coded prev
 });
 
 test('UI keeps WhatsApp separate from the operational Web runtime', () => {
-  assert.match(html, /whatsappDesc:'متروك عمدًا حتى تفويض Meta الحقيقي'/);
-  assert.match(html, /whatsappDesc:'Intentionally deferred until real Meta authorization'/);
-  assert.match(html, /webTruth/);
+  assert.match(html, /whatsappDesc:'[^']*Meta[^']*'/);
+  assert.match(html, /webTruth:'[^']*WhatsApp[^']*'/);
+  assert.match(html, /\[t\.whatsapp,t\.whatsappDesc,t\.notOperational,'red'\]/);
   assert.match(html, /Nothing is sent to WhatsApp/);
 });
