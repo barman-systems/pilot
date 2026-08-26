@@ -22,8 +22,12 @@ export function getPilotAiConfig(env = process.env) {
       provider: 'vercel-ai-gateway',
       endpoint: GATEWAY_ENDPOINT,
       model: String(env.PILOT_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
-      configured: Boolean(gatewayCredential),
-      auth_mode: env.AI_GATEWAY_API_KEY ? 'API_KEY' : env.VERCEL_OIDC_TOKEN ? 'OIDC' : 'MISSING',
+      configured: Boolean(gatewayCredential || env.VERCEL_ENV),
+      auth_mode: env.AI_GATEWAY_API_KEY
+        ? 'API_KEY'
+        : env.VERCEL_OIDC_TOKEN
+          ? 'OIDC_ENV'
+          : 'VERCEL_PROJECT_OIDC_RUNTIME',
       cost_mode: 'FREE_TIER_ONLY',
     };
   }
@@ -36,6 +40,34 @@ export function getPilotAiConfig(env = process.env) {
     auth_mode: 'MISSING',
     cost_mode: 'FREE_TIER_ONLY',
   };
+}
+
+async function resolveGatewayCredential(env = process.env, oidcGetter) {
+  if (env.AI_GATEWAY_API_KEY) {
+    return { credential: String(env.AI_GATEWAY_API_KEY), auth_mode: 'API_KEY' };
+  }
+  if (env.VERCEL_OIDC_TOKEN) {
+    return { credential: String(env.VERCEL_OIDC_TOKEN), auth_mode: 'OIDC_ENV' };
+  }
+  if (!env.VERCEL_ENV) return null;
+
+  let getter = oidcGetter;
+  if (!getter) {
+    try {
+      const oidc = await import('@vercel/oidc');
+      getter = oidc.getVercelOidcToken;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const token = await getter();
+    if (!token) return null;
+    return { credential: String(token), auth_mode: 'VERCEL_PROJECT_OIDC' };
+  } catch {
+    return null;
+  }
 }
 
 function domainPrompt(project) {
@@ -93,7 +125,8 @@ function normalizeHistory(history = []) {
   });
 }
 
-function finalizeReply({ reply, input, language, config }) {
+function finalizeReply({ reply, input, language, config, authMode }) {
+  const resolvedAuthMode = authMode || config.auth_mode;
   if (!reply) {
     return {
       ok: false,
@@ -101,7 +134,7 @@ function finalizeReply({ reply, input, language, config }) {
       error: 'empty_ai_response',
       provider: config.provider,
       model: config.model,
-      auth_mode: config.auth_mode,
+      auth_mode: resolvedAuthMode,
       cost_mode: config.cost_mode,
     };
   }
@@ -112,7 +145,7 @@ function finalizeReply({ reply, input, language, config }) {
       state: 'SUCCESS',
       provider: config.provider,
       model: config.model,
-      auth_mode: config.auth_mode,
+      auth_mode: resolvedAuthMode,
       cost_mode: config.cost_mode,
       reply: safeGroundedReply(input, language),
       guarded: true,
@@ -125,7 +158,7 @@ function finalizeReply({ reply, input, language, config }) {
     state: 'SUCCESS',
     provider: config.provider,
     model: config.model,
-    auth_mode: config.auth_mode,
+    auth_mode: resolvedAuthMode,
     cost_mode: config.cost_mode,
     reply,
     guarded: false,
@@ -159,6 +192,7 @@ export async function generatePilotAiReply({
   history = [],
   env = process.env,
   fetchImpl = fetch,
+  oidcGetter,
 } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) {
@@ -170,7 +204,6 @@ export async function generatePilotAiReply({
 
   const config = getPilotAiConfig(env);
   const groqKey = String(env.GROQ_API_KEY || '');
-  const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
   const prior = normalizeHistory(history);
   const messages = [
     { role: 'system', content: systemPrompt(normalizedProject, language, businessContext) },
@@ -179,21 +212,22 @@ export async function generatePilotAiReply({
   ];
 
   if (!groqKey && env.VERCEL_ENV) {
-    if (!gatewayCredential) {
+    const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
+    if (!gatewayAuth?.credential) {
       return {
         ok: false,
         state: 'UNCONFIGURED',
         error: 'gateway_credential_missing',
         provider: config.provider,
         model: config.model,
-        auth_mode: config.auth_mode,
+        auth_mode: 'MISSING',
         cost_mode: config.cost_mode,
       };
     }
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GATEWAY_ENDPOINT,
-        credential: gatewayCredential,
+        credential: gatewayAuth.credential,
         model: config.model,
         messages,
         fetchImpl,
@@ -205,7 +239,7 @@ export async function generatePilotAiReply({
           error: `gateway_http_${response.status}`,
           provider: config.provider,
           model: config.model,
-          auth_mode: config.auth_mode,
+          auth_mode: gatewayAuth.auth_mode,
           cost_mode: config.cost_mode,
         };
       }
@@ -214,6 +248,7 @@ export async function generatePilotAiReply({
         input,
         language,
         config,
+        authMode: gatewayAuth.auth_mode,
       });
     } catch {
       return {
@@ -222,7 +257,7 @@ export async function generatePilotAiReply({
         error: 'gateway_network_error',
         provider: config.provider,
         model: config.model,
-        auth_mode: config.auth_mode,
+        auth_mode: gatewayAuth.auth_mode,
         cost_mode: config.cost_mode,
       };
     }
