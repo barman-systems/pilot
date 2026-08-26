@@ -5,6 +5,13 @@
       "includeFiles": "index.html"
     }
   },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/api/app",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/",
