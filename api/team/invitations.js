@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       ok: true,
       invitation,
       invite_token: token,
-      invite_path: `/?invite=${encodeURIComponent(token)}`,
+      invite_path: `/team.html?invite=${encodeURIComponent(token)}`,
       delivery: { status: 'prepared', provider_required: true },
     });
   } catch (error) {
