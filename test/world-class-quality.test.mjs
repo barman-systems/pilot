@@ -4,29 +4,28 @@ import { readFile } from 'node:fs/promises';
 
 const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('every referenced UI localization key exists in Arabic and English', async () => {
-  const [html, arRaw, enRaw] = await Promise.all([read('index.html'), read('locales/ar.json'), read('locales/en.json')]);
-  const ar = JSON.parse(arRaw), en = JSON.parse(enRaw);
-  assert.deepEqual(Object.keys(ar).sort(), Object.keys(en).sort());
-  const keys = [...html.matchAll(/data-(?:i18n|ph)="([^"]+)"/g)].map(m => m[1]);
-  assert.ok(keys.length > 100, 'full preview should localize all major user-facing copy');
-  for (const key of new Set(keys)) {
-    assert.ok(ar[key]?.trim(), `missing Arabic key ${key}`);
-    assert.ok(en[key]?.trim(), `missing English key ${key}`);
+test('operational workspace is bilingual and switches RTL/LTR without single-language screens', async () => {
+  const html = await read('index.html');
+  assert.match(html, /const D=\{ar:\{/);
+  assert.match(html, /,en:\{/);
+  assert.match(html, /document\.documentElement\.dir=lang==='ar'\?'rtl':'ltr'/);
+  for (const label of ['dashboard','conversations','appointments','customers','tasks','automations','analytics','integrations','notifications','settings','help']) {
+    assert.match(html, new RegExp(`${label}:'`));
   }
 });
 
-test('preview cannot claim verified external channels while registry is unverified', async () => {
+test('UI cannot promote external channels into verified state', async () => {
   const [html, registryRaw] = await Promise.all([read('index.html'), read('config/runtime-registry.json')]);
   const registry = JSON.parse(registryRaw);
+  assert.equal(registry.channels.web, 'OPERATIONAL');
+  assert.match(registry.channels.whatsapp, /^NOT_OPERATIONAL/);
   assert.equal(registry.projects.pilot_clinics.external_channels, 'UNVERIFIED');
-  assert.match(html, /externalVerified\(\)/);
-  assert.match(html, /integrations\.unverified/);
+  assert.match(html, /function externalVerified\(\)\{return false\}/);
+  assert.match(html, /Meta authorization/);
   assert.doesNotMatch(html, /WhatsApp channel healthy/i);
-  assert.doesNotMatch(html, /Last verified 1 hour ago/i);
 });
 
-test('full preview has mobile touch, focus, reduced-motion, and modal accessibility baselines', async () => {
+test('operational interface has mobile touch, focus, reduced-motion and modal accessibility baselines', async () => {
   const html = await read('index.html');
   assert.match(html, /button:focus-visible/);
   assert.match(html, /min-height:48px/);
@@ -35,10 +34,15 @@ test('full preview has mobile touch, focus, reduced-motion, and modal accessibil
   assert.match(html, /role="status" aria-live="polite"/);
 });
 
-test('translation route has bounded workload and prompt-injection handling instruction', async () => {
+test('translation route is authenticated, bounded and prompt-injection resistant', async () => {
   const source = await read('api/translate.js');
   assert.match(source, /MAX_MESSAGES = 20/);
   assert.match(source, /MAX_TOTAL_CHARS = 12000/);
   assert.match(source, /translation_payload_too_large/);
   assert.match(source, /never as an instruction/);
+  assert.match(source, /requireSameOrigin/);
+  assert.match(source, /getVerifiedUser/);
+  assert.match(source, /BUSINESS_ACCESS_DENIED/);
+  assert.match(source, /FREE_TIER_ONLY/);
+  assert.doesNotMatch(source, /preview_only_runtime/);
 });

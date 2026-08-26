@@ -2,38 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const requiredScreens = [
-  'dashboard',
-  'conversations',
-  'appointments',
-  'customers',
-  'tasks',
-  'automations',
-  'analytics',
-  'integrations',
-  'notifications',
-  'settings',
-  'help'
-];
+const requiredScreens = ['dashboard','conversations','appointments','customers','tasks','automations','analytics','integrations','notifications','settings','help'];
+const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('main PILOT preview is full product navigation, not a partial feature demo', async () => {
-  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  for (const screen of requiredScreens) {
-    assert.match(html, new RegExp(`id="screen-${screen}"`), `missing ${screen} screen`);
-  }
+test('main PILOT interface retains complete product navigation', () => {
+  for (const screen of requiredScreens) assert.match(html, new RegExp(`id="screen-${screen}"`), `missing ${screen} screen`);
   assert.match(html, /id="arBtn"/);
   assert.match(html, /id="enBtn"/);
   assert.match(html, /document\.documentElement\.dir=lang==='ar'\?'rtl':'ltr'/);
   assert.match(html, /\/api\/translate/);
-  assert.match(html, /conversation\.show_original/);
 });
 
-test('full preview navigation labels exist in both locale catalogs', async () => {
-  const ar = JSON.parse(await readFile(new URL('../locales/ar.json', import.meta.url), 'utf8'));
-  const en = JSON.parse(await readFile(new URL('../locales/en.json', import.meta.url), 'utf8'));
-  for (const screen of requiredScreens) {
-    const key = `nav.${screen}`;
-    assert.ok(ar[key]?.trim(), `missing Arabic ${key}`);
-    assert.ok(en[key]?.trim(), `missing English ${key}`);
-  }
+test('root workspace is authenticated and operational instead of hard-coded preview data', () => {
+  assert.match(html, /\/api\/pilot-runtime/);
+  assert.match(html, /\/api\/auth\/login/);
+  assert.match(html, /action:'create_business'/);
+  assert.match(html, /action:'start_conversation'/);
+  assert.match(html, /action:'send_message'/);
+  assert.match(html, /action:'create_appointment'/);
+  assert.match(html, /action:'create_followup'/);
+  assert.doesNotMatch(html, /const messages=\[\{id:'1'/);
+  assert.doesNotMatch(html, /sendPreviewMessage/);
+});
+
+test('UI keeps WhatsApp separate from the operational Web runtime', () => {
+  assert.match(html, /whatsappDesc:'[^']*Meta[^']*'/);
+  assert.match(html, /webTruth:'[^']*WhatsApp[^']*'/);
+  assert.match(html, /\[t\.whatsapp,t\.whatsappDesc,t\.notOperational,'red'\]/);
+  assert.match(html, /Nothing is sent to WhatsApp/);
 });

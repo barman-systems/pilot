@@ -1,19 +1,40 @@
 {
-  "version": 1,
+  "version": 2,
   "authority": "PILOT",
   "runtime": "api/pilot-runtime.js",
-  "environment": "PREVIEW_PILOT",
+  "environment": "PRODUCTION_PILOT",
+  "operational_mode": "AUTHENTICATED_WEB_RUNTIME",
+  "ai": {
+    "state": "OPERATIONAL_IN_AUTHENTICATED_RUNTIME",
+    "cost_mode": "FREE_TIER_ONLY",
+    "grounding": "BUSINESS_RLS_CONTEXT"
+  },
+  "channels": {
+    "web": "OPERATIONAL",
+    "whatsapp": "NOT_OPERATIONAL_META_AUTHORIZATION_PENDING",
+    "instagram": "UNVERIFIED",
+    "calendar": "UNVERIFIED"
+  },
   "projects": {
     "pilot_clinics": {
-      "status": "ACTIVE_PILOT_CANDIDATE",
-      "data_mode": "SYNTHETIC_ONLY_NO_PATIENT_DATA",
+      "status": "AUTHENTICATED_WEB_RUNTIME_READY",
+      "data_mode": "REAL_TENANT_RLS_DATA",
       "external_channels": "UNVERIFIED",
+      "whatsapp": "NOT_OPERATIONAL",
       "payment_live": false
     },
     "pilot_celebrities": {
-      "status": "ACTIVE_PILOT_CANDIDATE",
-      "data_mode": "SYNTHETIC_ONLY",
+      "status": "AUTHENTICATED_WEB_RUNTIME_READY",
+      "data_mode": "REAL_TENANT_RLS_DATA",
       "external_channels": "UNVERIFIED",
+      "whatsapp": "NOT_OPERATIONAL",
+      "payment_live": false
+    },
+    "pilot_businesses": {
+      "status": "AUTHENTICATED_WEB_RUNTIME_READY",
+      "data_mode": "REAL_TENANT_RLS_DATA",
+      "external_channels": "UNVERIFIED",
+      "whatsapp": "NOT_OPERATIONAL",
       "payment_live": false
     }
   }
