@@ -17,27 +17,32 @@ function normalizeArabic(input = '') {
     .trim();
 }
 
+function containsAny(text, terms) {
+  return terms.some(term => text.includes(term));
+}
+
 export function extractClinicSignals(message = '') {
   const text = normalizeArabic(message);
-  const has = (pattern) => pattern.test(text);
-
   const temporal = [];
-  if (has(/\b(اليوم|today)\b/)) temporal.push('TODAY');
-  if (has(/\b(باجر|بكره|بكرة|غدا|غد|tomorrow)\b/)) temporal.push('TOMORROW');
-  if (has(/\b(عقب باجر|بعد بكره|day after tomorrow)\b/)) temporal.push('DAY_AFTER_TOMORROW');
-  if (has(/\b(الصبح|صباح|morning)\b/)) temporal.push('MORNING');
-  if (has(/\b(الظهر|ظهرا|noon)\b/)) temporal.push('NOON');
-  if (has(/\b(العصر|afternoon)\b/)) temporal.push('AFTERNOON');
-  if (has(/\b(المغرب|المسا|مساء|evening)\b/)) temporal.push('EVENING');
-  if (has(/\b(الليل|ليلا|night)\b/)) temporal.push('NIGHT');
 
+  if (containsAny(text, ['عقب باجر', 'بعد بكره', 'بعد بكرة', 'day after tomorrow'])) temporal.push('DAY_AFTER_TOMORROW');
+  else if (containsAny(text, ['باجر', 'بكره', 'بكرة', 'غدا', 'غد', 'tomorrow'])) temporal.push('TOMORROW');
+  else if (containsAny(text, ['اليوم', 'today'])) temporal.push('TODAY');
+
+  if (containsAny(text, ['الصبح', 'صباح', 'morning'])) temporal.push('MORNING');
+  if (containsAny(text, ['الظهر', 'ظهرا', 'noon'])) temporal.push('NOON');
+  if (containsAny(text, ['العصر', 'afternoon'])) temporal.push('AFTERNOON');
+  if (containsAny(text, ['المغرب', 'المسا', 'مساء', 'evening'])) temporal.push('EVENING');
+  if (containsAny(text, ['الليل', 'ليلا', 'night'])) temporal.push('NIGHT');
+
+  const appointmentTerms = ['موعد', 'حجز', 'احجز', 'appointment', 'book', 'booking', 'slot', 'availability'];
   let intent = 'GENERAL_INQUIRY';
-  if (has(/\b(الغاء|الغي|الغيه|كنسل|cancel)\b/)) intent = 'CANCEL_APPOINTMENT';
-  else if (has(/\b(اغير|غير|تغيير|بدل|انقل|move|reschedule|change)\b/) && has(/\b(موعد|حجز|appointment|booking)\b/)) intent = 'RESCHEDULE_APPOINTMENT';
-  else if (has(/\b(موعد|حجز|احجز|appointment|book|booking|slot|availability)\b/)) intent = 'APPOINTMENT_REQUEST';
-  else if (has(/\b(متابعه|راجع|follow.?up|followup)\b/)) intent = 'FOLLOW_UP';
-  else if (has(/\b(موقع|لوكيشن|عنوان|location|address|map)\b/)) intent = 'LOCATION_REQUEST';
-  else if (has(/\b(دوام|تفتحون|تسكرون|ساعات|hours|opening|closing|open|close)\b/)) intent = 'BUSINESS_HOURS';
+  if (containsAny(text, ['الغاء', 'الغي', 'الغيه', 'كنسل', 'cancel'])) intent = 'CANCEL_APPOINTMENT';
+  else if (containsAny(text, ['اغير', 'غير', 'تغيير', 'بدل', 'انقل', 'move', 'reschedule', 'change']) && containsAny(text, appointmentTerms)) intent = 'RESCHEDULE_APPOINTMENT';
+  else if (containsAny(text, appointmentTerms)) intent = 'APPOINTMENT_REQUEST';
+  else if (containsAny(text, ['متابعه', 'راجع', 'follow-up', 'follow up', 'followup'])) intent = 'FOLLOW_UP';
+  else if (containsAny(text, ['موقع', 'لوكيشن', 'عنوان', 'location', 'address', 'map'])) intent = 'LOCATION_REQUEST';
+  else if (containsAny(text, ['دوام', 'تفتحون', 'تسكرون', 'ساعات', 'hours', 'opening', 'closing', 'open', 'close'])) intent = 'BUSINESS_HOURS';
 
   return { intent, temporal, normalized: text };
 }
@@ -48,10 +53,10 @@ export function classifyClinicMessage(message = '') {
 
 export function classifyCelebrityMessage(message = '') {
   const text = normalizeArabic(message);
-  if (/\b(اعلان|advert|campaign|sponsor)\b/.test(text)) return 'ADVERTISING_REQUEST';
-  if (/\b(تعاون|collab|collaboration)\b/.test(text)) return 'COLLABORATION_REQUEST';
-  if (/\b(دعوه|invite|invitation|event)\b/.test(text)) return 'INVITATION';
-  if (/\b(موعد|appointment|meeting)\b/.test(text)) return 'APPOINTMENT_REQUEST';
+  if (containsAny(text, ['اعلان', 'advert', 'campaign', 'sponsor'])) return 'ADVERTISING_REQUEST';
+  if (containsAny(text, ['تعاون', 'collab', 'collaboration'])) return 'COLLABORATION_REQUEST';
+  if (containsAny(text, ['دعوه', 'invite', 'invitation', 'event'])) return 'INVITATION';
+  if (containsAny(text, ['موعد', 'appointment', 'meeting'])) return 'APPOINTMENT_REQUEST';
   return 'GENERAL_REQUEST';
 }
 
@@ -88,9 +93,7 @@ function syntheticResult(project, message) {
 }
 
 export default async function handler(req, res) {
-  if (process.env.VERCEL_ENV !== 'preview') {
-    return json(res, 404, { ok: false, error: 'preview_only_runtime' });
-  }
+  if (process.env.VERCEL_ENV !== 'preview') return json(res, 404, { ok: false, error: 'preview_only_runtime' });
 
   const project = String(req.query?.project || req.body?.project || '').toLowerCase();
   if (!PROJECTS.has(project)) return json(res, 400, { ok: false, error: 'unsupported_project' });
@@ -110,7 +113,6 @@ export default async function handler(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-
     return json(res, 200, {
       ok: true,
       service: 'pilot-runtime',
