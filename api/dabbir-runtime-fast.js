@@ -32,26 +32,34 @@ function stateRank(state) {
   return 0;
 }
 
+function activityTime(conversation) {
+  return new Date(conversation?.updated_at || conversation?.created_at || 0).getTime();
+}
+
+function isBetterCanonical(candidate, existing) {
+  const rankDelta = stateRank(candidate?.state) - stateRank(existing?.state);
+  if (rankDelta !== 0) return rankDelta > 0;
+  return activityTime(candidate) > activityTime(existing);
+}
+
 function visibleConversations(conversations = [], customers = []) {
   const customerById = new Map((customers || []).map(customer => [customer.id, customer]));
-  const ordered = [...(conversations || [])].sort((a, b) => {
-    const rankDelta = stateRank(b.state) - stateRank(a.state);
-    if (rankDelta) return rankDelta;
-    return new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime();
-  });
-  const seenWebRuntimeNames = new Set();
-  const visible = [];
-  for (const conversation of ordered) {
+  const runtimeGroups = new Map();
+  const passthrough = [];
+
+  for (const conversation of conversations || []) {
     const customer = customerById.get(conversation.customer_id);
     const source = String(customer?.metadata?.source || '');
     const normalizedName = normalizeDisplayName(customer?.display_name || '');
-    if (source === 'dabbir_web_runtime' && normalizedName) {
-      if (seenWebRuntimeNames.has(normalizedName)) continue;
-      seenWebRuntimeNames.add(normalizedName);
+    if (source !== 'dabbir_web_runtime' || !normalizedName) {
+      passthrough.push(conversation);
+      continue;
     }
-    visible.push(conversation);
+    const existing = runtimeGroups.get(normalizedName);
+    if (!existing || isBetterCanonical(conversation, existing)) runtimeGroups.set(normalizedName, conversation);
   }
-  return visible;
+
+  return [...passthrough, ...runtimeGroups.values()].sort((a, b) => activityTime(b) - activityTime(a));
 }
 
 async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
@@ -194,7 +202,7 @@ async function handleFastGet(req, res) {
 
   const duration = Date.now() - started;
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v2');
+  res.setHeader('x-dabbir-runtime', 'fast-v3');
   return json(res, 200, {
     ok: true,
     authenticated: true,
