@@ -1,4 +1,5 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m2.7-free';
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities']);
@@ -10,16 +11,19 @@ export function getPilotAiConfig(env = process.env) {
       endpoint: GROQ_ENDPOINT,
       model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
       configured: true,
+      auth_mode: 'API_KEY',
       cost_mode: 'FREE_TIER_ONLY',
     };
   }
 
+  const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
   if (env.VERCEL_ENV) {
     return {
       provider: 'vercel-ai-gateway',
-      endpoint: 'ai-gateway',
+      endpoint: GATEWAY_ENDPOINT,
       model: String(env.PILOT_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
-      configured: true,
+      configured: Boolean(gatewayCredential),
+      auth_mode: env.AI_GATEWAY_API_KEY ? 'API_KEY' : env.VERCEL_OIDC_TOKEN ? 'OIDC' : 'MISSING',
       cost_mode: 'FREE_TIER_ONLY',
     };
   }
@@ -29,6 +33,7 @@ export function getPilotAiConfig(env = process.env) {
     endpoint: GROQ_ENDPOINT,
     model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
     configured: false,
+    auth_mode: 'MISSING',
     cost_mode: 'FREE_TIER_ONLY',
   };
 }
@@ -104,13 +109,33 @@ function finalizeReply({ reply, input, language, config }) {
   };
 }
 
+async function callOpenAiCompatible({ endpoint, credential, model, system, input, fetchImpl }) {
+  const response = await fetchImpl(endpoint, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${credential}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: input },
+      ],
+      temperature: 0.2,
+      max_tokens: 350,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
 export async function generatePilotAiReply({
   project,
   message,
   language = 'auto',
   env = process.env,
   fetchImpl = fetch,
-  gatewayGenerateImpl,
 } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) {
@@ -121,9 +146,58 @@ export async function generatePilotAiReply({
   if (!input) return { ok: false, state: 'REJECTED', error: 'message_required' };
 
   const config = getPilotAiConfig(env);
-  const apiKey = String(env.GROQ_API_KEY || '');
+  const groqKey = String(env.GROQ_API_KEY || '');
+  const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
 
-  if (!apiKey && !env.VERCEL_ENV) {
+  if (!groqKey && env.VERCEL_ENV) {
+    if (!gatewayCredential) {
+      return {
+        ok: false,
+        state: 'UNCONFIGURED',
+        error: 'gateway_credential_missing',
+        provider: config.provider,
+        model: config.model,
+        cost_mode: config.cost_mode,
+      };
+    }
+    try {
+      const { response, payload } = await callOpenAiCompatible({
+        endpoint: GATEWAY_ENDPOINT,
+        credential: gatewayCredential,
+        model: config.model,
+        system: systemPrompt(normalizedProject, language),
+        input,
+        fetchImpl,
+      });
+      if (!response.ok) {
+        return {
+          ok: false,
+          state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR',
+          error: `gateway_http_${response.status}`,
+          provider: config.provider,
+          model: config.model,
+          cost_mode: config.cost_mode,
+        };
+      }
+      return finalizeReply({
+        reply: String(payload?.choices?.[0]?.message?.content || '').trim(),
+        input,
+        language,
+        config,
+      });
+    } catch {
+      return {
+        ok: false,
+        state: 'PROVIDER_ERROR',
+        error: 'gateway_network_error',
+        provider: config.provider,
+        model: config.model,
+        cost_mode: config.cost_mode,
+      };
+    }
+  }
+
+  if (!groqKey) {
     return {
       ok: false,
       state: 'UNCONFIGURED',
@@ -134,60 +208,15 @@ export async function generatePilotAiReply({
     };
   }
 
-  if (!apiKey && env.VERCEL_ENV) {
-    try {
-      let generate = gatewayGenerateImpl;
-      if (!generate) {
-        const ai = await import('ai');
-        generate = ai.generateText;
-      }
-      const { text } = await generate({
-        model: config.model,
-        system: systemPrompt(normalizedProject, language),
-        prompt: input,
-        temperature: 0.2,
-        maxOutputTokens: 350,
-        providerOptions: {
-          gateway: {
-            disallowPromptTraining: true,
-            user: 'pilot-production-synthetic-chat',
-            tags: ['product:pilot', 'feature:conversation-ai', `env:${String(env.VERCEL_ENV)}`],
-          },
-        },
-      });
-      return finalizeReply({ reply: String(text || '').trim(), input, language, config });
-    } catch (error) {
-      const status = Number(error?.statusCode || error?.status || 0);
-      return {
-        ok: false,
-        state: status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR',
-        error: status ? `gateway_http_${status}` : 'gateway_runtime_error',
-        provider: config.provider,
-        model: config.model,
-        cost_mode: config.cost_mode,
-      };
-    }
-  }
-
   try {
-    const response = await fetchImpl(config.endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          { role: 'system', content: systemPrompt(normalizedProject, language) },
-          { role: 'user', content: input },
-        ],
-        temperature: 0.2,
-        max_completion_tokens: 350,
-      }),
+    const { response, payload } = await callOpenAiCompatible({
+      endpoint: GROQ_ENDPOINT,
+      credential: groqKey,
+      model: config.model,
+      system: systemPrompt(normalizedProject, language),
+      input,
+      fetchImpl,
     });
-
-    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       return {
         ok: false,
@@ -198,7 +227,6 @@ export async function generatePilotAiReply({
         cost_mode: config.cost_mode,
       };
     }
-
     return finalizeReply({
       reply: String(payload?.choices?.[0]?.message?.content || '').trim(),
       input,
