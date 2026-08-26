@@ -22,8 +22,9 @@ test('unified conversation is rendered with a real PILOT AI request and reply', 
   assert.match(app, /syntheticCustomer:true/);
 });
 
-test('root route serves the AI-enabled unified PILOT interface', () => {
+test('canonical root cannot fall back to the static non-AI composer', () => {
   const config = JSON.parse(vercel);
+  assert.ok(config.redirects.some(rule => rule.source === '/' && rule.destination === '/api/app'));
   assert.ok(config.rewrites.some(rule => rule.source === '/' && rule.destination === '/api/app'));
   assert.equal(config.functions['api/app.js'].includeFiles, 'index.html');
 });
