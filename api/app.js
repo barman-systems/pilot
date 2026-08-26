@@ -20,12 +20,9 @@ const businessAdaptiveUi = String.raw`
     const isStore=String(workspace.business.business_type||'').toLowerCase()==='store';
     document.body.classList.toggle('pilot-store',isStore);
     if(!isStore) return;
-
     document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display='none'});
     document.querySelector('#bottomNav')?.classList.add('pilot-store-nav');
-
     if(current==='appointments') showScreen('dashboard');
-
     const cards=document.querySelectorAll('#dashCards .card.metric');
     if(cards[1]){
       const label=cards[1].querySelector('span');
@@ -33,16 +30,11 @@ const businessAdaptiveUi = String.raw`
       if(label) label.textContent=lang==='ar'?'المتابعات':'Follow-ups';
       if(value) value.textContent=String((workspace.followups||[]).length);
     }
-
     const state=document.querySelector('#workspaceState');
     if(state) state.textContent=lang==='ar'?'متجر • تشغيلي':'Store • Operational';
   }
-
   const baseRenderAll=renderAll;
-  renderAll=function(){
-    baseRenderAll();
-    applyBusinessProfile();
-  };
+  renderAll=function(){baseRenderAll();applyBusinessProfile()};
   setTimeout(applyBusinessProfile,0);
 })();
 </script>`;
@@ -65,12 +57,16 @@ const conversationPerformanceUi = String.raw`
     if(!list) return;
     list.querySelectorAll('.msgrow').forEach(row=>{
       const body=row.querySelector('.bubble .body');
-      if(!body) return;
-      if(body.textContent==='PILOT_TYPING'){
+      if(body?.textContent==='PILOT_TYPING'){
         row.dataset.pilotTyping='true';
         body.textContent='…';
       }
     });
+  }
+
+  function localConversationState(state){
+    const conversation=(workspace?.conversations||[]).find(c=>c.id===selectedConversationId);
+    if(conversation) conversation.state=state;
   }
 
   async function fastSendMessage(){
@@ -95,24 +91,26 @@ const conversationPerformanceUi = String.raw`
     renderFastMessages();
 
     try{
-      const result=await api('/api/pilot-runtime',{
+      const {r,j={}}=await api('/api/chat-send',{
         method:'POST',
-        body:JSON.stringify({action:'send_message',business_id:workspace.business.id,conversation_id:selectedConversationId,message:text})
+        body:JSON.stringify({business_id:workspace.business.id,conversation_id:selectedConversationId,message:text})
       });
-      const r=result.r,j=result.j||{};
 
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==tempId&&m.id!==typingId);
 
+      if(j.customer_message) workspace.messages.push(j.customer_message);
+      else if(!j.customer_message_persisted) workspace.messages.push({id:tempId,conversation_id:selectedConversationId,sender_type:'customer',body:text,intent:'UNVERIFIED',simulated:false,created_at:now});
+
       if(!r.ok||!j.ok){
-        toast(j.error||T().sendFailed);
-        await loadRuntime(workspace.business.id,selectedConversationId);
+        localConversationState('action_required');
+        renderMessages();
+        renderDashboard();
+        toast(lang==='ar'?(j.customer_message_persisted?'تم حفظ رسالتك، وتعذر رد AI مؤقتًا':'تعذر إرسال الرسالة'):(j.customer_message_persisted?'Message saved; AI reply is temporarily unavailable':'Message could not be sent'));
         return;
       }
 
-      if(j.customer_message) workspace.messages.push(j.customer_message);
       if(j.ai_message) workspace.messages.push(j.ai_message);
-      const conversation=(workspace.conversations||[]).find(c=>c.id===selectedConversationId);
-      if(conversation) conversation.state='waiting_customer';
+      localConversationState('waiting_customer');
       translations.clear();
       translationMode=false;
       renderMessages();
@@ -120,8 +118,8 @@ const conversationPerformanceUi = String.raw`
       renderAnalytics();
     }catch{
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==typingId);
-      toast(T().sendFailed);
-      await loadRuntime(workspace.business.id,selectedConversationId);
+      renderMessages();
+      toast(lang==='ar'?'تعذر الاتصال؛ حاول مرة أخرى':'Connection failed; try again');
     }finally{
       pilotSending=false;
       btn.disabled=false;
@@ -134,11 +132,7 @@ const conversationPerformanceUi = String.raw`
   const composer=document.querySelector('#composer');
   if(composer){
     composer.addEventListener('keydown',event=>{
-      if(event.key==='Enter'&&!event.shiftKey){
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        fastSendMessage();
-      }
+      if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();event.stopImmediatePropagation();fastSendMessage()}
     },true);
   }
   window.pilotFastSendMessage=fastSendMessage;
@@ -146,17 +140,10 @@ const conversationPerformanceUi = String.raw`
 </script>`;
 
 export default function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
-  }
+  if (req.method !== 'GET') return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
 
   let html = fs.readFileSync(htmlPath, 'utf8');
-
-  // Keep employee management discoverable in primary navigation on desktop and mobile.
-  // Invitation, membership and RLS behavior are unchanged.
-  if (!html.includes('data-pilot-team-nav="true"') && html.includes(settingsNav)) {
-    html = html.replace(settingsNav, `${teamNav}\n    ${settingsNav}`);
-  }
+  if (!html.includes('data-pilot-team-nav="true"') && html.includes(settingsNav)) html = html.replace(settingsNav, `${teamNav}\n    ${settingsNav}`);
   if (!html.includes('data-pilot-team-mobile="true"') && html.includes(settingsBottom)) {
     html = html.replace(settingsBottom, `${teamBottom}${settingsBottom}`);
     html = html.replace('grid-template-columns:repeat(5,1fr);bottom:0', 'grid-template-columns:repeat(6,1fr);bottom:0');
@@ -168,5 +155,6 @@ export default function handler(req, res) {
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
   res.setHeader('x-pilot-interface', 'operational-runtime-v1');
+  res.setHeader('x-pilot-chat-path', 'lightweight-v1');
   return res.status(200).send(html);
 }
