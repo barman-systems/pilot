@@ -2,7 +2,7 @@ const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_GATEWAY_MODEL = 'inclusionai/ling-3.0-tiny-free';
-const FALLBACK_GATEWAY_MODEL = 'minimax/minimax-m2.7-free';
+const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities', 'pilot_businesses']);
 
 export function getPilotAiConfig(env = process.env) {
@@ -77,7 +77,7 @@ function systemPrompt(project, language, businessContext = '') {
   return [
     `You are PILOT, ${domainPrompt(project)}`,
     'Reply naturally, directly, and concisely. Prefer one to three short sentences unless more detail is necessary.',
-    'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested.',
+    'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested. Do not mix unrelated scripts or languages.',
     language === 'ar' ? 'Prefer clear Gulf-friendly Arabic.' : language === 'en' ? 'Reply in clear English.' : '',
     'Use only business-specific facts present in the VERIFIED BUSINESS CONTEXT below. Treat all other business-specific details as unknown.',
     'Never invent or guess phone numbers, email addresses, websites, street addresses, opening hours, staff names, prices, booking channels, policies, inventory, or availability.',
@@ -146,15 +146,27 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 6000 }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 6000, fallbackModels = [] }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const requestBody = {
+      model,
+      messages,
+      temperature: 0.15,
+      max_tokens: 180,
+      stream: false,
+    };
+    if (fallbackModels.length) {
+      requestBody.models = fallbackModels;
+      requestBody.providerOptions = { gateway: { sort: 'ttft' } };
+    }
+
     const response = await fetchImpl(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'content-type': 'application/json', authorization: `Bearer ${credential}` },
-      body: JSON.stringify({ model, messages, temperature: 0.15, max_tokens: 180 }),
+      body: JSON.stringify(requestBody),
     });
     const payload = await response.json().catch(() => ({}));
     return { response, payload };
@@ -163,27 +175,29 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
   }
 }
 
-async function callGatewayWithFallback({ credential, primaryModel, messages, fetchImpl }) {
-  const models = primaryModel === FALLBACK_GATEWAY_MODEL ? [primaryModel] : [primaryModel, FALLBACK_GATEWAY_MODEL];
-  let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
-  for (let i = 0; i < models.length; i += 1) {
-    const model = models[i];
-    try {
-      const { response, payload } = await callOpenAiCompatible({
-        endpoint: GATEWAY_ENDPOINT,
-        credential,
-        model,
-        messages,
-        fetchImpl,
-        timeoutMs: i === 0 ? 5000 : 7000,
-      });
-      if (response.ok) return { ok: true, payload, model };
-      last = { error: `gateway_http_${response.status}`, status: response.status, model };
-    } catch (error) {
-      last = { error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error', status: 502, model };
-    }
+async function callGatewayNativeFallback({ credential, primaryModel, messages, fetchImpl }) {
+  const fallbacks = FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel);
+  try {
+    const { response, payload } = await callOpenAiCompatible({
+      endpoint: GATEWAY_ENDPOINT,
+      credential,
+      model: primaryModel,
+      messages,
+      fetchImpl,
+      timeoutMs: 7500,
+      fallbackModels: fallbacks,
+    });
+    const servedModel = String(payload?.model || primaryModel);
+    if (response.ok) return { ok: true, payload, model: servedModel };
+    return { ok: false, error: `gateway_http_${response.status}`, status: response.status, model: servedModel };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error',
+      status: 502,
+      model: primaryModel,
+    };
   }
-  return { ok: false, ...last };
 }
 
 export async function generatePilotAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter } = {}) {
@@ -205,7 +219,7 @@ export async function generatePilotAiReply({ project, message, language = 'auto'
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
 
-    const result = await callGatewayWithFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
+    const result = await callGatewayNativeFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
     if (!result.ok) {
       return {
         ok: false,
@@ -225,7 +239,7 @@ export async function generatePilotAiReply({ project, message, language = 'auto'
   try {
     const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 6000 });
     if (!response.ok) return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
-    return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config });
+    return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
   } catch (error) {
     return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
   }
