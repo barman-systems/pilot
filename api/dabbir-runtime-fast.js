@@ -11,6 +11,49 @@ import dabbirRuntimeHandler from './dabbir-runtime.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 
+function normalizeDisplayName(value = '') {
+  return String(value)
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stateRank(state) {
+  const value = String(state || '').toLowerCase();
+  if (value === 'human_active') return 4;
+  if (value === 'waiting_customer') return 3;
+  if (value === 'ai_active') return 2;
+  if (value === 'action_required') return 1;
+  return 0;
+}
+
+function visibleConversations(conversations = [], customers = []) {
+  const customerById = new Map((customers || []).map(customer => [customer.id, customer]));
+  const ordered = [...(conversations || [])].sort((a, b) => {
+    const rankDelta = stateRank(b.state) - stateRank(a.state);
+    if (rankDelta) return rankDelta;
+    return new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime();
+  });
+  const seenWebRuntimeNames = new Set();
+  const visible = [];
+  for (const conversation of ordered) {
+    const customer = customerById.get(conversation.customer_id);
+    const source = String(customer?.metadata?.source || '');
+    const normalizedName = normalizeDisplayName(customer?.display_name || '');
+    if (source === 'dabbir_web_runtime' && normalizedName) {
+      if (seenWebRuntimeNames.has(normalizedName)) continue;
+      seenWebRuntimeNames.add(normalizedName);
+    }
+    visible.push(conversation);
+  }
+  return visible;
+}
+
 async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
   const text = await response.text();
   let payload = null;
@@ -83,12 +126,12 @@ async function handleFastGet(req, res) {
   );
   const conversationsPromise = rest(
     accessToken,
-    `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&order=updated_at.desc&limit=20`,
+    `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&state=neq.closed&order=updated_at.desc&limit=40`,
     'CONVERSATIONS_LOOKUP_FAILED',
   );
   const customersPromise = rest(
     accessToken,
-    `dabbir_customers?select=id,display_name,lead_status,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=30`,
+    `dabbir_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=80`,
     'CUSTOMERS_LOOKUP_FAILED',
   );
   const appointmentsPromise = rest(
@@ -110,7 +153,7 @@ async function handleFastGet(req, res) {
     ? loadMessages(accessToken, businessId, requestedConversationId)
     : Promise.resolve(null);
 
-  const [businessRows, conversations, customers, appointments, handoffs, followups, requestedMessages] = await Promise.all([
+  const [businessRows, rawConversations, customers, appointments, handoffs, followups, requestedMessages] = await Promise.all([
     businessPromise,
     conversationsPromise,
     customersPromise,
@@ -123,8 +166,19 @@ async function handleFastGet(req, res) {
   const business = businessRows?.[0] || null;
   if (!business) return json(res, 404, { ok: false, error: 'BUSINESS_NOT_FOUND' });
 
+  const conversations = visibleConversations(rawConversations, customers);
+  const customerById = new Map((customers || []).map(customer => [customer.id, customer]));
+
   let conversationId = requestedConversationId;
-  if (conversationId && !conversations.some(item => item.id === conversationId)) conversationId = null;
+  if (conversationId && !conversations.some(item => item.id === conversationId)) {
+    const hiddenRequested = (rawConversations || []).find(item => item.id === conversationId);
+    const hiddenCustomer = hiddenRequested ? customerById.get(hiddenRequested.customer_id) : null;
+    const hiddenName = normalizeDisplayName(hiddenCustomer?.display_name || '');
+    const replacement = hiddenName
+      ? conversations.find(item => normalizeDisplayName(customerById.get(item.customer_id)?.display_name || '') === hiddenName)
+      : null;
+    conversationId = replacement?.id || null;
+  }
   if (!conversationId) conversationId = conversations?.[0]?.id || null;
 
   let messages = [];
@@ -140,7 +194,7 @@ async function handleFastGet(req, res) {
 
   const duration = Date.now() - started;
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v1');
+  res.setHeader('x-dabbir-runtime', 'fast-v2');
   return json(res, 200, {
     ok: true,
     authenticated: true,
@@ -166,7 +220,7 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, summary_only: summaryOnly },
+    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true },
   });
 }
 
