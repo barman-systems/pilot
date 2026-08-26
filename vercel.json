@@ -5,6 +5,12 @@
       "includeFiles": "index.html"
     }
   },
+  "routes": [
+    {
+      "src": "^/$",
+      "dest": "/api/app"
+    }
+  ],
   "rewrites": [
     {
       "source": "/",
