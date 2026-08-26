@@ -1,0 +1,33 @@
+name: Repair conversation preview
+
+on:
+  push:
+    branches:
+      - fix/conversation-preview-send
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[conversation-preview-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/conversation-preview-send
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply repair
+        run: node scripts/repair-conversation-preview.mjs
+      - name: Run regression suite
+        run: npm test
+      - name: Commit verified repair
+        run: |
+          rm -f scripts/repair-conversation-preview.mjs .github/workflows/repair-conversation-preview.yml
+          git config user.name "barmanai"
+          git config user.email "alcaptain2014@gmail.com"
+          git add index.html test/conversation-preview-send.test.mjs scripts/repair-conversation-preview.mjs .github/workflows/repair-conversation-preview.yml
+          git commit -m "fix: make conversation composer functional [conversation-preview-fixed]"
+          git push origin HEAD:fix/conversation-preview-send
