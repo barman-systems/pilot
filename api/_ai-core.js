@@ -1,13 +1,34 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
+const DEFAULT_GATEWAY_MODEL = 'inclusionai/ling-3.0-tiny-free';
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities']);
 
 export function getPilotAiConfig(env = process.env) {
+  if (env.GROQ_API_KEY) {
+    return {
+      provider: 'groq',
+      endpoint: GROQ_ENDPOINT,
+      model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
+      configured: true,
+      cost_mode: 'FREE_TIER_ONLY',
+    };
+  }
+
+  if (env.VERCEL_ENV) {
+    return {
+      provider: 'vercel-ai-gateway',
+      endpoint: 'ai-gateway',
+      model: String(env.PILOT_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
+      configured: true,
+      cost_mode: 'FREE_TIER_ONLY',
+    };
+  }
+
   return {
     provider: 'groq',
     endpoint: GROQ_ENDPOINT,
     model: String(env.PILOT_AI_MODEL || DEFAULT_MODEL),
-    configured: Boolean(env.GROQ_API_KEY),
+    configured: false,
     cost_mode: 'FREE_TIER_ONLY',
   };
 }
@@ -46,12 +67,50 @@ function safeGroundedReply(input, language) {
     : 'I can help with the appointment or inquiry. This preview does not have verified business contact or booking details, so I will not invent a phone number or link. Tell me your preferred day and time and I can prepare the request without claiming it is confirmed.';
 }
 
+function finalizeReply({ reply, input, language, config }) {
+  if (!reply) {
+    return {
+      ok: false,
+      state: 'PROVIDER_ERROR',
+      error: 'empty_ai_response',
+      provider: config.provider,
+      model: config.model,
+      cost_mode: config.cost_mode,
+    };
+  }
+
+  if (containsUnverifiedBusinessContact(reply)) {
+    return {
+      ok: true,
+      state: 'SUCCESS',
+      provider: config.provider,
+      model: config.model,
+      cost_mode: config.cost_mode,
+      reply: safeGroundedReply(input, language),
+      guarded: true,
+      grounding_state: 'UNVERIFIED_BUSINESS_CONTACT_BLOCKED',
+    };
+  }
+
+  return {
+    ok: true,
+    state: 'SUCCESS',
+    provider: config.provider,
+    model: config.model,
+    cost_mode: config.cost_mode,
+    reply,
+    guarded: false,
+    grounding_state: 'NO_UNVERIFIED_CONTACT_DETECTED',
+  };
+}
+
 export async function generatePilotAiReply({
   project,
   message,
   language = 'auto',
   env = process.env,
   fetchImpl = fetch,
+  gatewayGenerateImpl,
 } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) {
@@ -63,7 +122,8 @@ export async function generatePilotAiReply({
 
   const config = getPilotAiConfig(env);
   const apiKey = String(env.GROQ_API_KEY || '');
-  if (!apiKey) {
+
+  if (!apiKey && !env.VERCEL_ENV) {
     return {
       ok: false,
       state: 'UNCONFIGURED',
@@ -72,6 +132,41 @@ export async function generatePilotAiReply({
       model: config.model,
       cost_mode: config.cost_mode,
     };
+  }
+
+  if (!apiKey && env.VERCEL_ENV) {
+    try {
+      let generate = gatewayGenerateImpl;
+      if (!generate) {
+        const ai = await import('ai');
+        generate = ai.generateText;
+      }
+      const { text } = await generate({
+        model: config.model,
+        system: systemPrompt(normalizedProject, language),
+        prompt: input,
+        temperature: 0.2,
+        maxOutputTokens: 350,
+        providerOptions: {
+          gateway: {
+            disallowPromptTraining: true,
+            user: 'pilot-production-synthetic-chat',
+            tags: ['product:pilot', 'feature:conversation-ai', `env:${String(env.VERCEL_ENV)}`],
+          },
+        },
+      });
+      return finalizeReply({ reply: String(text || '').trim(), input, language, config });
+    } catch (error) {
+      const status = Number(error?.statusCode || error?.status || 0);
+      return {
+        ok: false,
+        state: status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR',
+        error: status ? `gateway_http_${status}` : 'gateway_runtime_error',
+        provider: config.provider,
+        model: config.model,
+        cost_mode: config.cost_mode,
+      };
+    }
   }
 
   try {
@@ -104,41 +199,12 @@ export async function generatePilotAiReply({
       };
     }
 
-    const reply = String(payload?.choices?.[0]?.message?.content || '').trim();
-    if (!reply) {
-      return {
-        ok: false,
-        state: 'PROVIDER_ERROR',
-        error: 'empty_ai_response',
-        provider: config.provider,
-        model: config.model,
-        cost_mode: config.cost_mode,
-      };
-    }
-
-    if (containsUnverifiedBusinessContact(reply)) {
-      return {
-        ok: true,
-        state: 'SUCCESS',
-        provider: config.provider,
-        model: config.model,
-        cost_mode: config.cost_mode,
-        reply: safeGroundedReply(input, language),
-        guarded: true,
-        grounding_state: 'UNVERIFIED_BUSINESS_CONTACT_BLOCKED',
-      };
-    }
-
-    return {
-      ok: true,
-      state: 'SUCCESS',
-      provider: config.provider,
-      model: config.model,
-      cost_mode: config.cost_mode,
-      reply,
-      guarded: false,
-      grounding_state: 'NO_UNVERIFIED_CONTACT_DETECTED',
-    };
+    return finalizeReply({
+      reply: String(payload?.choices?.[0]?.message?.content || '').trim(),
+      input,
+      language,
+      config,
+    });
   } catch {
     return {
       ok: false,
