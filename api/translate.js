@@ -14,7 +14,63 @@ const TRANSLATION_MODELS = [...new Set([
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12000;
-const MODEL_TIMEOUT_MS = 8000;
+const MODEL_TIMEOUT_MS = 5500;
+const LOCAL_MODEL = 'dabbir-local-business-dictionary-v1';
+
+const EXACT_AR_EN = new Map([
+  ['مرحبا', 'Hello'],
+  ['مرحبا المنتج متوفر اليوم', 'Hello, the product is available today.'],
+  ['السلام عليكم', 'Hello'],
+  ['شكرا', 'Thank you'],
+  ['شكرا لك', 'Thank you'],
+  ['كم السعر', 'What is the price?'],
+  ['بكم المنتج', 'How much is the product?'],
+  ['هل المنتج متوفر', 'Is the product available?'],
+  ['هل المنتج متوفر اليوم', 'Is the product available today?'],
+  ['متى الموعد', 'When is the appointment?'],
+  ['اريد حجز موعد', 'I want to book an appointment.'],
+  ['اريد الغاء الموعد', 'I want to cancel the appointment.'],
+  ['وين طلبي', 'Where is my order?'],
+  ['اين طلبي', 'Where is my order?'],
+  ['متى يوصل الطلب', 'When will the order arrive?'],
+  ['اريد التحدث مع موظف', 'I want to speak with a staff member.'],
+  ['احتاج موظف', 'I need a staff member.'],
+]);
+
+const EXACT_EN_AR = new Map([
+  ['hello', 'مرحبا'],
+  ['hello the product is available today', 'مرحبا، المنتج متوفر اليوم.'],
+  ['thank you', 'شكرا لك'],
+  ['what is the price', 'كم السعر؟'],
+  ['how much is the product', 'بكم المنتج؟'],
+  ['is the product available', 'هل المنتج متوفر؟'],
+  ['is the product available today', 'هل المنتج متوفر اليوم؟'],
+  ['when is the appointment', 'متى الموعد؟'],
+  ['i want to book an appointment', 'أريد حجز موعد.'],
+  ['i want to cancel the appointment', 'أريد إلغاء الموعد.'],
+  ['where is my order', 'أين طلبي؟'],
+  ['when will the order arrive', 'متى يصل الطلب؟'],
+  ['i want to speak with a staff member', 'أريد التحدث مع موظف.'],
+]);
+
+const AR_EN_TERMS = new Map(Object.entries({
+  'مرحبا':'hello','اهلا':'hello','السلام':'hello','عليكم':'','شكرا':'thank you','نعم':'yes','لا':'no',
+  'انا':'i','اريد':'want','احتاج':'need','المنتج':'the product','منتج':'product','الخدمه':'the service','خدمه':'service',
+  'متوفر':'available','متوفره':'available','غير':'not','اليوم':'today','غدا':'tomorrow','بكره':'tomorrow','الان':'now',
+  'السعر':'the price','سعر':'price','بكم':'how much','كم':'how much','الطلب':'the order','طلبي':'my order','طلب':'order',
+  'موعد':'appointment','الموعد':'the appointment','حجز':'book','الغاء':'cancel','تاكيد':'confirm','مؤكد':'confirmed',
+  'متى':'when','اين':'where','وين':'where','كيف':'how','هل':'is','يوصل':'arrive','يصل':'arrive','التوصيل':'delivery','شحن':'shipping',
+  'موظف':'staff member','الفريق':'the team','تحدث':'speak','اتحدث':'speak','مع':'with','مشكله':'problem','شكوى':'complaint',
+  'متابعه':'follow-up','رقم':'number','فاتوره':'invoice','دفع':'payment','مدفوع':'paid','العميل':'the customer','عميل':'customer'
+}));
+
+const EN_AR_TERMS = new Map(Object.entries({
+  'hello':'مرحبا','hi':'مرحبا','thanks':'شكرا','thank':'شكرا','you':'لك','yes':'نعم','no':'لا','i':'أنا','want':'أريد','need':'أحتاج',
+  'the':'ال','product':'منتج','service':'خدمة','available':'متوفر','not':'غير','today':'اليوم','tomorrow':'غدا','now':'الآن','price':'السعر',
+  'how':'كيف','much':'كم','order':'طلب','my':'لي','appointment':'موعد','book':'حجز','cancel':'إلغاء','confirm':'تأكيد','confirmed':'مؤكد',
+  'when':'متى','where':'أين','is':'هل','arrive':'يصل','delivery':'التوصيل','shipping':'الشحن','staff':'موظف','member':'','team':'الفريق',
+  'speak':'التحدث','with':'مع','problem':'مشكلة','complaint':'شكوى','follow-up':'متابعة','number':'رقم','invoice':'فاتورة','payment':'دفع','paid':'مدفوع','customer':'عميل'
+}));
 
 function normalizeMessages(input) {
   if (!Array.isArray(input)) return [];
@@ -31,6 +87,65 @@ function totalChars(messages) {
 function parseJsonText(text) {
   const clean = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   return JSON.parse(clean);
+}
+
+function normalizePhrase(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function localTranslateText(text, targetLanguage) {
+  const normalized = normalizePhrase(text);
+  if (!normalized) return { text, confidence: 1 };
+  const exact = targetLanguage === 'en' ? EXACT_AR_EN.get(normalized) : EXACT_EN_AR.get(normalized);
+  if (exact) return { text: exact, confidence: 1 };
+
+  const sourceLooksArabic = /[\u0600-\u06FF]/.test(text);
+  if ((targetLanguage === 'en' && !sourceLooksArabic) || (targetLanguage === 'ar' && sourceLooksArabic)) {
+    return { text, confidence: 1 };
+  }
+
+  const dictionary = targetLanguage === 'en' ? AR_EN_TERMS : EN_AR_TERMS;
+  const tokens = normalized.split(' ').filter(Boolean);
+  let recognized = 0;
+  const output = tokens.map(token => {
+    if (dictionary.has(token)) {
+      recognized += 1;
+      return dictionary.get(token);
+    }
+    if (/^\d+(?:[.,]\d+)?$/.test(token)) {
+      recognized += 1;
+      return token;
+    }
+    return token;
+  }).filter(Boolean);
+  const confidence = tokens.length ? recognized / tokens.length : 0;
+  if (confidence < 0.72) return null;
+  let translated = output.join(' ').replace(/\s+/g, ' ').trim();
+  if (!translated) return null;
+  translated = translated.charAt(0).toUpperCase() + translated.slice(1);
+  if (/[?.!؟]$/.test(String(text).trim()) && !/[?.!؟]$/.test(translated)) translated += targetLanguage === 'ar' ? '؟' : '?';
+  return { text: translated, confidence };
+}
+
+function localBusinessTranslation(messages, targetLanguage) {
+  const translated = [];
+  let minimumConfidence = 1;
+  for (const message of messages) {
+    const result = localTranslateText(message.text, targetLanguage);
+    if (!result) return null;
+    translated.push({ id: message.id, text: result.text });
+    minimumConfidence = Math.min(minimumConfidence, result.confidence);
+  }
+  return { translations: translated, confidence: minimumConfidence };
 }
 
 async function requireIdentity(req) {
@@ -76,16 +191,25 @@ async function translateWithModel(messages, targetLanguage, model) {
 }
 
 async function translate(messages, targetLanguage) {
+  const local = localBusinessTranslation(messages, targetLanguage);
+  if (local && local.confidence >= 0.9) {
+    return { translations: local.translations, model: LOCAL_MODEL, fallback_used: false, local: true, confidence: local.confidence, attempts: 0 };
+  }
+
   let lastError = null;
   let attempts = 0;
   for (const model of TRANSLATION_MODELS) {
     attempts += 1;
     try {
       const translations = await translateWithModel(messages, targetLanguage, model);
-      return { translations, model, fallback_used: attempts > 1, attempts };
+      return { translations, model, fallback_used: attempts > 1, local: false, attempts };
     } catch (error) {
       lastError = error;
     }
+  }
+
+  if (local) {
+    return { translations: local.translations, model: LOCAL_MODEL, fallback_used: true, local: true, confidence: local.confidence, attempts };
   }
   throw lastError || new Error('TRANSLATION_MODEL_UNAVAILABLE');
 }
@@ -136,6 +260,8 @@ export default async function handler(req, res) {
       operation: 'conversation_translation',
       outcome: 'VERIFIED_SUCCESS',
       model: result.model,
+      local: result.local === true,
+      confidence: result.confidence || null,
       fallback_used: result.fallback_used,
       attempts: result.attempts,
       message_count: messages.length,
@@ -143,11 +269,13 @@ export default async function handler(req, res) {
     });
     return json(res, 200, {
       ok: true,
-      state: 'AVAILABLE',
+      state: result.local && result.fallback_used ? 'DEGRADED_AVAILABLE' : 'AVAILABLE',
       service: 'dabbir-translation',
       targetLanguage,
       translations: result.translations,
       model: result.model,
+      local: result.local === true,
+      confidence: result.confidence || undefined,
       fallback_used: result.fallback_used,
       attempts: result.attempts,
       persisted: false,
