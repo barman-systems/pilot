@@ -94,7 +94,7 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     assert.equal(res.body.persisted, false);
     assert.equal(res.body.outbound_messages_sent, false);
     assert.equal(res.body.classifications.includes('APPOINTMENT_REQUEST'), true);
-    assert.ok(res.headers['x-pilot-correlation-id']);
+    assert.ok(res.headers['x-dabbir-correlation-id']);
 
     const responseText = JSON.stringify(res.body);
     for (const value of Object.values(sensitive)) assert.equal(responseText.includes(value), false);

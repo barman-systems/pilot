@@ -31,7 +31,7 @@ test('root route serves the authoritative DABBIR interface with recovery enhance
   assert.ok(config.rewrites.some(rule => rule.source === '/' && rule.destination === '/api/app-recovery'));
   assert.equal(config.functions['api/app.js'].includeFiles, 'index.html');
   assert.equal(config.functions['api/app-recovery.js'].includeFiles, 'index.html');
-  assert.match(app, /x-pilot-interface/);
+  assert.match(app, /x-dabbir-interface/);
   assert.doesNotMatch(app, /source\.replace/);
   assert.doesNotMatch(app, /dabbir-ai/);
   assert.match(recoveryShell, /import appHandler from '\.\/app\.js'/);

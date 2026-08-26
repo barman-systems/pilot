@@ -1,9 +1,9 @@
 const script = String.raw`(()=>{
-  if(window.__pilotRecoveryUiLoaded) return;
-  window.__pilotRecoveryUiLoaded=true;
+  if(window.__dabbirRecoveryUiLoaded) return;
+  window.__dabbirRecoveryUiLoaded=true;
 
   const style=document.createElement('style');
-  style.textContent='.pilotForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.pilotRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.pilotRecoveryOverlay.pilotHidden{display:none!important}.pilotRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.pilotRecoveryCard h2{font-size:24px;margin:18px 0 6px}.pilotRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.pilotRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.pilotRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.pilotRecoveryCard .pilotPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.pilotRecoveryCard .pilotSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.pilotRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.pilotRecoveryOk{color:#8ce6a1}.pilotRecoveryBrand{display:flex;gap:11px;align-items:center}.pilotRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}';
+  style.textContent='.pilotForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.dabbirRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.dabbirRecoveryOverlay.pilotHidden{display:none!important}.dabbirRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.dabbirRecoveryCard h2{font-size:24px;margin:18px 0 6px}.dabbirRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.dabbirRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.dabbirRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.dabbirRecoveryCard .pilotPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.dabbirRecoveryCard .pilotSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.dabbirRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.dabbirRecoveryOk{color:#8ce6a1}.dabbirRecoveryBrand{display:flex;gap:11px;align-items:center}.dabbirRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}';
   document.head.appendChild(style);
 
   const forgot=document.createElement('button');
@@ -14,7 +14,7 @@ const script = String.raw`(()=>{
   if(passwordField) passwordField.insertAdjacentElement('afterend',forgot);
 
   const wrap=document.createElement('div');
-  wrap.innerHTML='<section id="pilotForgotOverlay" class="pilotRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotForgotForm" class="pilotRecoveryCard"><div class="pilotRecoveryBrand"><div class="pilotRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotForgotTag"></small></div></div><h2 id="pilotForgotTitle"></h2><p id="pilotForgotDesc"></p><label id="pilotForgotEmailLabel" for="pilotForgotEmail"></label><input id="pilotForgotEmail" type="email" autocomplete="email" required><button id="pilotForgotSubmit" class="pilotPrimary" type="submit"></button><button id="pilotForgotCancel" class="pilotSecondary" type="button"></button><div id="pilotForgotMsg" class="pilotRecoveryMsg" role="status" aria-live="polite"></div></form></section><section id="pilotResetOverlay" class="pilotRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotResetForm" class="pilotRecoveryCard"><div class="pilotRecoveryBrand"><div class="pilotRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotResetTag"></small></div></div><h2 id="pilotResetTitle"></h2><p id="pilotResetDesc"></p><div id="pilotResetFields"><label id="pilotNewPasswordLabel" for="pilotNewPassword"></label><input id="pilotNewPassword" type="password" autocomplete="new-password" minlength="12" required><label id="pilotConfirmPasswordLabel" for="pilotConfirmPassword"></label><input id="pilotConfirmPassword" type="password" autocomplete="new-password" minlength="12" required><button id="pilotResetSubmit" class="pilotPrimary" type="submit"></button></div><button id="pilotResetBack" class="pilotSecondary" type="button"></button><div id="pilotResetMsg" class="pilotRecoveryMsg" role="status" aria-live="polite"></div></form></section>';
+  wrap.innerHTML='<section id="pilotForgotOverlay" class="dabbirRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotForgotForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotForgotTag"></small></div></div><h2 id="pilotForgotTitle"></h2><p id="pilotForgotDesc"></p><label id="pilotForgotEmailLabel" for="pilotForgotEmail"></label><input id="pilotForgotEmail" type="email" autocomplete="email" required><button id="pilotForgotSubmit" class="pilotPrimary" type="submit"></button><button id="pilotForgotCancel" class="pilotSecondary" type="button"></button><div id="pilotForgotMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section><section id="pilotResetOverlay" class="dabbirRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotResetForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotResetTag"></small></div></div><h2 id="pilotResetTitle"></h2><p id="pilotResetDesc"></p><div id="pilotResetFields"><label id="pilotNewPasswordLabel" for="pilotNewPassword"></label><input id="pilotNewPassword" type="password" autocomplete="new-password" minlength="12" required><label id="pilotConfirmPasswordLabel" for="pilotConfirmPassword"></label><input id="pilotConfirmPassword" type="password" autocomplete="new-password" minlength="12" required><button id="pilotResetSubmit" class="pilotPrimary" type="submit"></button></div><button id="pilotResetBack" class="pilotSecondary" type="button"></button><div id="pilotResetMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section>';
   while(wrap.firstChild) document.body.appendChild(wrap.firstChild);
 
   const q=s=>document.querySelector(s);
@@ -55,7 +55,7 @@ const script = String.raw`(()=>{
     const existing=String(q('#authEmail')?.value||'').trim();
     q('#pilotForgotEmail').value=existing;
     q('#pilotForgotMsg').textContent='';
-    q('#pilotForgotMsg').classList.remove('pilotRecoveryOk');
+    q('#pilotForgotMsg').classList.remove('dabbirRecoveryOk');
     q('#pilotForgotOverlay').classList.remove('pilotHidden');
     setTimeout(()=>q('#pilotForgotEmail').focus(),0);
   }
@@ -77,7 +77,7 @@ const script = String.raw`(()=>{
     const button=q('#pilotForgotSubmit');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
       msg.textContent=text().invalidEmail;
-      msg.classList.remove('pilotRecoveryOk');
+      msg.classList.remove('dabbirRecoveryOk');
       return;
     }
     button.disabled=true;
@@ -86,13 +86,13 @@ const script = String.raw`(()=>{
       const response=await fetch('/api/auth/forgot-password',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({email:email})});
       if(!response.ok){
         const payload=await response.json().catch(()=>({}));
-        if(response.status===400){msg.textContent=text().invalidEmail;msg.classList.remove('pilotRecoveryOk');return}
+        if(response.status===400){msg.textContent=text().invalidEmail;msg.classList.remove('dabbirRecoveryOk');return}
       }
       msg.textContent=text().sent;
-      msg.classList.add('pilotRecoveryOk');
+      msg.classList.add('dabbirRecoveryOk');
     }catch{
       msg.textContent=text().sent;
-      msg.classList.add('pilotRecoveryOk');
+      msg.classList.add('dabbirRecoveryOk');
     }finally{button.disabled=false}
   });
 
@@ -118,7 +118,7 @@ const script = String.raw`(()=>{
     const confirm=String(q('#pilotConfirmPassword').value||'');
     const msg=q('#pilotResetMsg');
     const button=q('#pilotResetSubmit');
-    msg.classList.remove('pilotRecoveryOk');
+    msg.classList.remove('dabbirRecoveryOk');
     if(password.length<12){msg.textContent=text().tooShort;return}
     if(password!==confirm){msg.textContent=text().mismatch;return}
     if(!recoveryAccessToken){msg.textContent=text().expired;return}
@@ -134,7 +134,7 @@ const script = String.raw`(()=>{
       history.replaceState({},document.title,location.pathname);
       q('#pilotResetFields').style.display='none';
       msg.textContent=text().updated;
-      msg.classList.add('pilotRecoveryOk');
+      msg.classList.add('dabbirRecoveryOk');
     }catch{msg.textContent=text().resetFailed}
     finally{button.disabled=false}
   });

@@ -211,7 +211,7 @@ export default async function handler(req, res) {
       console.info('pilot_chat_fast_path', { intent, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
-        provider: 'pilot-local-fastpath',
+        provider: 'dabbir-local-fastpath',
         model: 'deterministic-v1',
         fast_path: true,
         customer_message: customerMessage,
@@ -240,7 +240,7 @@ export default async function handler(req, res) {
       console.warn('pilot_chat_ai_degraded', { state: aiResult.state, error: aiResult.error, model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
-        provider: 'pilot-local-fallback',
+        provider: 'dabbir-local-fallback',
         model: 'deterministic-v1',
         degraded: true,
         upstream_ai_state: aiResult.state,

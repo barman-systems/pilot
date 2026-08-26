@@ -91,10 +91,10 @@ export default async function handler(req, res) {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
     if (!result.ok) {
       logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'challenge_verification', outcome: 'FAILED', failure_class: 'AUTH' });
-      return res.status(403).setHeader('x-pilot-correlation-id', cid).send('forbidden');
+      return res.status(403).setHeader('x-dabbir-correlation-id', cid).send('forbidden');
     }
     logEvent('info', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'challenge_verification', outcome: 'VERIFIED_SUCCESS' });
-    return res.status(200).setHeader('x-pilot-correlation-id', cid).send(result.challenge);
+    return res.status(200).setHeader('x-dabbir-correlation-id', cid).send(result.challenge);
   }
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed', correlation_id: cid }, cid);
 
