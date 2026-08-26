@@ -13,6 +13,7 @@ import { generateDABBIRAiReply } from './_ai-core.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const cleanText = (value, max = 2000) => String(value || '').trim().slice(0, max);
+const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 
 async function readData(response, fallback) {
   const text = await response.text();
@@ -70,13 +71,60 @@ function verifiedKnowledge(knowledge = []) {
   return knowledge.filter(item => !item.status || ['active', 'verified', 'approved'].includes(String(item.status).toLowerCase()));
 }
 
-function buildContext(business, knowledge = []) {
+function inventoryMap(inventory = []) {
+  return new Map((inventory || []).map(row => [row.product_id, row]));
+}
+
+function activeProducts(products = []) {
+  return (products || []).filter(product => product.active !== false);
+}
+
+function productOperationalFact(product, inventory = []) {
+  const stock = inventoryMap(inventory).get(product?.id) || { quantity: 0, reserved: 0 };
+  const quantity = Math.max(0, number(stock.quantity));
+  const reserved = Math.max(0, number(stock.reserved));
+  return {
+    id: product?.id || null,
+    name: product?.name || '',
+    sku: product?.sku || '',
+    price_aed: Number(number(product?.price_aed).toFixed(2)),
+    quantity,
+    reserved,
+    available: Math.max(0, quantity - reserved),
+  };
+}
+
+function findProduct(message, products = []) {
+  const text = normalizeLocal(message);
+  const active = activeProducts(products);
+  const exact = active.filter(product => {
+    const name = normalizeLocal(product.name);
+    const sku = normalizeLocal(product.sku);
+    return (name && text.includes(name)) || (sku && text.includes(sku));
+  });
+  if (exact.length === 1) return exact[0];
+  if (active.length === 1) return active[0];
+  return null;
+}
+
+function buildContext(business, knowledge = [], products = [], inventory = [], services = []) {
   const verified = verifiedKnowledge(knowledge)
     .slice(0, 12)
     .map(item => ({ key: item.knowledge_key, type: item.knowledge_type, value: item.value, source: item.source }));
+  const catalog = activeProducts(products).slice(0, 30).map(product => productOperationalFact(product, inventory));
+  const serviceRows = (services || []).filter(service => service.active !== false).slice(0, 20).map(service => ({
+    name: service.name,
+    duration_minutes: service.duration_minutes,
+  }));
   return JSON.stringify({
     business: { name: business.name, type: business.business_type, locale: business.locale },
     knowledge: verified,
+    live_operations: {
+      products: catalog,
+      services: serviceRows,
+      source: 'DABBIR live tenant data',
+      rule: 'Treat product price and available stock here as authoritative for this response. Never invent missing values.',
+    },
   });
 }
 
@@ -87,7 +135,37 @@ function containsContactKnowledge(knowledge = []) {
   });
 }
 
-function instantGroundedReply({ message, language, intent, business, knowledge }) {
+function productReply({ message, language, business, products, inventory }) {
+  if (business.business_type !== 'store') return null;
+  const text = normalizeLocal(message);
+  const asksPrice = /(سعر|price|cost|كم ب|بكم)/i.test(text);
+  const asksAvailability = /(متوفر|توفر|availability|available|stock)/i.test(text);
+  if (!asksPrice && !asksAvailability) return null;
+
+  const active = activeProducts(products);
+  const product = findProduct(message, active);
+  const ar = language === 'ar';
+  if (!product) {
+    if (!active.length) return null;
+    const names = active.slice(0, 3).map(item => item.name).filter(Boolean).join('، ');
+    return ar
+      ? `عندي أكثر من منتج في النظام. حدد اسم المنتج الذي تقصده${names ? `، مثل: ${names}` : ''}، وسأعطيك السعر والتوفر الموثقين.`
+      : `There is more than one product in the system. Tell me which product you mean${names ? `, for example: ${names}` : ''}, and I’ll give you its verified price and availability.`;
+  }
+
+  const fact = productOperationalFact(product, inventory);
+  const price = `${fact.price_aed.toFixed(2)} ${ar ? 'د.إ' : 'AED'}`;
+  const availabilityAr = fact.available > 0 ? `ومتوفر حاليًا، والكمية المتاحة ${fact.available}` : 'وغير متوفر حاليًا في المخزون';
+  const availabilityEn = fact.available > 0 ? `and it is currently available (${fact.available} available)` : 'and it is currently out of stock';
+
+  if (asksPrice && asksAvailability) {
+    return ar ? `${fact.name} سعره ${price}، ${availabilityAr}.` : `${fact.name} is ${price}, ${availabilityEn}.`;
+  }
+  if (asksPrice) return ar ? `${fact.name} سعره الموثق في دَبِّر هو ${price}.` : `The verified price for ${fact.name} in DABBIR is ${price}.`;
+  return ar ? `${fact.name} ${availabilityAr}.` : `${fact.name} is ${availabilityEn}.`;
+}
+
+function instantGroundedReply({ message, language, intent, business, knowledge, products, inventory }) {
   const text = normalizeLocal(message);
   const ar = language === 'ar';
   const hasKnowledge = verifiedKnowledge(knowledge).length > 0;
@@ -98,6 +176,9 @@ function instantGroundedReply({ message, language, intent, business, knowledge }
   if (/^(شكرا|شكرا لك|مشكور|يعطيك العافيه|thanks|thank you|thx)[!.،,\s]*$/i.test(text)) {
     return ar ? 'العفو، أنا حاضر. إذا تحتاج أي شيء إضافي قل لي.' : 'You’re welcome. I’m here if you need anything else.';
   }
+
+  const liveProductReply = productReply({ message, language, business, products, inventory });
+  if (liveProductReply) return liveProductReply;
 
   const asksContact = /(كيف اتواصل|تواصل مع|رقم|واتساب|whatsapp|contact|phone|email|ايميل)/i.test(text);
   if (asksContact && !containsContactKnowledge(knowledge)) {
@@ -177,12 +258,15 @@ export default async function handler(req, res) {
     if (!memberships.some(item => item.business_id === businessId)) return json(res, 403, { ok: false, error: 'BUSINESS_ACCESS_DENIED' });
 
     const lookupStarted = Date.now();
-    const [conversations, businesses, knowledge, historyDesc, mayReply] = await Promise.all([
+    const [conversations, businesses, knowledge, historyDesc, mayReply, products, inventory, services] = await Promise.all([
       rest(accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED'),
       rest(accessToken, `dabbir_businesses?select=id,name,business_type,locale,demo_mode&id=eq.${businessId}&limit=1`, {}, 'BUSINESS_LOOKUP_FAILED'),
       rest(accessToken, `dabbir_business_knowledge?select=knowledge_key,knowledge_type,value,source,status&business_id=eq.${businessId}&order=updated_at.desc&limit=12`, {}, 'KNOWLEDGE_LOOKUP_FAILED'),
       rest(accessToken, `dabbir_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.desc&limit=8`, {}, 'MESSAGE_HISTORY_FAILED'),
       rpc(accessToken, 'dabbir_ai_may_reply', { p_business_id: businessId, p_conversation_id: conversationId }, 'AI_POLICY_CHECK_FAILED'),
+      rest(accessToken, `dabbir_products?select=id,sku,name,price_aed,active&business_id=eq.${businessId}&active=eq.true&order=name.asc&limit=40`, {}, 'PRODUCTS_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&limit=80`, {}, 'INVENTORY_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_services?select=id,name,duration_minutes,active&business_id=eq.${businessId}&active=eq.true&limit=20`, {}, 'SERVICES_LOOKUP_FAILED'),
     ]);
     const lookupMs = Date.now() - lookupStarted;
 
@@ -202,18 +286,19 @@ export default async function handler(req, res) {
     }, 'CUSTOMER_MESSAGE_PERSIST_FAILED');
     const customerMessage = customerRows?.[0] || null;
 
-    const fastReply = instantGroundedReply({ message, language, intent, business, knowledge });
+    const fastReply = instantGroundedReply({ message, language, intent, business, knowledge, products, inventory });
     if (fastReply) {
       const finalStarted = Date.now();
       const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fastReply });
       const finalMs = Date.now() - finalStarted;
       const totalMs = Date.now() - started;
-      console.info('dabbir_chat_fast_path', { intent, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
+      console.info('dabbir_chat_fast_path', { intent, live_products: Array.isArray(products) ? products.length : 0, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
         provider: 'dabbir-local-fastpath',
-        model: 'deterministic-v1',
+        model: 'deterministic-v2-live-operations',
         fast_path: true,
+        live_operations_grounded: true,
         customer_message: customerMessage,
         ai_message: aiMessage,
         timing: { lookup_ms: lookupMs, ai_ms: 0, final_ms: finalMs, total_ms: totalMs },
@@ -226,7 +311,7 @@ export default async function handler(req, res) {
       project: projectFor(business.business_type),
       message,
       language,
-      businessContext: buildContext(business, knowledge),
+      businessContext: buildContext(business, knowledge, products, inventory, services),
       history: Array.isArray(historyDesc) ? historyDesc.slice().reverse() : [],
     });
     const aiMs = Date.now() - aiStarted;
@@ -262,6 +347,7 @@ export default async function handler(req, res) {
       ok: true,
       provider: aiResult.provider,
       model: aiResult.model,
+      live_operations_grounded: true,
       customer_message: customerMessage,
       ai_message: aiMessage,
       timing: { lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs },
