@@ -12,7 +12,7 @@ export function correlationId(req) {
 }
 
 export function attachCorrelation(res, id) {
-  if (id) res.setHeader('x-pilot-correlation-id', id);
+  if (id) res.setHeader('x-dabbir-correlation-id', id);
 }
 
 export function classifyFailure(error, fallback = 'UNKNOWN') {

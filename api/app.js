@@ -2,26 +2,26 @@ import fs from 'node:fs';
 
 const htmlPath = new URL('../index.html', import.meta.url);
 const settingsNav = '<button class="navBtn" data-screen="settings">⚙ <span data-label="settings"></span></button>';
-const teamNav = '<a class="navBtn" data-pilot-team-nav="true" href="/team.html" style="text-decoration:none">♟ <span data-label="team"></span></a>';
+const teamNav = '<a class="navBtn" data-dabbir-team-nav="true" href="/team.html" style="text-decoration:none">♟ <span data-label="team"></span></a>';
 const legacyTeamLink = '<div class="sideFoot"><a class="secondary" href="/team.html" style="display:block;text-align:center;text-decoration:none" id="teamLink"></a></div>';
 const settingsBottom = '<button data-screen="settings">⚙<br><span data-label="settings"></span></button>';
-const teamBottom = '<a data-pilot-team-mobile="true" href="/team.html" style="border:0;background:transparent;color:#9298a1;font-size:8px;border-radius:10px;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center">♟<br><span data-label="team"></span></a>';
+const teamBottom = '<a data-dabbir-team-mobile="true" href="/team.html" style="border:0;background:transparent;color:#9298a1;font-size:8px;border-radius:10px;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center">♟<br><span data-label="team"></span></a>';
 const legacyTeamLanguageWrite = "$('#teamLink').textContent=t.team;";
 const safeTeamLanguageWrite = "$('#teamLink')&&($('#teamLink').textContent=t.team);";
 
 const businessAdaptiveUi = String.raw`
 <style>
-@media(max-width:700px){.bottomNav.pilot-store-nav{grid-template-columns:repeat(5,1fr)!important}}
+@media(max-width:700px){.bottomNav.dabbir-store-nav{grid-template-columns:repeat(5,1fr)!important}}
 </style>
 <script>
 (()=>{
   function applyBusinessProfile(){
     if(!workspace?.business) return;
     const isStore=String(workspace.business.business_type||'').toLowerCase()==='store';
-    document.body.classList.toggle('pilot-store',isStore);
+    document.body.classList.toggle('dabbir-store',isStore);
     if(!isStore) return;
     document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display='none'});
-    document.querySelector('#bottomNav')?.classList.add('pilot-store-nav');
+    document.querySelector('#bottomNav')?.classList.add('dabbir-store-nav');
     if(current==='appointments') showScreen('dashboard');
     const cards=document.querySelectorAll('#dashCards .card.metric');
     if(cards[1]){
@@ -42,14 +42,14 @@ const businessAdaptiveUi = String.raw`
 const conversationPerformanceUi = String.raw`
 <style>
 #sendBtn:disabled{opacity:.6;cursor:wait}
-.msgrow[data-pilot-pending="true"] .bubble{opacity:.72}
-.msgrow[data-pilot-typing="true"] .bubble{min-width:52px;text-align:center;animation:pilotPulse 1s ease-in-out infinite}
-@keyframes pilotPulse{0%,100%{opacity:.45}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.msgrow[data-pilot-typing="true"] .bubble{animation:none}}
+.msgrow[data-dabbir-pending="true"] .bubble{opacity:.72}
+.msgrow[data-dabbir-typing="true"] .bubble{min-width:52px;text-align:center;animation:dabbirPulse 1s ease-in-out infinite}
+@keyframes dabbirPulse{0%,100%{opacity:.45}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.msgrow[data-dabbir-typing="true"] .bubble{animation:none}}
 </style>
 <script>
 (()=>{
-  let pilotSending=false;
+  let dabbirSending=false;
 
   function renderFastMessages(){
     renderMessages();
@@ -58,7 +58,7 @@ const conversationPerformanceUi = String.raw`
     list.querySelectorAll('.msgrow').forEach(row=>{
       const body=row.querySelector('.bubble .body');
       if(body?.textContent==='DABBIR_TYPING'){
-        row.dataset.pilotTyping='true';
+        row.dataset.dabbirTyping='true';
         body.textContent='…';
       }
     });
@@ -73,15 +73,15 @@ const conversationPerformanceUi = String.raw`
     const input=document.querySelector('#composer');
     const btn=document.querySelector('#sendBtn');
     const text=(input?.value||'').trim();
-    if(!input||!btn||!text||!selectedConversationId||pilotSending) return;
+    if(!input||!btn||!text||!selectedConversationId||dabbirSending) return;
 
-    pilotSending=true;
+    dabbirSending=true;
     btn.disabled=true;
     input.value='';
 
     const stamp=Date.now();
-    const tempId='pilot-local-'+stamp;
-    const typingId='pilot-typing-'+stamp;
+    const tempId='dabbir-local-'+stamp;
+    const typingId='dabbir-typing-'+stamp;
     const now=new Date().toISOString();
     const baseMessages=Array.isArray(workspace?.messages)?workspace.messages:[];
     workspace.messages=baseMessages.concat([
@@ -121,7 +121,7 @@ const conversationPerformanceUi = String.raw`
       renderMessages();
       toast(lang==='ar'?'تعذر الاتصال؛ حاول مرة أخرى':'Connection failed; try again');
     }finally{
-      pilotSending=false;
+      dabbirSending=false;
       btn.disabled=false;
       input.focus();
     }
@@ -135,7 +135,7 @@ const conversationPerformanceUi = String.raw`
       if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();event.stopImmediatePropagation();fastSendMessage()}
     },true);
   }
-  window.pilotFastSendMessage=fastSendMessage;
+  window.dabbirFastSendMessage=fastSendMessage;
 })();
 </script>`;
 
@@ -143,8 +143,8 @@ export default function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
 
   let html = fs.readFileSync(htmlPath, 'utf8');
-  if (!html.includes('data-pilot-team-nav="true"') && html.includes(settingsNav)) html = html.replace(settingsNav, `${teamNav}\n    ${settingsNav}`);
-  if (!html.includes('data-pilot-team-mobile="true"') && html.includes(settingsBottom)) {
+  if (!html.includes('data-dabbir-team-nav="true"') && html.includes(settingsNav)) html = html.replace(settingsNav, `${teamNav}\n    ${settingsNav}`);
+  if (!html.includes('data-dabbir-team-mobile="true"') && html.includes(settingsBottom)) {
     html = html.replace(settingsBottom, `${teamBottom}${settingsBottom}`);
     html = html.replace('grid-template-columns:repeat(5,1fr);bottom:0', 'grid-template-columns:repeat(6,1fr);bottom:0');
   }
@@ -154,7 +154,7 @@ export default function handler(req, res) {
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
-  res.setHeader('x-pilot-interface', 'operational-runtime-v1');
-  res.setHeader('x-pilot-chat-path', 'lightweight-v1');
+  res.setHeader('x-dabbir-interface', 'operational-runtime-v1');
+  res.setHeader('x-dabbir-chat-path', 'lightweight-v1');
   return res.status(200).send(html);
 }
