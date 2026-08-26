@@ -66,6 +66,18 @@ export async function supabaseRest(path, accessToken, options = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers, cache: 'no-store' });
 }
 
+export function accessTokenFromRequest(req) {
+  return parseCookies(req.headers.cookie || '')[ACCESS_COOKIE] || null;
+}
+
+export async function supabaseRpc(name, accessToken, params = {}) {
+  return supabaseRest(`rpc/${encodeURIComponent(name)}`, accessToken, {
+    method: 'POST',
+    headers: { prefer: 'return=representation' },
+    body: JSON.stringify(params),
+  });
+}
+
 export async function getVerifiedUser(accessToken) {
   if (!accessToken) return null;
   const response = await supabaseAuth('/auth/v1/user', { headers: { authorization: `Bearer ${accessToken}` } });
@@ -75,7 +87,7 @@ export async function getVerifiedUser(accessToken) {
 }
 
 export async function getBusinessMemberships(accessToken) {
-  const response = await supabaseRest('pilot_memberships?select=business_id,role', accessToken);
+  const response = await supabaseRest('pilot_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active', accessToken);
   if (!response.ok) throw new Error('MEMBERSHIP_LOOKUP_FAILED');
   return response.json();
 }
@@ -99,4 +111,23 @@ export function readJsonBody(req, maxBytes = 8192) {
     });
     req.on('error', reject);
   });
+}
+
+export async function readRpcJson(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try { return JSON.parse(text); }
+  catch { return { message: text.slice(0, 500) }; }
+}
+
+export function rpcErrorCode(payload, fallback = 'REQUEST_FAILED') {
+  const raw = String(payload?.message || payload?.error || '').toUpperCase();
+  const known = [
+    'AUTH_REQUIRED','BUSINESS_REQUIRED','INVALID_EMAIL','INVALID_ROLE','INVALID_TOKEN_HASH','INVALID_EXPIRY',
+    'TEAM_MANAGEMENT_REQUIRED','PERMISSION_GRANT_NOT_ALLOWED','INVITATION_ALREADY_PENDING','EMPLOYEE_ALREADY_MEMBER',
+    'INVALID_INVITATION','VERIFIED_EMAIL_REQUIRED','INVITATION_NOT_FOUND','INVITATION_NOT_PENDING','INVITATION_EXPIRED',
+    'INVITATION_EMAIL_MISMATCH','INVITER_NO_LONGER_AUTHORIZED','MEMBERSHIP_ALREADY_EXISTS','MEMBERSHIP_NOT_FOUND',
+    'OWNER_IMMUTABLE','INVALID_STATUS','NEW_INVITATION_REQUIRED'
+  ];
+  return known.find(code => raw.includes(code)) || fallback;
 }
