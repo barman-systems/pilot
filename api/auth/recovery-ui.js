@@ -3,18 +3,18 @@ const script = String.raw`(()=>{
   window.__dabbirRecoveryUiLoaded=true;
 
   const style=document.createElement('style');
-  style.textContent='.pilotForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.dabbirRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.dabbirRecoveryOverlay.pilotHidden{display:none!important}.dabbirRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.dabbirRecoveryCard h2{font-size:24px;margin:18px 0 6px}.dabbirRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.dabbirRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.dabbirRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.dabbirRecoveryCard .pilotPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.dabbirRecoveryCard .pilotSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.dabbirRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.dabbirRecoveryOk{color:#8ce6a1}.dabbirRecoveryBrand{display:flex;gap:11px;align-items:center}.dabbirRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}';
+  style.textContent='.dabbirForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.dabbirRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.dabbirRecoveryOverlay.dabbirHidden{display:none!important}.dabbirRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.dabbirRecoveryCard h2{font-size:24px;margin:18px 0 6px}.dabbirRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.dabbirRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.dabbirRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.dabbirRecoveryCard .dabbirPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.dabbirRecoveryCard .dabbirSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.dabbirRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.dabbirRecoveryOk{color:#8ce6a1}.dabbirRecoveryBrand{display:flex;gap:11px;align-items:center}.dabbirRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}';
   document.head.appendChild(style);
 
   const forgot=document.createElement('button');
   forgot.type='button';
-  forgot.id='pilotForgotPassword';
-  forgot.className='pilotForgotBtn';
+  forgot.id='dabbirForgotPassword';
+  forgot.className='dabbirForgotBtn';
   const passwordField=document.querySelector('#authPassword')?.closest('.field');
   if(passwordField) passwordField.insertAdjacentElement('afterend',forgot);
 
   const wrap=document.createElement('div');
-  wrap.innerHTML='<section id="pilotForgotOverlay" class="dabbirRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotForgotForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotForgotTag"></small></div></div><h2 id="pilotForgotTitle"></h2><p id="pilotForgotDesc"></p><label id="pilotForgotEmailLabel" for="pilotForgotEmail"></label><input id="pilotForgotEmail" type="email" autocomplete="email" required><button id="pilotForgotSubmit" class="pilotPrimary" type="submit"></button><button id="pilotForgotCancel" class="pilotSecondary" type="button"></button><div id="pilotForgotMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section><section id="pilotResetOverlay" class="dabbirRecoveryOverlay pilotHidden" role="dialog" aria-modal="true"><form id="pilotResetForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">P</div><div><b>DABBIR</b><br><small id="pilotResetTag"></small></div></div><h2 id="pilotResetTitle"></h2><p id="pilotResetDesc"></p><div id="pilotResetFields"><label id="pilotNewPasswordLabel" for="pilotNewPassword"></label><input id="pilotNewPassword" type="password" autocomplete="new-password" minlength="12" required><label id="pilotConfirmPasswordLabel" for="pilotConfirmPassword"></label><input id="pilotConfirmPassword" type="password" autocomplete="new-password" minlength="12" required><button id="pilotResetSubmit" class="pilotPrimary" type="submit"></button></div><button id="pilotResetBack" class="pilotSecondary" type="button"></button><div id="pilotResetMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section>';
+  wrap.innerHTML='<section id="dabbirForgotOverlay" class="dabbirRecoveryOverlay dabbirHidden" role="dialog" aria-modal="true"><form id="dabbirForgotForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">D</div><div><b>DABBIR</b><br><small id="dabbirForgotTag"></small></div></div><h2 id="dabbirForgotTitle"></h2><p id="dabbirForgotDesc"></p><label id="dabbirForgotEmailLabel" for="dabbirForgotEmail"></label><input id="dabbirForgotEmail" type="email" autocomplete="email" required><button id="dabbirForgotSubmit" class="dabbirPrimary" type="submit"></button><button id="dabbirForgotCancel" class="dabbirSecondary" type="button"></button><div id="dabbirForgotMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section><section id="dabbirResetOverlay" class="dabbirRecoveryOverlay dabbirHidden" role="dialog" aria-modal="true"><form id="dabbirResetForm" class="dabbirRecoveryCard"><div class="dabbirRecoveryBrand"><div class="dabbirRecoveryLogo">D</div><div><b>DABBIR</b><br><small id="dabbirResetTag"></small></div></div><h2 id="dabbirResetTitle"></h2><p id="dabbirResetDesc"></p><div id="dabbirResetFields"><label id="dabbirNewPasswordLabel" for="dabbirNewPassword"></label><input id="dabbirNewPassword" type="password" autocomplete="new-password" minlength="12" required><label id="dabbirConfirmPasswordLabel" for="dabbirConfirmPassword"></label><input id="dabbirConfirmPassword" type="password" autocomplete="new-password" minlength="12" required><button id="dabbirResetSubmit" class="dabbirPrimary" type="submit"></button></div><button id="dabbirResetBack" class="dabbirSecondary" type="button"></button><div id="dabbirResetMsg" class="dabbirRecoveryMsg" role="status" aria-live="polite"></div></form></section>';
   while(wrap.firstChild) document.body.appendChild(wrap.firstChild);
 
   const q=s=>document.querySelector(s);
@@ -30,19 +30,19 @@ const script = String.raw`(()=>{
   function setRecoveryLanguage(){
     const t=text();
     forgot.textContent=t.forgot;
-    q('#pilotForgotTag').textContent=t.forgotTag;
-    q('#pilotForgotTitle').textContent=t.forgotTitle;
-    q('#pilotForgotDesc').textContent=t.forgotDesc;
-    q('#pilotForgotEmailLabel').textContent=t.email;
-    q('#pilotForgotSubmit').textContent=t.send;
-    q('#pilotForgotCancel').textContent=t.cancel;
-    q('#pilotResetTag').textContent=t.resetTag;
-    q('#pilotResetTitle').textContent=t.resetTitle;
-    q('#pilotResetDesc').textContent=t.resetDesc;
-    q('#pilotNewPasswordLabel').textContent=t.newPassword;
-    q('#pilotConfirmPasswordLabel').textContent=t.confirmPassword;
-    q('#pilotResetSubmit').textContent=t.save;
-    q('#pilotResetBack').textContent=t.back;
+    q('#dabbirForgotTag').textContent=t.forgotTag;
+    q('#dabbirForgotTitle').textContent=t.forgotTitle;
+    q('#dabbirForgotDesc').textContent=t.forgotDesc;
+    q('#dabbirForgotEmailLabel').textContent=t.email;
+    q('#dabbirForgotSubmit').textContent=t.send;
+    q('#dabbirForgotCancel').textContent=t.cancel;
+    q('#dabbirResetTag').textContent=t.resetTag;
+    q('#dabbirResetTitle').textContent=t.resetTitle;
+    q('#dabbirResetDesc').textContent=t.resetDesc;
+    q('#dabbirNewPasswordLabel').textContent=t.newPassword;
+    q('#dabbirConfirmPasswordLabel').textContent=t.confirmPassword;
+    q('#dabbirResetSubmit').textContent=t.save;
+    q('#dabbirResetBack').textContent=t.back;
     syncForgotVisibility();
   }
 
@@ -53,28 +53,28 @@ const script = String.raw`(()=>{
 
   function showForgot(){
     const existing=String(q('#authEmail')?.value||'').trim();
-    q('#pilotForgotEmail').value=existing;
-    q('#pilotForgotMsg').textContent='';
-    q('#pilotForgotMsg').classList.remove('dabbirRecoveryOk');
-    q('#pilotForgotOverlay').classList.remove('pilotHidden');
-    setTimeout(()=>q('#pilotForgotEmail').focus(),0);
+    q('#dabbirForgotEmail').value=existing;
+    q('#dabbirForgotMsg').textContent='';
+    q('#dabbirForgotMsg').classList.remove('dabbirRecoveryOk');
+    q('#dabbirForgotOverlay').classList.remove('dabbirHidden');
+    setTimeout(()=>q('#dabbirForgotEmail').focus(),0);
   }
-  function hideForgot(){q('#pilotForgotOverlay').classList.add('pilotHidden')}
+  function hideForgot(){q('#dabbirForgotOverlay').classList.add('dabbirHidden')}
   function hideReset(){
-    q('#pilotResetOverlay').classList.add('pilotHidden');
+    q('#dabbirResetOverlay').classList.add('dabbirHidden');
     if(typeof showGate==='function') showGate('auth');
   }
 
   forgot.addEventListener('click',showForgot);
-  q('#pilotForgotCancel').addEventListener('click',hideForgot);
+  q('#dabbirForgotCancel').addEventListener('click',hideForgot);
   q('#loginTab')?.addEventListener('click',()=>setTimeout(syncForgotVisibility,0));
   q('#signupTab')?.addEventListener('click',()=>setTimeout(syncForgotVisibility,0));
 
-  q('#pilotForgotForm').addEventListener('submit',async event=>{
+  q('#dabbirForgotForm').addEventListener('submit',async event=>{
     event.preventDefault();
-    const email=String(q('#pilotForgotEmail').value||'').trim();
-    const msg=q('#pilotForgotMsg');
-    const button=q('#pilotForgotSubmit');
+    const email=String(q('#dabbirForgotEmail').value||'').trim();
+    const msg=q('#dabbirForgotMsg');
+    const button=q('#dabbirForgotSubmit');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
       msg.textContent=text().invalidEmail;
       msg.classList.remove('dabbirRecoveryOk');
@@ -103,21 +103,21 @@ const script = String.raw`(()=>{
   if(recoveryType==='recovery'&&hash.get('access_token')){
     recoveryAccessToken=String(hash.get('access_token'));
     history.replaceState({},document.title,location.pathname+'?password_recovery=1');
-    q('#pilotResetOverlay').classList.remove('pilotHidden');
-    setTimeout(()=>q('#pilotNewPassword').focus(),0);
+    q('#dabbirResetOverlay').classList.remove('dabbirHidden');
+    setTimeout(()=>q('#dabbirNewPassword').focus(),0);
   }else if(queryRecovery||hashError){
     history.replaceState({},document.title,location.pathname);
-    q('#pilotResetFields').style.display='none';
-    q('#pilotResetMsg').textContent=text().expired;
-    q('#pilotResetOverlay').classList.remove('pilotHidden');
+    q('#dabbirResetFields').style.display='none';
+    q('#dabbirResetMsg').textContent=text().expired;
+    q('#dabbirResetOverlay').classList.remove('dabbirHidden');
   }
 
-  q('#pilotResetForm').addEventListener('submit',async event=>{
+  q('#dabbirResetForm').addEventListener('submit',async event=>{
     event.preventDefault();
-    const password=String(q('#pilotNewPassword').value||'');
-    const confirm=String(q('#pilotConfirmPassword').value||'');
-    const msg=q('#pilotResetMsg');
-    const button=q('#pilotResetSubmit');
+    const password=String(q('#dabbirNewPassword').value||'');
+    const confirm=String(q('#dabbirConfirmPassword').value||'');
+    const msg=q('#dabbirResetMsg');
+    const button=q('#dabbirResetSubmit');
     msg.classList.remove('dabbirRecoveryOk');
     if(password.length<12){msg.textContent=text().tooShort;return}
     if(password!==confirm){msg.textContent=text().mismatch;return}
@@ -132,14 +132,14 @@ const script = String.raw`(()=>{
       }
       recoveryAccessToken='';
       history.replaceState({},document.title,location.pathname);
-      q('#pilotResetFields').style.display='none';
+      q('#dabbirResetFields').style.display='none';
       msg.textContent=text().updated;
       msg.classList.add('dabbirRecoveryOk');
     }catch{msg.textContent=text().resetFailed}
     finally{button.disabled=false}
   });
 
-  q('#pilotResetBack').addEventListener('click',()=>{
+  q('#dabbirResetBack').addEventListener('click',()=>{
     recoveryAccessToken='';
     history.replaceState({},document.title,location.pathname);
     hideReset();
