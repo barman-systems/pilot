@@ -25,14 +25,28 @@ function hostFromRequest(req) {
   return raw.toLowerCase();
 }
 
-export function requireSameOrigin(req) {
-  const origin = req.headers.origin;
-  if (!origin) return false;
+function matchesRequestHost(urlValue, req) {
+  if (!urlValue) return false;
   try {
-    return new URL(origin).host.toLowerCase() === hostFromRequest(req);
+    return new URL(String(urlValue)).host.toLowerCase() === hostFromRequest(req);
   } catch {
     return false;
   }
+}
+
+export function requireSameOrigin(req) {
+  const origin = req.headers.origin;
+  if (origin) return matchesRequestHost(origin, req);
+
+  // Safari/iOS may omit Origin on same-origin form/fetch POSTs. Keep the
+  // request fail-closed by accepting the fallback only when browser fetch
+  // metadata explicitly says same-origin, or when a same-host Referer is
+  // present. Cross-site and unknown requests remain rejected.
+  const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+  if (fetchSite === 'same-origin') return true;
+  if (fetchSite === 'cross-site' || fetchSite === 'same-site' || fetchSite === 'none') return false;
+
+  return matchesRequestHost(req.headers.referer, req);
 }
 
 export function authCookieHeaders(session) {
