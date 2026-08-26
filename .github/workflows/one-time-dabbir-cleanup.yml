@@ -24,7 +24,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Repair mobile customer journey navigation
+      - name: Repair async operations verification
         shell: bash
         run: |
           python - <<'PY'
@@ -32,17 +32,13 @@ jobs:
 
           test = Path('test/ai-full-customer-journey-v2.mjs')
           source = test.read_text()
-          old_conversations = '''  await page.locator('[data-screen="conversations"]').first().click();'''
-          new_conversations = '''  await page.locator('#bottomNav [data-screen="conversations"]').click();'''
-          old_operations = '''  await page.locator('[data-screen="operations"]').first().click();'''
-          new_operations = '''  await page.locator('#menuBtn').click();
-          await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
-          await page.locator('#side [data-screen="operations"]').click();'''
-          assert source.count(old_conversations) == 1, 'unexpected conversations selector state'
-          assert source.count(old_operations) == 1, 'unexpected operations selector state'
-          source = source.replace(old_conversations, new_conversations)
-          source = source.replace(old_operations, new_operations)
-          test.write_text(source)
+          old = '''  await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
+  assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');'''
+          new = '''  await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
+  await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
+  assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');'''
+          assert source.count(old) == 1, 'unexpected operations verification state'
+          test.write_text(source.replace(old, new))
           PY
 
       - name: Commit verified source repair
@@ -54,6 +50,6 @@ jobs:
           git config user.name 'barman-systems-bot'
           git config user.email 'barman-systems-bot@users.noreply.github.com'
           git add test/ai-full-customer-journey-v2.mjs
-          git commit -m 'fix: repair DABBIR mobile customer journey navigation'
+          git commit -m 'fix: wait for DABBIR operations data before assertion'
           git pull --rebase origin main
           git push origin HEAD:main
