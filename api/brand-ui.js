@@ -2,9 +2,9 @@ const script = String.raw`(()=>{
   if(window.__dabbirBrandUiLoaded) return;
   window.__dabbirBrandUiLoaded=true;
 
-  const icon='/dabbir-icon.svg';
+  const icon='/api/dabbir-approved-icon';
   const style=document.createElement('style');
-  style.textContent='.logo,.dabbirRecoveryLogo{background-image:url("/dabbir-icon.svg")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:cover!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}.brand .logo,.dabbirRecoveryLogo{box-shadow:0 8px 24px #0004}';
+  style.textContent='.logo,.dabbirRecoveryLogo{background-image:url("/api/dabbir-approved-icon")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:contain!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}';
   document.head.appendChild(style);
 
   function link(rel,href,type){
@@ -13,12 +13,12 @@ const script = String.raw`(()=>{
     node.href=href;
     if(type) node.type=type;
   }
-  link('icon',icon,'image/svg+xml');
-  link('shortcut icon',icon,'image/svg+xml');
-  link('apple-touch-icon',icon);
+  link('icon',icon,'image/png');
+  link('shortcut icon',icon,'image/png');
+  link('apple-touch-icon',icon,'image/png');
 
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.content='#0B0D12';
+  if(meta) meta.content='#0D1426';
 
   function uiText(key,fallback){
     try{
