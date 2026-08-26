@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { classifyClinicMessage, classifyCelebrityMessage } from './pilot-runtime.js';
+import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 
 function json(res, status, body, cid) {
@@ -83,9 +83,9 @@ export function classifyDABBIREvent(event, project = 'generic') {
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
-  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
-  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || process.env.DABBIR_WHATSAPP_APP_SECRET || '';
-  const project = String(process.env.DABBIR_PROJECT || process.env.DABBIR_PROJECT || 'generic').toLowerCase();
+  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
+  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || '';
+  const project = String(process.env.DABBIR_PROJECT || 'generic').toLowerCase();
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
@@ -133,7 +133,7 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     ok: true,
-    service: 'pilot-whatsapp-webhook',
+    service: 'dabbir-whatsapp-webhook',
     project,
     state: 'CONFIGURED_NOT_OPERATIONAL',
     signature_verified: true,
