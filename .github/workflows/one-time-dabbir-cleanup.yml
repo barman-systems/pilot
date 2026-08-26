@@ -1,0 +1,67 @@
+name: One-time DABBIR cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-dabbir-cleanup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-dabbir-cleanup
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Repair mobile journey selector and stop superseded runs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          test = Path('test/ai-full-customer-journey-v2.mjs')
+          source = test.read_text()
+          old_conversations = '''  await page.locator('[data-screen="conversations"]').first().click();'''
+          new_conversations = '''  await page.locator('#bottomNav [data-screen="conversations"]').click();'''
+          old_operations = '''  await page.locator('[data-screen="operations"]').first().click();'''
+          new_operations = '''  await page.locator('#menuBtn').click();
+          await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
+          await page.locator('#side [data-screen="operations"]').click();'''
+          assert source.count(old_conversations) == 1, 'unexpected conversations selector state'
+          assert source.count(old_operations) == 1, 'unexpected operations selector state'
+          source = source.replace(old_conversations, new_conversations)
+          source = source.replace(old_operations, new_operations)
+          test.write_text(source)
+
+          workflow = Path('.github/workflows/dabbir-ai-customer-journey.yml')
+          text = workflow.read_text()
+          assert text.count('cancel-in-progress: false') == 1, 'unexpected concurrency state'
+          text = text.replace('cancel-in-progress: false', 'cancel-in-progress: true')
+          text = text.replace('uses: actions/checkout@v4', 'uses: actions/checkout@v6')
+          text = text.replace('uses: actions/upload-artifact@v4', 'uses: actions/upload-artifact@v6')
+          workflow.write_text(text)
+          PY
+
+      - name: Commit verified cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code --quiet && exit 0
+          git config user.name 'barman-systems-bot'
+          git config user.email 'barman-systems-bot@users.noreply.github.com'
+          git add test/ai-full-customer-journey-v2.mjs .github/workflows/dabbir-ai-customer-journey.yml
+          git commit -m 'fix: repair DABBIR mobile journey and cancel stale runs'
+          git pull --rebase origin main
+          git push origin HEAD:main
