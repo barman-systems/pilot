@@ -1,0 +1,38 @@
+name: DABBIR final legacy validation
+
+on:
+  push:
+    branches:
+      - rename/remove-pilot-route-aliases-v2
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Run DABBIR tests
+        run: npm test
+      - name: Verify PILOT route aliases are gone
+        shell: bash
+        run: |
+          test ! -e api/pilot-ai.js
+          test ! -e api/pilot-runtime.js
+          test ! -e api/pilot-whatsapp-webhook.js
+          ! grep -RIn --exclude-dir=.git -E "\./pilot-runtime\.js|service: 'pilot-whatsapp-webhook'" api
+      - name: Reject committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git --exclude='ci.yml' --exclude='dabbir-final-legacy-validation.yml' '(sk_live_|sb_secret_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|VERCEL_TOKEN[[:space:]]*=|(DABBIR|PILOT)_WHATSAPP_APP_SECRET[[:space:]]*=)' .; then
+            echo 'Potential secret material detected.'
+            exit 1
+          fi
+          echo 'Secret pattern scan PASS'
