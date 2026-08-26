@@ -3,6 +3,7 @@ import { generatePilotAiReply } from './_ai-core.js';
 const ALLOWED = new Set([
   'inclusionai/ling-3.0-tiny-free',
   'poolside/laguna-s-2.1-free',
+  'nvidia/nemotron-3.5-lightning-free',
   'minimax/minimax-m2.7-free',
 ]);
 
