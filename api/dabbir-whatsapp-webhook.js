@@ -20,6 +20,22 @@ function secureEqual(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
+function firstEnv(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function normalizeProject(value = 'generic') {
+  const project = String(value || 'generic').toLowerCase();
+  if (project === 'pilot_clinics') return 'dabbir_clinics';
+  if (project === 'pilot_celebrities') return 'dabbir_celebrities';
+  if (project === 'pilot_businesses') return 'dabbir_businesses';
+  return project;
+}
+
 export function verifyWebhookChallenge(query = {}, verifyToken = '') {
   const mode = String(query['hub.mode'] || '');
   const token = String(query['hub.verify_token'] || '');
@@ -99,9 +115,11 @@ export function classifyDABBIREvent(event, project = 'generic') {
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
-  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
-  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || '';
-  const project = String(process.env.DABBIR_PROJECT || 'generic').toLowerCase();
+  // Keep the credentials the owner already provisioned under PILOT working after the DABBIR rename.
+  // DABBIR-prefixed values win when both generations are present.
+  const verifyToken = firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN');
+  const appSecret = firstEnv('DABBIR_WHATSAPP_APP_SECRET', 'PILOT_WHATSAPP_APP_SECRET');
+  const project = normalizeProject(firstEnv('DABBIR_PROJECT', 'PILOT_PROJECT') || 'generic');
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);

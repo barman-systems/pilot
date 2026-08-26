@@ -62,6 +62,10 @@ const script = String.raw`(()=>{
     return fallback;
   }
 
+  function isArabic(){
+    return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
+  }
+
   function notify(message){
     try{if(typeof toast==='function') return toast(message)}catch{}
   }
@@ -140,19 +144,110 @@ const script = String.raw`(()=>{
     }
   }
 
+  function whatsAppConnected(status){
+    if(!status) return false;
+    return Boolean(
+      status.connected||status.meta_authorized||status.webhook_configured||status.outbound_configured||
+      ['META_AUTHORIZED','WEBHOOK_LINKED','CONFIGURED_READY_FOR_VERIFICATION','OUTBOUND_CONFIGURED','OPERATIONAL'].includes(String(status.state||''))
+    );
+  }
+
+  function whatsAppOperational(status){
+    return Boolean(status&&(status.operational||status.state==='OPERATIONAL'));
+  }
+
+  function applyWhatsAppCardState(){
+    if(typeof workspace==='undefined'||!workspace) return;
+    const status=workspace.whatsapp||{};
+    const connected=whatsAppConnected(status);
+    const operational=whatsAppOperational(status);
+    const ar=isArabic();
+    const grid=document.querySelector('#integrationGrid');
+    if(grid){
+      const wanted=uiText('whatsapp','WhatsApp').trim();
+      const card=[...grid.querySelectorAll('.integration')].find(item=>String(item.querySelector('h3')?.textContent||'').trim()===wanted);
+      if(card){
+        const badge=card.querySelector('.badge');
+        const description=card.querySelector('p');
+        if(badge){
+          badge.classList.remove('red','yellow','green','blue','gray');
+          if(operational){
+            badge.classList.add('green');
+            badge.textContent=uiText('operational',ar?'تشغيلي':'Operational');
+          }else if(connected){
+            badge.classList.add('blue');
+            badge.textContent=ar?'مربوط':'Linked';
+          }else{
+            badge.classList.add('red');
+            badge.textContent=ar?'غير مربوط':'Not linked';
+          }
+        }
+        if(description){
+          if(operational){
+            description.textContent=ar?'تم التحقق من ربط WhatsApp ومسار التشغيل الحقيقي.':'WhatsApp link and live message path are verified.';
+          }else if(status.meta_authorized){
+            description.textContent=ar?'تم التحقق من تفويض Meta فعليًا. بقي اختبار رسالة حقيقية قبل اعتماد الحالة «تشغيلي».':'Meta authorization is verified. A real message path still must pass before marking it Operational.';
+          }else if(connected){
+            description.textContent=ar?'تم العثور على ربط Meta / Webhook الفعلي. بقي التحقق من مسار رسالة حقيقية قبل اعتماد التشغيل الكامل.':'The real Meta / webhook link was found. A live message path still needs verification before full Operational status.';
+          }else{
+            description.textContent=ar?'لم يعثر DABBIR في هذا التشغيل على إعدادات WhatsApp الفعلية.':'DABBIR did not find the WhatsApp connection settings in this runtime.';
+          }
+        }
+      }
+    }
+
+    const helpTitle=document.querySelector('#helpWhatsTitle');
+    const helpDesc=document.querySelector('#helpWhatsDesc');
+    if(helpTitle&&helpDesc&&connected){
+      helpTitle.textContent=ar?'حالة WhatsApp':'WhatsApp status';
+      helpDesc.textContent=operational
+        ? (ar?'الربط ومسار الرسالة الحقيقي موثقان.':'The connection and real message path are verified.')
+        : (ar?'الربط موجود. DABBIR يفصل بين «مربوط» و«تشغيلي» حتى ينجح اختبار رسالة حقيقية.':'The connection exists. DABBIR keeps Linked separate from Operational until a real message test passes.');
+    }
+  }
+
+  let whatsappStatusInFlight=false;
+  let whatsappStatusCheckedAt=0;
+  async function refreshWhatsAppStatus(force=false){
+    if(whatsappStatusInFlight||typeof workspace==='undefined'||!workspace) return;
+    if(!force&&Date.now()-whatsappStatusCheckedAt<60000){applyWhatsAppCardState();return;}
+    whatsappStatusInFlight=true;
+    try{
+      const response=await fetch('/api/dabbir-whatsapp-status',{method:'GET',cache:'no-store',headers:{accept:'application/json'}});
+      const payload=await response.json().catch(()=>({}));
+      if(response.ok&&payload.ok){
+        workspace.whatsapp={...(workspace.whatsapp||{}),...payload};
+        whatsappStatusCheckedAt=Date.now();
+        applyWhatsAppCardState();
+      }
+    }catch{}
+    finally{whatsappStatusInFlight=false}
+  }
+
   installIdempotentConversationStart();
+
+  if(typeof renderIntegrations==='function'&&!window.__dabbirWhatsAppIntegrationsWrapped){
+    window.__dabbirWhatsAppIntegrationsWrapped=true;
+    const renderIntegrationsBeforeWhatsAppStatus=renderIntegrations;
+    renderIntegrations=function(){
+      const result=renderIntegrationsBeforeWhatsAppStatus.apply(this,arguments);
+      applyWhatsAppCardState();
+      setTimeout(()=>refreshWhatsAppStatus(),0);
+      return result;
+    };
+  }
 
   if(typeof renderAll==='function'&&!window.__dabbirBrandRenderWrapped){
     window.__dabbirBrandRenderWrapped=true;
     const renderBeforeBrandChatFix=renderAll;
     renderAll=function(){
       const result=renderBeforeBrandChatFix.apply(this,arguments);
-      setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats();syncAppActive()},30);
+      setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats();syncAppActive();applyWhatsAppCardState();refreshWhatsAppStatus()},30);
       return result;
     };
   }
 
-  setTimeout(()=>{installMobileBrand();installIdempotentConversationStart();repairActionRequiredChats();syncAppActive()},500);
+  setTimeout(()=>{installMobileBrand();installIdempotentConversationStart();repairActionRequiredChats();syncAppActive();applyWhatsAppCardState();refreshWhatsAppStatus(true)},500);
 })();`;
 
 export default function handler(req,res){
