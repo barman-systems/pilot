@@ -22,14 +22,27 @@ jobs:
         with:
           node-version: 22
 
+      - name: Rename DABBIR database and test artifacts
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for file in db/pilot_*.sql; do
+            name="${file#db/pilot_}"
+            git mv "$file" "db/dabbir_${name}"
+          done
+          for file in test/pilot-*.test.mjs; do
+            name="${file#test/pilot-}"
+            git mv "$file" "test/dabbir-${name}"
+          done
+
       - name: Switch runtime namespace to DABBIR
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          roots = [Path('api'), Path('test'), Path('config'), Path('docs'), Path('index.html'), Path('team.html'), Path('translation-preview.html'), Path('README.md'), Path('package.json')]
-          suffixes = {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.json','.md','.html','.css','.yml','.yaml'}
+          roots = [Path('api'), Path('test'), Path('db'), Path('config'), Path('docs'), Path('index.html'), Path('team.html'), Path('translation-preview.html'), Path('README.md'), Path('package.json')]
+          suffixes = {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.json','.md','.html','.css','.sql','.yml','.yaml'}
           changed=[]
           candidates=[]
           for root in roots:
@@ -47,11 +60,15 @@ jobs:
           print('\n'.join(changed) or 'none')
           PY
 
-      - name: Verify no runtime database namespace remains
+      - name: Verify no DABBIR runtime namespace legacy remains
         shell: bash
         run: |
-          if grep -RIn --exclude='pilot-ai.js' --exclude='pilot-runtime.js' --exclude='pilot-whatsapp-webhook.js' --exclude-dir='.git' 'pilot_' api index.html team.html translation-preview.html test config 2>/dev/null; then
-            echo 'Legacy pilot_ namespace remains in runtime surface'
+          if grep -RIn --exclude='pilot-ai.js' --exclude='pilot-runtime.js' --exclude='pilot-whatsapp-webhook.js' --exclude-dir='.git' 'pilot_' api index.html team.html translation-preview.html test config db 2>/dev/null; then
+            echo 'Legacy pilot_ namespace remains in DABBIR runtime or database artifacts'
+            exit 1
+          fi
+          if find db -maxdepth 1 -type f -name 'pilot_*.sql' | grep -q .; then
+            echo 'Legacy pilot_ database filenames remain'
             exit 1
           fi
 
@@ -63,10 +80,10 @@ jobs:
         run: |
           git config user.name "barmanai"
           git config user.email "actions@users.noreply.github.com"
-          git add api test config docs index.html team.html translation-preview.html README.md package.json
+          git add -A api test db config docs index.html team.html translation-preview.html README.md package.json
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
           fi
-          git commit -m "[dabbir-db-cutover] switch runtime database namespace to DABBIR"
+          git commit -m "[dabbir-db-cutover] switch runtime and database artifacts to DABBIR"
           git push origin HEAD:rename/dabbir-db-cutover
