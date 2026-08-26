@@ -1,0 +1,138 @@
+{
+  "date": "2026-08-26",
+  "pilot_commit": "a31d4cf2669f793fec7d6d3909da3484b8adfec6",
+  "scope": "PILOT full bilingual synthetic preview and current repository/runtime contracts",
+  "evidence_policy": "No operational credit for synthetic, configured-only, or unverified capability.",
+  "scores": {
+    "pqi": {
+      "before": 42.23,
+      "after": 51.67,
+      "method": "weighted evidence-based audit using config/quality-baseline.json weights",
+      "after_dimensions": {
+        "product_utility": 55,
+        "ai_quality": 42,
+        "ux_simplicity": 70,
+        "automation": 25,
+        "reliability": 48,
+        "performance": 45,
+        "security": 68,
+        "privacy": 62,
+        "bilingual_quality": 85,
+        "integrations": 15,
+        "cost_efficiency": 38,
+        "accessibility": 72
+      }
+    },
+    "cai": {
+      "before": 25.3,
+      "after": 32.5,
+      "method": "equal-weight competitive advantage audit; unproven moats receive low credit",
+      "after_dimensions": {
+        "differentiation": 40,
+        "customer_value": 45,
+        "difficulty_to_copy": 20,
+        "data_advantage": 10,
+        "workflow_advantage": 35,
+        "localization_advantage": 80,
+        "integration_depth": 15,
+        "automation_depth": 25,
+        "switching_benefit": 20,
+        "cost_advantage": 35
+      }
+    }
+  },
+  "competitive_position": {
+    "operational_maturity": "WEAK",
+    "product_direction": "STRONGER_AFTER_REMEDIATION",
+    "reason": "Mature competitors have verified live omnichannel inboxes, WhatsApp/Instagram operation, team permissions, APIs/webhooks, production automation/agents, bookings and analytics; PILOT currently exposes these as synthetic or unverified where applicable."
+  },
+  "competitors": [
+    {
+      "name": "respond.io",
+      "evidence": "OFFICIAL_PRICING",
+      "source": "https://respond.io/pricing",
+      "observed": ["team/custom inboxes", "mobile app", "AI Assist/Prompt", "workflows", "AI Agents", "advanced reports", "developer API", "webhooks/HTTP on higher tiers"],
+      "pricing_observed": "$79 Starter, $159 Growth, $279 Advanced per month before WhatsApp usage fees"
+    },
+    {
+      "name": "SleekFlow",
+      "evidence": "OFFICIAL_PRICING",
+      "source": "https://sleekflow.io/pricing",
+      "observed": ["web/mobile inbox", "AI Agent", "Flow Builder", "analytics dashboards", "webhooks/API", "role-based access control", "advanced AI agents with integrations"],
+      "pricing_observed": "Free; Pro AI $149/month; Premium AI $349/month; Enterprise custom on observed page"
+    },
+    {
+      "name": "Kommo",
+      "evidence": "OFFICIAL_PRICING_AND_SUPPORT",
+      "source": "https://www.kommo.com/buy/tariff/",
+      "observed": ["unified inbox", "WhatsApp and Instagram", "AI replies/tasks/summaries", "automation", "AI agents", "booking/scheduling", "AI appointment booking", "analytics"],
+      "pricing_observed": "$15 Base, $25 Advanced, $45 Pro per user/month on 2026-08-26; official notice says new-customer Base/Advanced increase on 2026-09-01"
+    },
+    {
+      "name": "Manychat",
+      "evidence": "OFFICIAL_PRICING",
+      "source": "https://manychat.com/pricing",
+      "observed": ["WhatsApp/Instagram and other channels", "advanced automation", "AI-powered conversations", "role-based permissions", "shared inbox/assignments on higher tiers"],
+      "pricing_observed": "Free; Essential from $14/month; Pro from $29; Business from $69; Advanced from $139 on observed pricing page"
+    },
+    {
+      "name": "Trengo",
+      "evidence": "OFFICIAL_PRICING",
+      "source": "https://trengo.com/prices",
+      "observed": ["unified inbox", "official WhatsApp Business API", "Instagram", "AI Agent", "AI Journeys", "third-party AI actions on higher tiers", "custom permissions"],
+      "pricing_observed": "Boost €299/month annual or €349 monthly; Pro €499 annual or €599 monthly; Enterprise custom on observed page"
+    }
+  ],
+  "standards": [
+    {"name": "WCAG 2.2", "source": "https://www.w3.org/TR/WCAG22/", "target": "AA", "status": "BASELINE_ADOPTED_NOT_CERTIFIED"},
+    {"name": "OWASP ASVS", "version": "5.0.0", "source": "https://owasp.org/www-project-application-security-verification-standard/", "status": "BASELINE_ADOPTED_NOT_FULLY_VERIFIED"},
+    {"name": "NIST AI RMF + GenAI Profile", "source": "https://www.nist.gov/itl/ai-risk-management-framework", "status": "BASELINE_ADOPTED"},
+    {"name": "ISO/IEC 42001:2023", "source": "https://www.iso.org/standard/42001", "status": "MANAGEMENT_BASELINE_NOT_CERTIFICATION"},
+    {"name": "UAE Federal Decree-Law No. 45 of 2021", "source": "https://u.ae/en/about-the-uae/digital-uae/data/data-protection-laws", "status": "LEGAL_BASELINE_REQUIRES_PRODUCT-SPECIFIC_COMPLIANCE_REVIEW_BEFORE_REAL_DATA"}
+  ],
+  "verified_improvements": [
+    "Authoritative production deployment on main is READY and canonical alias serves HTTP 200.",
+    "Main CI completed successfully after a real Arabic classifier regression was found and fixed.",
+    "UI derives external-channel truth from runtime registry instead of claiming configured channels are connected.",
+    "Arabic and English locale coverage is enforced by tests across the full owner preview.",
+    "Gulf/UAE Arabic deterministic golden tests now cover booking, rescheduling, cancellation, location, hours and temporal phrases.",
+    "Translation workload is bounded and translation prompts treat message content as data rather than instructions.",
+    "Production response carries CSP, clickjacking, MIME-sniffing, referrer and permissions hardening headers.",
+    "Focus-visible, mobile touch-target, reduced-motion, dialog and live-region accessibility baselines are present."
+  ],
+  "remaining_p0_for_current_synthetic_preview": [],
+  "hard_gates_before_real_customer_launch": [
+    "Verified authentication and production RBAC",
+    "Automated multi-tenant isolation with real persistence",
+    "Verified WhatsApp/Instagram/Calendar channel operation",
+    "Privacy consent, retention, export and deletion implementation",
+    "Real E2E action verification and idempotency for non-reversible operations",
+    "Production observability, tracing, SLOs and failure taxonomy",
+    "Full AI eval harness with measured hallucination/tool-selection/escalation metrics",
+    "Real mobile/browser and accessibility testing",
+    "Clinic-specific legal/regulatory approval before real patient data"
+  ],
+  "remaining_p1": [
+    "Turn synthetic workflows into closed-loop verified operations behind hard gates",
+    "Build production auth/RBAC/tenant model",
+    "Verify channels and calendar rather than configuration presence",
+    "Add full AI evaluation datasets and scorecards beyond deterministic intent tests",
+    "Measure LCP/INP/CLS and API/AI latency rather than assigning operational performance credit",
+    "Externalize inline CSS/JS so CSP can remove unsafe-inline",
+    "Localize accessibility-only labels and date/day rendering for strict screen-reader parity",
+    "Implement Owner Hours Saved and Safe Autonomy Rate from real events"
+  ],
+  "potential_moats": [
+    {"name": "UAE/Gulf Arabic operational intelligence", "status": "EARLY_EVIDENCE_NOT_YET_DEFENSIBLE"},
+    {"name": "Owner-by-exception closed-loop execution", "status": "DESIGNED_NOT_OPERATIONALLY_VERIFIED"},
+    {"name": "Vertical clinic/creator intelligence on a shared core", "status": "DESIGNED_NOT_OPERATIONALLY_VERIFIED"},
+    {"name": "Owner-hours-saved outcome metric", "status": "PROPOSED_NOT_IMPLEMENTED"}
+  ],
+  "verification_limits": {
+    "browser_visual_e2e": "UNVERIFIED_IN_CURRENT_TOOLING",
+    "live_ai_translation_preview_endpoint": "UNVERIFIED_END_TO_END_BECAUSE_PREVIEW_DEPLOYMENTS_ARE_AUTH_PROTECTED_AND_PRODUCTION_API_IS_INTENTIONALLY_PREVIEW_ONLY",
+    "performance_web_vitals": "UNMEASURED",
+    "full_wcag_aa": "NOT_CERTIFIED",
+    "full_asvs_5": "NOT_VERIFIED"
+  }
+}
