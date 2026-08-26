@@ -38,6 +38,13 @@ jobs:
               ('pilotRecovery', 'dabbirRecovery'),
               ('x-pilot-', 'x-dabbir-'),
           ]
+          public_surface_files = {
+              Path('index.html'),
+              Path('team.html'),
+              Path('translation-preview.html'),
+              Path('api/app.js'),
+              Path('api/auth/recovery-ui.js'),
+          }
           suffixes = {'.js','.mjs','.html','.css','.ts','.tsx','.jsx'}
           changed=[]
           candidates=[]
@@ -46,16 +53,25 @@ jobs:
               elif root.is_dir(): candidates.extend(p for p in root.rglob('*') if p.is_file())
           for path in candidates:
               if path.suffix.lower() not in suffixes: continue
-              # Legacy route aliases intentionally retain their filenames but not public branding.
               text=path.read_text(encoding='utf-8')
               new=text
               for old,repl in replacements:
                   new=new.replace(old,repl)
+              if path in public_surface_files:
+                  new=new.replace('pilot','dabbir').replace('Pilot','DABBIR')
+                  new=new.replace('>P</div><div><b>DABBIR', '>D</div><div><b>DABBIR')
               if new != text:
                   path.write_text(new,encoding='utf-8')
                   changed.append(str(path))
           print('Changed files:')
           print('\n'.join(changed) or 'none')
+
+          remaining=[]
+          for path in public_surface_files:
+              if path.exists() and 'pilot' in path.read_text(encoding='utf-8').lower():
+                  remaining.append(str(path))
+          if remaining:
+              raise SystemExit('Legacy public PILOT identifiers remain in: ' + ', '.join(remaining))
           PY
 
       - name: Verify tests
