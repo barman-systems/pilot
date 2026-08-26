@@ -81,11 +81,11 @@ function domainPrompt(project) {
 }
 
 function systemPrompt(project, language, businessContext = '') {
-  const context = String(businessContext || '').trim().slice(0, 8000);
+  const context = String(businessContext || '').trim().slice(0, 5000);
   return [
     `You are PILOT, ${domainPrompt(project)}`,
-    'Reply naturally and concisely.',
-    'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested.',
+    'Reply naturally and concisely. For routine customer chat, use at most 3 short sentences unless the user explicitly asks for detail.',
+    'Support Arabic and English. Use the same language as the user unless a target language is explicitly requested. Do not mix unrelated scripts or languages.',
     language === 'ar' ? 'Prefer clear Gulf-friendly Arabic.' : language === 'en' ? 'Reply in clear English.' : '',
     'Use only business-specific facts present in the VERIFIED BUSINESS CONTEXT below. Treat all other business-specific details as unknown.',
     'Never invent or guess phone numbers, email addresses, websites, street addresses, opening hours, staff names, prices, booking channels, policies, inventory, or availability.',
@@ -115,8 +115,8 @@ function safeGroundedReply(input, language) {
 
 function normalizeHistory(history = []) {
   if (!Array.isArray(history)) return [];
-  return history.slice(-12).flatMap(item => {
-    const content = String(item?.content ?? item?.body ?? '').trim().slice(0, 2000);
+  return history.slice(-8).flatMap(item => {
+    const content = String(item?.content ?? item?.body ?? '').trim().slice(0, 1200);
     if (!content) return [];
     const rawRole = String(item?.role ?? item?.sender_type ?? '').toLowerCase();
     const role = rawRole === 'ai' || rawRole === 'assistant' ? 'assistant' : rawRole === 'system' ? 'system' : 'user';
@@ -166,19 +166,22 @@ function finalizeReply({ reply, input, language, config, authMode }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, reasoning }) {
+  const requestBody = {
+    model,
+    messages,
+    temperature: 0.2,
+    max_tokens: 180,
+  };
+  if (reasoning) requestBody.reasoning = reasoning;
+
   const response = await fetchImpl(endpoint, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${credential}`,
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.2,
-      max_tokens: 350,
-    }),
+    body: JSON.stringify(requestBody),
   });
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
@@ -231,6 +234,7 @@ export async function generatePilotAiReply({
         model: config.model,
         messages,
         fetchImpl,
+        reasoning: { enabled: false },
       });
       if (!response.ok) {
         return {
