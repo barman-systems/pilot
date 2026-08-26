@@ -1,0 +1,73 @@
+name: DABBIR database namespace cutover
+
+on:
+  push:
+    branches:
+      - rename/dabbir-db-cutover
+
+permissions:
+  contents: write
+
+jobs:
+  cutover:
+    if: ${{ !contains(github.event.head_commit.message, '[dabbir-db-cutover]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: rename/dabbir-db-cutover
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Switch runtime namespace to DABBIR
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          roots = [Path('api'), Path('test'), Path('config'), Path('docs'), Path('index.html'), Path('team.html'), Path('translation-preview.html'), Path('README.md'), Path('package.json')]
+          suffixes = {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.json','.md','.html','.css','.yml','.yaml'}
+          changed=[]
+          candidates=[]
+          for root in roots:
+              if root.is_file(): candidates.append(root)
+              elif root.is_dir(): candidates.extend(p for p in root.rglob('*') if p.is_file())
+          for path in candidates:
+              if path.suffix.lower() not in suffixes and path.name not in {'README.md','package.json'}:
+                  continue
+              text=path.read_text(encoding='utf-8')
+              new=text.replace('pilot_', 'dabbir_')
+              if new != text:
+                  path.write_text(new,encoding='utf-8')
+                  changed.append(str(path))
+          print('Changed files:')
+          print('\n'.join(changed) or 'none')
+          PY
+
+      - name: Verify no runtime database namespace remains
+        shell: bash
+        run: |
+          if grep -RIn --exclude='pilot-ai.js' --exclude='pilot-runtime.js' --exclude='pilot-whatsapp-webhook.js' --exclude-dir='.git' 'pilot_' api index.html team.html translation-preview.html test config 2>/dev/null; then
+            echo 'Legacy pilot_ namespace remains in runtime surface'
+            exit 1
+          fi
+
+      - name: Run DABBIR tests
+        run: npm test
+
+      - name: Commit verified namespace cutover
+        shell: bash
+        run: |
+          git config user.name "barmanai"
+          git config user.email "actions@users.noreply.github.com"
+          git add api test config docs index.html team.html translation-preview.html README.md package.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "[dabbir-db-cutover] switch runtime database namespace to DABBIR"
+          git push origin HEAD:rename/dabbir-db-cutover
