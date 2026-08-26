@@ -6,6 +6,7 @@ const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
 const migration = await read('db/pilot_employee_access_v5.sql');
+const fix = await read('db/pilot_employee_access_v9_fix.sql');
 const authCore = await read('api/_auth-core.js');
 const invitations = await read('api/team/invitations.js');
 const accept = await read('api/team/accept-invite.js');
@@ -74,4 +75,17 @@ test('audit and owner immutability cover lifecycle-sensitive changes', () => {
   }
   assert.match(migration, /BUSINESS_OWNER_MEMBERSHIP_IMMUTABLE/);
   assert.match(migration, /new\.status<>'active'/);
+});
+
+test('status and access mutation functions qualify membership columns to avoid PLpgSQL output-name ambiguity', () => {
+  assert.match(fix, /select m\.\* into v_old from public\.pilot_memberships m where m\.business_id=p_business_id and m\.user_id=p_user_id/i);
+  assert.match(fix, /update public\.pilot_memberships m[\s\S]*where m\.business_id=p_business_id and m\.user_id=p_user_id/i);
+  assert.doesNotMatch(fix, /where business_id=p_business_id and user_id=p_user_id/i);
+});
+
+test('suspension and removal record business-scoped session revocation while preserving multi-tenant login semantics', () => {
+  assert.match(fix, /'session_revoked'/);
+  assert.match(fix, /jsonb_build_object\('scope','business_membership','reason',p_status\)/i);
+  assert.match(fix, /p_status in \('suspended','removed'\)/i);
+  assert.match(authCore, /pilot_memberships\?select=business_id,role,status,permissions,accepted_at&status=eq\.active/);
 });
