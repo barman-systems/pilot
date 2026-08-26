@@ -1,4 +1,5 @@
 name: DABBIR AI Full Customer Journey
+# Covers authenticated translation fallback, mobile WebKit, RBAC, AI handoff, operations, and cleanup.
 
 on:
   workflow_dispatch:
