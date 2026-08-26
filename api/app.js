@@ -47,6 +47,104 @@ const businessAdaptiveUi = String.raw`
 })();
 </script>`;
 
+const conversationPerformanceUi = String.raw`
+<style>
+#sendBtn:disabled{opacity:.6;cursor:wait}
+.msgrow[data-pilot-pending="true"] .bubble{opacity:.72}
+.msgrow[data-pilot-typing="true"] .bubble{min-width:52px;text-align:center;animation:pilotPulse 1s ease-in-out infinite}
+@keyframes pilotPulse{0%,100%{opacity:.45}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.msgrow[data-pilot-typing="true"] .bubble{animation:none}}
+</style>
+<script>
+(()=>{
+  let pilotSending=false;
+
+  function renderFastMessages(){
+    renderMessages();
+    const list=document.querySelector('#messages');
+    if(!list) return;
+    list.querySelectorAll('.msgrow').forEach(row=>{
+      const body=row.querySelector('.bubble .body');
+      if(!body) return;
+      if(body.textContent==='PILOT_TYPING'){
+        row.dataset.pilotTyping='true';
+        body.textContent='…';
+      }
+    });
+  }
+
+  async function fastSendMessage(){
+    const input=document.querySelector('#composer');
+    const btn=document.querySelector('#sendBtn');
+    const text=(input?.value||'').trim();
+    if(!input||!btn||!text||!selectedConversationId||pilotSending) return;
+
+    pilotSending=true;
+    btn.disabled=true;
+    input.value='';
+
+    const stamp=Date.now();
+    const tempId='pilot-local-'+stamp;
+    const typingId='pilot-typing-'+stamp;
+    const now=new Date().toISOString();
+    const baseMessages=Array.isArray(workspace?.messages)?workspace.messages:[];
+    workspace.messages=baseMessages.concat([
+      {id:tempId,conversation_id:selectedConversationId,sender_type:'customer',body:text,intent:'PENDING',simulated:false,created_at:now},
+      {id:typingId,conversation_id:selectedConversationId,sender_type:'ai',body:'PILOT_TYPING',intent:'PENDING',simulated:false,created_at:now}
+    ]);
+    renderFastMessages();
+
+    try{
+      const result=await api('/api/pilot-runtime',{
+        method:'POST',
+        body:JSON.stringify({action:'send_message',business_id:workspace.business.id,conversation_id:selectedConversationId,message:text})
+      });
+      const r=result.r,j=result.j||{};
+
+      workspace.messages=(workspace.messages||[]).filter(m=>m.id!==tempId&&m.id!==typingId);
+
+      if(!r.ok||!j.ok){
+        toast(j.error||T().sendFailed);
+        await loadRuntime(workspace.business.id,selectedConversationId);
+        return;
+      }
+
+      if(j.customer_message) workspace.messages.push(j.customer_message);
+      if(j.ai_message) workspace.messages.push(j.ai_message);
+      const conversation=(workspace.conversations||[]).find(c=>c.id===selectedConversationId);
+      if(conversation) conversation.state='waiting_customer';
+      translations.clear();
+      translationMode=false;
+      renderMessages();
+      renderDashboard();
+      renderAnalytics();
+    }catch{
+      workspace.messages=(workspace.messages||[]).filter(m=>m.id!==typingId);
+      toast(T().sendFailed);
+      await loadRuntime(workspace.business.id,selectedConversationId);
+    }finally{
+      pilotSending=false;
+      btn.disabled=false;
+      input.focus();
+    }
+  }
+
+  const sendBtn=document.querySelector('#sendBtn');
+  if(sendBtn) sendBtn.onclick=fastSendMessage;
+  const composer=document.querySelector('#composer');
+  if(composer){
+    composer.addEventListener('keydown',event=>{
+      if(event.key==='Enter'&&!event.shiftKey){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        fastSendMessage();
+      }
+    },true);
+  }
+  window.pilotFastSendMessage=fastSendMessage;
+})();
+</script>`;
+
 export default function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
@@ -65,7 +163,7 @@ export default function handler(req, res) {
   }
   html = html.replace(legacyTeamLanguageWrite, safeTeamLanguageWrite);
   html = html.replace(legacyTeamLink, '');
-  html = html.replace('</body>', `${businessAdaptiveUi}\n</body>`);
+  html = html.replace('</body>', `${businessAdaptiveUi}\n${conversationPerformanceUi}\n</body>`);
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
