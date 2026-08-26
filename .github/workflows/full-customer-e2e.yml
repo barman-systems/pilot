@@ -1,0 +1,36 @@
+name: PILOT Full Customer E2E
+
+on:
+  push:
+    branches:
+      - test/full-customer-e2e
+    paths:
+      - 'test/full-customer-e2e.remote.mjs'
+      - '.github/workflows/full-customer-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  full-customer-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run full synthetic customer journey
+        run: node test/full-customer-e2e.remote.mjs
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilot-full-customer-e2e-report
+          path: e2e-report.json
+          if-no-files-found: warn
