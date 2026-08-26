@@ -1,0 +1,117 @@
+name: Wire production synthetic AI chat
+
+on:
+  push:
+    branches:
+      - fix/production-ai-chat
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/production-ai-chat
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch unified conversation to call PILOT AI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="""function sendPreviewMessage(){
+  const input=$('#composer');
+  const text=String(input?.value||'').trim();
+  if(!text)return;
+  const nextId=String(Math.max(0,...messages.map(m=>Number(m.id)||0))+1);
+  messages.push({id:nextId,side:'out',original:text,fb:{ar:text,en:text},previewOnly:true});
+  input.value='';
+  renderMessages();
+  const box=$('#messages');
+  if(box)box.scrollTop=box.scrollHeight;
+  toast('تمت إضافة الرسالة داخل معاينة المحادثة فقط — لم تُرسل إلى قناة خارجية','Message added to the conversation preview only — it was not sent to an external channel');
+}
+$('#sendBtn').onclick=sendPreviewMessage;
+"""
+          new="""async function sendPreviewMessage(){
+  const input=$('#composer');
+  const sendBtn=$('#sendBtn');
+  const text=String(input?.value||'').trim();
+  if(!text||sendBtn?.disabled)return;
+  const nextId=()=>String(Math.max(0,...messages.map(m=>Number(m.id)||0))+1);
+  messages.push({id:nextId(),side:'in',original:text,fb:{ar:text,en:text},previewOnly:true,syntheticCustomer:true});
+  input.value='';
+  if(sendBtn)sendBtn.disabled=true;
+  renderMessages();
+  const box=$('#messages');
+  if(box)box.scrollTop=box.scrollHeight;
+  try{
+    const r=await fetch('/api/pilot-ai',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({synthetic:true,project:'pilot_clinics',message:text,language:lang})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok||!j.reply)throw new Error(j.error||'pilot_ai_unavailable');
+    const reply=String(j.reply).trim();
+    messages.push({id:nextId(),side:'out',original:reply,fb:{ar:reply,en:reply},previewOnly:true,aiGenerated:true});
+    renderMessages();
+    if(box)box.scrollTop=box.scrollHeight;
+    toast('رد PILOT AI فعليًا داخل المعاينة — بدون إرسال خارجي','PILOT AI replied in the preview — no external message was sent');
+  }catch{
+    const fail=lang==='ar'?'تعذر تشغيل PILOT AI الآن. لم يتم تنفيذ أي حجز أو إرسال خارجي.':'PILOT AI is unavailable right now. No booking or external message was performed.';
+    messages.push({id:nextId(),side:'out',original:fail,fb:{ar:fail,en:fail},previewOnly:true,aiGenerated:false});
+    renderMessages();
+    if(box)box.scrollTop=box.scrollHeight;
+  }finally{
+    if(sendBtn)sendBtn.disabled=false;
+  }
+}
+$('#sendBtn').onclick=sendPreviewMessage;
+"""
+          if old not in s:
+            raise SystemExit('expected conversation function not found')
+          p.write_text(s.replace(old,new))
+
+          t=Path('test/conversation-preview-send.test.mjs')
+          ts=t.read_text()
+          ts=ts.replace("assert.match(html, /messages\\.push\\(\\{id:nextId,side:'out'/);", "assert.match(html, /side:'in'.*syntheticCustomer:true/);")
+          ts=ts.replace("assert.match(html, /\\$\\('#sendBtn'\\)\\.onclick=sendPreviewMessage/);", "assert.match(html, /fetch\\('\/api\/pilot-ai'/);\n  assert.match(html, /synthetic:true,project:'pilot_clinics'/);\n  assert.match(html, /j\\.reply/);\n  assert.match(html, /aiGenerated:true/);\n  assert.match(html, /\\$\\('#sendBtn'\\)\\.onclick=sendPreviewMessage/);")
+          t.write_text(ts)
+          PY
+      - name: Add production AI contract test
+        run: |
+          cat > test/production-ai-chat.test.mjs <<'EOF'
+          import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+
+          const api = fs.readFileSync(new URL('../api/pilot-ai.js', import.meta.url), 'utf8');
+          const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+          test('PILOT AI endpoint supports production synthetic mode without side effects', () => {
+            assert.doesNotMatch(api, /preview_only_ai/);
+            assert.match(api, /PRODUCTION_PILOT/);
+            assert.match(api, /synthetic_mode_required/);
+            assert.match(api, /data_mode: 'SYNTHETIC_ONLY'/);
+            assert.match(api, /external_side_effects: false/);
+          });
+
+          test('conversation calls PILOT AI and renders a real AI reply', () => {
+            assert.match(html, /fetch\('\/api\/pilot-ai'/);
+            assert.match(html, /synthetic:true/);
+            assert.match(html, /j\.reply/);
+            assert.match(html, /aiGenerated:true/);
+          });
+          EOF
+      - name: Run tests
+        run: node --test test/*.test.mjs
+      - name: Remove one-shot workflow and commit
+        run: |
+          git rm .github/workflows/wire-production-ai-chat.yml
+          git config user.name barmanai
+          git config user.email alcaptain2014@gmail.com
+          git add index.html test/conversation-preview-send.test.mjs test/production-ai-chat.test.mjs
+          git commit -m "ai: connect unified conversation to PILOT AI [production-synthetic]"
+          git push origin HEAD:fix/production-ai-chat
