@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './pilot-runtime.js';
+import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 
-function json(res, status, body) {
+function json(res, status, body, cid) {
+  attachCorrelation(res, cid);
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
 }
 
@@ -79,24 +81,70 @@ export function classifyPilotEvent(event, project = 'generic') {
 }
 
 export default async function handler(req, res) {
+  const cid = correlationId(req);
+  attachCorrelation(res, cid);
   const verifyToken = process.env.PILOT_WHATSAPP_VERIFY_TOKEN || '';
   const appSecret = process.env.PILOT_WHATSAPP_APP_SECRET || '';
   const project = String(process.env.PILOT_PROJECT || 'generic').toLowerCase();
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
-    if (!result.ok) return res.status(403).send('forbidden');
-    return res.status(200).send(result.challenge);
+    if (!result.ok) {
+      logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'challenge_verification', outcome: 'FAILED', failure_class: 'AUTH' });
+      return res.status(403).setHeader('x-pilot-correlation-id', cid).send('forbidden');
+    }
+    logEvent('info', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'challenge_verification', outcome: 'VERIFIED_SUCCESS' });
+    return res.status(200).setHeader('x-pilot-correlation-id', cid).send(result.challenge);
   }
-  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
+  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed', correlation_id: cid }, cid);
 
   const signature = verifyMetaSignature(req, appSecret);
-  if (!signature.ok) return json(res, 401, { ok: false, error: 'invalid_meta_signature', reason: signature.reason });
+  if (!signature.ok) {
+    logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'signature_verification', outcome: 'FAILED', failure_class: 'SECURITY', reason: signature.reason });
+    return json(res, 401, { ok: false, error: 'invalid_meta_signature', reason: signature.reason, correlation_id: cid }, cid);
+  }
 
   const payload = normalizeBody(req);
-  if (!payload || payload.object !== 'whatsapp_business_account') return json(res, 400, { ok: false, error: 'invalid_whatsapp_payload' });
+  if (!payload || payload.object !== 'whatsapp_business_account') {
+    logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'payload_validation', outcome: 'FAILED', failure_class: 'USER_INPUT' });
+    return json(res, 400, { ok: false, error: 'invalid_whatsapp_payload', correlation_id: cid }, cid);
+  }
 
   const events = extractWhatsAppEvents(payload);
   const routed = events.map((event) => ({ ...event, ...classifyPilotEvent(event, project) }));
-  return json(res, 200, { ok: true, service: 'pilot-whatsapp-webhook', project, event_count: routed.length, routed, persisted: false, outbound_messages_sent: false, external_side_effects: false, timestamp: new Date().toISOString() });
+  const messageCount = routed.filter(e => e.type === 'message').length;
+  const statusCount = routed.filter(e => e.type === 'status').length;
+  const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
+
+  // Never log or echo message text, sender/recipient IDs, phone numbers, message IDs, or raw payloads.
+  logEvent('info', {
+    correlation_id: cid,
+    component: 'whatsapp_webhook',
+    operation: 'signed_inbound_normalization',
+    outcome: 'PARTIAL',
+    project,
+    event_count: routed.length,
+    message_count: messageCount,
+    status_count: statusCount,
+    classifications,
+    persisted: false,
+    outbound_messages_sent: false,
+  });
+
+  return json(res, 200, {
+    ok: true,
+    service: 'pilot-whatsapp-webhook',
+    project,
+    state: 'CONFIGURED_NOT_OPERATIONAL',
+    signature_verified: true,
+    event_count: routed.length,
+    message_count: messageCount,
+    status_count: statusCount,
+    classifications,
+    persisted: false,
+    outbound_messages_sent: false,
+    external_side_effects: false,
+    correlation_id: cid,
+    timestamp: new Date().toISOString(),
+  }, cid);
 }
