@@ -1,7 +1,7 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
-const DEFAULT_GATEWAY_MODEL = 'poolside/laguna-s-2.1-free';
+const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities', 'pilot_businesses']);
 
@@ -146,7 +146,7 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 6000 }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 5000 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -158,7 +158,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         model,
         messages,
         temperature: 0.15,
-        max_tokens: 180,
+        max_tokens: 140,
         stream: false,
       }),
     });
@@ -169,12 +169,17 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
   }
 }
 
-async function callGatewayMeasuredFallback({ credential, primaryModel, messages, fetchImpl }) {
+async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl }) {
   const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
+  const deadline = Date.now() + 5000;
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
 
   for (let index = 0; index < models.length; index += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
+
     const model = models[index];
+    const timeoutMs = index === 0 ? Math.min(2500, remaining) : remaining;
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GATEWAY_ENDPOINT,
@@ -182,11 +187,12 @@ async function callGatewayMeasuredFallback({ credential, primaryModel, messages,
         model,
         messages,
         fetchImpl,
-        timeoutMs: index === 0 ? 4000 : 6500,
+        timeoutMs,
       });
       const servedModel = String(payload?.model || model);
       if (response.ok) return { ok: true, payload, model: servedModel };
       last = { error: `gateway_http_${response.status}`, status: response.status, model: servedModel };
+      if (![404, 408, 409, 429, 500, 502, 503, 504].includes(response.status)) return { ok: false, ...last };
     } catch (error) {
       last = {
         error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error',
@@ -218,7 +224,7 @@ export async function generatePilotAiReply({ project, message, language = 'auto'
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
 
-    const result = await callGatewayMeasuredFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
+    const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
     if (!result.ok) {
       return {
         ok: false,
@@ -236,7 +242,7 @@ export async function generatePilotAiReply({ project, message, language = 'auto'
   if (!groqKey) return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
 
   try {
-    const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 6000 });
+    const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
     if (!response.ok) return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
   } catch (error) {
