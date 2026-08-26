@@ -26,7 +26,7 @@ export default function handler(req, res) {
       forwardHeaders(res, headers);
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', '<script src="/api/brand-ui"></script>\n<script src="/api/timezone-ui"></script>\n<script src="/api/auth/recovery-ui"></script>\n<script src="/api/chat-human-ui"></script>\n<script src="/api/owner-operations-ui"></script>\n<script src="/api/service-operations-ui"></script>\n<script src="/api/activity-profile-ui"></script>\n<script src="/api/owner-action-center-ui"></script>\n<script src="/api/business-profile-ui"></script>\n</body>')
+        ? body.replace('</body>', '<script src="/api/brand-ui"></script>\n<script src="/api/dabbir-whatsapp-embedded-ui"></script>\n<script src="/api/timezone-ui"></script>\n<script src="/api/auth/recovery-ui"></script>\n<script src="/api/chat-human-ui"></script>\n<script src="/api/owner-operations-ui"></script>\n<script src="/api/service-operations-ui"></script>\n<script src="/api/activity-profile-ui"></script>\n<script src="/api/owner-action-center-ui"></script>\n<script src="/api/business-profile-ui"></script>\n</body>')
         : body;
       return res.end(html);
     },
