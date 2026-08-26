@@ -3,8 +3,14 @@
   "producer": "PILOT",
   "control_plane": "barman-systems/barman-control-plane",
   "target_source_repository": "barman-systems/pilot",
-  "status": "STAGED_FOR_REPOSITORY_CREATION",
+  "status": "ACTIVE_STANDALONE_REPOSITORY",
   "integration_mode": "API_EVENTS_ONLY",
+  "provenance": {
+    "verified_import_commit": "99c32c074ca47cdb6caa83474df46f60a9bdd0aa",
+    "verified_import_tree": "a69388e44ef0f8b6aa7b62b31ed79d1662218ef7",
+    "verified_import_ci_run_id": 32922639169,
+    "verified_import_ci_status": "PASS"
+  },
   "rules": {
     "source_code_imports_across_boundary": false,
     "shared_raw_secrets": false,
