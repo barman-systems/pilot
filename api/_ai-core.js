@@ -1,6 +1,6 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
-const DEFAULT_GATEWAY_MODEL = 'inclusionai/ling-3.0-tiny-free';
+const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m2.7-free';
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities']);
 
 export function getPilotAiConfig(env = process.env) {

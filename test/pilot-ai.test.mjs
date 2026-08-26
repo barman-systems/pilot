@@ -34,10 +34,10 @@ test('Vercel AI Gateway fallback works when Groq secret is absent', async () => 
 
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'vercel-ai-gateway');
-  assert.equal(result.model, 'inclusionai/ling-3.0-tiny-free');
+  assert.equal(result.model, 'minimax/minimax-m2.7-free');
   assert.match(result.reply, /موعد/);
   assert.equal(result.guarded, false);
-  assert.equal(request.model, 'inclusionai/ling-3.0-tiny-free');
+  assert.equal(request.model, 'minimax/minimax-m2.7-free');
   assert.match(request.system, /Gulf-friendly Arabic/);
   assert.equal(request.providerOptions.gateway.disallowPromptTraining, true);
 });
