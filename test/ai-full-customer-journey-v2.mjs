@@ -294,6 +294,7 @@ async function browserJourney() {
 await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
 await page.locator('#side [data-screen="operations"]').click();
   await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
+  await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
   assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
   await page.screenshot({ path: 'dabbir-ai-customer-journey-screenshot.png', fullPage: true });
