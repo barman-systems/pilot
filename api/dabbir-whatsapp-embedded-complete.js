@@ -1,8 +1,8 @@
 import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
 import {
-  embeddedPlatformConfig,
   exchangeEmbeddedCode,
   ownerContext,
+  resolveEmbeddedPlatformConfig,
   sealAccessToken,
   upsertBusinessConnection,
   verifyEmbeddedAssets,
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     if (!wabaId || !phoneNumberId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_ASSETS_REQUIRED' });
 
     const owner = await ownerContext(req, businessId);
-    const platform = embeddedPlatformConfig();
+    const platform = await resolveEmbeddedPlatformConfig();
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
     const exchanged = await exchangeEmbeddedCode(platform, code);

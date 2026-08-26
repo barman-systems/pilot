@@ -1,5 +1,5 @@
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
-import { embeddedPlatformConfig, loadBusinessConnection, ownerContext } from './_whatsapp-embedded-core.js';
+import { loadBusinessConnection, ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 
 function readiness(platform) {
   return {
@@ -7,13 +7,15 @@ function readiness(platform) {
     app_secret_configured: Boolean(platform.appSecret),
     embedded_config_id_configured: Boolean(platform.configId),
     encryption_configured: Boolean(platform.encryptionSecret),
+    existing_whatsapp_token_available: Boolean(platform.legacyAccessTokenAvailable),
+    app_id_source: platform.appIdSource || null,
   };
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
 
-  const platform = embeddedPlatformConfig();
+  const platform = await resolveEmbeddedPlatformConfig();
   const accessToken = accessTokenFromRequest(req);
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
   const platformReadiness = readiness(platform);

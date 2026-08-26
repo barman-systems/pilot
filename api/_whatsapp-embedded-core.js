@@ -14,6 +14,15 @@ function firstEnv(...names) {
   return '';
 }
 
+function legacyWhatsAppAccessToken() {
+  return firstEnv(
+    'DABBIR_WHATSAPP_ACCESS_TOKEN',
+    'PILOT_WHATSAPP_ACCESS_TOKEN',
+    'WHATSAPP_ACCESS_TOKEN',
+    'META_WHATSAPP_ACCESS_TOKEN',
+  );
+}
+
 export function embeddedPlatformConfig() {
   const appId = firstEnv(
     'DABBIR_META_APP_ID',
@@ -45,7 +54,50 @@ export function embeddedPlatformConfig() {
     configId,
     graphVersion,
     encryptionSecret,
+    appIdSource: appId ? 'environment' : null,
+    legacyAccessTokenAvailable: Boolean(legacyWhatsAppAccessToken()),
     ready: Boolean(appId && appSecret && configId && encryptionSecret),
+  };
+}
+
+let discoveredAppIdCache = null;
+let discoveredAppIdExpiresAt = 0;
+
+async function discoverAppIdFromExistingToken(config) {
+  if (config.appId) return config.appId;
+  if (discoveredAppIdCache && Date.now() < discoveredAppIdExpiresAt) return discoveredAppIdCache;
+  const token = legacyWhatsAppAccessToken();
+  if (!token) return '';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/app`);
+    url.searchParams.set('fields', 'id');
+    url.searchParams.set('access_token', token);
+    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    const id = String(payload?.id || '').trim();
+    if (!response.ok || !/^[0-9]{5,40}$/.test(id)) return '';
+    discoveredAppIdCache = id;
+    discoveredAppIdExpiresAt = Date.now() + 15 * 60 * 1000;
+    return id;
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function resolveEmbeddedPlatformConfig() {
+  const base = embeddedPlatformConfig();
+  if (base.appId) return base;
+  const appId = await discoverAppIdFromExistingToken(base);
+  return {
+    ...base,
+    appId,
+    appIdSource: appId ? 'existing_whatsapp_token' : null,
+    ready: Boolean(appId && base.appSecret && base.configId && base.encryptionSecret),
   };
 }
 

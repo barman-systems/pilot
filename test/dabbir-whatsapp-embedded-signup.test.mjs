@@ -36,6 +36,8 @@ test('Embedded completion exchanges authorization code server-side and never ret
   assert.match(endpoint, /exchangeEmbeddedCode/);
   assert.match(endpoint, /sealAccessToken/);
   assert.match(endpoint, /verifyEmbeddedAssets/);
+  assert.match(endpoint, /resolveEmbeddedPlatformConfig/);
+  assert.match(endpoint, /await resolveEmbeddedPlatformConfig\(\)/);
   assert.match(endpoint, /secrets_exposed:\s*false/);
   assert.doesNotMatch(endpoint, /access_token:\s*exchanged\.accessToken/);
 });
@@ -64,4 +66,30 @@ test('status endpoint prefers business-scoped Embedded Signup when business_id i
   assert.match(status, /source:\s*'embedded_signup'/);
   assert.match(status, /req\.query\?\.business_id/);
   assert.match(status, /loadBusinessConnection/);
+});
+
+test('Meta App ID can be discovered server-side from the existing WhatsApp authorization', async () => {
+  const core = await read('api/_whatsapp-embedded-core.js');
+  const configEndpoint = await read('api/dabbir-whatsapp-embedded-config.js');
+
+  assert.match(core, /export async function resolveEmbeddedPlatformConfig/);
+  assert.match(core, /discoverAppIdFromExistingToken/);
+  assert.match(core, /\/app`\)/);
+  assert.match(core, /fields', 'id'/);
+  assert.match(core, /appIdSource:\s*appId \? 'existing_whatsapp_token'/);
+  assert.match(core, /legacyAccessTokenAvailable/);
+  assert.match(configEndpoint, /await resolveEmbeddedPlatformConfig\(\)/);
+  assert.match(configEndpoint, /existing_whatsapp_token_available/);
+  assert.match(configEndpoint, /app_id_source/);
+});
+
+test('automatic Meta App ID discovery never exposes the legacy access token to the browser', async () => {
+  const core = await read('api/_whatsapp-embedded-core.js');
+  const configEndpoint = await read('api/dabbir-whatsapp-embedded-config.js');
+
+  assert.match(core, /legacyWhatsAppAccessToken/);
+  assert.doesNotMatch(configEndpoint, /access_token\s*:/i);
+  assert.doesNotMatch(configEndpoint, /legacyAccessToken\s*:/);
+  assert.match(configEndpoint, /values_exposed:\s*false/);
+  assert.match(configEndpoint, /secrets_exposed:\s*false/);
 });
