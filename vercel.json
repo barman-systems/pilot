@@ -3,18 +3,21 @@
   "functions": {
     "api/app.js": {
       "includeFiles": "index.html"
+    },
+    "api/app-recovery.js": {
+      "includeFiles": "index.html"
     }
   },
   "routes": [
     {
       "src": "^/$",
-      "dest": "/api/app"
+      "dest": "/api/app-recovery"
     }
   ],
   "rewrites": [
     {
       "source": "/",
-      "destination": "/api/app"
+      "destination": "/api/app-recovery"
     }
   ],
   "headers": [
