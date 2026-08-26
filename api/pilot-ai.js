@@ -5,16 +5,14 @@ function json(res, status, body) {
 }
 
 export default async function handler(req, res) {
-  if (process.env.VERCEL_ENV !== 'preview') {
-    return json(res, 404, { ok: false, error: 'preview_only_ai' });
-  }
+  const environment = process.env.VERCEL_ENV === 'production' ? 'PRODUCTION_PILOT' : 'PREVIEW_PILOT';
 
   if (req.method === 'GET') {
     const config = getPilotAiConfig();
     return json(res, 200, {
       ok: true,
       service: 'pilot-ai',
-      environment: 'PREVIEW_PILOT',
+      environment,
       provider: config.provider,
       model: config.model,
       configured: config.configured,
@@ -47,7 +45,7 @@ export default async function handler(req, res) {
   return json(res, status, {
     ...result,
     service: 'pilot-ai',
-    environment: 'PREVIEW_PILOT',
+    environment,
     data_mode: 'SYNTHETIC_ONLY',
     external_side_effects: false,
     timestamp: new Date().toISOString(),
