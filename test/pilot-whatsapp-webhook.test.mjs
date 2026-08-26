@@ -5,8 +5,8 @@ import {
   verifyWebhookChallenge,
   verifyMetaSignature,
   extractWhatsAppEvents,
-  classifyPilotEvent
-} from '../api/pilot-whatsapp-webhook.js';
+  classifyDABBIREvent
+} from '../api/dabbir-whatsapp-webhook.js';
 
 test('verifies webhook challenge', () => {
   const result = verifyWebhookChallenge({
@@ -44,7 +44,7 @@ test('extracts inbound text message', () => {
   const events = extractWhatsAppEvents(payload);
   assert.equal(events.length, 1);
   assert.equal(events[0].text, 'اريد موعد');
-  const routed = classifyPilotEvent(events[0], 'pilot_clinics');
+  const routed = classifyDABBIREvent(events[0], 'pilot_clinics');
   assert.equal(routed.classification, 'APPOINTMENT_REQUEST');
   assert.ok(routed.workflow.includes('BOOKING'));
 });

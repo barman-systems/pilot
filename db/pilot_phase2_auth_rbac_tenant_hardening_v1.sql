@@ -1,4 +1,4 @@
--- PILOT Phase 2 auth/RBAC/tenant hardening. Scope is intentionally pilot_* only.
+-- DABBIR Phase 2 auth/RBAC/tenant hardening. Scope is intentionally pilot_* only.
 
 create schema if not exists pilot_private;
 revoke all on schema pilot_private from public, anon;
@@ -54,7 +54,7 @@ revoke all on function pilot_private.guard_designated_owner_membership() from pu
 drop trigger if exists pilot_guard_designated_owner_membership on public.pilot_memberships;
 create trigger pilot_guard_designated_owner_membership before update or delete on public.pilot_memberships for each row execute function pilot_private.guard_designated_owner_membership();
 
--- No anonymous PILOT data API access; remove dangerous non-DML privileges from signed-in users.
+-- No anonymous DABBIR data API access; remove dangerous non-DML privileges from signed-in users.
 do $$ declare r record; begin
  for r in select tablename from pg_tables where schemaname='public' and tablename like 'pilot_%' loop
   execute format('revoke all privileges on table public.%I from anon',r.tablename);

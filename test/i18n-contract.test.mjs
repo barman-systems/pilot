@@ -6,7 +6,7 @@ async function readJson(path) {
   return JSON.parse(await readFile(new URL(`../${path}`, import.meta.url), 'utf8'));
 }
 
-test('PILOT product contract requires Arabic and English everywhere', async () => {
+test('DABBIR product contract requires Arabic and English everywhere', async () => {
   const contract = await readJson('config/i18n-contract.json');
   assert.equal(contract.status, 'MANDATORY');
   assert.deepEqual(contract.supported_locales, ['ar', 'en']);

@@ -1,4 +1,4 @@
-# PILOT Phase 2 observability verification
+# DABBIR Phase 2 observability verification
 
 Authoritative baseline before this tranche: `ee1713ffe529634a603582e4028ddfa5a6f0170f`.
 

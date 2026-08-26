@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
-test('conversation composer sends through authenticated PILOT runtime', () => {
+test('conversation composer sends through authenticated DABBIR runtime', () => {
   assert.match(html, /async function sendMessage\(\)/);
   assert.match(html, /action:'send_message'/);
   assert.match(html, /business_id:workspace\.business\.id/);

@@ -1,4 +1,4 @@
--- PILOT business onboarding v12
+-- DABBIR business onboarding v12
 -- Allows the designated owner to read the business row during first-owner bootstrap
 -- while preserving tenant RLS, and keeps external channels unconfigured until real authorization.
 

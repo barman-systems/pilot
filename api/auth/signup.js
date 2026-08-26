@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
     const response = await supabaseAuth('/auth/v1/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, data: { product: 'PILOT' } }),
+      body: JSON.stringify({ email, password, data: { product: 'DABBIR' } }),
     });
     if (!response.ok) {
       // Avoid exposing whether an account already exists.

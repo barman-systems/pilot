@@ -1,16 +1,16 @@
-import { generatePilotAiReply, getPilotAiConfig } from './_ai-core.js';
+import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 function json(res, status, body) {
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
 }
 
 export default async function handler(req, res) {
-  const environment = process.env.VERCEL_ENV === 'production' ? 'PRODUCTION_PILOT' : 'PREVIEW_PILOT';
+  const environment = process.env.VERCEL_ENV === 'production' ? 'PRODUCTION_DABBIR' : 'PREVIEW_DABBIR';
 
   if (req.method === 'GET') {
-    const config = getPilotAiConfig();
+    const config = getDABBIRAiConfig();
     if (String(req.query?.synthetic || '') === '1') {
-      const result = await generatePilotAiReply({
+      const result = await generateDABBIRAiReply({
         project: 'pilot_clinics',
         message: 'هلا، ابا موعد باجر العصر',
         language: 'ar',
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     return json(res, 403, { ok: false, error: 'synthetic_mode_required' });
   }
 
-  const result = await generatePilotAiReply({
+  const result = await generateDABBIRAiReply({
     project: req.body?.project,
     message: req.body?.message,
     language: req.body?.language || 'auto',

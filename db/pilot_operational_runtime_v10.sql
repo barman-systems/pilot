@@ -1,4 +1,4 @@
--- PILOT operational runtime v10
+-- DABBIR operational runtime v10
 -- Purpose: allow ordinary owner/admin operations without blanket MFA while preserving
 -- step-up for sensitive integration/billing/export actions; harden runtime RPCs.
 

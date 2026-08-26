@@ -1,4 +1,4 @@
--- PILOT Phase 2 privacy/data-lifecycle foundation.
+-- DABBIR Phase 2 privacy/data-lifecycle foundation.
 -- This migration creates governance and request workflows only. It does NOT execute exports/deletions
 -- and does NOT authorize real patient data. Patient-data approval remains server/governance controlled.
 
@@ -285,7 +285,7 @@ create index if not exists pilot_privacy_requests_business_status_idx on public.
 create index if not exists pilot_privacy_requests_customer_idx on public.pilot_privacy_requests(business_id,customer_id) where customer_id is not null;
 create index if not exists pilot_privacy_audit_business_created_idx on public.pilot_privacy_audit(business_id,created_at desc);
 
-comment on table public.pilot_data_categories is 'PILOT data classification catalog. PATIENT_DATA is SENSITIVE and requires a hard legal/privacy/security gate.';
+comment on table public.pilot_data_categories is 'DABBIR data classification catalog. PATIENT_DATA is SENSITIVE and requires a hard legal/privacy/security gate.';
 comment on table public.pilot_retention_policies is 'Retention configuration. UNCONFIGURED means no automatic retention/deletion execution may be assumed.';
 comment on table public.pilot_privacy_controls is 'Server/governance-controlled privacy gates. Authenticated clients have read-only access.';
 comment on table public.pilot_privacy_requests is 'Privacy request intake only. No export/delete is considered complete until a server-side executor verifies completion.';

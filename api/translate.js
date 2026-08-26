@@ -2,7 +2,7 @@ import { generateText } from 'ai';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, requireSameOrigin } from './_auth-core.js';
 import { attachCorrelation, classifyFailure, correlationId, logEvent } from './_observability.js';
 
-const MODEL = process.env.PILOT_TRANSLATION_MODEL || 'minimax/minimax-m2.7-free';
+const MODEL = process.env.DABBIR_TRANSLATION_MODEL || 'minimax/minimax-m2.7-free';
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12000;

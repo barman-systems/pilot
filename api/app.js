@@ -57,7 +57,7 @@ const conversationPerformanceUi = String.raw`
     if(!list) return;
     list.querySelectorAll('.msgrow').forEach(row=>{
       const body=row.querySelector('.bubble .body');
-      if(body?.textContent==='PILOT_TYPING'){
+      if(body?.textContent==='DABBIR_TYPING'){
         row.dataset.pilotTyping='true';
         body.textContent='…';
       }
@@ -86,7 +86,7 @@ const conversationPerformanceUi = String.raw`
     const baseMessages=Array.isArray(workspace?.messages)?workspace.messages:[];
     workspace.messages=baseMessages.concat([
       {id:tempId,conversation_id:selectedConversationId,sender_type:'customer',body:text,intent:'PENDING',simulated:false,created_at:now},
-      {id:typingId,conversation_id:selectedConversationId,sender_type:'ai',body:'PILOT_TYPING',intent:'PENDING',simulated:false,created_at:now}
+      {id:typingId,conversation_id:selectedConversationId,sender_type:'ai',body:'DABBIR_TYPING',intent:'PENDING',simulated:false,created_at:now}
     ]);
     renderFastMessages();
 

@@ -32,7 +32,7 @@ export function classifyFailure(error, fallback = 'UNKNOWN') {
 export function logEvent(level, event) {
   const safe = {
     ts: new Date().toISOString(),
-    product: 'PILOT',
+    product: 'DABBIR',
     ...event,
   };
   // Never log message bodies, access tokens, refresh tokens, secrets, phone numbers or emails here.

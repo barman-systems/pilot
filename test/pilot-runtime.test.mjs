@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { classifyClinicMessage, classifyCelebrityMessage } from '../api/pilot-runtime.js';
+import { classifyClinicMessage, classifyCelebrityMessage } from '../api/dabbir-runtime.js';
 
 const root = new URL('../', import.meta.url);
 const runtimeSource = await readFile(new URL('api/pilot-runtime.js', root), 'utf8');

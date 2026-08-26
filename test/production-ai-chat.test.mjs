@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const runtime = fs.readFileSync(new URL('../api/pilot-runtime.js', import.meta.url), 'utf8');
+const runtime = fs.readFileSync(new URL('../api/dabbir-runtime.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
 const recoveryShell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
 const recoveryUi = fs.readFileSync(new URL('../api/auth/recovery-ui.js', import.meta.url), 'utf8');
@@ -13,20 +13,20 @@ test('production AI is reached only through authenticated tenant runtime', () =>
   assert.match(runtime, /accessTokenFromRequest/);
   assert.match(runtime, /getVerifiedUser/);
   assert.match(runtime, /getBusinessMemberships/);
-  assert.match(runtime, /generatePilotAiReply/);
+  assert.match(runtime, /generateDABBIRAiReply/);
   assert.match(runtime, /pilot_business_knowledge/);
   assert.match(runtime, /simulated:\s*false/);
   assert.doesNotMatch(runtime, /synthetic_mode_required/);
 });
 
-test('unified conversation uses the real persisted PILOT runtime', () => {
+test('unified conversation uses the real persisted DABBIR runtime', () => {
   assert.match(html, /action:'send_message'/);
   assert.match(html, /\/api\/pilot-runtime/);
   assert.match(html, /await loadRuntime\(workspace\.business\.id,selectedConversationId\)/);
   assert.doesNotMatch(html, /synthetic:true/);
 });
 
-test('root route serves the authoritative PILOT interface with recovery enhancement only', () => {
+test('root route serves the authoritative DABBIR interface with recovery enhancement only', () => {
   const config = JSON.parse(vercel);
   assert.ok(config.rewrites.some(rule => rule.source === '/' && rule.destination === '/api/app-recovery'));
   assert.equal(config.functions['api/app.js'].includeFiles, 'index.html');

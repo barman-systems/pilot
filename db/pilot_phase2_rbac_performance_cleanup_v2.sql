@@ -1,4 +1,4 @@
--- PILOT Phase 2 follow-up: remove legacy permissive-policy overlap, index tenant-safe FKs,
+-- DABBIR Phase 2 follow-up: remove legacy permissive-policy overlap, index tenant-safe FKs,
 -- and move the remaining authenticated SECURITY DEFINER implementation out of the exposed public schema.
 
 -- Membership: one SELECT and one INSERT policy preserve owner bootstrap + team administration.

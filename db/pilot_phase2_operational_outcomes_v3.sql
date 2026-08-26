@@ -1,4 +1,4 @@
--- PILOT Phase 2 observability/outcomes ledger.
+-- DABBIR Phase 2 observability/outcomes ledger.
 -- Writes are server/service-only; signed-in business members can read only when RBAC grants view_analytics.
 
 create table if not exists public.pilot_operation_outcomes (

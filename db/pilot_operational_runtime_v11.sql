@@ -1,4 +1,4 @@
--- PILOT operational runtime v11
+-- DABBIR operational runtime v11
 -- Move handoff creation fully under caller RLS and remove exposed SECURITY DEFINER execution.
 
 drop policy if exists pilot_handoffs_insert on public.pilot_handoffs;

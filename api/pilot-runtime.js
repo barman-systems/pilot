@@ -8,7 +8,7 @@ import {
   supabaseRest,
   supabaseRpc,
 } from './_auth-core.js';
-import { generatePilotAiReply, getPilotAiConfig } from './_ai-core.js';
+import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUSINESS_TYPES = new Set(['store', 'clinic', 'creator', 'salon', 'real_estate', 'services', 'other']);
@@ -187,7 +187,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
       memberships: identity.memberships,
       operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
       whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-      ai: getPilotAiConfig(),
+      ai: getDABBIRAiConfig(),
     };
   }
 
@@ -211,7 +211,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
     ? await rest(identity.accessToken, `pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.asc&limit=100`, {}, 'MESSAGES_LOOKUP_FAILED')
     : [];
 
-  const aiConfig = getPilotAiConfig();
+  const aiConfig = getDABBIRAiConfig();
   return {
     ok: true,
     authenticated: true,
@@ -346,7 +346,7 @@ async function sendMessage(identity, body) {
   }, 'CUSTOMER_MESSAGE_PERSIST_FAILED');
 
   const language = languageFor(message, business.locale);
-  const aiResult = await generatePilotAiReply({
+  const aiResult = await generateDABBIRAiReply({
     project: projectForBusinessType(business.business_type),
     message,
     language,

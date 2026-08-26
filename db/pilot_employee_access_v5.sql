@@ -1,4 +1,4 @@
--- PILOT one-time employee invite, permanent membership and secure access.
+-- DABBIR one-time employee invite, permanent membership and secure access.
 -- Applied to production as Supabase migrations pilot_employee_access_v5 through v7.
 
 alter table public.pilot_memberships

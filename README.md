@@ -1,10 +1,10 @@
-# PILOT
+# DABBIR
 
-Standalone source package for PILOT products.
+Standalone source package for DABBIR products.
 
 ## Scope
 
-This repository boundary owns PILOT product runtime and channel integrations. It does not own the BARMAN control plane, ZAJEL commerce runtime, or R&A.
+This repository boundary owns DABBIR product runtime and channel integrations. It does not own the BARMAN control plane, ZAJEL commerce runtime, or R&A.
 
 Current product modes:
 - `pilot_clinics` — synthetic-only; no patient data persistence.
@@ -12,7 +12,7 @@ Current product modes:
 
 ## Mandatory bilingual product standard
 
-PILOT is Arabic + English by default across the entire product, not only conversation views.
+DABBIR is Arabic + English by default across the entire product, not only conversation views.
 
 This requirement applies to web and app surfaces including authentication, onboarding, dashboard, navigation, conversations, appointments, tasks, notifications, settings, help, errors, empty states, status messages, legal/consent copy, and customer-facing messages.
 
@@ -27,7 +27,7 @@ The machine-readable source of truth is `config/i18n-contract.json`; locale pari
 
 ## Boundary
 
-BARMAN may govern and observe PILOT only through authenticated API/event contracts. PILOT must not import BARMAN source code, share raw secrets, or directly read another product database.
+BARMAN may govern and observe DABBIR only through authenticated API/event contracts. DABBIR must not import BARMAN source code, share raw secrets, or directly read another product database.
 
 ## Safety state
 

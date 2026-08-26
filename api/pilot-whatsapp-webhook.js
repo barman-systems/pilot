@@ -67,7 +67,7 @@ export function extractWhatsAppEvents(payload = {}) {
   return events;
 }
 
-export function classifyPilotEvent(event, project = 'generic') {
+export function classifyDABBIREvent(event, project = 'generic') {
   if (event.type !== 'message') return { classification: 'MESSAGE_STATUS', workflow: ['STATUS_UPDATE'] };
   if (project === 'pilot_clinics') {
     const classification = classifyClinicMessage(event.text);
@@ -83,9 +83,9 @@ export function classifyPilotEvent(event, project = 'generic') {
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
-  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || process.env.PILOT_WHATSAPP_VERIFY_TOKEN || '';
-  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || process.env.PILOT_WHATSAPP_APP_SECRET || '';
-  const project = String(process.env.DABBIR_PROJECT || process.env.PILOT_PROJECT || 'generic').toLowerCase();
+  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
+  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || process.env.DABBIR_WHATSAPP_APP_SECRET || '';
+  const project = String(process.env.DABBIR_PROJECT || process.env.DABBIR_PROJECT || 'generic').toLowerCase();
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
   }
 
   const events = extractWhatsAppEvents(payload);
-  const routed = events.map((event) => ({ ...event, ...classifyPilotEvent(event, project) }));
+  const routed = events.map((event) => ({ ...event, ...classifyDABBIREvent(event, project) }));
   const messageCount = routed.filter(e => e.type === 'message').length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);

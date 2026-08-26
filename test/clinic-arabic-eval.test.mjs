@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyClinicMessage, extractClinicSignals } from '../api/pilot-runtime.js';
+import { classifyClinicMessage, extractClinicSignals } from '../api/dabbir-runtime.js';
 
 const cases = [
   ['ابا موعد باجر العصر', 'APPOINTMENT_REQUEST', ['TOMORROW','AFTERNOON']],

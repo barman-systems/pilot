@@ -25,7 +25,7 @@ test('phase 2 RBAC includes owner/admin/manager/staff/viewer and defaults to exp
   assert.match(migration, /manage_appointments/);
 });
 
-test('all PILOT tables are hardened to forced RLS with anonymous table grants revoked', () => {
+test('all DABBIR tables are hardened to forced RLS with anonymous table grants revoked', () => {
   assert.match(migration, /revoke all privileges on table public\.%I from anon/i);
   assert.match(migration, /force row level security/i);
   assert.match(migration, /revoke update,delete on public\.pilot_messages from authenticated/i);

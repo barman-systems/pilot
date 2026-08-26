@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import whatsappHandler from '../api/pilot-whatsapp-webhook.js';
+import whatsappHandler from '../api/dabbir-whatsapp-webhook.js';
 import { classifyFailure, correlationId, FAILURE_CLASSES } from '../api/_observability.js';
 
 const root = new URL('../', import.meta.url);
@@ -11,8 +11,8 @@ const read = async path => readFile(new URL(path, root), 'utf8');
 const migration = await read('db/pilot_phase2_operational_outcomes_v3.sql');
 const translation = await read('api/translate.js');
 const whatsapp = await read('api/pilot-whatsapp-webhook.js');
-const appSecretEnv = ['PILOT', 'WHATSAPP', 'APP', 'SECRET'].join('_');
-const projectEnv = ['PILOT', 'PROJECT'].join('_');
+const appSecretEnv = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
+const projectEnv = ['DABBIR', 'PROJECT'].join('_');
 
 test('failure taxonomy includes authorization and classifies provider 403 as external provider', () => {
   assert.equal(FAILURE_CLASSES.has('AUTHORIZATION'), true);

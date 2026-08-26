@@ -1,4 +1,4 @@
--- PILOT employee access v9: fix ambiguous membership references and record business-scope session revocation.
+-- DABBIR employee access v9: fix ambiguous membership references and record business-scope session revocation.
 
 create or replace function pilot_private.pilot_set_employee_status(p_business_id uuid,p_user_id uuid,p_status text)
 returns table(user_id uuid,role text,status text)
