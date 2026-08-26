@@ -2,16 +2,19 @@ import { generateText } from 'ai';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, requireSameOrigin } from './_auth-core.js';
 import { attachCorrelation, classifyFailure, correlationId, logEvent } from './_observability.js';
 
-const DEFAULT_FREE_MODEL = 'minimax/minimax-m2.7-free';
-const PRIMARY_MODEL = process.env.DABBIR_TRANSLATION_MODEL || DEFAULT_FREE_MODEL;
-const FALLBACK_MODEL = process.env.DABBIR_TRANSLATION_FALLBACK_MODEL || DEFAULT_FREE_MODEL;
+const DEFAULT_FREE_MODELS = ['minimax/minimax-m3-free', 'minimax/minimax-m2.7-free'];
+const PRIMARY_MODEL = String(process.env.DABBIR_TRANSLATION_MODEL || '').trim();
+const FALLBACK_MODEL = String(process.env.DABBIR_TRANSLATION_FALLBACK_MODEL || '').trim();
 const isFreeTierModel = model => String(model || '').trim().includes('-free');
-const configuredModels = [...new Set([PRIMARY_MODEL, FALLBACK_MODEL].map(value => String(value || '').trim()).filter(Boolean))];
-const TRANSLATION_MODELS = configuredModels.filter(isFreeTierModel);
-if (!TRANSLATION_MODELS.length) TRANSLATION_MODELS.push(DEFAULT_FREE_MODEL);
+const TRANSLATION_MODELS = [...new Set([
+  PRIMARY_MODEL,
+  FALLBACK_MODEL,
+  ...DEFAULT_FREE_MODELS,
+].filter(Boolean))].filter(isFreeTierModel);
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_TOTAL_CHARS = 12000;
+const MODEL_TIMEOUT_MS = 8000;
 
 function normalizeMessages(input) {
   if (!Array.isArray(input)) return [];
@@ -56,6 +59,7 @@ async function translateWithModel(messages, targetLanguage, model) {
   const { text } = await generateText({
     model,
     prompt,
+    abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     providerOptions: {
       gateway: {
         disallowPromptTraining: true,
@@ -73,10 +77,12 @@ async function translateWithModel(messages, targetLanguage, model) {
 
 async function translate(messages, targetLanguage) {
   let lastError = null;
+  let attempts = 0;
   for (const model of TRANSLATION_MODELS) {
+    attempts += 1;
     try {
       const translations = await translateWithModel(messages, targetLanguage, model);
-      return { translations, model, fallback_used: model !== PRIMARY_MODEL };
+      return { translations, model, fallback_used: attempts > 1, attempts };
     } catch (error) {
       lastError = error;
     }
@@ -131,6 +137,7 @@ export default async function handler(req, res) {
       outcome: 'VERIFIED_SUCCESS',
       model: result.model,
       fallback_used: result.fallback_used,
+      attempts: result.attempts,
       message_count: messages.length,
       persisted: false,
     });
@@ -142,6 +149,7 @@ export default async function handler(req, res) {
       translations: result.translations,
       model: result.model,
       fallback_used: result.fallback_used,
+      attempts: result.attempts,
       persisted: false,
       original_preserved: true,
       cost_mode: 'FREE_TIER_ONLY',
