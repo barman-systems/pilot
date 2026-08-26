@@ -1,0 +1,27 @@
+{
+  "product": "DABBIR Business OS",
+  "version": "0.1.0",
+  "status": "foundation",
+  "modules": [
+    "company-core",
+    "crm",
+    "sales",
+    "inventory",
+    "procurement",
+    "operations",
+    "finance-lite",
+    "hr-lite",
+    "communications",
+    "automation-engine",
+    "dabbir-ai",
+    "governance"
+  ],
+  "hard_rules": {
+    "separate_from_current_dabbir": true,
+    "production_mutation_allowed": false,
+    "multi_tenant": true,
+    "row_level_security_required": true,
+    "audit_every_business_write": true,
+    "ai_must_respect_permissions": true
+  }
+}
