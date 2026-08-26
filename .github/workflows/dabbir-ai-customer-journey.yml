@@ -1,5 +1,5 @@
 name: DABBIR AI Full Customer Journey
-# Covers authenticated translation fallback, mobile WebKit, RBAC, AI handoff, operations, and cleanup.
+# Covers authenticated translation fallback, mobile WebKit, RBAC, AI handoff, operations, activity semantics, and cleanup.
 
 on:
   workflow_dispatch:
@@ -8,15 +8,21 @@ on:
       - main
     paths:
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-activity-regression.test.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'db/dabbir*.sql'
       - 'api/auth/**'
       - 'api/team/**'
       - 'api/chat*.js'
       - 'api/translate.js'
       - 'api/dabbir-runtime*.js'
       - 'api/owner-operations*.js'
+      - 'api/service-operations*.js'
+      - 'api/activity-*.js'
+      - 'api/owner-action-center*.js'
+      - 'api/business-profile*.js'
       - 'api/app*.js'
       - 'api/brand-ui.js'
       - 'api/timezone-ui.js'
