@@ -1,4 +1,10 @@
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
+import {
+  embeddedPlatformConfig,
+  loadBusinessConnection,
+  ownerContext,
+  verifyStoredConnection,
+} from './_whatsapp-embedded-core.js';
 
 function firstEnv(...names) {
   for (const name of names) {
@@ -30,22 +36,10 @@ export function getWhatsAppConfig() {
     'WABA_ID',
   );
   const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION') || 'v23.0';
-
   const webhookConfigured = Boolean(verifyToken && appSecret);
   const outboundConfigured = Boolean(accessToken && phoneNumberId);
   const configured = webhookConfigured || outboundConfigured;
-
-  return {
-    verifyToken,
-    appSecret,
-    accessToken,
-    phoneNumberId,
-    wabaId,
-    graphVersion,
-    webhookConfigured,
-    outboundConfigured,
-    configured,
-  };
+  return { verifyToken, appSecret, accessToken, phoneNumberId, wabaId, graphVersion, webhookConfigured, outboundConfigured, configured };
 }
 
 function publicConfig(config) {
@@ -54,7 +48,6 @@ function publicConfig(config) {
   else if (config.webhookConfigured) state = 'WEBHOOK_LINKED';
   else if (config.outboundConfigured) state = 'OUTBOUND_CONFIGURED';
   else if (config.configured) state = 'PARTIALLY_CONFIGURED';
-
   return {
     configured: config.configured,
     connected: config.webhookConfigured || config.outboundConfigured,
@@ -67,71 +60,114 @@ function publicConfig(config) {
 }
 
 export async function verifyMetaAuthorization(config = getWhatsAppConfig()) {
-  if (!config.accessToken || !config.phoneNumberId) {
-    return {
-      attempted: false,
-      authorized: false,
-      reason: 'META_READ_CREDENTIALS_NOT_CONFIGURED',
-    };
-  }
-
+  if (!config.accessToken || !config.phoneNumberId) return { attempted: false, authorized: false, reason: 'META_READ_CREDENTIALS_NOT_CONFIGURED' };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4500);
   try {
     const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/${encodeURIComponent(config.phoneNumberId)}`);
     url.searchParams.set('fields', 'display_phone_number,verified_name');
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${config.accessToken}` },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { method: 'GET', headers: { authorization: `Bearer ${config.accessToken}` }, cache: 'no-store', signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return {
-        attempted: true,
-        authorized: false,
-        reason: 'META_AUTHORIZATION_CHECK_FAILED',
-        provider_status: response.status,
-      };
-    }
+    if (!response.ok) return { attempted: true, authorized: false, reason: 'META_AUTHORIZATION_CHECK_FAILED', provider_status: response.status };
     return {
       attempted: true,
       authorized: true,
       reason: null,
       provider_status: response.status,
-      phone: {
-        display_phone_number: payload?.display_phone_number || null,
-        verified_name: payload?.verified_name || null,
-      },
+      phone: { display_phone_number: payload?.display_phone_number || null, verified_name: payload?.verified_name || null },
     };
   } catch (error) {
-    return {
-      attempted: true,
-      authorized: false,
-      reason: error?.name === 'AbortError' ? 'META_AUTHORIZATION_CHECK_TIMEOUT' : 'META_AUTHORIZATION_CHECK_UNAVAILABLE',
-    };
+    return { attempted: true, authorized: false, reason: error?.name === 'AbortError' ? 'META_AUTHORIZATION_CHECK_TIMEOUT' : 'META_AUTHORIZATION_CHECK_UNAVAILABLE' };
   } finally {
     clearTimeout(timeout);
   }
 }
 
+async function embeddedStatus(req, accessToken, businessId) {
+  await ownerContext(req, businessId);
+  const row = await loadBusinessConnection(accessToken, businessId);
+  if (!row) return null;
+  const platform = embeddedPlatformConfig();
+  try {
+    const verified = await verifyStoredConnection(platform, row);
+    return {
+      ok: true,
+      channel: 'whatsapp',
+      source: 'embedded_signup',
+      configured: true,
+      connected: Boolean(verified.authorized),
+      webhook_configured: Boolean(firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN') && platform.appSecret),
+      outbound_configured: Boolean(verified.authorized),
+      phone_number_configured: true,
+      waba_configured: true,
+      state: verified.authorized ? 'META_AUTHORIZED' : 'AUTHORIZATION_INVALID',
+      meta_authorized: Boolean(verified.authorized),
+      meta_check_attempted: true,
+      meta_check_reason: verified.authorized ? null : 'META_AUTHORIZATION_CHECK_FAILED',
+      provider_status: verified.providerStatus || null,
+      phone: {
+        display_phone_number: verified.displayPhoneNumber,
+        verified_name: verified.verifiedName,
+      },
+      waba_id: row.waba_id,
+      phone_number_id: row.phone_number_id,
+      connected_at: row.connected_at,
+      operational: false,
+      operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
+      checked_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      ok: true,
+      channel: 'whatsapp',
+      source: 'embedded_signup',
+      configured: true,
+      connected: true,
+      webhook_configured: Boolean(firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN') && platform.appSecret),
+      outbound_configured: true,
+      phone_number_configured: true,
+      waba_configured: true,
+      state: 'CONNECTED_VERIFICATION_FAILED',
+      meta_authorized: false,
+      meta_check_attempted: true,
+      meta_check_reason: String(error?.message || 'META_AUTHORIZATION_CHECK_UNAVAILABLE').slice(0, 200),
+      provider_status: error?.providerStatus || null,
+      phone: { display_phone_number: row.display_phone_number || null, verified_name: row.verified_name || null },
+      waba_id: row.waba_id,
+      phone_number_id: row.phone_number_id,
+      connected_at: row.connected_at,
+      operational: false,
+      operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
+      checked_at: new Date().toISOString(),
+    };
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
-
   const accessToken = accessTokenFromRequest(req);
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
   if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
+
+  const businessId = String(req.query?.business_id || '').trim();
+  if (businessId) {
+    try {
+      const tenant = await embeddedStatus(req, accessToken, businessId);
+      if (tenant) return json(res, 200, tenant);
+    } catch (error) {
+      return json(res, Number(error?.status || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
+    }
+  }
 
   const config = getWhatsAppConfig();
   const base = publicConfig(config);
   const meta = await verifyMetaAuthorization(config);
   const metaAuthorized = Boolean(meta.authorized);
   const state = metaAuthorized ? 'META_AUTHORIZED' : base.state;
-
   return json(res, 200, {
     ok: true,
     channel: 'whatsapp',
+    source: 'legacy_server_config',
     ...base,
     connected: metaAuthorized || base.connected,
     state,
