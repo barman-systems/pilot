@@ -286,11 +286,13 @@ async function browserJourney() {
   await logo.waitFor({ state: 'visible', timeout: 10_000 });
   assert(String(await logo.evaluate(el => getComputedStyle(el).backgroundImage)).includes('dabbir-approved-icon'), 'BROWSER_APPROVED_LOGO_MISSING');
 
-  await page.locator('[data-screen="conversations"]').first().click();
+  await page.locator('#bottomNav [data-screen="conversations"]').click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
   assert((await page.locator('#chatList').textContent())?.includes('AI Journey Customer'), 'BROWSER_CONVERSATION_MISSING');
 
-  await page.locator('[data-screen="operations"]').first().click();
+  await page.locator('#menuBtn').click();
+await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
+await page.locator('#side [data-screen="operations"]').click();
   await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
   assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
