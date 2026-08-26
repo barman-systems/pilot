@@ -1,0 +1,104 @@
+name: DABBIR Auth Production Guard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-auth-production.yml'
+      - 'api/auth/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  enforce-auth-production-url:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PROJECT_REF: spohjzrsymsmzsseygtw
+      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+    steps:
+      - name: Resolve management credential
+        id: credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+            echo 'source=SUPABASE_ACCESS_TOKEN' >> "$GITHUB_OUTPUT"
+          elif [ -n "${SUPABASE_MANAGEMENT_TOKEN:-}" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+            echo 'source=SUPABASE_MANAGEMENT_TOKEN' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'source=none' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Enforce hosted Supabase Auth URLs
+        if: steps.credential.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="${SUPABASE_ACCESS_TOKEN:-${SUPABASE_MANAGEMENT_TOKEN:-}}"
+          API="https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth"
+
+          current="$(curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${TOKEN}" \
+            --header 'Accept: application/json' \
+            "$API")"
+
+          allow_list="$(CURRENT="$current" ORIGIN="$PRODUCTION_ORIGIN" node <<'NODE'
+          const current = JSON.parse(process.env.CURRENT || '{}');
+          const origin = process.env.ORIGIN;
+          const existing = String(current.uri_allow_list || '')
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean)
+            .filter(v => !/^https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|\/|$)/i.test(v));
+          for (const value of [origin, `${origin}/`, `${origin}/?password_recovery=1`]) {
+            if (!existing.includes(value)) existing.push(value);
+          }
+          process.stdout.write(existing.join(','));
+          NODE
+          )"
+
+          body="$(ORIGIN="$PRODUCTION_ORIGIN" ALLOW_LIST="$allow_list" node <<'NODE'
+          process.stdout.write(JSON.stringify({
+            site_url: process.env.ORIGIN,
+            uri_allow_list: process.env.ALLOW_LIST,
+          }));
+          NODE
+          )"
+
+          curl --silent --show-error --fail-with-body \
+            --request PATCH \
+            --header "Authorization: Bearer ${TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data "$body" \
+            "$API" >/dev/null
+
+          verified="$(curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${TOKEN}" \
+            --header 'Accept: application/json' \
+            "$API")"
+
+          VERIFIED="$verified" ORIGIN="$PRODUCTION_ORIGIN" node <<'NODE'
+          const config = JSON.parse(process.env.VERIFIED || '{}');
+          const origin = process.env.ORIGIN;
+          const allow = String(config.uri_allow_list || '');
+          if (config.site_url !== origin) throw new Error('Production Site URL drift remains');
+          if (!allow.includes(origin)) throw new Error('Production redirect allow-list is missing DABBIR');
+          if (/(^|,|\s)https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|\/|,|$)/i.test(allow)) {
+            throw new Error('Loopback redirect remains in hosted production Auth config');
+          }
+          console.log('DABBIR hosted Auth production URL configuration verified.');
+          NODE
+
+      - name: Credential unavailable
+        if: steps.credential.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo 'Supabase Management API credential is not configured in this repository; no remote Auth configuration was changed.'
