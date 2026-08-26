@@ -56,6 +56,16 @@ export async function supabaseAuth(path, options = {}) {
   return fetch(`${SUPABASE_URL}${path}`, { ...options, headers, redirect: 'manual' });
 }
 
+export async function supabaseRest(path, accessToken, options = {}) {
+  if (!accessToken) throw Object.assign(new Error('AUTH_REQUIRED'), { code: 401 });
+  const headers = new Headers(options.headers || {});
+  headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
+  headers.set('authorization', `Bearer ${accessToken}`);
+  headers.set('accept', 'application/json');
+  if (options.body !== undefined) headers.set('content-type', 'application/json');
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers, cache: 'no-store' });
+}
+
 export async function getVerifiedUser(accessToken) {
   if (!accessToken) return null;
   const response = await supabaseAuth('/auth/v1/user', { headers: { authorization: `Bearer ${accessToken}` } });
@@ -65,14 +75,7 @@ export async function getVerifiedUser(accessToken) {
 }
 
 export async function getBusinessMemberships(accessToken) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/pilot_memberships?select=business_id,role`, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      authorization: `Bearer ${accessToken}`,
-      accept: 'application/json',
-    },
-    cache: 'no-store',
-  });
+  const response = await supabaseRest('pilot_memberships?select=business_id,role', accessToken);
   if (!response.ok) throw new Error('MEMBERSHIP_LOOKUP_FAILED');
   return response.json();
 }
