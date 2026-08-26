@@ -44,25 +44,114 @@ function projectFor(type) {
   return 'pilot_businesses';
 }
 
+function normalizeLocal(value = '') {
+  return String(value)
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function intentFor(type, message) {
-  const text = String(message || '').toLowerCase();
+  const text = normalizeLocal(message);
   if (type === 'clinic' && /(موعد|حجز|appointment|booking)/i.test(text)) return 'APPOINTMENT_REQUEST';
-  if (type === 'creator' && /(اعلان|إعلان|advert|campaign|sponsor)/i.test(text)) return 'ADVERTISING_REQUEST';
-  if (/(سعر|price|cost)/i.test(text)) return 'PRICE_INQUIRY';
-  if (/(متوفر|availability|available|stock)/i.test(text)) return 'AVAILABILITY_INQUIRY';
-  if (/(شكوى|مشكله|مشكلة|complaint|problem)/i.test(text)) return 'SUPPORT_REQUEST';
+  if (type === 'creator' && /(اعلان|advert|campaign|sponsor)/i.test(text)) return 'ADVERTISING_REQUEST';
+  if (/(سعر|price|cost|كم ب|بكم)/i.test(text)) return 'PRICE_INQUIRY';
+  if (/(متوفر|توفر|availability|available|stock)/i.test(text)) return 'AVAILABILITY_INQUIRY';
+  if (/(شكوى|مشكله|complaint|problem)/i.test(text)) return 'SUPPORT_REQUEST';
   return 'GENERAL_INQUIRY';
 }
 
+function verifiedKnowledge(knowledge = []) {
+  return knowledge.filter(item => !item.status || ['active', 'verified', 'approved'].includes(String(item.status).toLowerCase()));
+}
+
 function buildContext(business, knowledge = []) {
-  const verified = knowledge
-    .filter(item => !item.status || ['active', 'verified', 'approved'].includes(String(item.status).toLowerCase()))
+  const verified = verifiedKnowledge(knowledge)
     .slice(0, 12)
     .map(item => ({ key: item.knowledge_key, type: item.knowledge_type, value: item.value, source: item.source }));
   return JSON.stringify({
     business: { name: business.name, type: business.business_type, locale: business.locale },
     knowledge: verified,
   });
+}
+
+function containsContactKnowledge(knowledge = []) {
+  return verifiedKnowledge(knowledge).some(item => {
+    const descriptor = `${item.knowledge_key || ''} ${item.knowledge_type || ''}`.toLowerCase();
+    return /(phone|mobile|contact|email|whatsapp|website|url|هاتف|جوال|تواصل|بريد|واتساب|موقع)/i.test(descriptor);
+  });
+}
+
+function instantGroundedReply({ message, language, intent, business, knowledge }) {
+  const text = normalizeLocal(message);
+  const ar = language === 'ar';
+  const hasKnowledge = verifiedKnowledge(knowledge).length > 0;
+
+  if (/^(هلا|هلا والله|مرحبا|مرحبا بك|السلام عليكم|سلام|hello|hi|hey)[!.،,\s]*$/i.test(text)) {
+    return ar ? 'هلا وغلا! كيف أقدر أساعدك؟' : 'Hi! How can I help you?';
+  }
+  if (/^(شكرا|شكرا لك|مشكور|يعطيك العافيه|thanks|thank you|thx)[!.،,\s]*$/i.test(text)) {
+    return ar ? 'العفو، أنا حاضر. إذا تحتاج أي شيء إضافي قل لي.' : 'You’re welcome. I’m here if you need anything else.';
+  }
+
+  const asksContact = /(كيف اتواصل|تواصل مع|رقم|واتساب|whatsapp|contact|phone|email|ايميل)/i.test(text);
+  if (asksContact && !containsContactKnowledge(knowledge)) {
+    return ar
+      ? 'ما عندي وسيلة تواصل موثقة لهذا النشاط داخل PILOT حاليًا، لذلك ما بعطيك رقم أو رابط غير مؤكد. أقدر أساعدك من هنا بالطلب أو الاستفسار.'
+      : 'I do not have a verified contact method for this business in PILOT yet, so I will not invent a number or link. I can still help you here with the request.';
+  }
+
+  if (business.business_type === 'store' && !hasKnowledge && /(توصيل|شحن|توصلون|delivery|shipping|ship)/i.test(text)) {
+    return ar
+      ? 'تفاصيل التوصيل والشحن غير موثقة في بيانات المتجر عندي حاليًا، لذلك ما بخمّنها. اذكر المنطقة أو الطلب الذي تقصده وسأكمل بالمعلومة المتاحة فقط.'
+      : 'Delivery and shipping details are not verified in the store data yet, so I will not guess. Tell me the area or order you mean and I will continue using only available information.';
+  }
+
+  if (intent === 'PRICE_INQUIRY' && !hasKnowledge) {
+    return ar
+      ? 'الأسعار غير مضافة كبيانات موثقة للنشاط عندي حاليًا. اذكر اسم المنتج أو الخدمة التي تقصدها، ولن أعطيك سعرًا غير مؤكد.'
+      : 'Verified pricing has not been added to this business yet. Tell me the product or service you mean, and I will not give you an unverified price.';
+  }
+
+  if (intent === 'AVAILABILITY_INQUIRY' && !hasKnowledge) {
+    return ar
+      ? 'المخزون أو التوفر غير موثق في بيانات النشاط عندي حاليًا. اذكر المنتج الذي تقصده، ولن أؤكد توفرًا غير موجود في النظام.'
+      : 'Stock or availability is not verified in the business data yet. Tell me which product you mean, and I will not claim availability that is not in the system.';
+  }
+
+  return null;
+}
+
+function failureFallbackReply({ language, intent, business }) {
+  const ar = language === 'ar';
+  if (intent === 'PRICE_INQUIRY') return ar ? 'اذكر اسم المنتج أو الخدمة التي تريد سعرها، وسأتعامل فقط مع السعر الموثق في النظام.' : 'Tell me the product or service whose price you need, and I will use only a verified price from the system.';
+  if (intent === 'AVAILABILITY_INQUIRY') return ar ? 'اذكر اسم المنتج الذي تريد التأكد من توفره، ولن أؤكد مخزونًا غير موثق.' : 'Tell me the product you want to check, and I will not confirm unverified stock.';
+  if (intent === 'APPOINTMENT_REQUEST') return ar ? 'اذكر اليوم والوقت المناسبين لك وتفاصيل الطلب. لن أعتبر الموعد مؤكدًا إلا بعد حفظ نتيجة مؤكدة.' : 'Tell me your preferred day, time, and request details. I will not treat the appointment as confirmed until there is a verified saved outcome.';
+  if (intent === 'ADVERTISING_REQUEST') return ar ? 'أرسل تفاصيل التعاون أو الإعلان والموعد المطلوب، وسأرتب المعلومات دون افتراض موافقة أو سعر.' : 'Send the collaboration or advertising details and preferred timing. I will organize them without assuming approval or pricing.';
+  if (intent === 'SUPPORT_REQUEST') return ar ? 'أرسل تفاصيل المشكلة ورقم الطلب إن وجد، وسأتعامل مع المعلومات المتاحة دون افتراض نتيجة غير مؤكدة.' : 'Send the issue details and an order number if available. I will work only with the information that is actually available.';
+  if (business.business_type === 'store') return ar ? 'وصلت رسالتك. اذكر المنتج أو الطلب أو المشكلة التي تريد المساعدة فيها، وسأعطيك فقط المعلومات الموثقة.' : 'I received your message. Tell me the product, order, or issue you need help with, and I will use only verified information.';
+  return ar ? 'وصلت رسالتك. اذكر المطلوب بشكل محدد وسأكمل معك بالمعلومات الموثقة فقط.' : 'I received your message. Tell me exactly what you need and I will continue using verified information only.';
+}
+
+async function persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply }) {
+  const [aiRows] = await Promise.all([
+    rest(accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
+      method: 'POST',
+      headers: { prefer: 'return=representation' },
+      body: JSON.stringify({ business_id: businessId, conversation_id: conversationId, sender_type: 'ai', body: reply, intent, simulated: false }),
+    }, 'AI_MESSAGE_PERSIST_FAILED'),
+    rest(accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
+      method: 'PATCH',
+      headers: { prefer: 'return=minimal' },
+      body: JSON.stringify({ state: 'waiting_customer', updated_at: new Date().toISOString() }),
+    }, 'CONVERSATION_STATE_UPDATE_FAILED'),
+  ]);
+  return aiRows?.[0] || null;
 }
 
 export default async function handler(req, res) {
@@ -104,6 +193,7 @@ export default async function handler(req, res) {
     if (!business) return json(res, 404, { ok: false, error: 'BUSINESS_NOT_FOUND' });
     if (mayReply !== true) return json(res, 409, { ok: false, error: 'AI_REPLY_BLOCKED_BY_HANDOFF_STATE' });
 
+    const language = languageFor(message, business.locale);
     const intent = intentFor(business.business_type, message);
     const customerRows = await rest(accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
       method: 'POST',
@@ -112,47 +202,58 @@ export default async function handler(req, res) {
     }, 'CUSTOMER_MESSAGE_PERSIST_FAILED');
     const customerMessage = customerRows?.[0] || null;
 
+    const fastReply = instantGroundedReply({ message, language, intent, business, knowledge });
+    if (fastReply) {
+      const finalStarted = Date.now();
+      const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fastReply });
+      const finalMs = Date.now() - finalStarted;
+      const totalMs = Date.now() - started;
+      console.info('pilot_chat_fast_path', { intent, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
+      return json(res, 200, {
+        ok: true,
+        provider: 'pilot-local-fastpath',
+        model: 'deterministic-v1',
+        fast_path: true,
+        customer_message: customerMessage,
+        ai_message: aiMessage,
+        timing: { lookup_ms: lookupMs, ai_ms: 0, final_ms: finalMs, total_ms: totalMs },
+        external_side_effects: false,
+      });
+    }
+
     const aiStarted = Date.now();
     const aiResult = await generatePilotAiReply({
       project: projectFor(business.business_type),
       message,
-      language: languageFor(message, business.locale),
+      language,
       businessContext: buildContext(business, knowledge),
       history: Array.isArray(historyDesc) ? historyDesc.slice().reverse() : [],
     });
     const aiMs = Date.now() - aiStarted;
 
     if (!aiResult.ok) {
-      await rest(accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
-        method: 'PATCH',
-        headers: { prefer: 'return=minimal' },
-        body: JSON.stringify({ state: 'action_required', updated_at: new Date().toISOString() }),
-      }, 'CONVERSATION_STATE_UPDATE_FAILED').catch(() => null);
-      console.warn('pilot_chat_ai_failed', { state: aiResult.state, error: aiResult.error, model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, total_ms: Date.now() - started });
-      return json(res, 503, {
-        ok: false,
-        error: aiResult.error || aiResult.state || 'AI_PROVIDER_FAILED',
-        ai_state: aiResult.state,
-        retryable: true,
-        customer_message_persisted: true,
+      const fallbackReply = failureFallbackReply({ language, intent, business });
+      const finalStarted = Date.now();
+      const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fallbackReply });
+      const finalMs = Date.now() - finalStarted;
+      const totalMs = Date.now() - started;
+      console.warn('pilot_chat_ai_degraded', { state: aiResult.state, error: aiResult.error, model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
+      return json(res, 200, {
+        ok: true,
+        provider: 'pilot-local-fallback',
+        model: 'deterministic-v1',
+        degraded: true,
+        upstream_ai_state: aiResult.state,
+        upstream_ai_error: aiResult.error || null,
         customer_message: customerMessage,
-        timing: { lookup_ms: lookupMs, ai_ms: aiMs, total_ms: Date.now() - started },
+        ai_message: aiMessage,
+        timing: { lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs },
+        external_side_effects: false,
       });
     }
 
     const finalStarted = Date.now();
-    const [aiRows] = await Promise.all([
-      rest(accessToken, 'pilot_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at', {
-        method: 'POST',
-        headers: { prefer: 'return=representation' },
-        body: JSON.stringify({ business_id: businessId, conversation_id: conversationId, sender_type: 'ai', body: aiResult.reply, intent, simulated: false }),
-      }, 'AI_MESSAGE_PERSIST_FAILED'),
-      rest(accessToken, `pilot_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
-        method: 'PATCH',
-        headers: { prefer: 'return=minimal' },
-        body: JSON.stringify({ state: 'waiting_customer', updated_at: new Date().toISOString() }),
-      }, 'CONVERSATION_STATE_UPDATE_FAILED'),
-    ]);
+    const aiMessage = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: aiResult.reply });
     const finalMs = Date.now() - finalStarted;
     const totalMs = Date.now() - started;
 
@@ -162,7 +263,7 @@ export default async function handler(req, res) {
       provider: aiResult.provider,
       model: aiResult.model,
       customer_message: customerMessage,
-      ai_message: aiRows?.[0] || null,
+      ai_message: aiMessage,
       timing: { lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs },
       external_side_effects: false,
     });
