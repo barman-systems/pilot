@@ -1,0 +1,31 @@
+name: PILOT CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, pilot/isolated-export]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Run PILOT tests
+        run: npm test
+      - name: Reject committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git --exclude='ci.yml' '(sk_live_|sb_secret_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|VERCEL_TOKEN[[:space:]]*=|PILOT_WHATSAPP_APP_SECRET[[:space:]]*=)' .; then
+            echo 'Potential secret material detected.'
+            exit 1
+          fi
+          echo 'Secret pattern scan PASS'
