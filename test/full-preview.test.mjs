@@ -14,7 +14,7 @@ test('main DABBIR interface retains complete product navigation', () => {
 });
 
 test('root workspace is authenticated and operational instead of hard-coded preview data', () => {
-  assert.match(html, /\/api\/pilot-runtime/);
+  assert.match(html, /\/api\/dabbir-runtime/);
   assert.match(html, /\/api\/auth\/login/);
   assert.match(html, /action:'create_business'/);
   assert.match(html, /action:'start_conversation'/);

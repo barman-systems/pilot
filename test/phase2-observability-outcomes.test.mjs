@@ -10,7 +10,7 @@ const read = async path => readFile(new URL(path, root), 'utf8');
 
 const migration = await read('db/pilot_phase2_operational_outcomes_v3.sql');
 const translation = await read('api/translate.js');
-const whatsapp = await read('api/pilot-whatsapp-webhook.js');
+const whatsapp = await read('api/dabbir-whatsapp-webhook.js');
 const appSecretEnv = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
 const projectEnv = ['DABBIR', 'PROJECT'].join('_');
 

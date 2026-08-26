@@ -21,7 +21,7 @@ test('production AI is reached only through authenticated tenant runtime', () =>
 
 test('unified conversation uses the real persisted DABBIR runtime', () => {
   assert.match(html, /action:'send_message'/);
-  assert.match(html, /\/api\/pilot-runtime/);
+  assert.match(html, /\/api\/dabbir-runtime/);
   assert.match(html, /await loadRuntime\(workspace\.business\.id,selectedConversationId\)/);
   assert.doesNotMatch(html, /synthetic:true/);
 });
@@ -33,7 +33,7 @@ test('root route serves the authoritative DABBIR interface with recovery enhance
   assert.equal(config.functions['api/app-recovery.js'].includeFiles, 'index.html');
   assert.match(app, /x-pilot-interface/);
   assert.doesNotMatch(app, /source\.replace/);
-  assert.doesNotMatch(app, /pilot-ai/);
+  assert.doesNotMatch(app, /dabbir-ai/);
   assert.match(recoveryShell, /import appHandler from '\.\/app\.js'/);
   assert.match(recoveryShell, /\/api\/auth\/recovery-ui/);
   assert.match(recoveryUi, /نسيت كلمة المرور/);

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { classifyClinicMessage, classifyCelebrityMessage } from '../api/dabbir-runtime.js';
 
 const root = new URL('../', import.meta.url);
-const runtimeSource = await readFile(new URL('api/pilot-runtime.js', root), 'utf8');
+const runtimeSource = await readFile(new URL('api/dabbir-runtime.js', root), 'utf8');
 const aiSource = await readFile(new URL('api/_ai-core.js', root), 'utf8');
 
 test('clinic appointment intent', () => {
