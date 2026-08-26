@@ -29,6 +29,7 @@ async function readData(response,fallback){
 
 const rest=(token,path,fallback)=>supabaseRest(path,token).then(r=>readData(r,fallback));
 const rpc=(token,name,params,fallback)=>supabaseRpc(name,token,params).then(r=>readData(r,fallback));
+const write=(token,path,options,fallback)=>supabaseRest(path,token,options).then(r=>readData(r,fallback));
 
 async function authenticatedContext(req,res){
   const token=accessTokenFromRequest(req);
@@ -51,11 +52,12 @@ async function handleGet(req,res,context){
   if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
   const businessId=membership.business_id;
 
-  const [products,inventory,orders,customers]=await Promise.all([
+  const [products,inventory,orders,customers,services]=await Promise.all([
     rest(context.token,`dabbir_products?select=id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
     rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=200`,'INVENTORY_LOOKUP_FAILED'),
     rest(context.token,`dabbir_orders?select=id,customer_id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
     rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
+    rest(context.token,`dabbir_services?select=id,name,duration_minutes,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'SERVICES_LOOKUP_FAILED'),
   ]);
 
   const inventoryByProduct=new Map((inventory||[]).map(row=>[row.product_id,row]));
@@ -68,6 +70,11 @@ async function handleGet(req,res,context){
     return {...product,quantity,reserved,available,low_stock:Boolean(product.active)&&available<=5,inventory_updated_at:stock.updated_at||null};
   });
 
+  const serviceRows=(services||[]).map(service=>({
+    ...service,
+    duration_minutes:Math.max(1,Math.trunc(number(service.duration_minutes)||1)),
+  }));
+
   const realOrders=(orders||[]).filter(order=>order.simulated===false);
   const recognizedOrders=realOrders.filter(order=>['confirmed','completed'].includes(String(order.status||'').toLowerCase()));
   const orderRows=(orders||[]).map(order=>({...order,customer_name:customerById.get(order.customer_id)||null}));
@@ -79,6 +86,7 @@ async function handleGet(req,res,context){
     can_manage:['owner','admin'].includes(String(membership.role||'').toLowerCase()),
     metrics:{
       active_products:productRows.filter(product=>product.active).length,
+      active_services:serviceRows.filter(service=>service.active).length,
       inventory_units:productRows.reduce((sum,product)=>sum+product.quantity,0),
       available_units:productRows.reduce((sum,product)=>sum+product.available,0),
       low_stock_products:productRows.filter(product=>product.low_stock).length,
@@ -87,9 +95,10 @@ async function handleGet(req,res,context){
       simulated_orders:(orders||[]).filter(order=>order.simulated!==false).length,
     },
     products:productRows,
+    services:serviceRows,
     orders:orderRows,
     low_stock:productRows.filter(product=>product.low_stock),
-    truth:{recognized_sales_statuses:['confirmed','completed'],simulated_orders_excluded_from_sales:true},
+    truth:{recognized_sales_statuses:['confirmed','completed'],simulated_orders_excluded_from_sales:true,services_source:'dabbir_services_live_tenant_data'},
   });
 }
 
@@ -120,6 +129,30 @@ async function handlePost(req,res,context){
     const status=clean(body.status,20).toLowerCase();
     if(!orderId||!['draft','reserved','confirmed','cancelled','completed'].includes(status))return json(res,400,{ok:false,error:'INVALID_ORDER_STATUS'});
     result=await rpc(context.token,'dabbir_owner_update_order_status',{p_business_id:businessId,p_order_id:orderId,p_status:status},'ORDER_STATUS_UPDATE_FAILED');
+  }else if(action==='create_service'){
+    const name=clean(body.name,160);
+    const durationMinutes=Math.trunc(number(body.duration_minutes));
+    if(!name||durationMinutes<1||durationMinutes>1440)return json(res,400,{ok:false,error:'INVALID_SERVICE_INPUT'});
+    const rows=await write(context.token,'dabbir_services?select=id,name,duration_minutes,active,metadata',{
+      method:'POST',
+      headers:{prefer:'return=representation'},
+      body:JSON.stringify({business_id:businessId,name,duration_minutes:durationMinutes,active:true,metadata:{source:'dabbir_owner_operations'}}),
+    },'SERVICE_CREATE_FAILED');
+    result=rows?.[0]||null;
+    if(!result)return json(res,500,{ok:false,error:'SERVICE_CREATE_FAILED'});
+  }else if(action==='update_service'){
+    const serviceId=safeId(body.service_id);
+    const name=clean(body.name,160);
+    const durationMinutes=Math.trunc(number(body.duration_minutes));
+    const active=body.active!==false;
+    if(!serviceId||!name||durationMinutes<1||durationMinutes>1440)return json(res,400,{ok:false,error:'INVALID_SERVICE_INPUT'});
+    const rows=await write(context.token,`dabbir_services?business_id=eq.${businessId}&id=eq.${serviceId}&select=id,name,duration_minutes,active,metadata`,{
+      method:'PATCH',
+      headers:{prefer:'return=representation'},
+      body:JSON.stringify({name,duration_minutes:durationMinutes,active,metadata:{source:'dabbir_owner_operations'}}),
+    },'SERVICE_UPDATE_FAILED');
+    result=rows?.[0]||null;
+    if(!result)return json(res,404,{ok:false,error:'SERVICE_NOT_FOUND'});
   }else{
     return json(res,400,{ok:false,error:'UNSUPPORTED_OWNER_OPERATION'});
   }
