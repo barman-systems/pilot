@@ -11,6 +11,21 @@
     "verified_import_ci_run_id": 32922639169,
     "verified_import_ci_status": "PASS"
   },
+  "deployment": {
+    "status": "ACTIVE_DEDICATED_VERCEL_PROJECT",
+    "platform": "VERCEL",
+    "project_name": "pilot",
+    "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
+    "source_repository": "barman-systems/pilot",
+    "source_branch": "main",
+    "root_directory": "./",
+    "verified_deployment_id": "dpl_5C2PjyZ79b5dUkBSiAWzrsRd7jx4",
+    "verified_deployment_state": "READY",
+    "verified_source_commit": "6a75246eab955a3e43a97c7ecd5f75b508b98dbe",
+    "production_domain": "pilot-taupe.vercel.app",
+    "production_runtime_policy": "FAIL_CLOSED_PREVIEW_ONLY",
+    "environment_secrets_shared_with_barman": false
+  },
   "rules": {
     "source_code_imports_across_boundary": false,
     "shared_raw_secrets": false,
