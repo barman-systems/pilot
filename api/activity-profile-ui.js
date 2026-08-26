@@ -5,9 +5,9 @@ const script=String.raw`(()=>{
   const ar=()=>document.documentElement.lang!=='en';
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const copy=()=>ar()?{
-    operational:'تشغيلي',activityTasks:'مهام خاصة بهذا النشاط',activityDesc:'دَبِّر يغيّر الأولويات والوحدات حسب نوع نشاطك، وليس بنفس القالب لكل الأعمال.',pending:'مطلوبة',progress:'قيد التنفيذ',done:'مكتملة',complete:'تم',reopen:'إعادة فتح',priority:'الأولوية',followups:'المتابعات',handoffs:'التدخل البشري',loading:'جارٍ تحميل مهام النشاط…',empty:'لا توجد مهام نشاط مفتوحة.',customersDesc:'السجلات المرتبطة بهذا النوع من النشاط.',appointmentsDesc:'المواعيد والجدول التشغيلي لهذا النشاط.',tasksDesc:'المهام التشغيلية الخاصة بنوع نشاطك، إضافة إلى المتابعات والتدخلات البشرية.',dashboardDesc:'لوحة تشغيل مخصصة لهذا النوع من النشاط من بياناتك الفعلية.'
+    operational:'تشغيلي',activityTasks:'مهام خاصة بهذا النشاط',activityDesc:'دَبِّر يغيّر الأولويات والوحدات حسب نوع نشاطك، وليس بنفس القالب لكل الأعمال.',pending:'مطلوبة',progress:'قيد التنفيذ',done:'مكتملة',complete:'تم',reopen:'إعادة فتح',priority:'الأولوية',followups:'المتابعات',handoffs:'التدخل البشري',loading:'جارٍ تحميل مهام النشاط…',empty:'لا توجد مهام نشاط مفتوحة.',customersDesc:'السجلات المرتبطة بهذا النوع من النشاط.',appointmentsDesc:'المواعيد والجدول التشغيلي لهذا النشاط.',tasksDesc:'المهام التشغيلية الخاصة بنوع نشاطك، إضافة إلى المتابعات والتدخلات البشرية.',dashboardDesc:'لوحة تشغيل مخصصة لهذا النوع من النشاط من بياناتك الفعلية.',conversationsDesc:'الاستفسارات والمحادثات المرتبطة بهذا النوع من النشاط.'
   }:{
-    operational:'Operational',activityTasks:'Activity-specific tasks',activityDesc:'DABBIR changes priorities and modules by business type instead of using one template for every business.',pending:'Pending',progress:'In progress',done:'Done',complete:'Done',reopen:'Reopen',priority:'Priority',followups:'Follow-ups',handoffs:'Human intervention',loading:'Loading activity tasks…',empty:'No open activity tasks.',customersDesc:'Records relevant to this business type.',appointmentsDesc:'The operational schedule for this business type.',tasksDesc:'Operational tasks for this business type, plus follow-ups and human handoffs.',dashboardDesc:'An operations dashboard tailored to this business type using live data.'
+    operational:'Operational',activityTasks:'Activity-specific tasks',activityDesc:'DABBIR changes priorities and modules by business type instead of using one template for every business.',pending:'Pending',progress:'In progress',done:'Done',complete:'Done',reopen:'Reopen',priority:'Priority',followups:'Follow-ups',handoffs:'Human intervention',loading:'Loading activity tasks…',empty:'No open activity tasks.',customersDesc:'Records relevant to this business type.',appointmentsDesc:'The operational schedule for this business type.',tasksDesc:'Operational tasks for this business type, plus follow-ups and human handoffs.',dashboardDesc:'An operations dashboard tailored to this business type using live data.',conversationsDesc:'Inquiries and conversations relevant to this business type.'
   };
 
   const style=document.createElement('style');
@@ -26,11 +26,34 @@ const script=String.raw`(()=>{
     return card;
   }
 
+  function patchDictionary(p){
+    if(typeof D==='undefined'||!D.ar||!D.en)return;
+    D.ar.conversations=p.conversation_ar;D.en.conversations=p.conversation_en;
+    D.ar.convTitle=p.conversation_ar;D.en.convTitle=p.conversation_en;
+    D.ar.customers=p.customer_ar;D.en.customers=p.customer_en;
+    D.ar.customer=p.customer_ar;D.en.customer=p.customer_en;
+    D.ar.customersCount=p.customer_ar;D.en.customersCount=p.customer_en;
+    D.ar.custTitle=p.customer_ar;D.en.custTitle=p.customer_en;
+    D.ar.tasks=p.tasks_ar;D.en.tasks=p.tasks_en;
+    D.ar.tasksTitle=p.tasks_ar;D.en.tasksTitle=p.tasks_en;
+    D.ar.dashTitle=p.dashboard_ar;D.en.dashTitle=p.dashboard_en;
+    if(p.show_appointments){
+      D.ar.appointments=p.appointments_ar;D.en.appointments=p.appointments_en;
+      D.ar.apptTitle=p.appointments_ar;D.en.apptTitle=p.appointments_en;
+      D.ar.todayAppointments=p.appointments_ar;D.en.todayAppointments=p.appointments_en;
+      D.ar.newAppointment='إضافة '+p.appointments_ar;D.en.newAppointment='Add '+String(p.appointments_en||'appointment').toLowerCase();
+    }else{
+      D.ar.todayAppointments='المتابعات';D.en.todayAppointments='Follow-ups';
+    }
+  }
+
   function applyProfile(){
     if(!state?.profile||!workspace?.business)return;
     const p=state.profile,t=copy();
+    patchDictionary(p);
     document.body.dataset.dabbirActivity=state.business_type;
     const activityName=ar()?p.name_ar:p.name_en;
+    const conversationLabel=ar()?p.conversation_ar:p.conversation_en;
     const customerLabel=ar()?p.customer_ar:p.customer_en;
     const appointmentLabel=ar()?p.appointments_ar:p.appointments_en;
     const taskLabel=ar()?p.tasks_ar:p.tasks_en;
@@ -39,12 +62,15 @@ const script=String.raw`(()=>{
     setText('#workspaceState',activityName+' • '+t.operational);
     setText('#dashTitle',dashboardLabel);
     setText('#dashDesc',t.dashboardDesc);
+    setText('#convTitle',conversationLabel);
+    setText('#convDesc',t.conversationsDesc);
     setText('#tasksTitle',taskLabel);
     setText('#tasksDesc',t.tasksDesc);
     setText('#custTitle',customerLabel);
     setText('#custDesc',t.customersDesc);
     setText('#handoffTitle',t.handoffs);
     setText('#followupsTitle',t.followups);
+    setLabel('conversations',conversationLabel);
     setLabel('customers',customerLabel);
     setLabel('tasks',taskLabel);
 
@@ -59,6 +85,11 @@ const script=String.raw`(()=>{
     const serviceNav=q('#dabbirServicesNav');
     if(serviceNav)serviceNav.style.display=p.show_services?'':'none';
     if(!p.show_services&&!p.show_operations&&current==='operations'&&typeof showScreen==='function')showScreen('dashboard');
+
+    const cards=qa('#dashCards .card.metric');
+    if(cards[0]?.querySelector('span'))cards[0].querySelector('span').textContent=conversationLabel;
+    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');
+    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;
 
     let identity=q('#activityIdentity');
     if(!identity&&q('#screen-dashboard .hero>div')){
@@ -108,19 +139,19 @@ const script=String.raw`(()=>{
     finally{loading=false;renderTasks()}
   }
 
-  const observer=new MutationObserver(()=>{if(workspace?.business?.id){applyProfile();load(false)}});
+  const observer=new MutationObserver(()=>{if(workspace?.business?.id){setTimeout(applyProfile,0);load(false)}});
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   const baseSetLanguage=typeof setLanguage==='function'?setLanguage:null;
   if(baseSetLanguage)setLanguage=function(next){const result=baseSetLanguage(next);setTimeout(applyProfile,0);return result};
   setInterval(()=>{if(workspace?.business?.id&&workspace.business.id!==lastBusiness)load(true)},1200);
   setTimeout(()=>load(false),500);
-  window.__dabbirActivityProfile={refresh:()=>load(true),version:'activity-profile-v1'};
+  window.__dabbirActivityProfile={refresh:()=>load(true),version:'activity-profile-v2'};
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-activity-profile-ui','v1');
+  res.setHeader('x-dabbir-activity-profile-ui','v2');
   return res.status(200).send(script);
 }
