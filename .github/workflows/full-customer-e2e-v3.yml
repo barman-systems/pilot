@@ -1,0 +1,36 @@
+name: PILOT Full Customer E2E v3
+
+on:
+  push:
+    branches:
+      - test/full-customer-e2e
+    paths:
+      - 'test/full-customer-e2e-v3.remote.mjs'
+      - '.github/workflows/full-customer-e2e-v3.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  full-customer-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run credential-safe full customer journey
+        run: node test/full-customer-e2e-v3.remote.mjs
+
+      - name: Upload safe E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilot-full-customer-e2e-v3-report
+          path: e2e-report-v3.json
+          if-no-files-found: warn
