@@ -8,9 +8,32 @@ const script = String.raw`(()=>{
     '.logo,.dabbirRecoveryLogo{background-image:url("/api/dabbir-approved-icon")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:contain!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}',
     '.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}',
     '#loading{font-size:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important;background-image:url("/api/dabbir-approved-icon")!important;background-repeat:no-repeat!important;background-position:center!important;background-size:96px 96px!important}',
-    '@media(max-width:700px){#loading{background-size:88px 88px!important}}'
+    '.dabbirMobileBrand{display:none!important}',
+    '@media(max-width:700px){#loading{background-size:88px 88px!important}body.dabbirAppActive>.dabbirMobileBrand{display:flex!important;position:fixed;top:11px;inset-inline-start:66px;z-index:19;align-items:center;gap:8px;height:44px;pointer-events:none}.dabbirMobileBrand .logo{width:36px!important;height:36px!important;border-radius:10px!important}.dabbirMobileBrand b{font-size:12px!important;letter-spacing:.02em}.dabbirMobileBrand small{display:none!important}}'
   ].join('');
   document.head.appendChild(style);
+
+  function installMobileBrand(){
+    if(!document.body||document.body.querySelector(':scope > .dabbirMobileBrand')) return;
+    const mobileBrand=document.createElement('div');
+    mobileBrand.className='brand dabbirMobileBrand';
+    mobileBrand.setAttribute('aria-label','DABBIR');
+    mobileBrand.innerHTML='<div class="logo">DABBIR</div><div><b>DABBIR</b></div>';
+    document.body.prepend(mobileBrand);
+  }
+
+  function syncAppActive(){
+    const shell=document.querySelector('#appShell');
+    const active=!!shell&&!shell.classList.contains('hidden');
+    document.body?.classList.toggle('dabbirAppActive',active);
+  }
+
+  installMobileBrand();
+  syncAppActive();
+  const appShell=document.querySelector('#appShell');
+  if(appShell){
+    new MutationObserver(syncAppActive).observe(appShell,{attributes:true,attributeFilter:['class']});
+  }
 
   const loading=document.querySelector('#loading');
   if(loading){
@@ -124,12 +147,12 @@ const script = String.raw`(()=>{
     const renderBeforeBrandChatFix=renderAll;
     renderAll=function(){
       const result=renderBeforeBrandChatFix.apply(this,arguments);
-      setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats()},30);
+      setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats();syncAppActive()},30);
       return result;
     };
   }
 
-  setTimeout(()=>{installIdempotentConversationStart();repairActionRequiredChats()},500);
+  setTimeout(()=>{installMobileBrand();installIdempotentConversationStart();repairActionRequiredChats();syncAppActive()},500);
 })();`;
 
 export default function handler(req,res){
