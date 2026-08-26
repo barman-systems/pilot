@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'test/ai-full-customer-journey-oidc.mjs'
+      - 'test/ai-full-customer-journey-v2.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -36,7 +36,7 @@ jobs:
   full-customer-journey:
     name: Owner + customer + employee + AI + operations
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
@@ -57,7 +57,7 @@ jobs:
           npx playwright install --with-deps webkit
 
       - name: Run AI full customer journey against production
-        run: node test/ai-full-customer-journey-oidc.mjs
+        run: node test/ai-full-customer-journey-v2.mjs
 
       - name: Publish journey summary
         if: always()
