@@ -83,9 +83,9 @@ export function classifyPilotEvent(event, project = 'generic') {
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
-  const verifyToken = process.env.PILOT_WHATSAPP_VERIFY_TOKEN || '';
-  const appSecret = process.env.PILOT_WHATSAPP_APP_SECRET || '';
-  const project = String(process.env.PILOT_PROJECT || 'generic').toLowerCase();
+  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || process.env.PILOT_WHATSAPP_VERIFY_TOKEN || '';
+  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || process.env.PILOT_WHATSAPP_APP_SECRET || '';
+  const project = String(process.env.DABBIR_PROJECT || process.env.PILOT_PROJECT || 'generic').toLowerCase();
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
