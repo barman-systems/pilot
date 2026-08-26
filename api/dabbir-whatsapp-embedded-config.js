@@ -1,18 +1,29 @@
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
 import { embeddedPlatformConfig, loadBusinessConnection, ownerContext } from './_whatsapp-embedded-core.js';
 
+function readiness(platform) {
+  return {
+    app_id_configured: Boolean(platform.appId),
+    app_secret_configured: Boolean(platform.appSecret),
+    embedded_config_id_configured: Boolean(platform.configId),
+    encryption_configured: Boolean(platform.encryptionSecret),
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
 
   const platform = embeddedPlatformConfig();
   const accessToken = accessTokenFromRequest(req);
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
+  const platformReadiness = readiness(platform);
 
   if (!user) {
     return json(res, 200, {
       ok: true,
       auth_required: true,
       platform_ready: platform.ready,
+      platform_readiness: platformReadiness,
       graph_version: platform.graphVersion,
       values_exposed: false,
     });
@@ -28,6 +39,7 @@ export default async function handler(req, res) {
       ok: true,
       auth_required: false,
       platform_ready: platform.ready,
+      platform_readiness: platformReadiness,
       app_id: platform.ready ? platform.appId : null,
       config_id: platform.ready ? platform.configId : null,
       graph_version: platform.graphVersion,
