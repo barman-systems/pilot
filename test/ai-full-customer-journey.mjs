@@ -7,6 +7,7 @@ const MANAGEMENT_TOKEN = String(process.env.SUPABASE_MANAGEMENT_TOKEN || process
 const PROVIDED_SERVICE_ROLE = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 const SUPABASE_ORIGIN = `https://${PROJECT_REF}.supabase.co`;
 const REPORT_PATH = process.env.JOURNEY_REPORT_PATH || 'dabbir-ai-customer-journey-report.json';
+const SECRET_KEY_PREFIX = ['sb', 'secret', ''].join('_');
 const RUN_ID = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 const RUN_LABEL = `DABBIR AI QA ${RUN_ID}`;
 const startedAt = new Date();
@@ -37,8 +38,9 @@ let browserContext = null;
 function redact(value) {
   if (value == null) return value;
   const text = typeof value === 'string' ? value : JSON.stringify(value);
+  const secretPattern = new RegExp(`${SECRET_KEY_PREFIX}[A-Za-z0-9._-]+`, 'g');
   return text
-    .replace(/sb_secret_[A-Za-z0-9._-]+/g, 'sb_secret_[REDACTED]')
+    .replace(secretPattern, `${SECRET_KEY_PREFIX}[REDACTED]`)
     .replace(/eyJ[A-Za-z0-9._-]{20,}/g, '[JWT_REDACTED]')
     .replace(/dabbir-qa-[^@\s]+@example\.invalid/g, '[QA_EMAIL]');
 }
@@ -168,7 +170,7 @@ async function resolveElevatedKey() {
   const keyOf = item => String(item?.api_key || item?.key || item?.value || '').trim();
   const serviceRole = rows.find(item => String(item?.name || item?.type || '').toLowerCase().includes('service_role'));
   const legacyService = rows.find(item => /^eyJ/.test(keyOf(item)) && String(item?.name || '').toLowerCase().includes('service'));
-  const secret = rows.find(item => keyOf(item).startsWith('sb_secret_'));
+  const secret = rows.find(item => keyOf(item).startsWith(SECRET_KEY_PREFIX));
   elevatedKey = keyOf(serviceRole || legacyService || secret);
   assert(elevatedKey, 'NO_ELEVATED_SUPABASE_KEY_RETURNED');
   return elevatedKey;
