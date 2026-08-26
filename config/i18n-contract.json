@@ -1,0 +1,46 @@
+{
+  "status": "MANDATORY",
+  "product": "PILOT",
+  "supported_locales": ["ar", "en"],
+  "default_locale": "ar",
+  "fallback_locale": "en",
+  "direction": {
+    "ar": "rtl",
+    "en": "ltr"
+  },
+  "scope": [
+    "web",
+    "app",
+    "authentication",
+    "onboarding",
+    "dashboard",
+    "navigation",
+    "conversations",
+    "conversation_translation",
+    "appointments",
+    "tasks",
+    "notifications",
+    "settings",
+    "help",
+    "errors",
+    "empty_states",
+    "status_messages",
+    "legal_and_consent",
+    "customer_facing_messages"
+  ],
+  "conversation_translation": {
+    "one_tap_full_conversation": true,
+    "single_message": true,
+    "preserve_original": true,
+    "automatic_source_language_detection": true,
+    "targets": ["ar", "en"]
+  },
+  "acceptance_rules": {
+    "no_single_language_ui": true,
+    "all_user_facing_copy_requires_ar_and_en": true,
+    "all_new_features_require_both_locales_before_release": true,
+    "rtl_ltr_required": true,
+    "language_switch_required": true,
+    "language_preference_persisted": true
+  }
+}
