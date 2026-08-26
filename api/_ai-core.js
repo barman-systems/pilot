@@ -1,7 +1,7 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
-const DEFAULT_GATEWAY_MODEL = 'inclusionai/ling-3.0-tiny-free';
+const DEFAULT_GATEWAY_MODEL = 'poolside/laguna-s-2.1-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['pilot_clinics', 'pilot_celebrities', 'pilot_businesses']);
 
@@ -146,27 +146,21 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 6000, fallbackModels = [] }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 6000 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const requestBody = {
-      model,
-      messages,
-      temperature: 0.15,
-      max_tokens: 180,
-      stream: false,
-    };
-    if (fallbackModels.length) {
-      requestBody.models = fallbackModels;
-      requestBody.providerOptions = { gateway: { sort: 'ttft' } };
-    }
-
     const response = await fetchImpl(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'content-type': 'application/json', authorization: `Bearer ${credential}` },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.15,
+        max_tokens: 180,
+        stream: false,
+      }),
     });
     const payload = await response.json().catch(() => ({}));
     return { response, payload };
@@ -175,29 +169,34 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
   }
 }
 
-async function callGatewayNativeFallback({ credential, primaryModel, messages, fetchImpl }) {
-  const fallbacks = FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel);
-  try {
-    const { response, payload } = await callOpenAiCompatible({
-      endpoint: GATEWAY_ENDPOINT,
-      credential,
-      model: primaryModel,
-      messages,
-      fetchImpl,
-      timeoutMs: 7500,
-      fallbackModels: fallbacks,
-    });
-    const servedModel = String(payload?.model || primaryModel);
-    if (response.ok) return { ok: true, payload, model: servedModel };
-    return { ok: false, error: `gateway_http_${response.status}`, status: response.status, model: servedModel };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error',
-      status: 502,
-      model: primaryModel,
-    };
+async function callGatewayMeasuredFallback({ credential, primaryModel, messages, fetchImpl }) {
+  const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
+  let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
+
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    try {
+      const { response, payload } = await callOpenAiCompatible({
+        endpoint: GATEWAY_ENDPOINT,
+        credential,
+        model,
+        messages,
+        fetchImpl,
+        timeoutMs: index === 0 ? 4000 : 6500,
+      });
+      const servedModel = String(payload?.model || model);
+      if (response.ok) return { ok: true, payload, model: servedModel };
+      last = { error: `gateway_http_${response.status}`, status: response.status, model: servedModel };
+    } catch (error) {
+      last = {
+        error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error',
+        status: 502,
+        model,
+      };
+    }
   }
+
+  return { ok: false, ...last };
 }
 
 export async function generatePilotAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter } = {}) {
@@ -219,7 +218,7 @@ export async function generatePilotAiReply({ project, message, language = 'auto'
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
 
-    const result = await callGatewayNativeFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
+    const result = await callGatewayMeasuredFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
     if (!result.ok) {
       return {
         ok: false,
