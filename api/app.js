@@ -39,6 +39,85 @@ const businessAdaptiveUi = String.raw`
 })();
 </script>`;
 
+const interfacePerformanceUi = String.raw`
+<style>
+button,a,[data-screen],[data-cid]{touch-action:manipulation}
+.screen.active{contain:layout paint style}
+.card,.chatList,.chatPanel,.table,.integration,.item{contain:layout paint}
+.messages{-webkit-overflow-scrolling:touch;overscroll-behavior:contain;contain:layout paint}
+.side{will-change:transform}
+@media(max-width:700px){
+  html,body{background:#08090a!important}
+  .top{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:#08090af7!important}
+  .authCard,.side,.modalBox{box-shadow:none!important}
+  .side{transition:transform .14s ease-out!important}
+  .content{contain:layout style}
+  .card,.chatList,.chatPanel,.table,.integration{box-shadow:none!important}
+}
+</style>
+<script>
+(()=>{
+  function applyFastBusinessProfile(){
+    if(!workspace?.business) return;
+    const isStore=String(workspace.business.business_type||'').toLowerCase()==='store';
+    document.body.classList.toggle('dabbir-store',isStore);
+    document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});
+    document.querySelector('#bottomNav')?.classList.toggle('dabbir-store-nav',isStore);
+    const state=document.querySelector('#workspaceState');
+    if(state) state.textContent=isStore?(lang==='ar'?'متجر • تشغيلي':'Store • Operational'):T().operational;
+  }
+
+  function renderShellFast(){
+    if(!workspace?.business) return;
+    const name=document.querySelector('#workspaceName');
+    const page=document.querySelector('#pageTitle');
+    if(name) name.textContent=workspace.business.name;
+    if(page) page.textContent=T()[current]||T().dashboard;
+    applyFastBusinessProfile();
+  }
+
+  function renderCurrentFast(){
+    if(!workspace?.business) return;
+    if(current==='dashboard') renderDashboard();
+    else if(current==='conversations') renderChats();
+    else if(current==='appointments') renderAppointments();
+    else if(current==='customers') renderCustomers();
+    else if(current==='tasks'||current==='automations') renderTasks();
+    else if(current==='analytics') renderAnalytics();
+    else if(current==='integrations') renderIntegrations();
+    else if(current==='notifications') renderNotices();
+    else if(current==='settings') renderSettings();
+  }
+
+  function ensureConversationLoaded(){
+    if(current!=='conversations'||!workspace?.business?.id||!selectedConversationId||workspace.messages_loaded!==false) return;
+    workspace.messages_loaded='loading';
+    loadRuntime(workspace.business.id,selectedConversationId).catch(()=>{if(workspace)workspace.messages_loaded=false});
+  }
+
+  renderAll=function(){
+    renderShellFast();
+    renderCurrentFast();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(ensureConversationLoaded);
+    else setTimeout(ensureConversationLoaded,0);
+  };
+
+  showScreen=function(name){
+    if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';
+    current=name;
+    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));
+    document.querySelectorAll('[data-screen]').forEach(b=>b.classList.toggle('active',b.dataset.screen===name));
+    const page=document.querySelector('#pageTitle');
+    if(page) page.textContent=T()[name]||name;
+    document.querySelector('#side')?.classList.remove('open');
+    const paint=()=>{renderCurrentFast();applyFastBusinessProfile();ensureConversationLoaded()};
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(paint); else setTimeout(paint,0);
+  };
+
+  window.__dabbirInterfacePerformance='fast-v2';
+})();
+</script>`;
+
 const conversationPerformanceUi = String.raw`
 <style>
 #sendBtn:disabled{opacity:.6;cursor:wait}
@@ -104,18 +183,19 @@ const conversationPerformanceUi = String.raw`
       if(!r.ok||!j.ok){
         localConversationState('action_required');
         renderMessages();
-        renderDashboard();
+        if(current==='dashboard') renderDashboard();
         toast(lang==='ar'?(j.customer_message_persisted?'تم حفظ رسالتك، وتعذر رد AI مؤقتًا':'تعذر إرسال الرسالة'):(j.customer_message_persisted?'Message saved; AI reply is temporarily unavailable':'Message could not be sent'));
         return;
       }
 
       if(j.ai_message) workspace.messages.push(j.ai_message);
       localConversationState('waiting_customer');
+      workspace.messages_loaded=true;
       translations.clear();
       translationMode=false;
       renderMessages();
-      renderDashboard();
-      renderAnalytics();
+      if(current==='dashboard') renderDashboard();
+      if(current==='analytics') renderAnalytics();
     }catch{
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==typingId);
       renderMessages();
@@ -150,11 +230,14 @@ export default function handler(req, res) {
   }
   html = html.replace(legacyTeamLanguageWrite, safeTeamLanguageWrite);
   html = html.replace(legacyTeamLink, '');
-  html = html.replace('</body>', `${businessAdaptiveUi}\n${conversationPerformanceUi}\n</body>`);
+  html = html.replaceAll('/api/dabbir-runtime', '/api/dabbir-runtime-fast');
+  html = html.replace("const {r,j}=await api('/api/dabbir-runtime-fast');if(r.status===401)", "const {r,j}=await api('/api/dabbir-runtime-fast?summary=1');if(r.status===401)");
+  html = html.replace('</body>', `${businessAdaptiveUi}\n${interfacePerformanceUi}\n${conversationPerformanceUi}\n</body>`);
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
   res.setHeader('x-dabbir-interface', 'operational-runtime-v1');
   res.setHeader('x-dabbir-chat-path', 'chat-send-fallback-v3');
+  res.setHeader('x-dabbir-performance', 'interface-fast-v2');
   return res.status(200).send(html);
 }
