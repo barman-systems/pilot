@@ -53,7 +53,8 @@ test('AI runtime is grounded in business data and supports general businesses', 
   assert.match(runtimeSource, /pilot_business_knowledge/);
   assert.match(runtimeSource, /buildBusinessContext/);
   assert.match(runtimeSource, /history/);
-  assert.match(aiSource, /operational-runtime-ai/);
+  assert.match(aiSource, /businessContext/);
+  assert.match(aiSource, /GROUNDED_RUNTIME_RESPONSE/);
 });
 
 test('appointments and followups are persisted through tenant RLS instead of preview-only state', () => {
