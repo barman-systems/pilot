@@ -24,7 +24,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Repair mobile journey selector and stop superseded runs
+      - name: Repair mobile customer journey navigation
         shell: bash
         run: |
           python - <<'PY'
@@ -43,17 +43,9 @@ jobs:
           source = source.replace(old_conversations, new_conversations)
           source = source.replace(old_operations, new_operations)
           test.write_text(source)
-
-          workflow = Path('.github/workflows/dabbir-ai-customer-journey.yml')
-          text = workflow.read_text()
-          assert text.count('cancel-in-progress: false') == 1, 'unexpected concurrency state'
-          text = text.replace('cancel-in-progress: false', 'cancel-in-progress: true')
-          text = text.replace('uses: actions/checkout@v4', 'uses: actions/checkout@v6')
-          text = text.replace('uses: actions/upload-artifact@v4', 'uses: actions/upload-artifact@v6')
-          workflow.write_text(text)
           PY
 
-      - name: Commit verified cleanup
+      - name: Commit verified source repair
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +53,7 @@ jobs:
           git diff --exit-code --quiet && exit 0
           git config user.name 'barman-systems-bot'
           git config user.email 'barman-systems-bot@users.noreply.github.com'
-          git add test/ai-full-customer-journey-v2.mjs .github/workflows/dabbir-ai-customer-journey.yml
-          git commit -m 'fix: repair DABBIR mobile journey and cancel stale runs'
+          git add test/ai-full-customer-journey-v2.mjs
+          git commit -m 'fix: repair DABBIR mobile customer journey navigation'
           git pull --rebase origin main
           git push origin HEAD:main
