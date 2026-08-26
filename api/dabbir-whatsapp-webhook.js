@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './pilot-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 function json(res, status, body, cid) {
   attachCorrelation(res, cid);
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
@@ -22,29 +28,39 @@ export function verifyWebhookChallenge(query = {}, verifyToken = '') {
   return { ok: true, challenge };
 }
 
-function getRawBody(req) {
+async function readRawBody(req) {
   if (Buffer.isBuffer(req.rawBody)) return req.rawBody;
   if (typeof req.rawBody === 'string') return Buffer.from(req.rawBody);
   if (Buffer.isBuffer(req.body)) return req.body;
   if (typeof req.body === 'string') return Buffer.from(req.body);
-  return null;
+
+  const chunks = [];
+  try {
+    for await (const chunk of req) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+  } catch {
+    return null;
+  }
+  return chunks.length ? Buffer.concat(chunks) : null;
 }
 
-export function verifyMetaSignature(req, appSecret = '') {
+export function verifyMetaSignature(rawBody, headers = {}, appSecret = '') {
   if (!appSecret) return { ok: false, reason: 'app_secret_missing' };
-  const signature = String(req.headers?.['x-hub-signature-256'] || '');
+  const signature = String(headers?.['x-hub-signature-256'] || '');
   if (!signature.startsWith('sha256=')) return { ok: false, reason: 'signature_missing' };
-  const raw = getRawBody(req);
-  if (!raw) return { ok: false, reason: 'raw_body_unavailable' };
-  const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(raw).digest('hex')}`;
+  if (!Buffer.isBuffer(rawBody) || rawBody.length === 0) return { ok: false, reason: 'raw_body_unavailable' };
+  const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex')}`;
   return secureEqual(signature, expected) ? { ok: true } : { ok: false, reason: 'signature_invalid' };
 }
 
-function normalizeBody(req) {
-  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
-  const raw = getRawBody(req);
-  if (!raw) return null;
-  try { return JSON.parse(raw.toString('utf8')); } catch { return null; }
+function parseRawBody(rawBody) {
+  if (!Buffer.isBuffer(rawBody) || rawBody.length === 0) return null;
+  try {
+    return JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return null;
+  }
 }
 
 export function extractWhatsAppEvents(payload = {}) {
@@ -83,9 +99,9 @@ export function classifyDABBIREvent(event, project = 'generic') {
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
-  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
-  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || process.env.DABBIR_WHATSAPP_APP_SECRET || '';
-  const project = String(process.env.DABBIR_PROJECT || process.env.DABBIR_PROJECT || 'generic').toLowerCase();
+  const verifyToken = process.env.DABBIR_WHATSAPP_VERIFY_TOKEN || '';
+  const appSecret = process.env.DABBIR_WHATSAPP_APP_SECRET || '';
+  const project = String(process.env.DABBIR_PROJECT || 'generic').toLowerCase();
 
   if (req.method === 'GET') {
     const result = verifyWebhookChallenge(req.query || {}, verifyToken);
@@ -98,13 +114,14 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed', correlation_id: cid }, cid);
 
-  const signature = verifyMetaSignature(req, appSecret);
+  const rawBody = await readRawBody(req);
+  const signature = verifyMetaSignature(rawBody, req.headers || {}, appSecret);
   if (!signature.ok) {
     logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'signature_verification', outcome: 'FAILED', failure_class: 'SECURITY', reason: signature.reason });
     return json(res, 401, { ok: false, error: 'invalid_meta_signature', reason: signature.reason, correlation_id: cid }, cid);
   }
 
-  const payload = normalizeBody(req);
+  const payload = parseRawBody(rawBody);
   if (!payload || payload.object !== 'whatsapp_business_account') {
     logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'payload_validation', outcome: 'FAILED', failure_class: 'USER_INPUT' });
     return json(res, 400, { ok: false, error: 'invalid_whatsapp_payload', correlation_id: cid }, cid);
@@ -133,7 +150,7 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     ok: true,
-    service: 'pilot-whatsapp-webhook',
+    service: 'dabbir-whatsapp-webhook',
     project,
     state: 'CONFIGURED_NOT_OPERATIONAL',
     signature_verified: true,
