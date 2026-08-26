@@ -4,8 +4,20 @@ const script = String.raw`(()=>{
 
   const icon='/api/dabbir-approved-icon';
   const style=document.createElement('style');
-  style.textContent='.logo,.dabbirRecoveryLogo{background-image:url("/api/dabbir-approved-icon")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:contain!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}';
+  style.textContent=[
+    '.logo,.dabbirRecoveryLogo{background-image:url("/api/dabbir-approved-icon")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:contain!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}',
+    '.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}',
+    '#loading{font-size:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important;background-image:url("/api/dabbir-approved-icon")!important;background-repeat:no-repeat!important;background-position:center!important;background-size:96px 96px!important}',
+    '@media(max-width:700px){#loading{background-size:88px 88px!important}}'
+  ].join('');
   document.head.appendChild(style);
+
+  const loading=document.querySelector('#loading');
+  if(loading){
+    loading.textContent='';
+    loading.setAttribute('aria-label','DABBIR');
+    loading.setAttribute('role','img');
+  }
 
   function link(rel,href,type){
     let node=document.head.querySelector('link[rel="'+rel+'"]');
