@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
