@@ -12,6 +12,16 @@ import dabbirRuntimeHandler from './dabbir-runtime.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 
+function singleQueryValue(req, name) {
+  try {
+    const url = new URL(String(req?.url || '/'), 'https://dabbir.invalid');
+    const values = url.searchParams.getAll(name);
+    return values.length === 1 ? values[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeDisplayName(value = '') {
   return String(value)
     .toLowerCase()
@@ -112,7 +122,7 @@ async function handleFastGet(req, res) {
   if (!user) user = await getVerifiedUser(accessToken).catch(() => null);
   if (!user) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
-  const requestedBusinessId = safeId(req.query?.business_id);
+  const requestedBusinessId = safeId(singleQueryValue(req, 'business_id'));
   const membership = requestedBusinessId
     ? memberships.find(item => item.business_id === requestedBusinessId) || null
     : memberships[0] || null;
@@ -139,8 +149,8 @@ async function handleFastGet(req, res) {
   }
 
   const businessId = membership.business_id;
-  const requestedConversationId = safeId(req.query?.conversation_id);
-  const summaryOnly = String(req.query?.summary || '') === '1';
+  const requestedConversationId = safeId(singleQueryValue(req, 'conversation_id'));
+  const summaryOnly = singleQueryValue(req, 'summary') === '1';
 
   const businessPromise = rest(
     accessToken,
