@@ -1,7 +1,7 @@
 export const PRODUCTION_CAPACITY_ACK = 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION';
 
 const KNOWN_PRODUCTION_HOSTS = new Set([
-  'pilot-taupe.vercel.app',
+  'dabbir-nd56cm4j5v-3619s-projects.vercel.app',
 ]);
 
 function hostname(origin) {
