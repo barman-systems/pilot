@@ -1,0 +1,18 @@
+export const DABBIR_STRIPE_SANDBOX_CONTRACT = Object.freeze({
+  version: 'sandbox-v1',
+  mode: 'sandbox',
+  price_id: 'price_1U8yRWLYIkiZam7bHaP2NhtT',
+  monthly_aed: 129,
+  trial_days: 7,
+  checkout: 'stripe_hosted',
+  customer_portal: true,
+  owner_only: true,
+  same_origin_mutations: true,
+  webhook_signature_required: true,
+  webhook_tolerance_seconds: 300,
+  webhook_truth_source: true,
+  force_rls: true,
+  card_data_stored_in_dabbir: false,
+  live_billing_enabled: false,
+  tax_collection_enabled: false,
+});
