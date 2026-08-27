@@ -33,15 +33,16 @@ export function passwordPolicy(password, { email = '' } = {}) {
   const raw = String(password || '');
   const normalized = fold(raw);
   const compact = normalized.replace(/\s+/g, '');
+  const alphanumeric = compact.replace(/[^a-z0-9]/g, '');
   const emailLocal = fold(email).split('@')[0].replace(/[^a-z0-9]/g, '');
   const reasons = [];
 
   if (raw.length < 12) reasons.push('TOO_SHORT');
   if (raw.length > 256) reasons.push('TOO_LONG');
-  if (COMMON_PASSWORDS.has(compact)) reasons.push('COMMON_PASSWORD');
-  if (/^(.)\1{7,}$/u.test(raw)) reasons.push('REPEATED_CHARACTER');
+  if (COMMON_PASSWORDS.has(compact) || COMMON_PASSWORDS.has(alphanumeric)) reasons.push('COMMON_PASSWORD');
+  if (/(.)\1{7,}/u.test(raw)) reasons.push('REPEATED_CHARACTER');
   if (hasSimpleSequence(raw)) reasons.push('SIMPLE_SEQUENCE');
-  if (emailLocal.length >= 4 && compact.includes(emailLocal)) reasons.push('CONTAINS_EMAIL_IDENTITY');
+  if (emailLocal.length >= 4 && alphanumeric.includes(emailLocal)) reasons.push('CONTAINS_EMAIL_IDENTITY');
 
   // Long passphrases remain valid without forcing arbitrary symbol rules.
   // Shorter passwords need diversity across letters, numbers and symbols.
