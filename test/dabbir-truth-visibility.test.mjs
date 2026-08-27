@@ -16,13 +16,13 @@ test('truth visibility files parse', () => {
 });
 
 test('fast runtime exposes verified tenant read provenance and exact read timestamp', () => {
-  assert.match(runtime, /truth_mode:\s*'VERIFIED_TENANT_READS'/);
+  assert.match(runtime, /truth_mode:\s*'VERIFIED_TENANT_READS_AND_EXACT_COUNTS'/);
   assert.match(runtime, /state:\s*'VERIFIED_TENANT_READ'/);
   assert.match(runtime, /source:\s*'SUPABASE_RLS_TENANT_DATA'/);
   assert.match(runtime, /read_at:\s*new Date\(\)\.toISOString\(\)/);
   assert.match(runtime, /business_updated_at/);
-  assert.match(runtime, /counts:/);
-  assert.match(runtime, /x-dabbir-runtime', 'fast-v5-truth'/);
+  assert.match(runtime, /exact_metrics_state/);
+  assert.match(runtime, /x-dabbir-runtime', 'fast-v6-exact-metrics'/);
 });
 
 test('fast runtime failures are explicit unverified states', () => {
