@@ -1,11 +1,10 @@
 name: DABBIR AI Full Customer Journey
-# Covers authenticated translation fallback, mobile WebKit, RBAC, AI handoff, operations, activity semantics, capacity, and cleanup.
+# Real production journey plus isolated runtime and AI capacity measurements.
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/dabbir-capacity-load.mjs'
@@ -43,51 +42,36 @@ concurrency:
 
 jobs:
   full-customer-journey:
-    name: Owner + customer + employee + AI + operations
+    name: Real owner + customer + employee + AI journey
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Use Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
-
       - name: Install WebKit journey runner
         run: |
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps webkit
-
       - name: Run AI full customer journey against production
         run: node test/ai-full-customer-journey-v2.mjs
-
       - name: Publish journey summary
         if: always()
         shell: bash
         run: |
           if [ -f dabbir-ai-customer-journey-report.json ]; then
             echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
             echo "**Verdict:** $(jq -r '.verdict' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
             echo "**Required failures:** $(jq -r '.required_failures' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
             echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '### Cleanup' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.cleanup[]? | "- \(.status): \(.detail // .item // "cleanup")"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'DABBIR journey report was not produced.' >> "$GITHUB_STEP_SUMMARY"
           fi
-
       - name: Upload journey evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -99,54 +83,82 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  capacity-1000:
-    name: 1000 customers + staged concurrency
+  runtime-capacity-1000:
+    name: Runtime capacity — 1000 customers
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       CUSTOMER_COUNT: '1000'
-      RUNTIME_STAGES: '50,100,250,500,750,1000'
-      AI_STAGES: '1,2,5,10,20,40,60,100'
-      CAPACITY_REPORT_PATH: dabbir-capacity-report.json
+      RUN_RUNTIME: 'true'
+      RUN_AI: 'false'
+      RUNTIME_STAGES: '1,5,10,20,30,40,50,75,100,125,150,175,200,225,250,500,750,1000'
+      CAPACITY_REPORT_PATH: dabbir-runtime-capacity-report.json
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Run isolated 1000-customer production capacity test
+      - name: Run 1000-customer runtime capacity test
         run: node test/dabbir-capacity-load.mjs
-      - name: Publish capacity summary
+      - name: Publish runtime capacity summary
         if: always()
         shell: bash
         run: |
-          if [ -f dabbir-capacity-report.json ]; then
-            echo '## DABBIR Production Capacity' >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo "**Verdict:** $(jq -r '.verdict' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**QA customers:** $(jq -r '.customer_count' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Strict UX concurrency:** $(jq -r '.capacity.infrastructure_stable_concurrency' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Available concurrency:** $(jq -r '.capacity.infrastructure_available_concurrency' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**AI concurrency passed:** $(jq -r '.capacity.ai_concurrency' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '### Runtime stages' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f dabbir-runtime-capacity-report.json ]; then
+            echo '## DABBIR Runtime Capacity' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Customers created:** $(jq -r '.customer_count' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Strict UX concurrency:** $(jq -r '.capacity.infrastructure_stable_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Available concurrency:** $(jq -r '.capacity.infrastructure_available_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
             echo '| Concurrent | Error rate | p95 ms | p99 ms | Stable | Available |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---:|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.runtime_stages[] | "| \(.concurrency) | \(.error_rate) | \(.p95_ms) | \(.p99_ms) | \(.stable) | \(.available) |"' dabbir-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '### AI stages' >> "$GITHUB_STEP_SUMMARY"
-            echo '| Concurrent | Error rate | AI reply rate | p95 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
-            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.ai_stages[] | "| \(.concurrency) | \(.error_rate) | \(.ai_reply_rate // 0) | \(.p95_ms) | \(.pass) |"' dabbir-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'Capacity report missing.' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.runtime_stages[] | "| \(.concurrency) | \(.error_rate) | \(.p95_ms) | \(.p99_ms) | \(.stable) | \(.available) |"' dabbir-runtime-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Upload capacity evidence
+      - name: Upload runtime capacity evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: dabbir-capacity-evidence
-          path: dabbir-capacity-report.json
+          name: dabbir-runtime-capacity-evidence
+          path: dabbir-runtime-capacity-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  ai-capacity:
+    name: AI capacity — clean system
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      CUSTOMER_COUNT: '300'
+      RUN_RUNTIME: 'false'
+      RUN_AI: 'true'
+      AI_STAGES: '1,2,5,10,20,40,60,100'
+      CAPACITY_REPORT_PATH: dabbir-ai-capacity-report.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Run clean AI concurrency test
+        run: node test/dabbir-capacity-load.mjs
+      - name: Publish AI capacity summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f dabbir-ai-capacity-report.json ]; then
+            echo '## DABBIR AI Capacity' >> "$GITHUB_STEP_SUMMARY"
+            echo "**AI concurrency passed:** $(jq -r '.capacity.ai_concurrency' dabbir-ai-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Concurrent | Error rate | AI reply rate | p95 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.ai_stages[] | "| \(.concurrency) | \(.error_rate) | \(.ai_reply_rate // 0) | \(.p95_ms) | \(.pass) |"' dabbir-ai-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload AI capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-ai-capacity-evidence
+          path: dabbir-ai-capacity-report.json
           if-no-files-found: warn
           retention-days: 14
