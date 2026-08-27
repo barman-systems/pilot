@@ -1,5 +1,5 @@
 import { singleQueryValue } from './_request-query.js';
-import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
+import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRest } from './_auth-core.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -60,6 +60,74 @@ function publicConfig(config) {
   };
 }
 
+function emptyOperationalEvidence(available = true) {
+  return {
+    available,
+    real_whatsapp_conversation: false,
+    real_inbound_message: false,
+    real_outbound_reply: false,
+    verified_external_result: false,
+  };
+}
+
+async function rowsOrNull(response) {
+  if (!response?.ok) return null;
+  const rows = await response.json().catch(() => null);
+  return Array.isArray(rows) ? rows : null;
+}
+
+export async function loadOperationalEvidence(accessToken, businessId) {
+  try {
+    const encodedBusinessId = encodeURIComponent(String(businessId));
+    const conversationResponse = await supabaseRest(
+      `dabbir_conversations?select=id&business_id=eq.${encodedBusinessId}&channel_type=eq.whatsapp&demo_mode=eq.false&order=created_at.desc&limit=100`,
+      accessToken,
+    );
+    const conversations = await rowsOrNull(conversationResponse);
+    if (conversations === null) return emptyOperationalEvidence(false);
+    const conversationIds = conversations.map(row => String(row?.id || '')).filter(Boolean);
+    if (!conversationIds.length) return emptyOperationalEvidence(true);
+
+    const conversationFilter = `in.(${conversationIds.join(',')})`;
+    const [messageResponse, outcomeResponse] = await Promise.all([
+      supabaseRest(
+        `dabbir_messages?select=sender_type,simulated&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&simulated=eq.false&limit=200`,
+        accessToken,
+      ),
+      supabaseRest(
+        `dabbir_conversation_outcomes?select=verified_external_result&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&verified_external_result=eq.true&limit=1`,
+        accessToken,
+      ),
+    ]);
+    const messages = await rowsOrNull(messageResponse);
+    const outcomes = await rowsOrNull(outcomeResponse);
+    if (messages === null || outcomes === null) return emptyOperationalEvidence(false);
+
+    const inbound = messages.some(row => row?.simulated === false && String(row?.sender_type || '') === 'customer');
+    const outbound = messages.some(row => row?.simulated === false && ['ai', 'human'].includes(String(row?.sender_type || '')));
+    const verifiedExternal = outcomes.some(row => row?.verified_external_result === true);
+    return {
+      available: true,
+      real_whatsapp_conversation: true,
+      real_inbound_message: inbound,
+      real_outbound_reply: outbound,
+      verified_external_result: verifiedExternal,
+    };
+  } catch {
+    return emptyOperationalEvidence(false);
+  }
+}
+
+function operationalReason(authorized, evidence) {
+  if (!authorized) return 'META_AUTHORIZATION_NOT_VERIFIED';
+  if (!evidence?.available) return 'OPERATIONAL_EVIDENCE_UNAVAILABLE';
+  if (!evidence.real_whatsapp_conversation) return 'REAL_WHATSAPP_CONVERSATION_NOT_VERIFIED';
+  if (!evidence.real_inbound_message) return 'REAL_WHATSAPP_INBOUND_NOT_VERIFIED';
+  if (!evidence.real_outbound_reply) return 'REAL_WHATSAPP_REPLY_NOT_RECORDED';
+  if (!evidence.verified_external_result) return 'EXTERNAL_REPLY_RESULT_NOT_VERIFIED';
+  return null;
+}
+
 export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') {
   return {
     ok: true,
@@ -82,6 +150,7 @@ export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') 
     connected_at: null,
     operational: false,
     operational_reason: 'WHATSAPP_NOT_LINKED',
+    operational_evidence: emptyOperationalEvidence(true),
     checked_at: new Date().toISOString(),
   };
 }
@@ -116,7 +185,12 @@ async function embeddedStatus(req, accessToken, businessId) {
   if (!row) return null;
   const platform = embeddedPlatformConfig();
   try {
-    const verified = await verifyStoredConnection(platform, row);
+    const [verified, evidence] = await Promise.all([
+      verifyStoredConnection(platform, row),
+      loadOperationalEvidence(accessToken, businessId),
+    ]);
+    const reason = operationalReason(Boolean(verified.authorized), evidence);
+    const operational = reason === null;
     return {
       ok: true,
       channel: 'whatsapp',
@@ -127,7 +201,7 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: Boolean(verified.authorized),
       phone_number_configured: true,
       waba_configured: true,
-      state: verified.authorized ? 'META_AUTHORIZED' : 'AUTHORIZATION_INVALID',
+      state: operational ? 'OPERATIONAL' : verified.authorized ? 'META_AUTHORIZED' : 'AUTHORIZATION_INVALID',
       meta_authorized: Boolean(verified.authorized),
       meta_check_attempted: true,
       meta_check_reason: verified.authorized ? null : 'META_AUTHORIZATION_CHECK_FAILED',
@@ -139,8 +213,9 @@ async function embeddedStatus(req, accessToken, businessId) {
       waba_id: row.waba_id,
       phone_number_id: row.phone_number_id,
       connected_at: row.connected_at,
-      operational: false,
-      operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
+      operational,
+      operational_reason: reason,
+      operational_evidence: evidence,
       checked_at: new Date().toISOString(),
     };
   } catch (error) {
@@ -164,7 +239,8 @@ async function embeddedStatus(req, accessToken, businessId) {
       phone_number_id: row.phone_number_id,
       connected_at: row.connected_at,
       operational: false,
-      operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
+      operational_reason: 'META_AUTHORIZATION_NOT_VERIFIED',
+      operational_evidence: emptyOperationalEvidence(false),
       checked_at: new Date().toISOString(),
     };
   }
