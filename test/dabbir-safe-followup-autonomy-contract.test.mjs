@@ -53,8 +53,7 @@ test('verified outcome is written only after follow-up persistence', () => {
   const outcomeInsert = sql.indexOf('insert into public.dabbir_operation_outcomes');
   assert.ok(followupInsert >= 0, 'follow-up insert must exist');
   assert.ok(outcomeInsert > followupInsert, 'outcome must be written after the follow-up is persisted');
-  must(/'VERIFIED_SUCCESS'/, 'successful internal persistence must be recorded as VERIFIED_SUCCESS');
-  must(/'safe_eligible',[\s\S]*true/i, 'outcome contract must mark the operation safe-eligible');
+  must(/'VERIFIED_SUCCESS',\s*\n\s*null,\s*\n\s*true,\s*\n\s*true,/i, 'verified outcome values must mark the operation safe-eligible and autonomous');
   must(/'manual_seconds_measurement','UNMEASURED'/, 'time-saving estimate must not be fabricated before field calibration');
 });
 
