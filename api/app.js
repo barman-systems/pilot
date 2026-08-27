@@ -105,16 +105,17 @@ button,a,[data-screen],[data-cid]{touch-action:manipulation}
   showScreen=function(name){
     if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';
     current=name;
+    renderCurrentFast();
+    applyFastBusinessProfile();
+    ensureConversationLoaded();
     document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));
     document.querySelectorAll('[data-screen]').forEach(b=>b.classList.toggle('active',b.dataset.screen===name));
     const page=document.querySelector('#pageTitle');
     if(page) page.textContent=T()[name]||name;
     document.querySelector('#side')?.classList.remove('open');
-    const paint=()=>{renderCurrentFast();applyFastBusinessProfile();ensureConversationLoaded()};
-    if(typeof requestAnimationFrame==='function') requestAnimationFrame(paint); else setTimeout(paint,0);
   };
 
-  window.__dabbirInterfacePerformance='fast-v2';
+  window.__dabbirInterfacePerformance='fast-v3';
 })();
 </script>`;
 
@@ -238,6 +239,6 @@ export default function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   res.setHeader('x-dabbir-interface', 'operational-runtime-v1');
   res.setHeader('x-dabbir-chat-path', 'chat-send-fallback-v3');
-  res.setHeader('x-dabbir-performance', 'interface-fast-v2');
+  res.setHeader('x-dabbir-performance', 'interface-fast-v3');
   return res.status(200).send(html);
 }
