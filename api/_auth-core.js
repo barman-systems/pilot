@@ -121,6 +121,8 @@ export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Mat
   if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
   if (String(payload.iss || '') !== `${SUPABASE_URL}/auth/v1`) return null;
   if (String(payload.role || '') !== 'authenticated') return null;
+  const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
+  if (!audiences.includes('authenticated')) return null;
   const exp = Number(payload.exp || 0);
   if (!Number.isFinite(exp) || exp <= Number(nowSeconds)) return null;
   const nbf = payload.nbf == null ? null : Number(payload.nbf);
