@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
+  "buildCommand": "npm test",
   "functions": {
     "api/app.js": {
       "includeFiles": "index.html"
