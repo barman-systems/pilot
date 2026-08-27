@@ -93,12 +93,43 @@ export async function supabaseRpc(name, accessToken, params = {}) {
   });
 }
 
-export async function getVerifiedUser(accessToken) {
+async function verifiedUserBase(accessToken) {
   if (!accessToken) return null;
   const response = await supabaseAuth('/auth/v1/user', { headers: { authorization: `Bearer ${accessToken}` } });
   if (!response.ok) return null;
   const user = await response.json();
+  if (!UUID_RE.test(String(user?.id || ''))) return null;
   return { id: user.id, email: user.email ?? null, aud: user.aud ?? null };
+}
+
+export async function getVerifiedUserWithAccess(accessToken) {
+  const user = await verifiedUserBase(accessToken);
+  if (!user) return null;
+
+  // This is an ordinary RLS-protected self-read. The authenticated browser/user
+  // can read only its own suspension row and cannot write any access state.
+  const response = await supabaseRest(
+    `account_access_state?select=status,reason,suspended_at&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
+    accessToken,
+  ).catch(() => null);
+  if (!response?.ok) return null;
+  const rows = await response.json().catch(() => null);
+  if (!Array.isArray(rows)) return null;
+  const access = rows[0] || { status: 'active', reason: null, suspended_at: null };
+  if (!['active','suspended'].includes(String(access.status || ''))) return null;
+
+  return {
+    ...user,
+    dabbir_access: access.status,
+    suspension_reason: access.reason ?? null,
+    suspended_at: access.suspended_at ?? null,
+  };
+}
+
+export async function getVerifiedUser(accessToken) {
+  const user = await getVerifiedUserWithAccess(accessToken);
+  if (!user || user.dabbir_access === 'suspended') return null;
+  return user;
 }
 
 function decodeJwtPayload(accessToken) {
@@ -113,9 +144,8 @@ function decodeJwtPayload(accessToken) {
 
 // IMPORTANT: this helper does not verify the JWT signature itself. Call it only
 // after the same access token has already been accepted by a Supabase API that
-// verifies JWTs (for example the Data API membership lookup). This lets hot
-// authenticated reads avoid a second /auth/v1/user round trip while preserving
-// Supabase as the authority that validates the token.
+// verifies JWTs (for example the Data API membership lookup). RLS still enforces
+// the DABBIR account-access gate for fast-path membership/data reads.
 export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const payload = decodeJwtPayload(accessToken);
   if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
@@ -180,7 +210,7 @@ export function rpcErrorCode(payload, fallback = 'REQUEST_FAILED') {
     'TEAM_MANAGEMENT_REQUIRED','PERMISSION_GRANT_NOT_ALLOWED','INVITATION_ALREADY_PENDING','EMPLOYEE_ALREADY_MEMBER',
     'INVALID_INVITATION','VERIFIED_EMAIL_REQUIRED','INVITATION_NOT_FOUND','INVITATION_NOT_PENDING','INVITATION_EXPIRED',
     'INVITATION_EMAIL_MISMATCH','INVITER_NO_LONGER_AUTHORIZED','MEMBERSHIP_ALREADY_EXISTS','MEMBERSHIP_NOT_FOUND',
-    'OWNER_IMMUTABLE','INVALID_STATUS','NEW_INVITATION_REQUIRED'
+    'OWNER_IMMUTABLE','INVALID_STATUS','NEW_INVITATION_REQUIRED','DABBIR_ACCOUNT_SUSPENDED'
   ];
   return known.find(code => raw.includes(code)) || fallback;
 }
