@@ -29,7 +29,8 @@ test('BAR-12 evidence returns aggregates and never selects customer content',()=
 test('readiness workflow reuses the existing QA runner with short-lived OIDC',()=>{
   assert.match(workflow,/id-token:\s*write/);
   assert.match(workflow,/audience=dabbir-bar12-readiness/);
-  assert.match(workflow,/barman-qa-suite-runner/);
+  assert.match(workflow,/supabase\/functions\/barman-qa-suite-runner/);
+  assert.match(workflow,/functions\/v1\/barman-qa-suite-runner/);
   assert.match(workflow,/dabbir_bar12_readiness/);
   assert.doesNotMatch(workflow,/dabbir-bar12-readiness-evidence/);
   assert.doesNotMatch(workflow,/SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|META_APP_SECRET/);
