@@ -21,12 +21,14 @@ test('BAR-12 evidence action has an OIDC profile separate from AI journey action
   assert.match(source,/actionError\(e,500\)/);
 });
 
-test('BAR-12 evidence returns aggregates and never selects customer content',()=>{
-  assert.doesNotMatch(source,/select\(['"`](?:[^'"`]*)(body|email|phone|display_name|access_token_ciphertext)/i);
-  assert.match(source,/connection_success_rate:null/);
-  assert.match(source,/satisfaction:\{samples:0,score:null\}/);
-  assert.match(source,/verified_external_result/);
-  assert.match(source,/channel_type','whatsapp'/);
+test('BAR-12 evidence is aggregate-only and readiness path is read-only',()=>{
+  const readiness=source.slice(source.indexOf('async function exactCount'),source.indexOf('async function handleReadiness'));
+  assert.doesNotMatch(readiness,/\.insert\(|\.update\(|\.upsert\(|\.delete\(|db\.rpc\(/);
+  assert.doesNotMatch(readiness,/select\(['"`](?:[^'"`]*)(body|email|phone|display_name|access_token_ciphertext)/i);
+  assert.match(readiness,/connection_success_rate:null/);
+  assert.match(readiness,/satisfaction:\{samples:0,score:null\}/);
+  assert.match(readiness,/verified_external_result/);
+  assert.match(readiness,/channel_type','whatsapp'/);
 });
 
 test('readiness workflow reuses the existing QA runner with short-lived OIDC',()=>{
