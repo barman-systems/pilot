@@ -65,7 +65,7 @@ const client=String.raw`
 
   function moreLabel(hiddenCount,t){
     if(expanded)return t.showLess;
-    return lang==='ar'?`عرض بقية الأولويات (${hiddenCount})`:`Show ${hiddenCount} more`;
+    return lang==='ar'?'عرض بقية الأولويات ('+hiddenCount+')':'Show '+hiddenCount+' more';
   }
 
   function render(data){
