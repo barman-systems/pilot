@@ -19,12 +19,11 @@ body{
 }
 .side{background:linear-gradient(180deg,rgba(12,14,20,.98),rgba(8,10,14,.98))!important;border-inline-end-color:#222837!important}
 .top{background:rgba(8,10,14,.84)!important;border-bottom-color:#202634!important;backdrop-filter:blur(22px)!important;-webkit-backdrop-filter:blur(22px)!important}
-.logo,.dabbirTopLogo{
-  background:linear-gradient(135deg,var(--dabbir-brand-purple),var(--dabbir-brand-blue) 56%,var(--dabbir-brand-cyan))!important;
-  color:#fff!important;
+.logo,.dabbirTopLogo,.dabbirAiIdentity img,.dabbirAiStatusLogo{
   border-color:transparent!important;
-  box-shadow:0 10px 28px rgba(89,98,255,.23)!important;
+  box-shadow:0 10px 28px rgba(89,98,255,.18)!important;
 }
+.dabbirAiIdentity{color:#c8c1ff!important}
 .primary,.send{
   background:linear-gradient(135deg,var(--dabbir-brand-purple),var(--dabbir-brand-blue) 62%,var(--dabbir-brand-cyan))!important;
   color:#fff!important;
