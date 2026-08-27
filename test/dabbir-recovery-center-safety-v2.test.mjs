@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [migration, api] = await Promise.all([
+const [migration, api, ui] = await Promise.all([
   read('supabase/migrations/20260827172122_dabbir_recovery_center_safety_v2.sql'),
   read('api/platform-customers.js'),
+  read('api/platform-customers-ui.js'),
 ]);
 
 test('recovery is fail-closed by default and only explicit safe tables auto-restore', () => {
@@ -55,4 +56,13 @@ test('API maps safety blocks explicitly for the admin UI', () => {
   assert.match(api, /RECOVERY_ACCOUNT_MUST_BE_SUSPENDED/);
   assert.match(api, /RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED/);
   assert.match(api, /requireSameOrigin\(req\)/);
+});
+
+test('Customer 360 UI hides apply path until preview is safe and account is frozen', () => {
+  assert.match(ui, /auto_restore_ready/);
+  assert.match(ui, /reconciliation_events/);
+  assert.match(ui, /RECOVERY_ACCOUNT_MUST_BE_SUSPENDED/);
+  assert.match(ui, /RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED/);
+  assert.match(ui, /const canPrepare=preview && !blocked && accountSuspended/);
+  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v3'/);
 });
