@@ -18,7 +18,7 @@ test('WhatsApp tenant access token is sealed and can be opened only with the ser
   assert.throws(() => openAccessToken(sealed, { encryptionSecret: 'wrong-key' }, businessId));
 });
 
-test('Embedded Signup UI connects through Meta inside DABBIR without manual token fields', async () => {
+test('Embedded Signup UI connects WhatsApp Business through Meta inside DABBIR without manual token fields', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   assert.match(ui, /FB\.login/);
   assert.match(ui, /config_id/);
@@ -29,6 +29,23 @@ test('Embedded Signup UI connects through Meta inside DABBIR without manual toke
   assert.match(ui, /تغيير رقم WhatsApp/);
   assert.match(ui, /فصل WhatsApp/);
   assert.doesNotMatch(ui, /type=["']password["']/);
+});
+
+test('DABBIR prefers WhatsApp Business app coexistence so verification happens through the existing WhatsApp Business account', async () => {
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+
+  assert.match(ui, /whatsapp_business_app_onboarding/);
+  assert.match(ui, /featureType:COEXISTENCE_FEATURE/);
+  assert.match(ui, /FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/);
+  assert.match(ui, /onboarding_mode:COEXISTENCE_FEATURE/);
+  assert.doesNotMatch(ui, /featureType:''/);
+
+  assert.match(endpoint, /resolveCoexistencePhoneNumberId/);
+  assert.match(endpoint, /is_on_biz_app/);
+  assert.match(endpoint, /platform_type/);
+  assert.match(endpoint, /META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED/);
+  assert.match(endpoint, /coexistence:\s*onboardingMode === 'whatsapp_business_app_onboarding'/);
 });
 
 test('iPhone Meta login preserves the original user activation by prewarming the SDK before tap', async () => {
@@ -44,7 +61,7 @@ test('iPhone Meta login preserves the original user activation by prewarming the
   assert.doesNotMatch(body, /await loadConfig|await loadSdk/);
   assert.match(ui, /async function prepareMeta/);
   assert.match(ui, /sdk_preload_start/);
-  assert.match(ui, /Preparing secure Meta login/);
+  assert.match(ui, /Meta secure onboarding/);
   assert.match(body, /const sessionPromise=waitForSession\(\)/);
   assert.match(body, /login_invoked/);
 });
