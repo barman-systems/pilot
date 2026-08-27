@@ -31,6 +31,32 @@ test('Embedded Signup UI connects through Meta inside DABBIR without manual toke
   assert.doesNotMatch(ui, /type=["']password["']/);
 });
 
+test('Embedded Signup does not time out during a normal multi-step Meta mobile journey', async () => {
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  assert.match(ui, /SESSION_TIMEOUT_MS=15\*60\*1000/);
+  assert.doesNotMatch(ui, /waitForSession\(timeoutMs=12000\)/);
+  assert.match(ui, /https:\/\/m\.facebook\.com/);
+  assert.match(ui, /https:\/\/business\.facebook\.com/);
+});
+
+test('Embedded Signup reports safe client stages to production logs without tokens or asset IDs', async () => {
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  const events = await read('api/dabbir-whatsapp-client-event.js');
+  assert.match(ui, /\/api\/dabbir-whatsapp-client-event/);
+  assert.match(ui, /connect_start/);
+  assert.match(ui, /login_callback/);
+  assert.match(ui, /session_finish/);
+  assert.match(ui, /complete_start/);
+  assert.match(ui, /connect_error/);
+  assert.match(events, /DABBIR_WHATSAPP_EMBEDDED_CLIENT/);
+  assert.match(events, /has_code/);
+  assert.match(events, /has_waba/);
+  assert.match(events, /has_phone/);
+  assert.doesNotMatch(events, /access_token/);
+  assert.doesNotMatch(events, /phone_number_id/);
+  assert.doesNotMatch(events, /waba_id/);
+});
+
 test('Embedded completion exchanges authorization code server-side and never returns access token', async () => {
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
   assert.match(endpoint, /exchangeEmbeddedCode/);
