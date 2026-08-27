@@ -17,7 +17,8 @@ const script = String.raw`(()=>{
     '.dabbirWhatsAppConnect{border:0;background:#25D366;color:#07140c}',
     '.dabbirWhatsAppChange{border:1px solid #2a2e33;background:#181b1f;color:#fff}',
     '.dabbirWhatsAppDisconnect{border:1px solid #5a2525;background:#2d1717;color:#ffb1b1}',
-    '.dabbirWhatsAppHint{display:block;margin-top:7px;color:#979da5;font-size:9px;line-height:1.55}',
+    '.dabbirWhatsAppHint{display:block;width:100%;margin-top:7px;color:#979da5;font-size:9px;line-height:1.55}',
+    '.dabbirWhatsAppHint.error{color:#ffb1b1}',
     '.dabbirWhatsAppBusy{opacity:.65;pointer-events:none}'
   ].join('');
   document.head.appendChild(css);
@@ -28,22 +29,23 @@ const script = String.raw`(()=>{
   let configCache=null;
   let configBusinessId=null;
   let busy=false;
+  let stage='idle';
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
-  function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
+  function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return ''}}
 
   function report(event,extra={}){
     try{
       fetch('/api/dabbir-whatsapp-client-event',{
-        method:'POST',
-        cache:'no-store',
-        keepalive:true,
+        method:'POST',cache:'no-store',keepalive:true,
         headers:{'content-type':'application/json','accept':'application/json'},
-        body:JSON.stringify({event,...extra})
+        body:JSON.stringify({event,stage,...extra})
       }).catch(()=>{});
     }catch{}
   }
+
+  function setStage(next){stage=next;report('stage',{stage:next})}
 
   function whatsappCard(){
     const grid=document.querySelector('#integrationGrid');
@@ -54,7 +56,7 @@ const script = String.raw`(()=>{
 
   function settleSession(value){
     const waiters=sessionWaiters.splice(0);
-    waiters.forEach(resolve=>resolve(value));
+    for(const resolve of waiters) resolve(value);
   }
 
   function parseMetaMessage(event){
@@ -64,21 +66,25 @@ const script = String.raw`(()=>{
       try{data=JSON.parse(data)}catch{return}
     }
     if(!data||data.type!=='WA_EMBEDDED_SIGNUP') return;
+
     if(data.event==='FINISH'){
       const payload=data.data||{};
       embeddedSession={
-        waba_id:String(payload.waba_id||payload.whatsapp_business_account_id||''),
-        phone_number_id:String(payload.phone_number_id||''),
+        waba_id:String(payload.waba_id||payload.whatsapp_business_account_id||'').trim(),
+        phone_number_id:String(payload.phone_number_id||'').trim(),
       };
-      report('session_finish',{stage:'meta_session',has_waba:Boolean(embeddedSession.waba_id),has_phone:Boolean(embeddedSession.phone_number_id)});
+      report('session_finish',{has_waba:Boolean(embeddedSession.waba_id),has_phone:Boolean(embeddedSession.phone_number_id)});
       settleSession(embeddedSession);
-    }else if(data.event==='CANCEL'){
-      report('session_cancel',{stage:'meta_session'});
+      return;
+    }
+    if(data.event==='CANCEL'){
+      report('session_cancel');
       settleSession(null);
-    }else if(data.event==='ERROR'){
-      report('session_error',{stage:'meta_session',error:String(data?.data?.error_message||data?.data?.error||'META_EMBEDDED_SIGNUP_ERROR').slice(0,160)});
+      return;
+    }
+    if(data.event==='ERROR'){
+      report('session_error',{error:String(data?.data?.error_message||data?.data?.error||'META_EMBEDDED_SIGNUP_ERROR').slice(0,160)});
       settleSession(null);
-      tell(ar()?'تعذر إكمال ربط WhatsApp من Meta':'Meta could not complete WhatsApp setup');
     }
   }
   window.addEventListener('message',parseMetaMessage);
@@ -97,62 +103,78 @@ const script = String.raw`(()=>{
         resolve(value);
       };
       timer=setTimeout(()=>{
-        report('session_timeout',{stage:'meta_session'});
+        report('session_timeout');
         finish(null);
       },timeoutMs);
       sessionWaiters.push(finish);
     });
   }
 
+  function initSdk(FB,cfg){
+    FB.init({appId:cfg.app_id,cookie:true,xfbml:false,version:cfg.graph_version});
+    return FB;
+  }
+
   async function loadSdk(cfg){
-    if(window.FB){
-      try{window.FB.init({appId:cfg.app_id,cookie:true,xfbml:false,version:cfg.graph_version})}catch{}
-      return window.FB;
-    }
+    if(window.FB) return initSdk(window.FB,cfg);
     if(sdkPromise) return sdkPromise;
+
     sdkPromise=new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timeout);fn(value)};
+      const timeout=setTimeout(()=>finish(reject,new Error('META_SDK_LOAD_TIMEOUT')),15000);
       const previous=window.fbAsyncInit;
       window.fbAsyncInit=function(){
         try{if(typeof previous==='function')previous()}catch{}
-        try{
-          window.FB.init({appId:cfg.app_id,cookie:true,xfbml:false,version:cfg.graph_version});
-          resolve(window.FB);
-        }catch(error){reject(error)}
+        try{finish(resolve,initSdk(window.FB,cfg))}catch(error){finish(reject,error)}
       };
+
       const existing=document.querySelector('script[data-dabbir-meta-sdk]');
       if(existing){
-        const wait=setInterval(()=>{
-          if(window.FB){clearInterval(wait);try{window.FB.init({appId:cfg.app_id,cookie:true,xfbml:false,version:cfg.graph_version})}catch{}resolve(window.FB)}
+        const interval=setInterval(()=>{
+          if(!window.FB)return;
+          clearInterval(interval);
+          try{finish(resolve,initSdk(window.FB,cfg))}catch(error){finish(reject,error)}
         },100);
-        setTimeout(()=>{clearInterval(wait);if(!window.FB)reject(new Error('META_SDK_LOAD_TIMEOUT'))},10000);
+        setTimeout(()=>clearInterval(interval),15100);
         return;
       }
+
       const metaScript=document.createElement('script');
-      metaScript.async=true;metaScript.defer=true;metaScript.crossOrigin='anonymous';
+      metaScript.async=true;
+      metaScript.defer=true;
+      metaScript.crossOrigin='anonymous';
       metaScript.src='https://connect.facebook.net/'+encodeURIComponent(cfg.sdk_locale||'en_US')+'/sdk.js';
       metaScript.setAttribute('data-dabbir-meta-sdk','true');
-      metaScript.onerror=()=>reject(new Error('META_SDK_LOAD_FAILED'));
+      metaScript.onerror=()=>finish(reject,new Error('META_SDK_LOAD_FAILED'));
       document.head.appendChild(metaScript);
     });
-    return sdkPromise;
+
+    try{return await sdkPromise}
+    catch(error){sdkPromise=null;throw error}
   }
 
   async function loadConfig(force=false){
     const bid=businessId();
-    if(!bid) return null;
+    if(!bid) throw new Error('BUSINESS_REQUIRED');
     if(!force&&configCache&&configBusinessId===bid) return configCache;
-    const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{cache:'no-store',headers:{accept:'application/json'}});
+    const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{
+      cache:'no-store',headers:{accept:'application/json'}
+    });
     const payload=await response.json().catch(()=>({}));
-    if(!response.ok||!payload.ok) return null;
-    configBusinessId=bid;configCache=payload;
+    if(!response.ok||!payload.ok) throw new Error(payload.error||'EMBEDDED_CONFIG_LOAD_FAILED');
+    configBusinessId=bid;
+    configCache=payload;
     return payload;
   }
 
   async function refreshTenantStatus(){
     const bid=businessId();
-    if(!bid) return;
+    if(!bid)return;
     try{
-      const response=await fetch('/api/dabbir-whatsapp-status?business_id='+encodeURIComponent(bid),{cache:'no-store',headers:{accept:'application/json'}});
+      const response=await fetch('/api/dabbir-whatsapp-status?business_id='+encodeURIComponent(bid),{
+        cache:'no-store',headers:{accept:'application/json'}
+      });
       const payload=await response.json().catch(()=>({}));
       if(response.ok&&payload.ok&&typeof workspace!=='undefined'&&workspace){
         workspace.whatsapp={...(workspace.whatsapp||{}),...payload};
@@ -165,18 +187,26 @@ const script = String.raw`(()=>{
     busy=value;
     const card=whatsappCard();
     card?.querySelector('[data-dabbir-whatsapp-actions]')?.classList.toggle('dabbirWhatsAppBusy',value);
-    card?.querySelectorAll('[data-dabbir-whatsapp-actions] button').forEach(button=>button.disabled=value||button.dataset.platformReady==='false');
+    card?.querySelectorAll('[data-dabbir-whatsapp-actions] button').forEach(button=>{
+      button.disabled=value||button.dataset.platformReady==='false';
+    });
   }
 
   async function completeSignup(code,session){
-    report('complete_start',{stage:'server_complete',has_code:Boolean(code),has_waba:Boolean(session?.waba_id),has_phone:Boolean(session?.phone_number_id)});
+    setStage('server_complete');
+    report('complete_start',{has_code:Boolean(code),has_waba:Boolean(session?.waba_id),has_phone:Boolean(session?.phone_number_id)});
     const response=await fetch('/api/dabbir-whatsapp-embedded-complete',{
       method:'POST',cache:'no-store',headers:{'content-type':'application/json','accept':'application/json'},
       body:JSON.stringify({business_id:businessId(),code,waba_id:session.waba_id,phone_number_id:session.phone_number_id})
     });
     const payload=await response.json().catch(()=>({}));
-    if(!response.ok||!payload.ok) throw new Error(payload.error||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
-    report('complete_ok',{stage:'server_complete',has_waba:true,has_phone:true});
+    if(!response.ok||!payload.ok){
+      const error=new Error(payload.error||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
+      error.providerStatus=payload.provider_status||null;
+      error.providerCode=payload.provider_code||null;
+      throw error;
+    }
+    report('complete_ok',{has_waba:true,has_phone:true});
     if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={...(workspace.whatsapp||{}),...payload};
     configCache=null;
     await loadConfig(true).catch(()=>null);
@@ -184,36 +214,46 @@ const script = String.raw`(()=>{
     tell(ar()?'تم ربط WhatsApp بنجاح':'WhatsApp connected successfully');
   }
 
-  function failureText(key){
-    if(key==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد Meta Embedded Signup الخاص بمنصة DABBIR غير مكتمل بعد':'DABBIR Meta Embedded Signup platform configuration is incomplete';
-    if(key==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. أغلق نافذة Meta وأعد المحاولة من زر ربط WhatsApp.':'Meta did not return an authorization code. Close the Meta window and retry from Connect WhatsApp.';
+  function failureText(key,cfg){
+    if(key==='CANONICAL_PRODUCTION_ORIGIN_REQUIRED'||key==='CANONICAL_ORIGIN_REQUIRED'){
+      const expected=String(cfg?.expected_origin||'').trim();
+      return ar()?('افتح DABBIR من رابط الإنتاج المعتمد'+(expected?' '+expected:'')+' ثم أعد الربط.'):('Open DABBIR from the canonical production URL'+(expected?' '+expected:'')+' and retry.');
+    }
+    if(key==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد Meta Embedded Signup غير مكتمل على خادم DABBIR.':'DABBIR Meta Embedded Signup server configuration is incomplete.';
+    if(key==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. لم يتم حفظ أي ربط.':'Meta did not return an authorization code. No connection was saved.';
     if(key==='META_EMBEDDED_SIGNUP_SESSION_MISSING') return ar()?'لم تصل بيانات حساب WhatsApp والرقم من Meta. لم يتم حفظ أي ربط ناقص.':'Meta did not return the WhatsApp account and phone data. No incomplete connection was saved.';
-    if(key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'تعذر تحميل تسجيل الدخول من Meta. أعد المحاولة بعد تحديث الصفحة.':'Meta login could not load. Refresh the page and retry.';
-    return ar()?'تعذر ربط WhatsApp. لم يتم حفظ أي ربط غير مكتمل.':'WhatsApp could not be connected. No incomplete connection was saved.';
+    if(key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'تعذر تحميل Meta Login. حدّث الصفحة ثم أعد المحاولة.':'Meta Login could not load. Refresh the page and retry.';
+    if(key==='BUSINESS_REQUIRED') return ar()?'تعذر تحديد النشاط الحالي. أعد تحميل DABBIR.':'The current business could not be resolved. Reload DABBIR.';
+    return ar()?'تعذر إكمال ربط WhatsApp. لم يتم حفظ أي ربط غير مكتمل.':'WhatsApp connection could not be completed. No incomplete connection was saved.';
   }
 
   async function connectWhatsApp(){
-    if(busy) return;
+    if(busy)return;
     setBusy(true);
     embeddedSession=null;
-    let stage='start';
-    report('connect_start',{stage});
+    settleSession(null);
+    let cfg=null;
+    setStage('connect_start');
+    report('connect_start');
     try{
-      stage='platform_config';
-      const cfg=await loadConfig(true);
-      report('config_loaded',{stage,has_code:false,has_waba:false,has_phone:false});
+      setStage('platform_config');
+      cfg=await loadConfig(true);
+      report('config_loaded',{canonical_origin_active:Boolean(cfg?.platform_readiness?.canonical_origin_active),platform_ready:Boolean(cfg?.platform_ready)});
+      if(cfg?.platform_readiness?.canonical_origin_active!==true) throw new Error('CANONICAL_ORIGIN_REQUIRED');
       if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id) throw new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED');
 
-      stage='sdk_load';
+      setStage('sdk_load');
       const FB=await loadSdk(cfg);
-      report('sdk_ready',{stage});
+      report('sdk_ready');
 
-      stage='meta_login';
+      // Start listening before opening Meta so a fast FINISH postMessage cannot race the callback.
+      const sessionPromise=waitForSession();
+      setStage('meta_login');
       const auth=await new Promise((resolve,reject)=>{
         try{
           FB.login(response=>{
-            report('login_callback',{stage:'meta_login',has_code:Boolean(response?.authResponse?.code)});
-            resolve(response);
+            report('login_callback',{has_code:Boolean(response?.authResponse?.code)});
+            resolve(response||{});
           },{
             config_id:cfg.config_id,
             response_type:'code',
@@ -223,29 +263,33 @@ const script = String.raw`(()=>{
         }catch(error){reject(error)}
       });
 
-      const code=String(auth?.authResponse?.code||'');
+      const code=String(auth?.authResponse?.code||'').trim();
       if(!code) throw new Error('META_AUTHORIZATION_CODE_MISSING');
 
-      stage='meta_session';
-      const session=await waitForSession();
+      setStage('meta_session');
+      const session=await sessionPromise;
       if(!session?.waba_id||!session?.phone_number_id) throw new Error('META_EMBEDDED_SIGNUP_SESSION_MISSING');
-
-      stage='server_complete';
       await completeSignup(code,session);
+      setStage('complete');
     }catch(error){
       const key=String(error?.message||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
-      report('connect_error',{stage,error:key,has_waba:Boolean(embeddedSession?.waba_id),has_phone:Boolean(embeddedSession?.phone_number_id)});
-      tell(failureText(key));
+      report('connect_error',{
+        error:key.slice(0,160),
+        has_waba:Boolean(embeddedSession?.waba_id),
+        has_phone:Boolean(embeddedSession?.phone_number_id),
+        provider_status:error?.providerStatus||null,
+        provider_code:error?.providerCode||null
+      });
+      tell(failureText(key,cfg));
     }finally{
       setBusy(false);
-      renderActions();
+      setTimeout(renderActions,0);
     }
   }
 
   async function disconnectWhatsApp(){
-    if(busy) return;
-    const accepted=window.confirm(ar()?'فصل رقم WhatsApp عن هذا النشاط؟':'Disconnect WhatsApp from this business?');
-    if(!accepted) return;
+    if(busy)return;
+    if(!window.confirm(ar()?'فصل رقم WhatsApp عن هذا النشاط؟':'Disconnect WhatsApp from this business?'))return;
     setBusy(true);
     try{
       const response=await fetch('/api/dabbir-whatsapp-disconnect',{
@@ -256,51 +300,75 @@ const script = String.raw`(()=>{
       if(!response.ok||!payload.ok) throw new Error(payload.error||'WHATSAPP_DISCONNECT_FAILED');
       configCache=null;
       if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={connected:false,state:'NOT_CONFIGURED',phone:null,operational:false};
-      try{if(typeof renderIntegrations==='function')renderIntegrations()}catch{}
+      await refreshTenantStatus();
       tell(ar()?'تم فصل WhatsApp':'WhatsApp disconnected');
     }catch{tell(ar()?'تعذر فصل WhatsApp':'WhatsApp could not be disconnected')}
-    finally{setBusy(false);renderActions()}
+    finally{setBusy(false);setTimeout(renderActions,0)}
   }
 
   async function renderActions(){
     const card=whatsappCard();
-    if(!card||!businessId()) return;
+    if(!card||!businessId())return;
     let box=card.querySelector('[data-dabbir-whatsapp-actions]');
     if(!box){
-      box=document.createElement('div');box.className='dabbirWhatsAppActions';box.setAttribute('data-dabbir-whatsapp-actions','true');card.appendChild(box);
+      box=document.createElement('div');
+      box.className='dabbirWhatsAppActions';
+      box.setAttribute('data-dabbir-whatsapp-actions','true');
+      card.appendChild(box);
     }
+
     let cfg=null;
     try{cfg=await loadConfig()}catch{}
-    if(!cfg){box.replaceChildren();return}
     box.replaceChildren();
-    const connected=Boolean(cfg.connected||workspace?.whatsapp?.connected);
+    if(!cfg)return;
+
+    const connected=Boolean(cfg.connected&&workspace?.whatsapp?.connected!==false);
     const primary=document.createElement('button');
-    primary.type='button';primary.className=connected?'dabbirWhatsAppChange':'dabbirWhatsAppConnect';
+    primary.type='button';
+    primary.className=connected?'dabbirWhatsAppChange':'dabbirWhatsAppConnect';
     primary.textContent=connected?(ar()?'تغيير رقم WhatsApp':'Change WhatsApp number'):(ar()?'ربط WhatsApp':'Connect WhatsApp');
     primary.dataset.platformReady=String(Boolean(cfg.platform_ready));
     primary.disabled=busy||!cfg.platform_ready;
     primary.onclick=connectWhatsApp;
     box.appendChild(primary);
+
     if(connected){
-      const disconnect=document.createElement('button');disconnect.type='button';disconnect.className='dabbirWhatsAppDisconnect';disconnect.textContent=ar()?'فصل WhatsApp':'Disconnect WhatsApp';disconnect.onclick=disconnectWhatsApp;disconnect.disabled=busy;box.appendChild(disconnect);
+      const disconnect=document.createElement('button');
+      disconnect.type='button';
+      disconnect.className='dabbirWhatsAppDisconnect';
+      disconnect.textContent=ar()?'فصل WhatsApp':'Disconnect WhatsApp';
+      disconnect.onclick=disconnectWhatsApp;
+      disconnect.disabled=busy;
+      box.appendChild(disconnect);
     }
+
     const hint=document.createElement('span');
     hint.className='dabbirWhatsAppHint';
-    hint.textContent=cfg.platform_ready
-      ? (ar()?'الربط يتم داخل DABBIR عبر نافذة Meta الرسمية. اترك النافذة مفتوحة حتى تنتهي كل خطوات Meta.':'Connection happens inside DABBIR through Meta’s official window. Keep the window open until every Meta step finishes.')
-      : (ar()?'إعداد Meta Embedded Signup للمنصة يحتاج App ID وConfiguration ID قبل فتح نافذة الربط.':'Platform Meta Embedded Signup needs an App ID and Configuration ID before the connection window can open.');
+    if(cfg.platform_readiness?.canonical_origin_active!==true){
+      hint.classList.add('error');
+      hint.textContent=ar()?('الربط متاح فقط من رابط DABBIR المعتمد: '+String(cfg.expected_origin||'')):('Connection is available only on the canonical DABBIR URL: '+String(cfg.expected_origin||''));
+    }else if(!cfg.platform_ready){
+      hint.classList.add('error');
+      hint.textContent=ar()?'إعداد Meta Embedded Signup على الخادم غير مكتمل.':'Meta Embedded Signup server configuration is incomplete.';
+    }else{
+      hint.textContent=ar()?'الربط يتم عبر نافذة Meta الرسمية. اتركها مفتوحة حتى تنتهي جميع الخطوات.':'Connection uses Meta’s official window. Keep it open until every step finishes.';
+    }
     box.appendChild(hint);
   }
 
   if(typeof renderIntegrations==='function'&&!window.__dabbirWhatsAppEmbeddedRenderWrapped){
     window.__dabbirWhatsAppEmbeddedRenderWrapped=true;
     const before=renderIntegrations;
-    renderIntegrations=function(){const result=before.apply(this,arguments);setTimeout(renderActions,0);return result};
+    renderIntegrations=function(){
+      const result=before.apply(this,arguments);
+      setTimeout(renderActions,0);
+      return result;
+    };
   }
 
   const observer=new MutationObserver(()=>{
     const card=whatsappCard();
-    if(card&&!card.querySelector('[data-dabbir-whatsapp-actions]')) setTimeout(renderActions,0);
+    if(card&&!card.querySelector('[data-dabbir-whatsapp-actions]'))setTimeout(renderActions,0);
   });
   observer.observe(document.documentElement,{subtree:true,childList:true});
   setTimeout(()=>{refreshTenantStatus();renderActions()},700);
@@ -308,7 +376,9 @@ const script = String.raw`(()=>{
 
 export default function handler(req,res){
   if(req.method!=='GET'){
-    res.statusCode=405;res.setHeader('allow','GET');return res.end('Method Not Allowed');
+    res.statusCode=405;
+    res.setHeader('allow','GET');
+    return res.end('Method Not Allowed');
   }
   res.statusCode=200;
   res.setHeader('content-type','application/javascript; charset=utf-8');
