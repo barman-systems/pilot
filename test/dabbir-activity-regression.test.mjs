@@ -7,7 +7,7 @@ const read = path => readFile(new URL(path, root), 'utf8');
 
 const activityApi = await read('api/activity-tasks.js');
 const activityUi = await read('api/activity-profile-ui.js');
-const mobileUi = await read('api/activity-mobile-polish-ui.js');
+const ownerUi = await read('api/dabbir-owner-first-ui.js');
 const appRecovery = await read('api/app-recovery.js');
 const appointmentGuard = await read('db/dabbir_activity_type_appointment_guard_v1.sql');
 
@@ -21,7 +21,7 @@ for (const type of activityTypes) {
 
 test('store is inventory/order driven and cannot expose appointments or services', () => {
   assert.match(activityApi, /store:\{[^\n]*show_appointments:false[^\n]*show_services:false[^\n]*show_operations:true/);
-  assert.match(mobileUi, /if\(type==='store'\) return item\?\.type!=='appointment'/);
+  assert.match(ownerUi, /if\(type==='store'\)return item\?\.type!=='appointment'/);
   assert.match(appointmentGuard, /if v_type = 'store'/);
   assert.match(appointmentGuard, /APPOINTMENTS_NOT_ALLOWED_FOR_STORE/);
 });
@@ -47,22 +47,32 @@ test('activity profile rewrites navigation, dashboard metrics and task labels', 
   assert.match(activityUi, /cards\[2\]/);
 });
 
-test('mobile navigation cannot wrap settings into a second row', () => {
-  assert.match(mobileUi, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
-  assert.match(mobileUi, /data-screen=\"settings\"\]\{display:none!important\}/);
+test('owner-first mobile navigation stays one five-column row with settings reachable', () => {
+  assert.match(ownerUi, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(ownerUi, /#bottomNav>button/);
+  assert.doesNotMatch(ownerUi, /data-screen=\\"settings\\"[^\n]*display:none/);
 });
 
-test('mobile header strips DABBIR text and leaves the approved icon only', () => {
-  assert.match(mobileUi, /removeMobileBrandText\(\)/);
-  assert.match(mobileUi, /if\(!child\.classList\.contains\('logo'\)\)child\.remove\(\)/);
-  assert.match(mobileUi, /logo\.textContent=''/);
+test('mobile header uses the approved DABBIR icon and no floating duplicate brand', () => {
+  assert.match(ownerUi, /const ICON='\/api\/dabbir-approved-icon'/);
+  assert.match(ownerUi, /d4-header-mark/);
+  assert.match(ownerUi, /\.dabbirMobileBrand\{display:none!important\}/);
 });
 
-test('activity mobile polish is always loaded after profile and action center layers', () => {
+test('owner-first UI is the only mobile presentation authority loaded after activity and action center', () => {
   const profileIndex = appRecovery.indexOf('/api/activity-profile-ui');
   const actionIndex = appRecovery.indexOf('/api/owner-action-center-ui');
-  const polishIndex = appRecovery.indexOf('/api/activity-mobile-polish-ui');
-  assert.ok(profileIndex >= 0 && actionIndex >= 0 && polishIndex >= 0);
-  assert.ok(polishIndex > profileIndex);
-  assert.ok(polishIndex > actionIndex);
+  const ownerUiIndex = appRecovery.indexOf('/api/dabbir-owner-first-ui');
+  assert.ok(profileIndex >= 0 && actionIndex >= 0 && ownerUiIndex >= 0);
+  assert.ok(ownerUiIndex > profileIndex);
+  assert.ok(ownerUiIndex > actionIndex);
+  assert.equal(appRecovery.includes('/api/activity-mobile-polish-ui'), false);
+  assert.equal(appRecovery.includes('/api/dabbir-ui-refinement'), false);
+  assert.equal(appRecovery.includes('/api/dabbir-mobile-shell-v3'), false);
+  assert.equal(appRecovery.includes('/api/dabbir-logo-placement-ui'), false);
+});
+
+test('owner-first UI has no continuous presentation polling loop', () => {
+  assert.doesNotMatch(ownerUi, /setInterval\(/);
+  assert.match(ownerUi, /pollingLoops:0/);
 });

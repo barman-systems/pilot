@@ -7,9 +7,11 @@ import { dubaiDayRange } from '../api/dabbir-runtime-fast.js';
 const runtimePath='api/dabbir-runtime-fast.js';
 const uiPath='api/verified-metrics-ui.js';
 const recoveryPath='api/app-recovery.js';
+const ownerUiPath='api/dabbir-owner-first-ui.js';
 const runtime=fs.readFileSync(runtimePath,'utf8');
 const ui=fs.readFileSync(uiPath,'utf8');
 const recovery=fs.readFileSync(recoveryPath,'utf8');
+const ownerUi=fs.readFileSync(ownerUiPath,'utf8');
 
 test('Dubai today range is exact across the UTC date boundary',()=>{
   const range=dubaiDayRange(new Date('2026-08-27T20:30:00.000Z'));
@@ -63,15 +65,16 @@ test('store dashboard uses exact open followups instead of a bounded followup li
   assert.match(ui,/Follow-ups/);
 });
 
-test('verified metrics authority loads after the mobile and refinement UI layers',()=>{
-  const mobile=recovery.indexOf('/api/dabbir-mobile-shell-v3');
+test('verified metrics authority loads after owner-first UI v4',()=>{
+  const ownerUiIndex=recovery.indexOf('/api/dabbir-owner-first-ui');
   const metrics=recovery.indexOf('/api/verified-metrics-ui');
-  assert.ok(mobile>=0,'mobile shell must be present');
-  assert.ok(metrics>mobile,'verified metrics must load after every prior UI layer');
+  assert.ok(ownerUiIndex>=0,'owner-first UI must be present');
+  assert.ok(metrics>ownerUiIndex,'verified metrics must load after presentation UI');
+  assert.match(ownerUi,/x-dabbir-ui-authority/);
 });
 
-test('exact metrics runtime and UI endpoint parse as Node modules',()=>{
-  for(const path of [runtimePath,uiPath,recoveryPath]){
+test('exact metrics runtime and UI endpoints parse as Node modules',()=>{
+  for(const path of [runtimePath,uiPath,recoveryPath,ownerUiPath]){
     const result=spawnSync(process.execPath,['--check',path],{encoding:'utf8'});
     assert.equal(result.status,0,`${path}: ${result.stderr||result.stdout}`);
   }
