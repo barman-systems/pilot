@@ -12,10 +12,12 @@ const client=String.raw`
 
   const q=s=>document.querySelector(s);
   const ar=()=>document.documentElement.lang!=='en';
-  const isServiceBusiness=()=>String(workspace?.business?.business_type||'').toLowerCase()!=='store';
+  const businessType=()=>String(workspace?.business?.business_type||'').toLowerCase();
+  const isServiceBusiness=()=>Boolean(businessType())&&businessType()!=='store';
   let data=null;
   let loading=false;
   let editingId=null;
+  let observedScreen=null;
 
   const copy=()=>ar()?{
     nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
@@ -155,15 +157,23 @@ const client=String.raw`
     if(!isServiceBusiness())return;
     applyCopy();
     const screen=ensureScreen();
-    if(screen){
+    if(screen&&screen!==observedScreen){
+      observedScreen=screen;
       new MutationObserver(()=>{if(screen.classList.contains('active')){applyCopy();load(false)}}).observe(screen,{attributes:true,attributeFilter:['class']});
     }
+    if(current==='operations')load(false);
   }
 
   const baseSetLanguage=typeof setLanguage==='function'?setLanguage:null;
   if(baseSetLanguage)setLanguage=function(next){const result=baseSetLanguage(next);applyCopy();return result};
+
+  try{
+    const baseRenderAll=renderAll;
+    renderAll=function(){const result=baseRenderAll.apply(this,arguments);initialize();return result};
+  }catch{}
+
   setTimeout(initialize,500);
-  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v1'};
+  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v2'};
 })();
 `;
 
@@ -171,6 +181,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
-  res.setHeader('x-dabbir-service-operations-ui','v1');
+  res.setHeader('x-dabbir-service-operations-ui','v2');
   return res.status(200).send(client);
 }
