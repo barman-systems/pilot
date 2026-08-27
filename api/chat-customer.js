@@ -28,7 +28,6 @@ function delegateRequest(req,body){
   const stream=Readable.from([Buffer.from(JSON.stringify(body),'utf8')]);
   stream.method='POST';
   stream.headers={...req.headers,'content-type':'application/json'};
-  stream.query=req.query||{};
   stream.url=req.url;
   return stream;
 }

@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
 import { loadBusinessConnection, ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const businessId = String(req.query?.business_id || '').trim();
+  const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
   if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
 
   try {

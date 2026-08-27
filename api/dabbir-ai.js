@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 function json(res, status, body) {
@@ -9,7 +10,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const config = getDABBIRAiConfig();
-    if (String(req.query?.synthetic || '') === '1') {
+    if (String(singleQueryValue(req, 'synthetic') || '') === '1') {
       const result = await generateDABBIRAiReply({
         project: 'dabbir_clinics',
         message: 'هلا، ابا موعد باجر العصر',
