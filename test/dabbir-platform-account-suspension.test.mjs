@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const [migration, api, ui, authCore, session] = await Promise.all([
-  read('supabase/migrations/20260827152800_dabbir_account_suspension_v1.sql'),
+  read('supabase/migrations/20260827154515_dabbir_account_suspension_hardening_v2.sql'),
   read('api/platform-customers.js'),
   read('api/platform-customers-ui.js'),
   read('api/_auth-core.js'),
@@ -12,7 +12,7 @@ const [migration, api, ui, authCore, session] = await Promise.all([
 ]);
 
 test('platform suspension is DABBIR-only and does not mutate Supabase Auth bans', () => {
-  assert.match(migration, /dabbir_private\.account_access_state/);
+  assert.match(migration, /public\.account_access_state/);
   assert.match(migration, /DABBIR_PLATFORM_ADMIN_IMMUTABLE/);
   assert.match(migration, /dabbir_private\.account_active\(\)/);
   assert.match(migration, /grant execute on function public\.dabbir_platform_set_account_access[\s\S]*to service_role/i);
@@ -20,9 +20,19 @@ test('platform suspension is DABBIR-only and does not mutate Supabase Auth bans'
   assert.doesNotMatch(migration, /ban_duration/i);
 });
 
+test('access state is self-readable through RLS and not client-writable', () => {
+  assert.match(migration, /enable row level security/i);
+  assert.match(migration, /create policy account_access_state_select_self/i);
+  assert.match(migration, /using \(user_id = \(select auth\.uid\(\)\)\)/i);
+  assert.match(migration, /revoke all on public\.account_access_state from public, anon, authenticated/i);
+  assert.match(migration, /grant select on public\.account_access_state to authenticated/i);
+  assert.doesNotMatch(migration, /grant (insert|update|delete).*account_access_state.*authenticated/i);
+});
+
 test('suspended accounts are denied in central auth and session surfaces', () => {
-  assert.match(authCore, /dabbir_account_access_self/);
+  assert.match(authCore, /account_access_state\?select=status,reason,suspended_at/);
   assert.match(authCore, /user\.dabbir_access === 'suspended'/);
+  assert.doesNotMatch(authCore, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(session, /DABBIR_ACCOUNT_SUSPENDED/);
   assert.match(session, /423/);
   assert.match(session, /memberships:\s*\[\]/);
@@ -38,7 +48,7 @@ test('platform access mutation is same-origin, reason-gated and service-side', (
   assert.match(ui, /PLATFORM_ADMIN_IMMUTABLE/);
 });
 
-test('admin UI exposes DABBIR suspension and reactivation without removing recovery controls', () => {
+test('admin UI exposes suspension and reactivation without removing recovery controls', () => {
   assert.match(ui, /Suspend account|تعليق الحساب/);
   assert.match(ui, /Reactivate account|إعادة تفعيل الحساب/);
   assert.match(ui, /recovery_preview/);
