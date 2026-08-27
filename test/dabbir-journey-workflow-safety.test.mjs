@@ -20,10 +20,8 @@ test('capacity never runs automatically on push or schedule',()=>{
   const manualGate=/github\.event_name == 'workflow_dispatch'/g;
   assert.ok((workflow.match(manualGate)||[]).length>=2,'both capacity jobs must be workflow_dispatch-only');
   must(/inputs\.run_capacity == true/,'capacity requires an explicit manual boolean');
-  must(/needs\.full-customer-journey\.result == 'success'/,'AI capacity requires a successful full journey');
-  must(/needs\.ai-capacity\.result == 'success'/,'runtime capacity requires successful AI capacity');
-  mustNot(/ai-capacity:[\s\S]*?if:\s*always\(\)/,'AI capacity must not run after a failed journey');
-  mustNot(/runtime-capacity-1000:[\s\S]*?if:\s*always\(\)/,'runtime capacity must not run after a failed AI gate');
+  must(/ai-capacity:\n    name:[^\n]*\n    needs: full-customer-journey\n    if: \$\{\{[^\n]*github\.event_name == 'workflow_dispatch'[^\n]*needs\.full-customer-journey\.result == 'success'[^\n]*\}\}/,'AI capacity job gate must be manual-only and require a successful journey');
+  must(/runtime-capacity-1000:\n    name:[^\n]*\n    needs: ai-capacity\n    if: \$\{\{[^\n]*github\.event_name == 'workflow_dispatch'[^\n]*needs\.ai-capacity\.result == 'success'[^\n]*\}\}/,'runtime capacity job gate must be manual-only and require successful AI capacity');
 });
 
 test('production capacity retains exact fail-closed acknowledgement',()=>{
