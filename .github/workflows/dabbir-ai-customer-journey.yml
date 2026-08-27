@@ -1,5 +1,5 @@
 name: DABBIR AI Full Customer Journey
-# Real production journey on push/schedule; capacity is manual-only and remains fail-closed.
+# Real production journey on push/schedule; protected pre-launch is classified without pretending production was tested.
 
 on:
   workflow_dispatch:
@@ -21,6 +21,8 @@ on:
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
+      - 'scripts/dabbir-production-origin-gate.mjs'
+      - 'config/barman-integration-contract.json'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -48,42 +50,40 @@ permissions:
   contents: read
   id-token: write
 
-# Never cancel a trusted production journey because another qualifying commit arrived.
-# A single group also prevents two production journeys/capacity sequences from overlapping.
 concurrency:
   group: dabbir-ai-full-customer-journey
   cancel-in-progress: false
 
 jobs:
   full-customer-journey:
-    name: Real owner + customer + employee + AI journey
+    name: Public-production owner + customer + employee + AI journey
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
+    outputs:
+      production_ready: ${{ steps.launch-gate.outputs.ready }}
+      production_state: ${{ steps.launch-gate.outputs.state }}
     steps:
-      - name: Require canonical DABBIR production origin
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
-            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
-            exit 1
-          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Classify canonical DABBIR production origin
+        id: launch-gate
+        run: node scripts/dabbir-production-origin-gate.mjs
       - name: Install WebKit journey runner
+        if: steps.launch-gate.outputs.ready == 'true'
         run: |
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps webkit
       - name: Run AI full customer journey against production
+        if: steps.launch-gate.outputs.ready == 'true'
         run: node test/ai-full-customer-journey-v2.mjs
       - name: Publish journey summary
-        if: always()
+        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
         shell: bash
         run: |
           if [ -f dabbir-ai-customer-journey-report.json ]; then
@@ -95,7 +95,7 @@ jobs:
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload journey evidence
-        if: always()
+        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v6
         with:
           name: dabbir-ai-customer-journey-evidence
@@ -108,7 +108,7 @@ jobs:
   ai-capacity:
     name: AI capacity — manual production gate
     needs: full-customer-journey
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.full-customer-journey.result == 'success' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.full-customer-journey.result == 'success' && needs.full-customer-journey.outputs.production_ready == 'true' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -149,8 +149,8 @@ jobs:
 
   runtime-capacity-1000:
     name: Runtime capacity — manual 1000-customer gate
-    needs: ai-capacity
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.ai-capacity.result == 'success' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
+    needs: [full-customer-journey, ai-capacity]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.ai-capacity.result == 'success' && needs.full-customer-journey.outputs.production_ready == 'true' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
