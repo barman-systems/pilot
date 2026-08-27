@@ -13,7 +13,7 @@ const script=String.raw`(()=>{
   const CACHE_MS=30000;
 
   const style=document.createElement('style');
-  style.dataset.dabbirCustomerActivation='v2';
+  style.dataset.dabbirCustomerActivation='v3';
   style.textContent=[
     '.dabbirActivation{margin:0 0 14px;border:1px solid #334061;background:linear-gradient(145deg,#12182b 0%,#101526 54%,#111827 100%);border-radius:22px;padding:16px;box-shadow:0 18px 55px #0005}',
     '.daHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.daHead h2{margin:0;font-size:16px;line-height:1.35}.daHead p{margin:5px 0 0;color:#a9b4c8;font-size:10px;line-height:1.65}',
@@ -34,10 +34,10 @@ const script=String.raw`(()=>{
 
   function copy(){return ar()?{
     title:'جهّز دَبِّر ليعمل عنك',readyTitle:'دَبِّر جاهز للعمل',desc:'دقيقة واحدة هنا تختصر عليك البحث داخل الإعدادات. نعرض فقط ما تم التحقق منه فعليًا.',readyDesc:'الأساسيات التشغيلية جاهزة. راقب ما أنجزه دَبِّر وما يحتاج قرارك فقط.',score:'الجاهزية',next:'الخطوة الأفضل الآن',proof:'دليل القيمة',intentTitle:'ماذا تريد من دَبِّر الآن؟',
-    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
+    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
   }:{
     title:'Get DABBIR working for you',readyTitle:'DABBIR is ready to operate',desc:'One minute here saves hunting through settings. Only verified setup state is shown.',readyDesc:'Core operations are ready. Focus on what DABBIR completed and what actually needs your decision.',score:'Readiness',next:'Best next step',proof:'Proof of value',intentTitle:'What do you want DABBIR to do now?',
-    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
+    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
   }}
 
   function profileReady(){
@@ -47,9 +47,14 @@ const script=String.raw`(()=>{
     return core&&contact;
   }
 
+  function whatsappLinked(){
+    const w=whatsapp||workspace?.whatsapp||{};
+    return Boolean(w.connected||w.meta_authorized||['META_AUTHORIZED','OPERATIONAL'].includes(String(w.state||'')));
+  }
+
   function whatsappReady(){
     const w=whatsapp||workspace?.whatsapp||{};
-    return Boolean(w.operational||w.connected||w.meta_authorized||['META_AUTHORIZED','WEBHOOK_LINKED','CONFIGURED_READY_FOR_VERIFICATION','OUTBOUND_CONFIGURED','OPERATIONAL'].includes(String(w.state||'')));
+    return w.operational===true&&String(w.state||'')==='OPERATIONAL';
   }
 
   function aiReady(){return Boolean(workspace?.ai?.configured)}
@@ -77,7 +82,8 @@ const script=String.raw`(()=>{
   function nextStep(){
     const t=copy();
     if(!profileReady())return {title:t.profileTodo,body:t.profileBody,action:t.profileAction,screen:'settings'};
-    if(!whatsappReady())return {title:t.channelTodo,body:t.channelBody,action:t.channelAction,screen:'integrations'};
+    if(!whatsappLinked())return {title:t.channelTodo,body:t.channelBody,action:t.channelAction,screen:'integrations'};
+    if(!whatsappReady())return {title:t.channelVerifyTodo,body:t.channelVerifyBody,action:t.channelVerifyAction,screen:'integrations'};
     if(!aiReady())return {title:t.aiTodo,body:t.aiBody,action:t.aiAction,screen:'integrations'};
     const chats=exactMetric('active_chats');
     if(chats===0)return {title:t.testTodo,body:t.testBody,action:t.testAction,screen:'conversations'};
@@ -149,7 +155,7 @@ const script=String.raw`(()=>{
     setLanguage=function(next){const result=base(next);setTimeout(render,0);return result};
   }
   setTimeout(()=>{render();load(false)},500);
-  window.__dabbirCustomerActivation={version:'customer-activation-v2',refresh:()=>load(true)};
+  window.__dabbirCustomerActivation={version:'customer-activation-v3',refresh:()=>load(true)};
 })();`;
 
 export default function handler(req,res){
@@ -158,6 +164,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-customer-activation','v2');
+  res.setHeader('x-dabbir-customer-activation','v3');
   return res.end(script);
 }
