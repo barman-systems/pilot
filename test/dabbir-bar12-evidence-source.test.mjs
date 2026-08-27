@@ -23,6 +23,7 @@ test('BAR-12 evidence action has an OIDC profile separate from AI journey action
 
 test('BAR-12 evidence is aggregate-only and readiness path is read-only',()=>{
   const readiness=source.slice(source.indexOf('async function exactCount'),source.indexOf('async function handleReadiness'));
+  assert.ok(readiness.length>1000);
   assert.doesNotMatch(readiness,/\.insert\(|\.update\(|\.upsert\(|\.delete\(|db\.rpc\(/);
   assert.doesNotMatch(readiness,/select\(['"`](?:[^'"`]*)(body|email|phone|display_name|access_token_ciphertext)/i);
   assert.match(readiness,/connection_success_rate:null/);
