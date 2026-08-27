@@ -23,7 +23,8 @@ const script=String.raw`(()=>{
     '.bottomNav .dabbirNavIconV3 svg{width:20px;height:20px;display:block;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}',
     '.bottomNav>button,.bottomNav>a{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important}',
     '.msgrow.ai>.dabbirAiIdentity{display:none!important}',
-    '.msgrow.ai>.dabbirSenderLabel{min-height:20px;display:flex;align-items:center;padding-inline-start:25px;background-image:url("/api/dabbir-approved-icon");background-repeat:no-repeat;background-position:inset-inline-start center;background-size:19px 19px;color:#caff68!important}',
+    '.msgrow.ai>.dabbirSenderLabel{min-height:20px;display:flex;align-items:center;padding-left:25px;background-image:url("/api/dabbir-approved-icon");background-repeat:no-repeat;background-position:left center;background-size:19px 19px;color:#caff68!important}',
+    'html[dir="rtl"] .msgrow.ai>.dabbirSenderLabel{padding-left:0;padding-right:25px;background-position:right center}',
     '.dac-open:empty{display:none!important}',
     '@media(max-width:700px){',
       '.top{height:78px!important;padding:0 12px!important;background:#080b0ef7!important;border-bottom:1px solid #242b32!important;box-shadow:0 12px 30px #0004!important}',
@@ -119,23 +120,28 @@ const script=String.raw`(()=>{
     qa('#screen-tasks .item b,#screen-tasks .item small,#screen-tasks .badge').forEach(el=>{
       const raw=(el.dataset.rawMachineText||el.textContent||'').trim();
       if(!el.dataset.rawMachineText)el.dataset.rawMachineText=raw;
-      if(map[raw])el.textContent=map[raw];
+      const next=map[raw];
+      if(next&&el.textContent!==next)el.textContent=next;
     });
   }
 
   function cleanConversationIdentity(){
     qa('#messages .msgrow.ai').forEach(row=>{
-      const identities=row.querySelectorAll(':scope > .dabbirAiIdentity');
-      identities.forEach(node=>node.remove());
+      row.querySelectorAll(':scope > .dabbirAiIdentity').forEach(node=>node.remove());
       const label=row.querySelector(':scope > .dabbirSenderLabel');
-      if(label)label.textContent='DABBIR';
+      if(label&&label.textContent!=='DABBIR')label.textContent='DABBIR';
     });
   }
 
   function removeBlankControls(){qa('.dac-open').forEach(btn=>{if(!String(btn.textContent||'').trim())btn.remove()})}
 
   function polish(){ensureHeaderBrand();upgradeBottomNav();localizeMachineText();cleanConversationIdentity();removeBlankControls()}
-  const observer=new MutationObserver(()=>requestAnimationFrame(polish));
+  let scheduled=false;
+  const observer=new MutationObserver(()=>{
+    if(scheduled)return;
+    scheduled=true;
+    requestAnimationFrame(()=>{scheduled=false;polish()});
+  });
   observer.observe(document.body,{subtree:true,childList:true});
   if(typeof renderAll==='function'&&!window.__dabbirMobileShellRenderWrapped){
     window.__dabbirMobileShellRenderWrapped=true;const base=renderAll;renderAll=function(){const out=base.apply(this,arguments);requestAnimationFrame(polish);return out};
@@ -147,7 +153,7 @@ const script=String.raw`(()=>{
     window.__dabbirMobileShellLangWrapped=true;const base=applyLang;applyLang=function(){const out=base.apply(this,arguments);requestAnimationFrame(polish);return out};
   }
   setTimeout(polish,0);setTimeout(polish,400);setTimeout(polish,1200);
-  window.__dabbirMobileShellV3Version='brand-visible-premium-v3';
+  window.__dabbirMobileShellV3Version='brand-visible-premium-v3.1';
 })();`;
 
 export default function handler(req,res){
@@ -155,6 +161,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-mobile-shell','brand-visible-premium-v3');
+  res.setHeader('x-dabbir-mobile-shell','brand-visible-premium-v3.1');
   return res.status(200).send(script);
 }
