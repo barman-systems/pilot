@@ -1,0 +1,101 @@
+name: DABBIR BAR-12 Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'config/barman-integration-contract.json'
+      - 'scripts/dabbir-production-origin-gate.mjs'
+      - 'scripts/dabbir-readiness-gate.mjs'
+      - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'api/dabbir-whatsapp-*.js'
+      - 'api/_whatsapp-*.js'
+      - 'test/ai-full-customer-journey-v2.mjs'
+      - '.github/workflows/dabbir-bar12-readiness.yml'
+  schedule:
+    - cron: '41 2 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dabbir-bar12-readiness
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
+      DABBIR_READINESS_EVIDENCE_PATH: dabbir-bar12-live-evidence.json
+      DABBIR_READINESS_REPORT_PATH: dabbir-bar12-readiness-report.json
+      DABBIR_READINESS_ENFORCE_PUBLIC_ONLY: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run DABBIR tests
+        run: npm test
+      - name: Request short-lived GitHub OIDC identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          separator='?'
+          if [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]]; then separator='&'; fi
+          token_json="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}${separator}audience=dabbir-bar12-readiness")"
+          token="$(jq -r '.value // empty' <<<"$token_json")"
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - name: Fetch aggregate production evidence from Supabase
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H 'Content-Type: application/json' \
+            'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-qa-suite-runner' \
+            -d '{"action":"dabbir_bar12_readiness"}' > dabbir-bar12-supabase-evidence.json
+          jq -e '.ok == true and .evidence != null' dabbir-bar12-supabase-evidence.json >/dev/null
+      - name: Assemble fail-closed BAR-12 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --slurpfile live dabbir-bar12-supabase-evidence.json \
+            '{
+              expected_main_sha:$sha,
+              live_evidence:$live[0],
+              production_deployment:null,
+              end_to_end_journey:null,
+              iphone_safari_ar:null,
+              iphone_safari_en:null,
+              monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},
+              critical_gates:{security:null,financial:null,legal:null}
+            }' > dabbir-bar12-live-evidence.json
+      - name: Evaluate BAR-12 readiness
+        run: node scripts/dabbir-readiness-gate.mjs
+      - name: Upload readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-bar12-readiness-evidence
+          path: |
+            dabbir-bar12-supabase-evidence.json
+            dabbir-bar12-live-evidence.json
+            dabbir-bar12-readiness-report.json
+          if-no-files-found: warn
+          retention-days: 30
