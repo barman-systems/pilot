@@ -4,6 +4,7 @@ import {
   getVerifiedUser,
   json,
   supabaseRest,
+  userClaimsFromValidatedAccessToken,
 } from './_auth-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,10 +30,22 @@ const rest=(token,path,fallback)=>supabaseRest(path,token).then(r=>readData(r,fa
 async function authenticatedContext(req,res){
   const token=accessTokenFromRequest(req);
   if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
-  const [user,memberships]=await Promise.all([
-    getVerifiedUser(token).catch(()=>null),
-    getBusinessMemberships(token).catch(()=>[]),
-  ]);
+
+  // Membership lookup goes through the Supabase Data API, which validates the
+  // same JWT before applying tenant RLS. Reuse that successful validation and
+  // keep /auth/v1/user off this high-frequency dashboard path.
+  let memberships;
+  try{
+    memberships=await getBusinessMemberships(token);
+  }catch(error){
+    const status=Number(error?.code||500);
+    if(status===401||status===403){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
+    json(res,503,{ok:false,error:'AUTH_VERIFICATION_UNAVAILABLE'});return null;
+  }
+
+  let user=userClaimsFromValidatedAccessToken(token);
+  // Compatibility fallback for unexpected/legacy token shapes only.
+  if(!user)user=await getVerifiedUser(token).catch(()=>null);
   if(!user){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   return {token,user,memberships};
 }
@@ -178,6 +191,7 @@ export default async function handler(req,res){
     const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.');
     const briefEn=handledPrefixEn+(top.length?`What needs your attention now: ${top.map(item=>item.title_en).join(', ')}.`:'No critical or due items in the next 24 hours. DABBIR is monitoring the business.');
 
+    res.setHeader('x-dabbir-owner-action-center-auth','fast-v1');
     return json(res,200,{
       ok:true,
       business_id:businessId,
@@ -189,7 +203,7 @@ export default async function handler(req,res){
       handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
       brief:{ar:briefAr,en:briefEn},
       items:items.slice(0,12),
-      truth:{source:'live_dabbir_tenant_data',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
+      truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
     });
   }catch(error){
     const status=Number(error?.status||500);
