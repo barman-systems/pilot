@@ -48,12 +48,23 @@ export function embeddedPlatformConfig() {
   );
   const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION') || 'v23.0';
   const encryptionSecret = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY') || appSecret;
+  const encryptionKeyVersion = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY_VERSION') || 'whatsapp_v1';
+  const previousEncryptionSecret = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY_PREVIOUS');
+  const previousEncryptionKeyVersion = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY_PREVIOUS_VERSION');
   return {
     appId,
     appSecret,
     configId,
     graphVersion,
     encryptionSecret,
+    encryptionKeyVersion,
+    previousEncryptionSecret,
+    previousEncryptionKeyVersion,
+    rotationReady: Boolean(
+      previousEncryptionSecret
+      && previousEncryptionKeyVersion
+      && previousEncryptionKeyVersion !== encryptionKeyVersion
+    ),
     appIdSource: appId ? 'environment' : null,
     legacyAccessTokenAvailable: Boolean(legacyWhatsAppAccessToken()),
     ready: Boolean(appId && appSecret && configId && encryptionSecret),
@@ -114,33 +125,46 @@ export async function ownerContext(req, businessId) {
   return { accessToken, user, membership };
 }
 
-function keyFor(config, businessId) {
-  if (!config.encryptionSecret) throw new Error('INTEGRATION_ENCRYPTION_NOT_CONFIGURED');
+function keySecretForVersion(config, keyVersion) {
+  const currentVersion = String(config.encryptionKeyVersion || 'whatsapp_v1');
+  const requestedVersion = String(keyVersion || currentVersion);
+  if (requestedVersion === currentVersion && config.encryptionSecret) return config.encryptionSecret;
+  if (
+    requestedVersion === String(config.previousEncryptionKeyVersion || '')
+    && config.previousEncryptionSecret
+  ) return config.previousEncryptionSecret;
+  throw new Error('INTEGRATION_ENCRYPTION_KEY_VERSION_UNAVAILABLE');
+}
+
+function keyFor(config, businessId, keyVersion = config.encryptionKeyVersion) {
+  const secret = keySecretForVersion(config, keyVersion);
   return crypto.createHash('sha256')
     .update('dabbir-whatsapp-embedded-v1\0')
     .update(String(businessId))
     .update('\0')
-    .update(config.encryptionSecret)
+    .update(secret)
     .digest();
 }
 
 export function sealAccessToken(token, config, businessId) {
+  const keyVersion = String(config.encryptionKeyVersion || 'whatsapp_v1');
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', keyFor(config, businessId), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', keyFor(config, businessId, keyVersion), iv);
   const ciphertext = Buffer.concat([cipher.update(String(token), 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
     access_token_ciphertext: ciphertext.toString('base64url'),
     access_token_iv: iv.toString('base64url'),
     access_token_tag: tag.toString('base64url'),
-    token_key_version: 'whatsapp_v1',
+    token_key_version: keyVersion,
   };
 }
 
 export function openAccessToken(row, config, businessId) {
+  const keyVersion = String(row.token_key_version || 'whatsapp_v1');
   const decipher = crypto.createDecipheriv(
     'aes-256-gcm',
-    keyFor(config, businessId),
+    keyFor(config, businessId, keyVersion),
     Buffer.from(String(row.access_token_iv || ''), 'base64url'),
   );
   decipher.setAuthTag(Buffer.from(String(row.access_token_tag || ''), 'base64url'));
@@ -149,6 +173,29 @@ export function openAccessToken(row, config, businessId) {
     decipher.final(),
   ]);
   return plaintext.toString('utf8');
+}
+
+export function tokenNeedsRotation(row, config) {
+  return String(row?.token_key_version || 'whatsapp_v1') !== String(config?.encryptionKeyVersion || 'whatsapp_v1');
+}
+
+export async function rotateStoredConnectionEncryption(accessToken, row, config, token = null) {
+  if (!row || !tokenNeedsRotation(row, config)) return { rotated: false, row };
+  const plaintext = token == null ? openAccessToken(row, config, row.business_id) : String(token);
+  const sealed = sealAccessToken(plaintext, config, row.business_id);
+  const response = await supabaseRest(
+    `dabbir_whatsapp_connections?business_id=eq.${encodeURIComponent(String(row.business_id))}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      headers: { prefer: 'return=representation' },
+      body: JSON.stringify(sealed),
+    },
+  );
+  const payload = await response.json().catch(() => []);
+  if (!response.ok) throw Object.assign(new Error('INTEGRATION_KEY_ROTATION_STORE_FAILED'), { status: 502 });
+  const updated = Array.isArray(payload) ? payload[0] || { ...row, ...sealed } : { ...row, ...sealed };
+  return { rotated: true, row: updated };
 }
 
 async function graphFetch(config, path, { method = 'GET', token, query, body } = {}) {
@@ -248,7 +295,14 @@ export async function loadBusinessConnection(accessToken, businessId) {
   const response = await supabaseRest(path, accessToken);
   if (!response.ok) return null;
   const rows = await response.json().catch(() => []);
-  return Array.isArray(rows) ? rows[0] || null : null;
+  let row = Array.isArray(rows) ? rows[0] || null : null;
+  if (!row) return null;
+  const config = embeddedPlatformConfig();
+  if (tokenNeedsRotation(row, config) && config.rotationReady) {
+    const rotation = await rotateStoredConnectionEncryption(accessToken, row, config);
+    row = rotation.row || row;
+  }
+  return row;
 }
 
 export async function upsertBusinessConnection(accessToken, row) {
