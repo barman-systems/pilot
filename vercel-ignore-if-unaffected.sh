@@ -4,24 +4,26 @@ set -u
 # Vercel ignoreCommand contract:
 #   exit 0 => skip/ignore deployment
 #   exit 1 => continue building
-# Fail safe: any uncertainty or unknown path builds.
-previous="${VERCEL_GIT_PREVIOUS_SHA:-}"
+# Compare the triggering commit to its direct parent. VERCEL_GIT_PREVIOUS_SHA is
+# the last successful deployment, not necessarily the prior commit in a PR.
+# Fail safe: any uncertainty, unavailable parent, or unknown path builds.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 
-if [[ -z "$previous" ]]; then
-  echo "No VERCEL_GIT_PREVIOUS_SHA; build for safety."
-  exit 1
-fi
-if ! git cat-file -e "${previous}^{commit}" 2>/dev/null; then
-  echo "Previous commit unavailable; build for safety."
-  exit 1
-fi
 if ! git cat-file -e "${current}^{commit}" 2>/dev/null; then
   echo "Current commit unavailable; build for safety."
   exit 1
 fi
 
-changed="$(git diff --name-only "$previous" "$current" --)"
+parent="$(git rev-parse "${current}^" 2>/dev/null)" || {
+  echo "Current commit parent unavailable; build for safety."
+  exit 1
+}
+if ! git cat-file -e "${parent}^{commit}" 2>/dev/null; then
+  echo "Current commit parent unavailable in checkout; build for safety."
+  exit 1
+fi
+
+changed="$(git diff --name-only "$parent" "$current" --)"
 if [[ -z "$changed" ]]; then
   echo "No changed files; skip deployment."
   exit 0
@@ -38,5 +40,5 @@ while IFS= read -r path; do
   esac
 done <<< "$changed"
 
-echo "Only non-runtime DABBIR paths changed; skip Vercel deployment."
+echo "Only non-runtime DABBIR paths changed in current commit; skip Vercel deployment."
 exit 0

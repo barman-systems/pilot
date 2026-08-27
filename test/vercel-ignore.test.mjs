@@ -26,43 +26,58 @@ function setupRepo() {
   return dir;
 }
 
-function runGuard(cwd, previous, current) {
+function runGuard(cwd, current, previousDeployment = '') {
   return spawnSync('bash', ['vercel-ignore-if-unaffected.sh'], {
     cwd,
-    env: { ...process.env, VERCEL_GIT_PREVIOUS_SHA: previous, VERCEL_GIT_COMMIT_SHA: current },
+    env: {
+      ...process.env,
+      VERCEL_GIT_COMMIT_SHA: current,
+      VERCEL_GIT_PREVIOUS_SHA: previousDeployment,
+    },
     encoding: 'utf8',
   });
 }
 
 test('test-only changes skip Vercel deployment', () => {
   const dir = setupRepo();
-  const base = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'test', 'new.test.mjs'), 'export {};\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'test only');
   const head = git(dir, 'rev-parse', 'HEAD');
-  assert.equal(runGuard(dir, base, head).status, 0);
+  assert.equal(runGuard(dir, head).status, 0);
+});
+
+test('last successful deployment may lag branch history without forcing a test-only build', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+
+  fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'runtime commit already built');
+
+  fs.writeFileSync(path.join(dir, 'test', 'later.test.mjs'), 'export {};\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'test-only follow-up');
+  const head = git(dir, 'rev-parse', 'HEAD');
+
+  assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
 test('runtime API changes continue Vercel deployment', () => {
   const dir = setupRepo();
-  const base = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'runtime');
   const head = git(dir, 'rev-parse', 'HEAD');
-  assert.equal(runGuard(dir, base, head).status, 1);
+  assert.equal(runGuard(dir, head).status, 1);
 });
 
 test('unknown root paths fail safe and build', () => {
   const dir = setupRepo();
-  const base = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'new-runtime-entry.js'), 'export default 1;\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'unknown root');
   const head = git(dir, 'rev-parse', 'HEAD');
-  assert.equal(runGuard(dir, base, head).status, 1);
+  assert.equal(runGuard(dir, head).status, 1);
 });
 
-test('missing previous SHA fails safe and builds', () => {
+test('commit without an available parent fails safe and builds', () => {
   const dir = setupRepo();
-  const head = git(dir, 'rev-parse', 'HEAD');
-  assert.equal(runGuard(dir, '', head).status, 1);
+  const rootCommit = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(runGuard(dir, rootCommit).status, 1);
 });
