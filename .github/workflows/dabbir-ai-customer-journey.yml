@@ -1,8 +1,18 @@
 name: DABBIR AI Full Customer Journey
-# Real production journey plus isolated, sequential AI and runtime capacity measurements.
+# Real production journey on push/schedule; capacity is manual-only and remains fail-closed.
 
 on:
   workflow_dispatch:
+    inputs:
+      run_capacity:
+        description: 'Run production AI/runtime capacity after a successful full journey'
+        required: false
+        default: false
+        type: boolean
+      production_capacity_ack:
+        description: 'For production capacity, enter exactly ALLOW_CAPACITY_LOAD_ON_PRODUCTION'
+        required: false
+        type: string
   push:
     branches: [main]
     paths:
@@ -36,9 +46,11 @@ permissions:
   contents: read
   id-token: write
 
+# Never cancel a trusted production journey because another qualifying commit arrived.
+# A single group also prevents two production journeys/capacity sequences from overlapping.
 concurrency:
   group: dabbir-ai-full-customer-journey
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   full-customer-journey:
@@ -84,14 +96,15 @@ jobs:
           retention-days: 14
 
   ai-capacity:
-    name: AI capacity — clean system
+    name: AI capacity — manual production gate
     needs: full-customer-journey
-    if: always()
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.full-customer-journey.result == 'success' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
       RUN_RUNTIME: 'false'
       RUN_AI: 'true'
@@ -125,14 +138,15 @@ jobs:
           retention-days: 14
 
   runtime-capacity-1000:
-    name: Runtime capacity — 1000 customers
+    name: Runtime capacity — manual 1000-customer gate
     needs: ai-capacity
-    if: always()
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.ai-capacity.result == 'success' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
       RUN_RUNTIME: 'true'
       RUN_AI: 'false'
