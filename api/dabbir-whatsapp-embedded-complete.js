@@ -7,6 +7,7 @@ import {
   upsertBusinessConnection,
   verifyEmbeddedAssets,
 } from './_whatsapp-embedded-core.js';
+import { isCanonicalProductionRequest } from '../config/dabbir-public-runtime.js';
 
 function cleanId(value) {
   const text = String(value || '').trim();
@@ -16,6 +17,7 @@ function cleanId(value) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'SAME_ORIGIN_REQUIRED' });
+  if (!isCanonicalProductionRequest(req)) return json(res, 409, { ok: false, error: 'CANONICAL_PRODUCTION_ORIGIN_REQUIRED' });
 
   try {
     const body = await readJsonBody(req, 16 * 1024);
