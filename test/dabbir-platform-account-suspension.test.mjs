@@ -54,11 +54,13 @@ test('platform access mutation is same-origin, reason-gated and service-side', (
   assert.match(ui, /PLATFORM_ADMIN_IMMUTABLE/);
 });
 
-test('admin UI exposes suspension and reactivation without removing recovery controls', () => {
+test('admin UI exposes suspension and reactivation while enforcing recovery v3 safety controls', () => {
   assert.match(ui, /Suspend account|تعليق الحساب/);
   assert.match(ui, /Reactivate account|إعادة تفعيل الحساب/);
   assert.match(ui, /recovery_preview/);
   assert.match(ui, /open_recovery/);
   assert.match(ui, /apply_recovery/);
-  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v2'/);
+  assert.match(ui, /frozenRequired|يجب تعليق حساب العميل أولًا/);
+  assert.match(ui, /manualRequired|مصالحة يدوية/);
+  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v3'/);
 });
