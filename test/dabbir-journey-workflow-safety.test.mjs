@@ -16,6 +16,11 @@ test('trusted production journeys queue instead of cancelling each other',()=>{
   mustNot(/cancel-in-progress:\s*true/,'mid-journey cancellation must not return');
 });
 
+test('runtime dependency changes trigger the production customer journey',()=>{
+  must(/- 'package\.json'/,'package.json changes must trigger the full production journey');
+  must(/- 'package-lock\.json'/,'package-lock.json changes must trigger the full production journey');
+});
+
 test('capacity never runs automatically on push or schedule',()=>{
   const manualGate=/github\.event_name == 'workflow_dispatch'/g;
   assert.ok((workflow.match(manualGate)||[]).length>=2,'both capacity jobs must be workflow_dispatch-only');

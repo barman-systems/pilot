@@ -16,6 +16,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'package.json'
+      - 'package-lock.json'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
