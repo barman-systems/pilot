@@ -1,15 +1,18 @@
 import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
 import { loadBusinessConnection, ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
+import { DABBIR_PUBLIC_RUNTIME, isCanonicalProductionRequest, requestHost } from '../config/dabbir-public-runtime.js';
 
-function readiness(platform) {
+function readiness(platform, originReady) {
   return {
     app_id_configured: Boolean(platform.appId),
     app_secret_configured: Boolean(platform.appSecret),
     embedded_config_id_configured: Boolean(platform.configId),
     encryption_configured: Boolean(platform.encryptionSecret),
-    existing_whatsapp_token_available: Boolean(platform.legacyAccessTokenAvailable),
+    canonical_origin_configured: Boolean(DABBIR_PUBLIC_RUNTIME.productionOrigin),
+    canonical_origin_active: Boolean(originReady),
     app_id_source: platform.appIdSource || null,
+    config_id_source: platform.configIdSource || null,
   };
 }
 
@@ -17,16 +20,20 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
 
   const platform = await resolveEmbeddedPlatformConfig();
+  const originReady = isCanonicalProductionRequest(req);
+  const platformReady = Boolean(platform.ready && originReady);
   const accessToken = accessTokenFromRequest(req);
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
-  const platformReadiness = readiness(platform);
+  const platformReadiness = readiness(platform, originReady);
 
   if (!user) {
     return json(res, 200, {
       ok: true,
       auth_required: true,
-      platform_ready: platform.ready,
+      platform_ready: platformReady,
       platform_readiness: platformReadiness,
+      expected_origin: DABBIR_PUBLIC_RUNTIME.productionOrigin,
+      request_host: requestHost(req),
       graph_version: platform.graphVersion,
       values_exposed: false,
     });
@@ -41,10 +48,12 @@ export default async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       auth_required: false,
-      platform_ready: platform.ready,
+      platform_ready: platformReady,
       platform_readiness: platformReadiness,
-      app_id: platform.ready ? platform.appId : null,
-      config_id: platform.ready ? platform.configId : null,
+      expected_origin: DABBIR_PUBLIC_RUNTIME.productionOrigin,
+      request_host: requestHost(req),
+      app_id: platformReady ? platform.appId : null,
+      config_id: platformReady ? platform.configId : null,
       graph_version: platform.graphVersion,
       sdk_locale: 'en_US',
       connected: Boolean(connection && connection.status !== 'disconnected'),
