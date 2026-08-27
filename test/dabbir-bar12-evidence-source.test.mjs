@@ -16,6 +16,7 @@ test('BAR-12 evidence action has an OIDC profile separate from AI journey action
   assert.match(source,/verifyGitHubOidc\(req,'readiness'\)/);
   assert.match(source,/payload\.ref!==GH_REF/);
   assert.match(source,/crypto\.subtle\.verify/);
+  assert.match(source,/actionError\(e,500\)/);
 });
 
 test('BAR-12 evidence returns aggregates and never selects customer content',()=>{
