@@ -8,10 +8,12 @@ const workflow=await readFile(new URL('.github/workflows/dabbir-bar12-readiness.
 
 test('BAR-12 evidence action has an OIDC profile separate from AI journey actions',()=>{
   assert.match(source,/READINESS_ACTION='dabbir_bar12_readiness'/);
-  assert.match(source,/audience:'dabbir-bar12-readiness'/);
-  assert.match(source,/dabbir-bar12-readiness\.yml@refs\/heads\/main/);
-  assert.match(source,/audience:'dabbir-ai-qa'/);
+  assert.match(source,/ai:\{audience:'dabbir-ai-qa'/);
+  assert.match(source,/readiness:\{audience:'dabbir-bar12-readiness'/);
   assert.match(source,/dabbir-ai-customer-journey\.yml@refs\/heads\/main/);
+  assert.match(source,/dabbir-bar12-readiness\.yml@refs\/heads\/main/);
+  assert.match(source,/verifyGitHubOidc\(req,'ai'\)/);
+  assert.match(source,/verifyGitHubOidc\(req,'readiness'\)/);
   assert.match(source,/payload\.ref!==GH_REF/);
   assert.match(source,/crypto\.subtle\.verify/);
 });
