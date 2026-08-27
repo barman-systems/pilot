@@ -20,7 +20,7 @@ const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration] 
   read('supabase/functions/barman-stripe-webhook/index.ts'),
   read('api/dabbir-billing-ui.js'),
   read('api/app-recovery.js'),
-  read('supabase/migrations/20260827173500_dabbir_stripe_sandbox_billing_v1.sql'),
+  read('supabase/migrations/20260827181057_dabbir_stripe_sandbox_billing_v1.sql'),
 ]);
 
 test('DABBIR owner plan is server-fixed to verified sandbox price and seven-day trial', () => {
@@ -62,6 +62,13 @@ test('shared Stripe webhook verifies signature and timestamp before parsing or p
   const parseAt = edgeWebhook.indexOf('JSON.parse(raw)');
   const classifyAt = edgeWebhook.indexOf('classification=await classifyDabbir(evt)');
   assert.ok(verifyAt > 0 && parseAt > verifyAt && classifyAt > parseAt);
+});
+
+test('live non-DABBIR invoice events bypass DABBIR sandbox lookup before legacy routing', () => {
+  const invoiceAt=edgeWebhook.indexOf("if(evt.type==='invoice.paid'||evt.type==='invoice.payment_failed')");
+  const liveBypassAt=edgeWebhook.indexOf("if(evt.livemode===true)return {yes:false,obj,subscription:null}",invoiceAt);
+  const stripeLookupAt=edgeWebhook.indexOf('const subscription=await stripeGet',invoiceAt);
+  assert.ok(invoiceAt>0&&liveBypassAt>invoiceAt&&stripeLookupAt>liveBypassAt);
 });
 
 test('billing data is tenant-owner readable, FORCE RLS, and event ledger is server-only', () => {
