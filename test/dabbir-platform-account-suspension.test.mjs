@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [migration, api, ui, authCore, session] = await Promise.all([
+const [migration, searchFix, api, ui, authCore, session] = await Promise.all([
   read('supabase/migrations/20260827154515_dabbir_account_suspension_hardening_v2.sql'),
+  read('supabase/migrations/20260827155045_dabbir_platform_customer_search_escape_fix_v3.sql'),
   read('api/platform-customers.js'),
   read('api/platform-customers-ui.js'),
   read('api/_auth-core.js'),
@@ -27,6 +28,11 @@ test('access state is self-readable through RLS and not client-writable', () => 
   assert.match(migration, /revoke all on public\.account_access_state from public, anon, authenticated/i);
   assert.match(migration, /grant select on public\.account_access_state to authenticated/i);
   assert.doesNotMatch(migration, /grant (insert|update|delete).*account_access_state.*authenticated/i);
+});
+
+test('platform customer search uses literal substring matching without LIKE escape hazards', () => {
+  assert.match(searchFix, /strpos\(lower\(coalesce\(b\.name,''\)\),lower\(v_q\)\) > 0/i);
+  assert.doesNotMatch(searchFix, /escape\s+'\\\\'/i);
 });
 
 test('suspended accounts are denied in central auth and session surfaces', () => {
