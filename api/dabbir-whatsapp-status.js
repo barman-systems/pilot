@@ -60,6 +60,32 @@ function publicConfig(config) {
   };
 }
 
+export function tenantUnconfiguredStatus() {
+  return {
+    ok: true,
+    channel: 'whatsapp',
+    source: 'embedded_signup',
+    configured: false,
+    connected: false,
+    webhook_configured: false,
+    outbound_configured: false,
+    phone_number_configured: false,
+    waba_configured: false,
+    state: 'NOT_CONFIGURED',
+    meta_authorized: false,
+    meta_check_attempted: false,
+    meta_check_reason: 'TENANT_WHATSAPP_NOT_LINKED',
+    provider_status: null,
+    phone: null,
+    waba_id: null,
+    phone_number_id: null,
+    connected_at: null,
+    operational: false,
+    operational_reason: 'WHATSAPP_NOT_LINKED',
+    checked_at: new Date().toISOString(),
+  };
+}
+
 export async function verifyMetaAuthorization(config = getWhatsAppConfig()) {
   if (!config.accessToken || !config.phoneNumberId) return { attempted: false, authorized: false, reason: 'META_READ_CREDENTIALS_NOT_CONFIGURED' };
   const controller = new AbortController();
@@ -155,6 +181,7 @@ export default async function handler(req, res) {
     try {
       const tenant = await embeddedStatus(req, accessToken, businessId);
       if (tenant) return json(res, 200, tenant);
+      return json(res, 200, tenantUnconfiguredStatus());
     } catch (error) {
       return json(res, Number(error?.status || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
     }

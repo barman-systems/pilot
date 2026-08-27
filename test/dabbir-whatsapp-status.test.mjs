@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { getWhatsAppConfig } from '../api/dabbir-whatsapp-status.js';
+import { getWhatsAppConfig, tenantUnconfiguredStatus } from '../api/dabbir-whatsapp-status.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
@@ -53,6 +53,18 @@ test('DABBIR WhatsApp credentials take precedence when both generations exist', 
     assert.equal(config.verifyToken, 'dabbir-verify');
     assert.equal(config.appSecret, 'dabbir-secret');
   });
+});
+
+test('tenant without an Embedded Signup connection never inherits the legacy global WhatsApp number', () => {
+  const status = tenantUnconfiguredStatus();
+  assert.equal(status.source, 'embedded_signup');
+  assert.equal(status.configured, false);
+  assert.equal(status.connected, false);
+  assert.equal(status.state, 'NOT_CONFIGURED');
+  assert.equal(status.phone, null);
+  assert.equal(status.waba_id, null);
+  assert.equal(status.phone_number_id, null);
+  assert.equal(status.meta_check_reason, 'TENANT_WHATSAPP_NOT_LINKED');
 });
 
 test('WhatsApp UI reads live status instead of trusting the stale static red card', async () => {
