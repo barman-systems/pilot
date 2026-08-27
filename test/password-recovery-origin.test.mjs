@@ -42,11 +42,11 @@ test('rejects non-HTTPS public origins in production', () => {
 test('uses the first forwarded host and protocol value', () => {
   const req = {
     headers: {
-      'x-forwarded-host': 'pilot-taupe.vercel.app, internal.proxy',
+      'x-forwarded-host': 'app.dabbir.example, internal.proxy',
       'x-forwarded-proto': 'https, http',
     },
   };
 
-  assert.equal(requestPublicOrigin(req, production), 'https://pilot-taupe.vercel.app');
-  assert.equal(buildRecoveryRedirect(req, production), 'https://pilot-taupe.vercel.app/?password_recovery=1');
+  assert.equal(requestPublicOrigin(req, production), 'https://app.dabbir.example');
+  assert.equal(buildRecoveryRedirect(req, production), 'https://app.dabbir.example/?password_recovery=1');
 });
