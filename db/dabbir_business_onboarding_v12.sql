@@ -30,7 +30,7 @@ begin
     raise exception 'UNSUPPORTED_BUSINESS_TYPE';
   end if;
 
-  v_slug := 'pilot-' || substr(replace(v_id::text,'-',''),1,16);
+  v_slug := 'dabbir-' || substr(replace(v_id::text,'-',''),1,16);
 
   insert into public.dabbir_businesses(id,slug,name,business_type,owner_id,locale,demo_mode)
   values(v_id,v_slug,left(trim(p_name),120),p_business_type,v_user,coalesce(nullif(trim(p_locale),''),'ar-AE'),false);
