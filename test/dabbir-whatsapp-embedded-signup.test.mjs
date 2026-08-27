@@ -31,6 +31,24 @@ test('Embedded Signup UI connects through Meta inside DABBIR without manual toke
   assert.doesNotMatch(ui, /type=["']password["']/);
 });
 
+test('iPhone Meta login preserves the original user activation by prewarming the SDK before tap', async () => {
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  const start = ui.indexOf('async function connectWhatsApp');
+  const end = ui.indexOf('async function disconnectWhatsApp', start);
+  assert.ok(start >= 0 && end > start);
+  const body = ui.slice(start, end);
+  const login = body.indexOf('FB.login');
+  const firstAwait = body.indexOf('await ');
+  assert.ok(login >= 0);
+  assert.ok(firstAwait === -1 || login < firstAwait, 'FB.login must run before the first await in the click path');
+  assert.doesNotMatch(body, /await loadConfig|await loadSdk/);
+  assert.match(ui, /async function prepareMeta/);
+  assert.match(ui, /sdk_preload_start/);
+  assert.match(ui, /Preparing secure Meta login/);
+  assert.match(body, /const sessionPromise=waitForSession\(\)/);
+  assert.match(body, /login_invoked/);
+});
+
 test('Embedded Signup does not time out during a normal multi-step Meta mobile journey', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   assert.match(ui, /SESSION_TIMEOUT_MS=15\*60\*1000/);
@@ -44,6 +62,7 @@ test('Embedded Signup reports safe client stages to production logs without toke
   const events = await read('api/dabbir-whatsapp-client-event.js');
   assert.match(ui, /\/api\/dabbir-whatsapp-client-event/);
   assert.match(ui, /connect_start/);
+  assert.match(ui, /login_invoked/);
   assert.match(ui, /login_callback/);
   assert.match(ui, /session_finish/);
   assert.match(ui, /complete_start/);

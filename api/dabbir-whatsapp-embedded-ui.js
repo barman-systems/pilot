@@ -23,6 +23,8 @@ const script = String.raw`(()=>{
   document.head.appendChild(css);
 
   let sdkPromise=null;
+  let sdkPreparePromise=null;
+  let sdkReadyAppId=null;
   let embeddedSession=null;
   let sessionWaiters=[];
   let configCache=null;
@@ -137,6 +139,28 @@ const script = String.raw`(()=>{
     return sdkPromise;
   }
 
+  async function prepareMeta(cfg){
+    if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id) return false;
+    if(window.FB&&sdkReadyAppId===String(cfg.app_id)) return true;
+    if(sdkPreparePromise) return sdkPreparePromise;
+    report('sdk_preload_start',{stage:'sdk_preload'});
+    sdkPreparePromise=loadSdk(cfg)
+      .then(FB=>{
+        if(!FB||typeof FB.login!=='function') throw new Error('META_SDK_NOT_READY');
+        sdkReadyAppId=String(cfg.app_id);
+        report('sdk_ready',{stage:'sdk_preload'});
+        return true;
+      })
+      .catch(error=>{
+        sdkPromise=null;
+        sdkReadyAppId=null;
+        report('sdk_preload_error',{stage:'sdk_preload',error:String(error?.message||'META_SDK_LOAD_FAILED').slice(0,160)});
+        return false;
+      })
+      .finally(()=>{sdkPreparePromise=null});
+    return sdkPreparePromise;
+  }
+
   async function loadConfig(force=false){
     const bid=businessId();
     if(!bid) return null;
@@ -188,28 +212,36 @@ const script = String.raw`(()=>{
     if(key==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد Meta Embedded Signup الخاص بمنصة DABBIR غير مكتمل بعد':'DABBIR Meta Embedded Signup platform configuration is incomplete';
     if(key==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. أغلق نافذة Meta وأعد المحاولة من زر ربط WhatsApp.':'Meta did not return an authorization code. Close the Meta window and retry from Connect WhatsApp.';
     if(key==='META_EMBEDDED_SIGNUP_SESSION_MISSING') return ar()?'لم تصل بيانات حساب WhatsApp والرقم من Meta. لم يتم حفظ أي ربط ناقص.':'Meta did not return the WhatsApp account and phone data. No incomplete connection was saved.';
-    if(key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'تعذر تحميل تسجيل الدخول من Meta. أعد المحاولة بعد تحديث الصفحة.':'Meta login could not load. Refresh the page and retry.';
+    if(key==='META_SDK_NOT_READY'||key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'جاري تجهيز تسجيل الدخول من Meta. انتظر ظهور زر الربط كجاهز ثم اضغطه مرة أخرى.':'Meta login is still preparing. Retry once the connect button becomes ready.';
     return ar()?'تعذر ربط WhatsApp. لم يتم حفظ أي ربط غير مكتمل.':'WhatsApp could not be connected. No incomplete connection was saved.';
   }
 
   async function connectWhatsApp(){
     if(busy) return;
-    setBusy(true);
+    const cfg=configCache;
+    const FB=window.FB;
     embeddedSession=null;
     let stage='start';
     report('connect_start',{stage});
+
+    if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
+      report('connect_error',{stage:'platform_config',error:'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED',has_waba:false,has_phone:false});
+      tell(failureText('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'));
+      renderActions();
+      return;
+    }
+    if(!FB||typeof FB.login!=='function'||sdkReadyAppId!==String(cfg.app_id)){
+      report('connect_error',{stage:'sdk_preload',error:'META_SDK_NOT_READY',has_waba:false,has_phone:false});
+      tell(failureText('META_SDK_NOT_READY'));
+      prepareMeta(cfg).then(()=>renderActions());
+      return;
+    }
+
+    setBusy(true);
     try{
-      stage='platform_config';
-      const cfg=await loadConfig(true);
-      report('config_loaded',{stage,has_code:false,has_waba:false,has_phone:false});
-      if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id) throw new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED');
-
-      stage='sdk_load';
-      const FB=await loadSdk(cfg);
-      report('sdk_ready',{stage});
-
       stage='meta_login';
-      const auth=await new Promise((resolve,reject)=>{
+      const sessionPromise=waitForSession();
+      const authPromise=new Promise((resolve,reject)=>{
         try{
           FB.login(response=>{
             report('login_callback',{stage:'meta_login',has_code:Boolean(response?.authResponse?.code)});
@@ -220,14 +252,16 @@ const script = String.raw`(()=>{
             override_default_response_type:true,
             extras:{setup:{},featureType:'',sessionInfoVersion:'3'}
           });
+          report('login_invoked',{stage:'meta_login'});
         }catch(error){reject(error)}
       });
 
+      const auth=await authPromise;
       const code=String(auth?.authResponse?.code||'');
       if(!code) throw new Error('META_AUTHORIZATION_CODE_MISSING');
 
       stage='meta_session';
-      const session=await waitForSession();
+      const session=await sessionPromise;
       if(!session?.waba_id||!session?.phone_number_id) throw new Error('META_EMBEDDED_SIGNUP_SESSION_MISSING');
 
       stage='server_complete';
@@ -255,6 +289,7 @@ const script = String.raw`(()=>{
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.ok) throw new Error(payload.error||'WHATSAPP_DISCONNECT_FAILED');
       configCache=null;
+      sdkReadyAppId=null;
       if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={connected:false,state:'NOT_CONFIGURED',phone:null,operational:false};
       try{if(typeof renderIntegrations==='function')renderIntegrations()}catch{}
       tell(ar()?'تم فصل WhatsApp':'WhatsApp disconnected');
@@ -274,11 +309,12 @@ const script = String.raw`(()=>{
     if(!cfg){box.replaceChildren();return}
     box.replaceChildren();
     const connected=Boolean(cfg.connected||workspace?.whatsapp?.connected);
+    const platformReady=Boolean(cfg.platform_ready&&cfg.app_id&&cfg.config_id);
     const primary=document.createElement('button');
     primary.type='button';primary.className=connected?'dabbirWhatsAppChange':'dabbirWhatsAppConnect';
     primary.textContent=connected?(ar()?'تغيير رقم WhatsApp':'Change WhatsApp number'):(ar()?'ربط WhatsApp':'Connect WhatsApp');
-    primary.dataset.platformReady=String(Boolean(cfg.platform_ready));
-    primary.disabled=busy||!cfg.platform_ready;
+    primary.dataset.platformReady='false';
+    primary.disabled=true;
     primary.onclick=connectWhatsApp;
     box.appendChild(primary);
     if(connected){
@@ -286,10 +322,21 @@ const script = String.raw`(()=>{
     }
     const hint=document.createElement('span');
     hint.className='dabbirWhatsAppHint';
-    hint.textContent=cfg.platform_ready
-      ? (ar()?'الربط يتم داخل DABBIR عبر نافذة Meta الرسمية. اترك النافذة مفتوحة حتى تنتهي كل خطوات Meta.':'Connection happens inside DABBIR through Meta’s official window. Keep the window open until every Meta step finishes.')
+    hint.textContent=platformReady
+      ? (ar()?'جاري تجهيز تسجيل الدخول الآمن من Meta…':'Preparing secure Meta login…')
       : (ar()?'إعداد Meta Embedded Signup للمنصة يحتاج App ID وConfiguration ID قبل فتح نافذة الربط.':'Platform Meta Embedded Signup needs an App ID and Configuration ID before the connection window can open.');
     box.appendChild(hint);
+
+    if(platformReady){
+      prepareMeta(cfg).then(metaReady=>{
+        if(!primary.isConnected) return;
+        primary.dataset.platformReady=String(metaReady);
+        primary.disabled=busy||!metaReady;
+        hint.textContent=metaReady
+          ? (ar()?'الربط جاهز. اضغط لفتح نافذة Meta الرسمية وأكمل كل الخطوات فيها.':'Ready. Tap to open Meta’s official window and complete every step there.')
+          : failureText('META_SDK_NOT_READY');
+      });
+    }
   }
 
   if(typeof renderIntegrations==='function'&&!window.__dabbirWhatsAppEmbeddedRenderWrapped){
