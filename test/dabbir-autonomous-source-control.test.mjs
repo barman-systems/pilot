@@ -37,3 +37,26 @@ test('runner enforces local tests and bounded CI repair', () => {
   assert.match(runner, /repair_attempts \|\| 0\) >= 3/);
   assert.match(runner, /localAttempt < 2/);
 });
+
+test('autonomy fails closed unless main is actually protected', () => {
+  assert.match(runner, /async function requireProtectedMain\(\)/);
+  assert.match(runner, /github\('\/branches\/main'\)/);
+  assert.match(runner, /branch\.body\?\.protected !== true/);
+  assert.match(runner, /main_branch_not_protected/);
+  assert.match(runner, /const protection = await requireProtectedMain\(\);/);
+  assert.match(runner, /branch_protection_verified:\s*true/);
+});
+
+test('auto-merge requires exact required DABBIR checks to succeed', () => {
+  assert.match(runner, /DABBIR_REQUIRED_CHECKS \|\| 'test'/);
+  assert.match(runner, /run\.name === name/);
+  assert.match(runner, /check\.conclusion === 'success'/);
+  assert.match(runner, /required_missing/);
+  assert.match(runner, /merge_truth_gate_not_satisfied/);
+  assert.doesNotMatch(runner, /\['success', 'neutral', 'skipped'\]/);
+});
+
+test('draft PRs can never be auto-merged', () => {
+  assert.match(runner, /pr\.body\?\.draft === true/);
+  assert.match(runner, /draft_pr_not_mergeable_by_autonomy/);
+});
