@@ -8,7 +8,7 @@ on:
       - 'config/barman-integration-contract.json'
       - 'scripts/dabbir-production-origin-gate.mjs'
       - 'scripts/dabbir-readiness-gate.mjs'
-      - 'supabase/functions/dabbir-bar12-readiness-evidence/**'
+      - 'supabase/functions/barman-qa-suite-runner/**'
       - 'api/dabbir-whatsapp-*.js'
       - 'api/_whatsapp-*.js'
       - 'test/ai-full-customer-journey-v2.mjs'
@@ -66,8 +66,8 @@ jobs:
             -X POST \
             -H "Authorization: Bearer $OIDC_TOKEN" \
             -H 'Content-Type: application/json' \
-            'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-bar12-readiness-evidence' \
-            -d '{}' > dabbir-bar12-supabase-evidence.json
+            'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-qa-suite-runner' \
+            -d '{"action":"dabbir_bar12_readiness"}' > dabbir-bar12-supabase-evidence.json
           jq -e '.ok == true and .evidence != null' dabbir-bar12-supabase-evidence.json >/dev/null
       - name: Assemble fail-closed BAR-12 evidence
         shell: bash
