@@ -4,6 +4,7 @@ import {
   getVerifiedUser,
   json,
   supabaseRest,
+  userClaimsFromValidatedAccessToken,
 } from './_auth-core.js';
 import { getDABBIRAiConfig } from './_ai-core.js';
 import dabbirRuntimeHandler from './dabbir-runtime.js';
@@ -91,10 +92,24 @@ async function handleFastGet(req, res) {
   const accessToken = accessTokenFromRequest(req);
   if (!accessToken) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
-  const [user, memberships] = await Promise.all([
-    getVerifiedUser(accessToken).catch(() => null),
-    getBusinessMemberships(accessToken).catch(() => []),
-  ]);
+  // The membership read goes through Supabase Data API, which validates the
+  // same JWT before applying RLS. Reuse that successful validation instead of
+  // sending every hot-path request through /auth/v1/user as well.
+  let memberships;
+  try {
+    memberships = await getBusinessMemberships(accessToken);
+  } catch (error) {
+    const status = Number(error?.code || 500);
+    if (status === 401 || status === 403) {
+      return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
+    }
+    return json(res, 503, { ok: false, authenticated: false, error: 'AUTH_VERIFICATION_UNAVAILABLE' });
+  }
+
+  let user = userClaimsFromValidatedAccessToken(accessToken);
+  // Compatibility fallback for an unexpected/legacy token shape. Normal
+  // Supabase Auth access tokens stay on the local claims path above.
+  if (!user) user = await getVerifiedUser(accessToken).catch(() => null);
   if (!user) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
   const requestedBusinessId = safeId(req.query?.business_id);
@@ -202,7 +217,7 @@ async function handleFastGet(req, res) {
 
   const duration = Date.now() - started;
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v3');
+  res.setHeader('x-dabbir-runtime', 'fast-v4');
   return json(res, 200, {
     ok: true,
     authenticated: true,
@@ -228,7 +243,7 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true },
+    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true },
   });
 }
 
