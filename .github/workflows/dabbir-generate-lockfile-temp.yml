@@ -1,12 +1,11 @@
 name: DABBIR Generate Lockfile Temp
 
 on:
-  pull_request:
   push:
     branches: [chore/dabbir-dependency-reproducibility-20260827]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-lockfile:
@@ -14,16 +13,23 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: chore/dabbir-dependency-reproducibility-20260827
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
           package-manager-cache: false
-      - name: Generate npm lockfile deterministically
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Upload generated lockfile
-        uses: actions/upload-artifact@v6
-        with:
-          name: dabbir-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+      - name: Generate and commit npm lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          if [ -z "$(git status --porcelain -- package-lock.json)" ]; then
+            echo 'package-lock.json already matches npm resolution.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'Lock DABBIR npm dependency graph'
+          git push origin HEAD:chore/dabbir-dependency-reproducibility-20260827
