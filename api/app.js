@@ -265,7 +265,7 @@ const truthVisibilityUi = String.raw`
     }
     const readAt=exactTime(data?.read_at);
     badge.title=verified
-      ? (lang==='ar'?`المصدر: بيانات النشاط المعزولة • آخر قراءة ${readAt||'الآن'}`:`Source: isolated tenant data • last read ${readAt||'now'}`)
+      ? (lang==='ar'?'المصدر: بيانات النشاط المعزولة • آخر قراءة '+(readAt||'الآن'):'Source: isolated tenant data • last read '+(readAt||'now'))
       : (lang==='ar'?'لا يوجد دليل قراءة موثقة لهذه الحالة':'No verified read evidence is available for this state');
   }
 
