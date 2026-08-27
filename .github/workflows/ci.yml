@@ -18,6 +18,8 @@ jobs:
         with:
           node-version-file: package.json
           package-manager-cache: false
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
       - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
