@@ -1,6 +1,7 @@
 name: DABBIR Generate Lockfile Temp
 
 on:
+  pull_request:
   push:
     branches: [chore/dabbir-dependency-reproducibility-20260827]
 
