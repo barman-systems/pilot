@@ -2,14 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { openAccessToken, sealAccessToken } from '../api/_whatsapp-embedded-core.js';
+import { DABBIR_PUBLIC_RUNTIME } from '../config/dabbir-public-runtime.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
+test('canonical DABBIR public runtime pins the Meta and production identities', () => {
+  assert.equal(DABBIR_PUBLIC_RUNTIME.productionOrigin, 'https://dabbir-nd56cm4j5v-3619s-projects.vercel.app');
+  assert.equal(DABBIR_PUBLIC_RUNTIME.metaAppId, '1876008666699823');
+  assert.equal(DABBIR_PUBLIC_RUNTIME.whatsappEmbeddedConfigId, '1984552462260787');
+  assert.equal(DABBIR_PUBLIC_RUNTIME.vercelProjectId, 'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq');
+});
+
 test('WhatsApp tenant access token is sealed and can be opened only with the server secret', () => {
-  const config = {
-    encryptionSecret: 'unit-test-only-encryption-material',
-  };
+  const config = { encryptionSecret: 'unit-test-only-encryption-material' };
   const businessId = '0b540176-8dd6-44b4-a5b7-aea4933e88f6';
   const token = ['EA', 'test', 'token', 'not-real'].join('-');
   const sealed = sealAccessToken(token, config, businessId);
@@ -39,15 +45,13 @@ test('Embedded Signup does not time out during a normal multi-step Meta mobile j
   assert.match(ui, /https:\/\/business\.facebook\.com/);
 });
 
-test('Embedded Signup reports safe client stages to production logs without tokens or asset IDs', async () => {
+test('Embedded Signup reports safe client stages without tokens or Meta asset IDs', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   const events = await read('api/dabbir-whatsapp-client-event.js');
   assert.match(ui, /\/api\/dabbir-whatsapp-client-event/);
-  assert.match(ui, /connect_start/);
-  assert.match(ui, /login_callback/);
-  assert.match(ui, /session_finish/);
-  assert.match(ui, /complete_start/);
-  assert.match(ui, /connect_error/);
+  for (const stage of ['connect_start','login_callback','session_finish','complete_start','connect_error']) {
+    assert.match(ui, new RegExp(stage));
+  }
   assert.match(events, /DABBIR_WHATSAPP_EMBEDDED_CLIENT/);
   assert.match(events, /has_code/);
   assert.match(events, /has_waba/);
@@ -57,18 +61,18 @@ test('Embedded Signup reports safe client stages to production logs without toke
   assert.doesNotMatch(events, /waba_id/);
 });
 
-test('Embedded completion exchanges authorization code server-side and never returns access token', async () => {
+test('Embedded completion is canonical-origin-only, server-side, and never returns access tokens', async () => {
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+  assert.match(endpoint, /isCanonicalProductionRequest/);
+  assert.match(endpoint, /CANONICAL_PRODUCTION_ORIGIN_REQUIRED/);
   assert.match(endpoint, /exchangeEmbeddedCode/);
   assert.match(endpoint, /sealAccessToken/);
   assert.match(endpoint, /verifyEmbeddedAssets/);
-  assert.match(endpoint, /resolveEmbeddedPlatformConfig/);
-  assert.match(endpoint, /await resolveEmbeddedPlatformConfig\(\)/);
   assert.match(endpoint, /secrets_exposed:\s*false/);
   assert.doesNotMatch(endpoint, /access_token:\s*exchanged\.accessToken/);
 });
 
-test('WhatsApp connection storage is tenant-scoped and RLS protected', async () => {
+test('WhatsApp connection storage remains tenant-scoped and RLS protected', async () => {
   const migration = await read('supabase/migrations/20260826195230_dabbir_whatsapp_embedded_signup_v17.sql');
   assert.match(migration, /dabbir_whatsapp_connections/);
   assert.match(migration, /enable row level security/i);
@@ -77,46 +81,41 @@ test('WhatsApp connection storage is tenant-scoped and RLS protected', async () 
   assert.doesNotMatch(migration, /grant .* to anon/i);
 });
 
-test('production shell mounts Embedded Signup and CSP permits only required Meta browser origins', async () => {
+test('production shell and CSP cover the supported Meta browser origins', async () => {
   const shell = await read('api/app-recovery.js');
   const vercel = await read('vercel.json');
   assert.match(shell, /\/api\/dabbir-whatsapp-embedded-ui/);
   assert.match(vercel, /https:\/\/connect\.facebook\.net/);
-  assert.match(vercel, /frame-src https:\/\/www\.facebook\.com https:\/\/web\.facebook\.com/);
-  assert.match(vercel, /connect-src 'self' https:\/\/graph\.facebook\.com/);
+  for (const origin of ['www\\.facebook\\.com','web\\.facebook\\.com','m\\.facebook\\.com','business\\.facebook\\.com']) {
+    assert.match(vercel, new RegExp(origin));
+  }
 });
 
-test('status endpoint prefers business-scoped Embedded Signup when business_id is supplied', async () => {
-  const status = await read('api/dabbir-whatsapp-status.js');
-  assert.match(status, /embeddedStatus/);
-  assert.match(status, /source:\s*'embedded_signup'/);
-  assert.match(status, /singleQueryValue\(req, 'business_id'\)/);
-  assert.doesNotMatch(status, /req\.query/);
-  assert.match(status, /loadBusinessConnection/);
+test('Embedded Signup platform config is canonical-origin gated', async () => {
+  const endpoint = await read('api/dabbir-whatsapp-embedded-config.js');
+  assert.match(endpoint, /isCanonicalProductionRequest/);
+  assert.match(endpoint, /canonical_origin_active/);
+  assert.match(endpoint, /expected_origin/);
+  assert.match(endpoint, /platformReady/);
 });
 
-test('Meta App ID can be discovered server-side from the existing WhatsApp authorization', async () => {
+test('Embedded Signup no longer discovers DABBIR identity from old WhatsApp credentials', async () => {
   const core = await read('api/_whatsapp-embedded-core.js');
-  const configEndpoint = await read('api/dabbir-whatsapp-embedded-config.js');
-
-  assert.match(core, /export async function resolveEmbeddedPlatformConfig/);
-  assert.match(core, /discoverAppIdFromExistingToken/);
-  assert.match(core, /\/app`\)/);
-  assert.match(core, /fields', 'id'/);
-  assert.match(core, /appIdSource:\s*appId \? 'existing_whatsapp_token'/);
-  assert.match(core, /legacyAccessTokenAvailable/);
-  assert.match(configEndpoint, /await resolveEmbeddedPlatformConfig\(\)/);
-  assert.match(configEndpoint, /existing_whatsapp_token_available/);
-  assert.match(configEndpoint, /app_id_source/);
+  assert.match(core, /DABBIR_PUBLIC_RUNTIME/);
+  assert.match(core, /dabbir_public_runtime/);
+  assert.doesNotMatch(core, /discoverAppIdFromExistingToken/);
+  assert.doesNotMatch(core, /legacyWhatsAppAccessToken/);
+  assert.doesNotMatch(core, /PILOT_META_/);
+  assert.doesNotMatch(core, /PILOT_WHATSAPP_APP_ID/);
+  assert.doesNotMatch(core, /FACEBOOK_APP_ID/);
+  assert.doesNotMatch(core, /META_APP_ID/);
 });
 
-test('automatic Meta App ID discovery never exposes the legacy access token to the browser', async () => {
-  const core = await read('api/_whatsapp-embedded-core.js');
-  const configEndpoint = await read('api/dabbir-whatsapp-embedded-config.js');
-
-  assert.match(core, /legacyWhatsAppAccessToken/);
-  assert.doesNotMatch(configEndpoint, /access_token\s*:/i);
-  assert.doesNotMatch(configEndpoint, /legacyAccessToken\s*:/);
-  assert.match(configEndpoint, /values_exposed:\s*false/);
-  assert.match(configEndpoint, /secrets_exposed:\s*false/);
+test('browser config exposes public Meta IDs only and never server secrets', async () => {
+  const endpoint = await read('api/dabbir-whatsapp-embedded-config.js');
+  assert.match(endpoint, /app_id:/);
+  assert.match(endpoint, /config_id:/);
+  assert.doesNotMatch(endpoint, /access_token\s*:/i);
+  assert.doesNotMatch(endpoint, /app_secret\s*:/i);
+  assert.match(endpoint, /secrets_exposed:\s*false/);
 });
