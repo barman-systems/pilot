@@ -47,7 +47,7 @@ const client=String.raw`
     const dash=document.querySelector('#screen-dashboard');
     const cards=document.querySelector('#dashCards');
     if(!dash||!cards)return;
-    const grid=[...dash.children].find(node=>node.classList?.contains('grid2'));
+    const grid=dash.querySelector('.grid2');
     if(!grid)return;
 
     let wrap=document.querySelector('#dabbirOwnerDetails');
@@ -74,6 +74,12 @@ const client=String.raw`
         if(grid.parentNode!==body)body.append(grid);
       }
     }
+
+    const body=wrap.querySelector('#dabbirOwnerDetailsBody');
+    const actionCenter=document.querySelector('#dabbirActionCenter');
+    if(body&&actionCenter&&body.contains(actionCenter)&&wrap.parentNode){
+      wrap.parentNode.insertBefore(actionCenter,wrap);
+    }
     sync();
   }
 
@@ -96,8 +102,7 @@ const client=String.raw`
   }
 
   const observer=new MutationObserver(()=>{
-    const dash=document.querySelector('#screen-dashboard');
-    if(dash&&!document.querySelector('#dabbirOwnerDetails'))install();
+    if(document.querySelector('#screen-dashboard'))install();
   });
   observer.observe(document.documentElement,{subtree:true,childList:true});
   install();
