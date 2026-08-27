@@ -57,6 +57,7 @@ function rpcError(error){
   const raw=String(error?.detail||error?.message||'').toUpperCase();
   if(raw.includes('DABBIR_CUSTOMER_ACCOUNT_NOT_FOUND'))return [404,'CUSTOMER_ACCOUNT_NOT_FOUND'];
   if(raw.includes('DABBIR_CUSTOMER_BUSINESS_MISMATCH'))return [409,'CUSTOMER_BUSINESS_MISMATCH'];
+  if(raw.includes('DABBIR_RECOVERY_PREVIEW_REQUIRED'))return [409,'RECOVERY_PREVIEW_REQUIRED'];
   if(raw.includes('DABBIR_RECOVERY_RECONCILIATION_NOT_REQUIRED'))return [409,'RECOVERY_RECONCILIATION_NOT_REQUIRED'];
   if(raw.includes('DABBIR_RECOVERY_TARGET_BEFORE_JOURNAL_START'))return [409,'RECOVERY_TARGET_BEFORE_JOURNAL_START'];
   if(raw.includes('DABBIR_RECOVERY_TARGET_IN_FUTURE'))return [400,'RECOVERY_TARGET_IN_FUTURE'];
@@ -88,14 +89,11 @@ export default async function handler(req,res){
 
     if(body.action==='ensure_recovery_reconciliation'){
       const businessId=uuid(body.business_id);
-      const targetAt=String(body.target_at||'').trim();
       if(!businessId)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});
-      if(!targetAt||!Number.isFinite(Date.parse(targetAt)))return json(res,400,{ok:false,error:'INVALID_RECOVERY_TARGET'});
-      const result=await serviceRpc(context.key,'dabbir_platform_support_ensure_recovery_reconciliation',{
+      const result=await serviceRpc(context.key,'dabbir_platform_support_ensure_latest_recovery_reconciliation',{
         p_actor_user_id:context.user.id,
         p_customer_no:no,
         p_business_id:businessId,
-        p_target_at:new Date(targetAt).toISOString(),
       });
       return json(res,result?.created?201:200,{ok:true,reconciliation:result});
     }
