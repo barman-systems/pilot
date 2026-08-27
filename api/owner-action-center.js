@@ -57,6 +57,19 @@ function addItem(items,item){
   });
 }
 
+function dubaiDayStartIso(nowMs){
+  const dubaiOffsetMs=4*60*60*1000;
+  const dubaiDay=new Date(nowMs+dubaiOffsetMs).toISOString().slice(0,10);
+  return new Date(`${dubaiDay}T00:00:00+04:00`).toISOString();
+}
+
+function handledLabel(operationType){
+  if(operationType==='followup.capture_internal'){
+    return {ar:'التقط متابعة عميل تلقائيًا',en:'Captured a customer follow-up automatically'};
+  }
+  return {ar:'أكمل إجراءً موثقًا تلقائيًا',en:'Completed a verified action automatically'};
+}
+
 export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
   const context=await authenticatedContext(req,res);
@@ -70,8 +83,16 @@ export default async function handler(req,res){
     const now=Date.now();
     const in24h=now+24*60*60*1000;
     const in2h=now+2*60*60*1000;
+    const dayStart=dubaiDayStartIso(now);
 
-    const [conversations,handoffs,followups,appointments,products,inventory,orders,channels,customers]=await Promise.all([
+    const handledLookup=rest(
+      context.token,
+      `dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${dayStart}&order=completed_at.desc&limit=20`,
+      'VERIFIED_OUTCOMES_LOOKUP_FAILED'
+    ).then(rows=>({available:true,rows:Array.isArray(rows)?rows:[]}))
+      .catch(error=>({available:false,rows:[],status:Number(error?.status||0)||null}));
+
+    const [conversations,handoffs,followups,appointments,products,inventory,orders,channels,customers,handledResult]=await Promise.all([
       rest(context.token,`dabbir_conversations?select=id,customer_id,state,channel_type,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=100`,'CONVERSATIONS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_handoffs?select=id,conversation_id,customer_id,state,priority,reason,summary,assigned_user_id,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=100`,'HANDOFFS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_followups?select=id,conversation_id,customer_id,status,reason,due_at,recommended_message,blocked_reason,send_count,max_sends&business_id=eq.${businessId}&order=due_at.asc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'),
@@ -81,10 +102,10 @@ export default async function handler(req,res){
       rest(context.token,`dabbir_orders?select=id,customer_id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=50`,'CHANNELS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
+      handledLookup,
     ]);
 
     const customerName=new Map((customers||[]).map(row=>[row.id,row.display_name||null]));
-    const productById=new Map((products||[]).map(row=>[row.id,row]));
     const stockByProduct=new Map((inventory||[]).map(row=>[row.product_id,row]));
     const items=[];
 
@@ -146,8 +167,16 @@ export default async function handler(req,res){
     const urgent=items.filter(item=>item.severity==='critical').length;
     const warning=items.filter(item=>item.severity==='warning').length;
     const top=items.slice(0,3);
-    const briefAr=top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.';
-    const briefEn=top.length?`What needs your attention now: ${top.map(item=>item.title_en).join(', ')}.`:'No critical or due items in the next 24 hours. DABBIR is monitoring the business.';
+    const handledRows=handledResult.available?handledResult.rows:[];
+    const handledLatest=handledRows.slice(0,3).map(row=>{
+      const label=handledLabel(row.operation_type);
+      return {operation_type:row.operation_type,title_ar:label.ar,title_en:label.en,completed_at:row.completed_at};
+    });
+    const handledCount=handledRows.length;
+    const handledPrefixAr=handledResult.available&&handledCount>0?`دَبِّر أنجز ${handledCount} إجراءً موثقًا تلقائيًا اليوم. `:'';
+    const handledPrefixEn=handledResult.available&&handledCount>0?`DABBIR completed ${handledCount} verified autonomous ${handledCount===1?'action':'actions'} today. `:'';
+    const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.');
+    const briefEn=handledPrefixEn+(top.length?`What needs your attention now: ${top.map(item=>item.title_en).join(', ')}.`:'No critical or due items in the next 24 hours. DABBIR is monitoring the business.');
 
     return json(res,200,{
       ok:true,
@@ -156,10 +185,11 @@ export default async function handler(req,res){
       generated_at:new Date().toISOString(),
       timezone:'Asia/Dubai',
       status:urgent>0?'needs_attention':warning>0?'watch':'clear',
-      metrics:{urgent,warning,total:items.length,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
+      metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
+      handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
       brief:{ar:briefAr,en:briefEn},
       items:items.slice(0,12),
-      truth:{source:'live_dabbir_tenant_data',simulated_orders_excluded:true,simulated_appointments_excluded:true,empty_automation_tables_not_presented_as_live_features:true},
+      truth:{source:'live_dabbir_tenant_data',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
     });
   }catch(error){
     const status=Number(error?.status||500);
