@@ -1,0 +1,56 @@
+import { json, readJsonBody, requireSameOrigin } from '../_auth-core.js';
+import {
+  checkoutIdempotencyKey,
+  DABBIR_OWNER_PRICE_ID,
+  DABBIR_TRIAL_DAYS,
+  getBillingAccount,
+  getStripe,
+  integrationIdentifier,
+  requestOrigin,
+  requireBillingOwner,
+} from '../_billing-core.js';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
+  if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'ORIGIN_REQUIRED' });
+  try {
+    const body = await readJsonBody(req, 4096);
+    const context = await requireBillingOwner(req, body?.business_id);
+    const account = await getBillingAccount(context.accessToken, context.businessId);
+    if (account && ['trialing', 'active', 'past_due', 'unpaid', 'incomplete'].includes(String(account.status))) {
+      return json(res, 409, { ok: false, error: 'SUBSCRIPTION_ALREADY_EXISTS', can_manage: Boolean(account.stripe_customer_id) });
+    }
+    const stripe = getStripe();
+    const origin = requestOrigin(req);
+    const customer = account?.stripe_customer_id || undefined;
+    const trialAvailable = !account?.trial_started_at && !account?.trial_ends_at;
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer,
+      customer_email: customer ? undefined : context.user.email || undefined,
+      client_reference_id: context.businessId,
+      line_items: [{ price: DABBIR_OWNER_PRICE_ID, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: trialAvailable ? DABBIR_TRIAL_DAYS : undefined,
+        metadata: { app: 'dabbir', business_id: context.businessId, plan: 'owner' },
+      },
+      metadata: { app: 'dabbir', business_id: context.businessId, plan: 'owner', livemode_expected: 'false' },
+      payment_method_collection: 'always',
+      allow_promotion_codes: false,
+      billing_address_collection: 'auto',
+      locale: 'auto',
+      success_url: `${origin}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/?billing=cancelled`,
+      integration_identifier: integrationIdentifier(),
+    }, {
+      idempotencyKey: checkoutIdempotencyKey(context.businessId, context.user.id),
+    });
+    if (!session.url) throw Object.assign(new Error('CHECKOUT_URL_MISSING'), { code: 502 });
+    return json(res, 200, { ok: true, url: session.url, livemode: false });
+  } catch (error) {
+    const status = Number(error?.code || error?.statusCode || 500);
+    const safe = [400, 401, 403, 409, 413, 503].includes(status) ? status : 502;
+    console.error('dabbir_billing_checkout_failed', { status: safe, error: String(error?.message || 'CHECKOUT_FAILED').slice(0, 120) });
+    return json(res, safe, { ok: false, error: String(error?.message || 'CHECKOUT_FAILED').slice(0, 120) });
+  }
+}

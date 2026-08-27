@@ -1,0 +1,23 @@
+import { json, readJsonBody, requireSameOrigin } from '../_auth-core.js';
+import { getBillingAccount, getStripe, requestOrigin, requireBillingOwner } from '../_billing-core.js';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
+  if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'ORIGIN_REQUIRED' });
+  try {
+    const body = await readJsonBody(req, 4096);
+    const context = await requireBillingOwner(req, body?.business_id);
+    const account = await getBillingAccount(context.accessToken, context.businessId);
+    if (!account?.stripe_customer_id) return json(res, 404, { ok: false, error: 'BILLING_CUSTOMER_NOT_FOUND' });
+    const session = await getStripe().billingPortal.sessions.create({
+      customer: account.stripe_customer_id,
+      return_url: `${requestOrigin(req)}/?billing=portal_return`,
+    });
+    return json(res, 200, { ok: true, url: session.url, livemode: false });
+  } catch (error) {
+    const status = Number(error?.code || error?.statusCode || 500);
+    const safe = [400, 401, 403, 404, 413, 503].includes(status) ? status : 502;
+    console.error('dabbir_billing_portal_failed', { status: safe, error: String(error?.message || 'PORTAL_FAILED').slice(0, 120) });
+    return json(res, safe, { ok: false, error: String(error?.message || 'PORTAL_FAILED').slice(0, 120) });
+  }
+}
