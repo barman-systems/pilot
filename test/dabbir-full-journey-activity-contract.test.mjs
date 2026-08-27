@@ -26,7 +26,13 @@ test('store full journey verifies the appointment guard instead of demanding an 
 });
 
 test('mobile journey targets exactly one visible operations navigation control', () => {
-  must(/#side\.open \[data-screen=\\"operations\\"\]:visible/, 'mobile selector must exclude hidden activity-specific duplicate controls');
+  assert.ok(
+    source.includes("page.locator('#side.open [data-screen=\"operations\"]:visible')"),
+    'mobile selector must exclude hidden activity-specific duplicate controls',
+  );
   must(/visibleOperationsCount === 1/, 'journey must detect genuinely duplicated visible navigation');
-  mustNot(/page\.locator\('#side \[data-screen=\\"operations\\"\]'\)\.click\(\)/, 'ambiguous strict locator must not return');
+  assert.ok(
+    !source.includes("page.locator('#side [data-screen=\"operations\"]').click()"),
+    'ambiguous strict locator must not return',
+  );
 });
