@@ -3,7 +3,7 @@ import { existsSync, openSync, closeSync, writeFileSync, unlinkSync } from 'node
 import os from 'node:os';
 import path from 'node:path';
 
-const gateVersion = 'v2-deployment-scoped';
+const gateVersion = 'v3-final';
 const rawSha = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local').trim();
 const rawDeploymentId = String(process.env.VERCEL_DEPLOYMENT_ID || `pid-${process.pid}`).trim();
 const safeSha = rawSha.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'local';
