@@ -14,6 +14,8 @@ test('BAR-12 evidence action has an OIDC profile separate from AI journey action
   assert.match(source,/dabbir-bar12-readiness\.yml@refs\/heads\/main/);
   assert.match(source,/verifyGitHubOidc\(req,'ai'\)/);
   assert.match(source,/verifyGitHubOidc\(req,'readiness'\)/);
+  assert.match(source,/if\(action===READINESS_ACTION\)\{try\{return await handleReadiness\(req\)\}/);
+  assert.match(source,/if\(!\(await auth\(req\)\)\)return new Response\('unauthorized'/);
   assert.match(source,/payload\.ref!==GH_REF/);
   assert.match(source,/crypto\.subtle\.verify/);
   assert.match(source,/actionError\(e,500\)/);
