@@ -18,7 +18,9 @@ test('rebased owner-first clients parse and keep the approved DABBIR identity di
   assert.match(theme.body,/--dabbir-brand-purple:#7c5cff/);
   assert.match(theme.body,/--dabbir-brand-blue:#3e8cff/);
   assert.match(theme.body,/--dabbir-brand-cyan:#46d9ff/);
-  assert.doesNotMatch(theme.body,/\.logo[^\n]*background:/);
+  assert.match(theme.body,/\.logo,.dabbirTopLogo,.dabbirAiIdentity img,.dabbirAiStatusLogo\{border-color:transparent/);
+  assert.doesNotMatch(theme.body,/\.logo\{background:/);
+  assert.doesNotMatch(theme.body,/\.dabbirTopLogo\{background:/);
 });
 
 test('owner home stays exception-first while preserving all business details',()=>{
