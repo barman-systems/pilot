@@ -26,10 +26,11 @@ test('support resolver is not executable by client roles', () => {
   assert.match(migration, /revoke all on function public\.dabbir_support_resolve_account\(text\) from public, anon, authenticated/i);
 });
 
-test('account-number endpoint requires bearer authentication and no undeclared SDK', () => {
-  assert.match(api, /authentication_required/);
+test('account-number endpoint reuses DABBIR cookie authentication', () => {
+  assert.match(api, /accessTokenFromRequest/);
+  assert.match(api, /getVerifiedUser/);
+  assert.match(api, /getBusinessMemberships/);
   assert.match(api, /dabbir_my_customer_no/);
-  assert.match(api, /Bearer/);
+  assert.match(api, /AUTH_REQUIRED/);
   assert.doesNotMatch(api, /@supabase\/supabase-js/);
-  assert.match(api, /\/rest\/v1\/rpc\/dabbir_my_customer_no/);
 });
