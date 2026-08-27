@@ -66,6 +66,7 @@ with check (
   and updated_by=(select auth.uid())
 );
 
+-- Audit evidence is deliberately private and is not exposed through the Data API.
 create table if not exists dabbir_private.owner_mode_events (
   id bigint generated always as identity primary key,
   business_id uuid not null,
@@ -84,7 +85,7 @@ create or replace function dabbir_private.audit_owner_mode_change()
 returns trigger
 language plpgsql
 security definer
-set search_path=public,dabbir_private,pg_temp
+set search_path=''
 as $$
 declare v_event text;
 begin
@@ -104,48 +105,16 @@ begin
     new.business_id,
     (select auth.uid()),
     v_event,
-    case when tg_op='UPDATE' then to_jsonb(old) else null end,
-    to_jsonb(new)
+    case when tg_op='UPDATE' then pg_catalog.to_jsonb(old) else null end,
+    pg_catalog.to_jsonb(new)
   );
   return new;
 end;
 $$;
 revoke all on function dabbir_private.audit_owner_mode_change() from public, anon, authenticated;
+grant execute on function dabbir_private.audit_owner_mode_change() to service_role;
 
 drop trigger if exists dabbir_audit_owner_mode_change on public.dabbir_owner_modes;
 create trigger dabbir_audit_owner_mode_change
 after insert or update on public.dabbir_owner_modes
 for each row execute function dabbir_private.audit_owner_mode_change();
-
-create or replace function public.dabbir_owner_away_mode_events(p_business_id uuid)
-returns table(
-  event_id bigint,
-  event_type text,
-  actor_user_id uuid,
-  previous_state jsonb,
-  next_state jsonb,
-  occurred_at timestamptz
-)
-language plpgsql
-security definer
-set search_path=public,dabbir_private,pg_temp
-as $$
-begin
-  if (select auth.uid()) is null then raise exception 'AUTH_REQUIRED'; end if;
-  if not exists (
-    select 1 from public.dabbir_memberships m
-    where m.business_id=p_business_id
-      and m.user_id=(select auth.uid())
-      and m.role='owner'
-  ) then raise exception 'OWNER_REQUIRED'; end if;
-
-  return query
-  select e.id,e.event_type,e.actor_user_id,e.previous_state,e.next_state,e.occurred_at
-  from dabbir_private.owner_mode_events e
-  where e.business_id=p_business_id
-  order by e.occurred_at desc
-  limit 50;
-end;
-$$;
-revoke all on function public.dabbir_owner_away_mode_events(uuid) from public, anon;
-grant execute on function public.dabbir_owner_away_mode_events(uuid) to authenticated, service_role;
