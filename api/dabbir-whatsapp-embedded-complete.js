@@ -13,6 +13,40 @@ function cleanId(value) {
   return /^[0-9]{5,40}$/.test(text) ? text : '';
 }
 
+async function resolveCoexistencePhoneNumberId(platform, token, wabaId) {
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(wabaId)}/phone_numbers`);
+  url.searchParams.set('fields', 'id,display_phone_number,verified_name,is_on_biz_app,platform_type');
+  url.searchParams.set('limit', '100');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(String(payload?.error?.message || 'META_PHONE_RESOLUTION_FAILED').slice(0, 300));
+      error.status = 502;
+      error.providerStatus = response.status;
+      error.providerCode = payload?.error?.code || null;
+      throw error;
+    }
+
+    const phones = Array.isArray(payload?.data) ? payload.data : [];
+    const coexistence = phones.filter(item => item?.is_on_biz_app === true && String(item?.platform_type || '').toUpperCase() === 'CLOUD_API');
+    if (coexistence.length === 1) return cleanId(coexistence[0]?.id);
+    if (phones.length === 1) return cleanId(phones[0]?.id);
+
+    throw Object.assign(new Error('META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED'), { status: 409 });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'SAME_ORIGIN_REQUIRED' });
@@ -22,16 +56,23 @@ export default async function handler(req, res) {
     const businessId = String(body?.business_id || '').trim();
     const code = String(body?.code || '').trim();
     const wabaId = cleanId(body?.waba_id);
-    const phoneNumberId = cleanId(body?.phone_number_id);
+    let phoneNumberId = cleanId(body?.phone_number_id);
+    const onboardingMode = String(body?.onboarding_mode || '').trim();
+
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     if (!code || code.length > 4096) return json(res, 400, { ok: false, error: 'META_AUTHORIZATION_CODE_REQUIRED' });
-    if (!wabaId || !phoneNumberId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_ASSETS_REQUIRED' });
+    if (!wabaId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_WABA_REQUIRED' });
 
     const owner = await ownerContext(req, businessId);
     const platform = await resolveEmbeddedPlatformConfig();
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
     const exchanged = await exchangeEmbeddedCode(platform, code);
+    if (!phoneNumberId && onboardingMode === 'whatsapp_business_app_onboarding') {
+      phoneNumberId = await resolveCoexistencePhoneNumberId(platform, exchanged.accessToken, wabaId);
+    }
+    if (!phoneNumberId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_PHONE_REQUIRED' });
+
     const verified = await verifyEmbeddedAssets(platform, exchanged.accessToken, wabaId, phoneNumberId);
     const sealed = sealAccessToken(exchanged.accessToken, platform, businessId);
     const now = new Date();
@@ -63,6 +104,8 @@ export default async function handler(req, res) {
       channel: 'whatsapp',
       state: 'META_AUTHORIZED',
       meta_authorized: true,
+      onboarding_mode: onboardingMode || 'standard',
+      coexistence: onboardingMode === 'whatsapp_business_app_onboarding',
       operational: false,
       operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
       phone: {
