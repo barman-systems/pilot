@@ -101,7 +101,6 @@ jobs:
 
   capacity-1000:
     name: 1000 customers + staged concurrency
-    needs: full-customer-journey
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
