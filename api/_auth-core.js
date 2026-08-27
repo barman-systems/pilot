@@ -1,6 +1,7 @@
 const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const ACCESS_COOKIE = '__Host-dabbir_access';
 export const REFRESH_COOKIE = '__Host-dabbir_refresh';
@@ -100,9 +101,45 @@ export async function getVerifiedUser(accessToken) {
   return { id: user.id, email: user.email ?? null, aud: user.aud ?? null };
 }
 
+function decodeJwtPayload(accessToken) {
+  try {
+    const parts = String(accessToken || '').split('.');
+    if (parts.length !== 3 || !parts[1]) return null;
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// IMPORTANT: this helper does not verify the JWT signature itself. Call it only
+// after the same access token has already been accepted by a Supabase API that
+// verifies JWTs (for example the Data API membership lookup). This lets hot
+// authenticated reads avoid a second /auth/v1/user round trip while preserving
+// Supabase as the authority that validates the token.
+export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
+  if (String(payload.iss || '') !== `${SUPABASE_URL}/auth/v1`) return null;
+  if (String(payload.role || '') !== 'authenticated') return null;
+  const exp = Number(payload.exp || 0);
+  if (!Number.isFinite(exp) || exp <= Number(nowSeconds)) return null;
+  const nbf = payload.nbf == null ? null : Number(payload.nbf);
+  if (nbf != null && (!Number.isFinite(nbf) || nbf > Number(nowSeconds))) return null;
+  return {
+    id: String(payload.sub),
+    email: payload.email == null ? null : String(payload.email),
+    aud: payload.aud ?? null,
+  };
+}
+
 export async function getBusinessMemberships(accessToken) {
   const response = await supabaseRest('dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active', accessToken);
-  if (!response.ok) throw new Error('MEMBERSHIP_LOOKUP_FAILED');
+  if (!response.ok) {
+    const status = Number(response.status || 500);
+    const error = new Error(status === 401 || status === 403 ? 'AUTH_REQUIRED' : 'MEMBERSHIP_LOOKUP_FAILED');
+    error.code = status;
+    throw error;
+  }
   return response.json();
 }
 
