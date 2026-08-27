@@ -152,7 +152,7 @@ export function readJsonBody(req, maxBytes = 8192) {
     req.on('data', chunk => {
       size += chunk.length;
       if (size > maxBytes) {
-        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 });
+        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 }));
         req.destroy();
         return;
       }
