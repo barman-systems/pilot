@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "vercel-build": "npm test"
+    "vercel-build": "node scripts/vercel-build-gate.mjs"
   },
   "dependencies": {
     "@vercel/oidc": "3.8.5",
