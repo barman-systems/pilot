@@ -115,7 +115,7 @@ button,a,[data-screen],[data-cid]{touch-action:manipulation}
     document.querySelector('#side')?.classList.remove('open');
   };
 
-  window.__dabbirInterfacePerformance='fast-v3';
+  window.__dabbirInterfacePerformance='fast-v4-truth';
 })();
 </script>`;
 
@@ -177,6 +177,7 @@ const conversationPerformanceUi = String.raw`
       });
 
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==tempId&&m.id!==typingId);
+      workspace.last_action_truth=j.truth||{state:'UNVERIFIED'};
 
       if(j.customer_message) workspace.messages.push(j.customer_message);
       else if(!j.customer_message_persisted) workspace.messages.push({id:tempId,conversation_id:selectedConversationId,sender_type:'customer',body:text,intent:'UNVERIFIED',simulated:false,created_at:now});
@@ -185,6 +186,7 @@ const conversationPerformanceUi = String.raw`
         localConversationState('action_required');
         renderMessages();
         if(current==='dashboard') renderDashboard();
+        if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
         toast(lang==='ar'?(j.customer_message_persisted?'تم حفظ رسالتك، وتعذر رد AI مؤقتًا':'تعذر إرسال الرسالة'):(j.customer_message_persisted?'Message saved; AI reply is temporarily unavailable':'Message could not be sent'));
         return;
       }
@@ -197,9 +199,12 @@ const conversationPerformanceUi = String.raw`
       renderMessages();
       if(current==='dashboard') renderDashboard();
       if(current==='analytics') renderAnalytics();
+      if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
     }catch{
+      workspace.last_action_truth={state:'UNVERIFIED'};
       workspace.messages=(workspace.messages||[]).filter(m=>m.id!==typingId);
       renderMessages();
+      if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
       toast(lang==='ar'?'تعذر الاتصال؛ حاول مرة أخرى':'Connection failed; try again');
     }finally{
       dabbirSending=false;
@@ -220,6 +225,57 @@ const conversationPerformanceUi = String.raw`
 })();
 </script>`;
 
+const truthVisibilityUi = String.raw`
+<style>
+.dabbirTruthBadge{display:inline-flex;align-items:center;gap:6px;margin-inline-start:8px;padding:4px 8px;border:1px solid rgba(255,255,255,.10);border-radius:999px;background:rgba(255,255,255,.04);font-size:10px;font-weight:700;letter-spacing:.01em;color:#bfc5cf;vertical-align:middle;white-space:nowrap}
+.dabbirTruthBadge[data-state="verified"]{color:#bfe7cf;border-color:rgba(137,214,170,.22);background:rgba(137,214,170,.07)}
+.dabbirTruthBadge[data-state="unverified"]{color:#f0cf9a;border-color:rgba(240,207,154,.20);background:rgba(240,207,154,.06)}
+.dabbirTruthBadge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+@media(max-width:700px){.dabbirTruthBadge{font-size:9px;padding:3px 7px;margin-inline-start:5px}}
+</style>
+<script>
+(()=>{
+  function exactTime(value){
+    if(!value) return '';
+    try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(value))}catch{return ''}
+  }
+
+  function renderTruth(){
+    const anchor=document.querySelector('#workspaceState');
+    if(!anchor) return;
+    let badge=document.querySelector('#dabbirTruthBadge');
+    if(!badge){
+      badge=document.createElement('span');
+      badge.id='dabbirTruthBadge';
+      badge.className='dabbirTruthBadge';
+      badge.innerHTML='<span class="dot"></span><span class="label"></span>';
+      anchor.insertAdjacentElement('afterend',badge);
+    }
+    const data=workspace?.data_truth;
+    const action=workspace?.last_action_truth;
+    const verified=data?.state==='VERIFIED_TENANT_READ';
+    const actionUnverified=action&&action.state!=='VERIFIED';
+    const state=actionUnverified?'unverified':(verified?'verified':'unverified');
+    badge.dataset.state=state;
+    const label=badge.querySelector('.label');
+    if(label){
+      if(actionUnverified) label.textContent=lang==='ar'?'آخر إجراء يحتاج تحقق':'Last action needs verification';
+      else if(verified) label.textContent=lang==='ar'?'بيانات موثقة':'Verified data';
+      else label.textContent=lang==='ar'?'حالة البيانات غير مؤكدة':'Data status unverified';
+    }
+    const readAt=exactTime(data?.read_at);
+    badge.title=verified
+      ? (lang==='ar'?`المصدر: بيانات النشاط المعزولة • آخر قراءة ${readAt||'الآن'}`:`Source: isolated tenant data • last read ${readAt||'now'}`)
+      : (lang==='ar'?'لا يوجد دليل قراءة موثقة لهذه الحالة':'No verified read evidence is available for this state');
+  }
+
+  const baseRenderAllTruth=renderAll;
+  renderAll=function(){baseRenderAllTruth();renderTruth()};
+  window.__dabbirRenderTruth=renderTruth;
+  setTimeout(renderTruth,0);
+})();
+</script>`;
+
 export default function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).setHeader('allow', 'GET').end('Method Not Allowed');
 
@@ -233,12 +289,12 @@ export default function handler(req, res) {
   html = html.replace(legacyTeamLink, '');
   html = html.replaceAll('/api/dabbir-runtime', '/api/dabbir-runtime-fast');
   html = html.replace("const {r,j}=await api('/api/dabbir-runtime-fast');if(r.status===401)", "const {r,j}=await api('/api/dabbir-runtime-fast?summary=1');if(r.status===401)");
-  html = html.replace('</body>', `${businessAdaptiveUi}\n${interfacePerformanceUi}\n${conversationPerformanceUi}\n</body>`);
+  html = html.replace('</body>', `${businessAdaptiveUi}\n${interfacePerformanceUi}\n${conversationPerformanceUi}\n${truthVisibilityUi}\n</body>`);
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
-  res.setHeader('x-dabbir-interface', 'operational-runtime-v1');
-  res.setHeader('x-dabbir-chat-path', 'chat-send-fallback-v3');
-  res.setHeader('x-dabbir-performance', 'interface-fast-v3');
+  res.setHeader('x-dabbir-interface', 'operational-runtime-v2-truth');
+  res.setHeader('x-dabbir-chat-path', 'chat-send-truth-v4');
+  res.setHeader('x-dabbir-performance', 'interface-fast-v4-truth');
   return res.status(200).send(html);
 }
