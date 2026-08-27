@@ -11,6 +11,8 @@ import dabbirRuntimeHandler from './dabbir-runtime.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
+const DABBIR_TIME_ZONE = 'Asia/Dubai';
+const DABBIR_UTC_OFFSET = '+04:00';
 
 function singleQueryValue(req, name) {
   try {
@@ -88,6 +90,75 @@ async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
 
 const rest = (token, path, fallback) => supabaseRest(path, token).then(response => readData(response, fallback));
 
+async function restCount(accessToken, path, fallback) {
+  const response = await supabaseRest(path, accessToken, { headers: { prefer: 'count=exact' } });
+  if (!response.ok) {
+    const payload = await readData(response, fallback);
+    return payload;
+  }
+  const range = String(response.headers.get('content-range') || '');
+  const rawTotal = range.includes('/') ? range.slice(range.lastIndexOf('/') + 1) : '';
+  const total = Number(rawTotal);
+  await response.text().catch(() => '');
+  if (!Number.isSafeInteger(total) || total < 0) {
+    const error = new Error(`${fallback}_COUNT_UNVERIFIED`);
+    error.status = 502;
+    throw error;
+  }
+  return total;
+}
+
+export function dubaiDayRange(now = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: DABBIR_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(now).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const dateKey = `${parts.year}-${parts.month}-${parts.day}`;
+  const start = new Date(`${dateKey}T00:00:00${DABBIR_UTC_OFFSET}`);
+  if (Number.isNaN(start.getTime())) throw Object.assign(new Error('DUBAI_DAY_RANGE_FAILED'), { status: 502 });
+  return {
+    time_zone: DABBIR_TIME_ZONE,
+    date_key: dateKey,
+    starts_at_gte: start.toISOString(),
+    starts_at_lt: new Date(start.getTime() + 86400000).toISOString(),
+  };
+}
+
+async function loadVerifiedMetrics(accessToken, businessId, now = new Date()) {
+  const day = dubaiDayRange(now);
+  const b = encodeURIComponent(businessId);
+  const start = encodeURIComponent(day.starts_at_gte);
+  const end = encodeURIComponent(day.starts_at_lt);
+  const [activeChats, todayAppointments, customers, activeHandoffs, openFollowups, aiMessages, humanHandoffs] = await Promise.all([
+    restCount(accessToken, `dabbir_conversations?select=id&business_id=eq.${b}&channel_type=eq.web&state=neq.closed&limit=1`, 'ACTIVE_CHATS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_appointments?select=id&business_id=eq.${b}&starts_at=gte.${start}&starts_at=lt.${end}&limit=1`, 'TODAY_APPOINTMENTS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_customers?select=id&business_id=eq.${b}&limit=1`, 'CUSTOMERS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_handoffs?select=id&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&limit=1`, 'ACTIVE_HANDOFFS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_followups?select=id&business_id=eq.${b}&status=not.in.(completed,cancelled,sent)&limit=1`, 'OPEN_FOLLOWUPS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_messages?select=id&business_id=eq.${b}&sender_type=eq.ai&simulated=eq.false&limit=1`, 'AI_MESSAGES_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_handoffs?select=id&business_id=eq.${b}&limit=1`, 'HUMAN_HANDOFFS_COUNT_FAILED'),
+  ]);
+
+  return {
+    state: 'VERIFIED_EXACT_COUNTS',
+    source: 'SUPABASE_POSTGREST_COUNT_EXACT',
+    as_of: new Date().toISOString(),
+    time_zone: day.time_zone,
+    date_key: day.date_key,
+    active_chats: activeChats,
+    today_appointments: todayAppointments,
+    customers,
+    active_handoffs: activeHandoffs,
+    open_followups: openFollowups,
+    needs_attention: activeHandoffs + openFollowups,
+    ai_messages: aiMessages,
+    human_handoffs: humanHandoffs,
+  };
+}
+
 async function loadMessages(accessToken, businessId, conversationId) {
   if (!conversationId) return [];
   return rest(
@@ -97,7 +168,7 @@ async function loadMessages(accessToken, businessId, conversationId) {
   );
 }
 
-function buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, duration, summaryOnly }) {
+function buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly }) {
   return {
     state: 'VERIFIED_TENANT_READ',
     source: 'SUPABASE_RLS_TENANT_DATA',
@@ -105,13 +176,14 @@ function buildDataTruth({ business, conversations, customers, appointments, hand
     business_updated_at: business?.updated_at || null,
     runtime_ms: duration,
     summary_only: summaryOnly,
+    exact_metrics_state: metrics?.state || 'UNVERIFIED',
     counts: {
-      conversations: Array.isArray(conversations) ? conversations.length : 0,
-      customers: Array.isArray(customers) ? customers.length : 0,
-      appointments: Array.isArray(appointments) ? appointments.length : 0,
-      handoffs: Array.isArray(handoffs) ? handoffs.length : 0,
-      followups: Array.isArray(followups) ? followups.length : 0,
-      loaded_messages: Array.isArray(messages) ? messages.length : 0,
+      conversations_loaded: Array.isArray(conversations) ? conversations.length : 0,
+      customers_loaded: Array.isArray(customers) ? customers.length : 0,
+      appointments_loaded: Array.isArray(appointments) ? appointments.length : 0,
+      handoffs_loaded: Array.isArray(handoffs) ? handoffs.length : 0,
+      followups_loaded: Array.isArray(followups) ? followups.length : 0,
+      messages_loaded: Array.isArray(messages) ? messages.length : 0,
     },
   };
 }
@@ -157,6 +229,7 @@ async function handleFastGet(req, res) {
         source: 'SUPABASE_AUTH_AND_MEMBERSHIP',
         read_at: new Date().toISOString(),
       },
+      verified_metrics: null,
       whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
       ai: {
         provider: aiConfig.provider,
@@ -202,17 +275,19 @@ async function handleFastGet(req, res) {
     `dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=20`,
     'FOLLOWUPS_LOOKUP_FAILED',
   );
+  const metricsPromise = loadVerifiedMetrics(accessToken, businessId);
   const requestedMessagesPromise = !summaryOnly && requestedConversationId
     ? loadMessages(accessToken, businessId, requestedConversationId)
     : Promise.resolve(null);
 
-  const [businessRows, rawConversations, customers, appointments, handoffs, followups, requestedMessages] = await Promise.all([
+  const [businessRows, rawConversations, customers, appointments, handoffs, followups, metrics, requestedMessages] = await Promise.all([
     businessPromise,
     conversationsPromise,
     customersPromise,
     appointmentsPromise,
     handoffsPromise,
     followupsPromise,
+    metricsPromise,
     requestedMessagesPromise,
   ]);
 
@@ -246,17 +321,18 @@ async function handleFastGet(req, res) {
   }
 
   const duration = Date.now() - started;
-  const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, duration, summaryOnly });
+  const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v5-truth');
+  res.setHeader('x-dabbir-runtime', 'fast-v6-exact-metrics');
   return json(res, 200, {
     ok: true,
     authenticated: true,
     user,
     needs_onboarding: false,
     operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
-    truth_mode: 'VERIFIED_TENANT_READS',
+    truth_mode: 'VERIFIED_TENANT_READS_AND_EXACT_COUNTS',
     data_truth: dataTruth,
+    verified_metrics: metrics,
     membership,
     memberships,
     business,
@@ -276,7 +352,7 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true },
+    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
   });
 }
 
