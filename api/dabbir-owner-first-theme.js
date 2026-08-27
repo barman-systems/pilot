@@ -1,10 +1,4 @@
-const script=String.raw`(()=>{
-  if(window.__dabbirOwnerFirstThemeLoaded)return;
-  window.__dabbirOwnerFirstThemeLoaded=true;
-
-  const style=document.createElement('style');
-  style.dataset.dabbirOwnerFirstTheme='v1';
-  style.textContent=String.raw`
+const css=String.raw`
 :root{
   --accent:#7c6cff!important;
   --green:#66e3c4!important;
@@ -106,6 +100,14 @@ html[dir=ltr] .navBtn.active{box-shadow:inset 3px 0 0 var(--dabbir-brand-cyan)!i
   #screen-dashboard #dashCards .card{padding:12px!important}
 }
 `;
+
+const script=String.raw`(()=>{
+  if(window.__dabbirOwnerFirstThemeLoaded)return;
+  window.__dabbirOwnerFirstThemeLoaded=true;
+
+  const style=document.createElement('style');
+  style.dataset.dabbirOwnerFirstTheme='v1';
+  style.textContent=${JSON.stringify(css)};
   document.head.appendChild(style);
   document.documentElement.dataset.dabbirOwnerFirstUi='v1';
   window.__dabbirOwnerFirstThemeVersion='owner-first-v1';
