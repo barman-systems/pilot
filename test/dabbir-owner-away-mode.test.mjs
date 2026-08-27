@@ -81,7 +81,7 @@ test('away action-center wrapper applies policy without changing the canonical s
   assert.match(source,/deferred:\{count:result\.deferred_count,noncritical_only:true\}/);
 });
 
-test('database migration is owner-only, force-RLS, audited privately, and does not grant delete',async()=>{
+test('database migration is owner-only, force-RLS, and keeps audit evidence private',async()=>{
   const sql=await readFile(new URL('../supabase/migrations/20260827122000_dabbir_owner_away_mode_v1.sql',import.meta.url),'utf8');
   assert.match(sql,/create table if not exists public\.dabbir_owner_modes/i);
   assert.match(sql,/force row level security/i);
@@ -89,8 +89,10 @@ test('database migration is owner-only, force-RLS, audited privately, and does n
   assert.match(sql,/revoke truncate, references, trigger, delete on public\.dabbir_owner_modes from authenticated/i);
   assert.match(sql,/create table if not exists dabbir_private\.owner_mode_events/i);
   assert.match(sql,/revoke all on dabbir_private\.owner_mode_events from public, anon, authenticated/i);
-  assert.match(sql,/audit_owner_mode_change/i);
-  assert.match(sql,/dabbir_owner_away_mode_events/i);
+  assert.match(sql,/create or replace function dabbir_private\.audit_owner_mode_change\(\)/i);
+  assert.match(sql,/security definer\s+set search_path=''/i);
+  assert.doesNotMatch(sql,/create or replace function public\.dabbir_owner_away_mode_events/i);
+  assert.doesNotMatch(sql,/grant execute on function .* to authenticated/i);
 });
 
 test('production shell loads Away Mode after action center so escalation fetches are intercepted',async()=>{
