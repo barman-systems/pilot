@@ -14,6 +14,16 @@ const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():
 const clean=(value,max=160)=>String(value||'').trim().slice(0,max);
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
 
+function singleQueryValue(req,name){
+  try{
+    const url=new URL(String(req?.url||'/'),'https://dabbir.invalid');
+    const values=url.searchParams.getAll(name);
+    return values.length===1?values[0]:null;
+  }catch{
+    return null;
+  }
+}
+
 async function readData(response,fallback){
   const text=await response.text();
   let payload=null;
@@ -47,7 +57,7 @@ function membershipFor(memberships,businessId){
 }
 
 async function handleGet(req,res,context){
-  const requested=safeId(req.query?.business_id);
+  const requested=safeId(singleQueryValue(req,'business_id'));
   const membership=membershipFor(context.memberships,requested);
   if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
   const businessId=membership.business_id;
