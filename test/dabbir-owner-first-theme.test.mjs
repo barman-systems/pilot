@@ -33,6 +33,12 @@ test('generated owner-first theme client is valid JavaScript', () => {
   assert.doesNotThrow(() => new Function(body));
 });
 
+test('owner-first theme preserves the approved logo image instead of replacing it with a generated background', () => {
+  const { body } = renderClient();
+  assert.doesNotMatch(body, /\.logo,.dabbirTopLogo\{\s*background:/);
+  assert.match(body, /\.logo,.dabbirTopLogo,.dabbirAiIdentity img,.dabbirAiStatusLogo/);
+});
+
 test('app recovery loads owner-first theme last so it can safely override legacy visual polish', async () => {
   const source = await readFile(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
   const theme = source.indexOf('/api/dabbir-owner-first-theme');
