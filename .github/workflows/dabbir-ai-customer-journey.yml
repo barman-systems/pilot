@@ -1,5 +1,6 @@
 name: DABBIR AI Full Customer Journey
-# Real production journey on push/schedule; capacity is manual-only and remains fail-closed.
+# Real production journey on push/schedule. A Vercel READY deployment is not enough:
+# the canonical public origin must pass the no-auth-redirect preflight first.
 
 on:
   workflow_dispatch:
@@ -18,9 +19,13 @@ on:
     paths:
       - 'package.json'
       - 'package-lock.json'
+      - 'config/dabbir-public-runtime.js'
+      - 'config/barman-integration-contract.json'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-public-origin-preflight.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
+      - 'test/dabbir-whatsapp-*.test.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -30,6 +35,8 @@ on:
       - 'api/chat*.js'
       - 'api/translate.js'
       - 'api/dabbir-runtime*.js'
+      - 'api/dabbir-whatsapp*.js'
+      - 'api/_whatsapp-embedded-core.js'
       - 'api/owner-operations*.js'
       - 'api/service-operations*.js'
       - 'api/activity-*.js'
@@ -39,6 +46,7 @@ on:
       - 'api/brand-ui.js'
       - 'api/timezone-ui.js'
       - 'api/dabbir-approved-icon.js'
+      - 'vercel.json'
       - 'index.html'
       - 'team.html'
   schedule:
@@ -48,40 +56,46 @@ permissions:
   contents: read
   id-token: write
 
-# Never cancel a trusted production journey because another qualifying commit arrived.
-# A single group also prevents two production journeys/capacity sequences from overlapping.
 concurrency:
   group: dabbir-ai-full-customer-journey
   cancel-in-progress: false
 
 jobs:
   full-customer-journey:
-    name: Real owner + customer + employee + AI journey
+    name: Real public owner + customer + employee + AI journey
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     env:
-      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
     steps:
-      - name: Require canonical DABBIR production origin
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
-            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
-            exit 1
-          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+
+      - name: Resolve canonical DABBIR origin from committed source of truth
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGIN="$(node --input-type=module -e "import { DABBIR_PUBLIC_RUNTIME as c } from './config/dabbir-public-runtime.js'; process.stdout.write(c.productionOrigin)")"
+          if [[ ! "$ORIGIN" =~ ^https://[^/]+$ ]]; then
+            echo 'Committed DABBIR production origin is invalid.'
+            exit 1
+          fi
+          echo "PRODUCTION_ORIGIN=$ORIGIN" >> "$GITHUB_ENV"
+
+      - name: Require a truly public production entrypoint
+        run: node test/dabbir-public-origin-preflight.mjs
+
       - name: Install WebKit journey runner
         run: |
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps webkit
+
       - name: Run AI full customer journey against production
         run: node test/ai-full-customer-journey-v2.mjs
+
       - name: Publish journey summary
         if: always()
         shell: bash
@@ -94,6 +108,7 @@ jobs:
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
           fi
+
       - name: Upload journey evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -112,7 +127,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
@@ -125,19 +139,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Run clean AI concurrency test
-        run: node test/dabbir-capacity-load.mjs
-      - name: Publish AI capacity summary
-        if: always()
+      - name: Resolve canonical public origin
         shell: bash
         run: |
-          if [ -f dabbir-ai-capacity-report.json ]; then
-            echo '## DABBIR AI Capacity' >> "$GITHUB_STEP_SUMMARY"
-            echo "**AI concurrency passed:** $(jq -r '.capacity.ai_concurrency' dabbir-ai-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo '| Concurrent | Error rate | AI reply rate | p95 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
-            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.ai_stages[] | "| \(.concurrency) | \(.error_rate) | \(.ai_reply_rate // 0) | \(.p95_ms) | \(.pass) |"' dabbir-ai-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
-          fi
+          set -euo pipefail
+          echo "PRODUCTION_ORIGIN=$(node --input-type=module -e "import { DABBIR_PUBLIC_RUNTIME as c } from './config/dabbir-public-runtime.js'; process.stdout.write(c.productionOrigin)")" >> "$GITHUB_ENV"
+      - name: Re-verify public production entrypoint
+        run: node test/dabbir-public-origin-preflight.mjs
+      - name: Run clean AI concurrency test
+        run: node test/dabbir-capacity-load.mjs
       - name: Upload AI capacity evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -154,7 +164,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
@@ -167,21 +176,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Run 1000-customer runtime capacity test
-        run: node test/dabbir-capacity-load.mjs
-      - name: Publish runtime capacity summary
-        if: always()
+      - name: Resolve canonical public origin
         shell: bash
         run: |
-          if [ -f dabbir-runtime-capacity-report.json ]; then
-            echo '## DABBIR Runtime Capacity' >> "$GITHUB_STEP_SUMMARY"
-            echo "**Customers created:** $(jq -r '.customer_count' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Strict UX concurrency:** $(jq -r '.capacity.infrastructure_stable_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Available concurrency:** $(jq -r '.capacity.infrastructure_available_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo '| Concurrent | Error rate | p95 ms | p99 ms | Stable | Available |' >> "$GITHUB_STEP_SUMMARY"
-            echo '|---:|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.runtime_stages[] | "| \(.concurrency) | \(.error_rate) | \(.p95_ms) | \(.p99_ms) | \(.stable) | \(.available) |"' dabbir-runtime-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
-          fi
+          set -euo pipefail
+          echo "PRODUCTION_ORIGIN=$(node --input-type=module -e "import { DABBIR_PUBLIC_RUNTIME as c } from './config/dabbir-public-runtime.js'; process.stdout.write(c.productionOrigin)")" >> "$GITHUB_ENV"
+      - name: Re-verify public production entrypoint
+        run: node test/dabbir-public-origin-preflight.mjs
+      - name: Run 1000-customer runtime capacity test
+        run: node test/dabbir-capacity-load.mjs
       - name: Upload runtime capacity evidence
         if: always()
         uses: actions/upload-artifact@v6
