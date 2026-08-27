@@ -295,8 +295,11 @@ async function browserJourney() {
   assert((await page.locator('#chatList').textContent())?.includes('AI Journey Customer'), 'BROWSER_CONVERSATION_MISSING');
 
   await page.locator('#menuBtn').click();
-await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
-await page.locator('#side [data-screen="operations"]').click();
+  await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
+  const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
+  const visibleOperationsCount = await visibleOperationsNav.count();
+  assert(visibleOperationsCount === 1, `BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_${visibleOperationsCount}`);
+  await visibleOperationsNav.click();
   await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
   assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
@@ -524,7 +527,7 @@ async function runJourney() {
     return { status: result.status, detail: 'AI resumed and customer/AI/human history remains intact.' };
   });
 
-  await step('21_future_appointment_persists', async () => {
+  await step('21_store_appointment_guard_enforced', async () => {
     const result = await ownerSession.request('/api/dabbir-runtime-fast', {
       method: 'POST',
       body: {
@@ -534,11 +537,14 @@ async function runJourney() {
         customer_name: 'AI Journey Customer',
         starts_at: new Date(Date.now() + 48 * 3600_000).toISOString(),
       },
+      retry: false,
     });
-    assert(result.ok && result.json?.ok, `APPOINTMENT_FAILED_${result.status}:${small(result.text)}`);
+    assert(result.status === 400, `STORE_APPOINTMENT_SHOULD_BE_REJECTED_${result.status}:${small(result.text)}`);
+    assert(result.json?.ok === false && result.json?.error === 'APPOINTMENT_CREATE_FAILED', `STORE_APPOINTMENT_REJECTION_WRONG:${small(result.text)}`);
+    assert(result.json?.external_side_effects === false, 'STORE_APPOINTMENT_REJECTION_SIDE_EFFECT_UNCLEAR');
     const state = await runtime(ownerSession, businessId, conversationId, false);
-    assert((state.json?.appointments || []).some(item => item.customer_id === customerId), 'APPOINTMENT_NOT_VISIBLE');
-    return { status: result.status, detail: 'Future appointment persisted and is visible.' };
+    assert(!(state.json?.appointments || []).some(item => item.customer_id === customerId), 'STORE_APPOINTMENT_UNEXPECTEDLY_PERSISTED');
+    return { status: result.status, detail: 'Store appointment was intentionally rejected; the activity-type rule is enforced without persistence.' };
   });
 
   await step('22_followup_persists', async () => {
@@ -579,27 +585,27 @@ async function runJourney() {
   });
 
   await step('24b_authenticated_translation_fallback', async () => {
-  const original = 'مرحبا، المنتج متوفر اليوم';
-  const result = await ownerSession.request('/api/translate', {
-    method: 'POST',
-    body: {
-      business_id: businessId,
-      targetLanguage: 'en',
-      messages: [{ id: 'qa-translation', text: original }],
-    },
+    const original = 'مرحبا، المنتج متوفر اليوم';
+    const result = await ownerSession.request('/api/translate', {
+      method: 'POST',
+      body: {
+        business_id: businessId,
+        targetLanguage: 'en',
+        messages: [{ id: 'qa-translation', text: original }],
+      },
+    });
+    const translated = String(result.json?.translations?.[0]?.text || '').trim();
+    assert(result.ok && result.json?.ok, `TRANSLATION_FAILED_${result.status}:${small(result.text)}`);
+    assert(result.json?.service === 'dabbir-translation', 'TRANSLATION_SERVICE_IDENTITY_WRONG');
+    assert(result.json?.original_preserved === true, 'TRANSLATION_ORIGINAL_PRESERVATION_MISSING');
+    assert(translated && translated !== original && /[A-Za-z]/.test(translated), 'TRANSLATION_OUTPUT_INVALID');
+    return {
+      status: result.status,
+      detail: `Authenticated translation succeeded via ${result.json?.model || 'unknown-model'}${result.json?.fallback_used ? ' fallback' : ''}.`,
+    };
   });
-  const translated = String(result.json?.translations?.[0]?.text || '').trim();
-  assert(result.ok && result.json?.ok, `TRANSLATION_FAILED_${result.status}:${small(result.text)}`);
-  assert(result.json?.service === 'dabbir-translation', 'TRANSLATION_SERVICE_IDENTITY_WRONG');
-  assert(result.json?.original_preserved === true, 'TRANSLATION_ORIGINAL_PRESERVATION_MISSING');
-  assert(translated && translated !== original && /[A-Za-z]/.test(translated), 'TRANSLATION_OUTPUT_INVALID');
-  return {
-    status: result.status,
-    detail: `Authenticated translation succeeded via ${result.json?.model || 'unknown-model'}${result.json?.fallback_used ? ' fallback' : ''}.`,
-  };
-});
 
-await step('25_mobile_webkit_owner_journey', browserJourney);
+  await step('25_mobile_webkit_owner_journey', browserJourney);
 
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
