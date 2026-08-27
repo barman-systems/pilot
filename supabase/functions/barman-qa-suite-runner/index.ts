@@ -98,13 +98,14 @@ async function readinessEvidence(){
   return {window_days:7,real_business_count:businessIds.length,whatsapp:{connection_rows:connectionRows,operational_connections:operationalConnections,verified_connections:verifiedConnections,inbound_conversations:inboundConversations,inbound_messages:inboundMessages,verified_replies:verifiedReplies,connection_success_rate:null,setup_time_seconds:setupTimeSeconds},operations:{records:operationRecords,verified_success:verifiedSuccess,autonomous_verified_success:autonomousVerifiedSuccess,p95_ms:p95},handoffs:{records:handoffRecords,routed_to_human:routedToHuman,rate:inboundConversations>0?routedToHuman/inboundConversations:null},quality:{events:qualityEvents,severe:severeQualityEvents},satisfaction:{samples:0,score:null}};
 }
 async function handleReadiness(req:Request){const claims=await verifyGitHubOidc(req,'readiness');const evidence=await readinessEvidence();return Response.json({ok:true,action:READINESS_ACTION,generated_at:new Date().toISOString(),github_run_id:claims.run_id||null,evidence},{headers:{'cache-control':'no-store'}})}
+function actionError(error:unknown,defaultStatus:number){const message=String(error instanceof Error?error.message:error).slice(0,500);const authFailure=message.startsWith('OIDC_');return Response.json({ok:false,error:message},{status:authFailure?401:defaultStatus,headers:{'cache-control':'no-store'}})}
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('method not allowed',{status:405});
   const b=await req.json().catch(()=>({}));
   const action=String(b.action||'');
-  if(action===READINESS_ACTION){try{return await handleReadiness(req)}catch(e){const message=String(e instanceof Error?e.message:e);const authFailure=message.startsWith('OIDC_');return Response.json({ok:false,error:message.slice(0,500)},{status:authFailure?401:500,headers:{'cache-control':'no-store'}})}}
-  if(DABBIR_QA_ACTIONS.has(action)){try{return await handleDabbirQa(req,b,action)}catch(e){const message=String(e instanceof Error?e.message:e);const authFailure=message.startsWith('OIDC_');return Response.json({ok:false,error:message.slice(0,500)},{status:authFailure?401:400,headers:{'cache-control':'no-store'}})}}
+  if(action===READINESS_ACTION){try{return await handleReadiness(req)}catch(e){return actionError(e,500)}}
+  if(DABBIR_QA_ACTIONS.has(action)){try{return await handleDabbirQa(req,b,action)}catch(e){return actionError(e,400)}}
   if(!(await auth(req)))return new Response('unauthorized',{status:401});
   const projectName=String(b.projectName||'bm-service'),url=String(b.url||''),deploymentId=String(b.deploymentId||''),artifactHash=String(b.artifactHash||''),baseline=b.baseline?String(b.baseline):null,profile=String(b.profile||b.artifactType||'web_ui')==='backend_api'?'backend_api':'web_ui';
   if(!url||!deploymentId||!artifactHash)return Response.json({ok:false,error:'url_deploymentId_artifactHash_required'},{status:400});
