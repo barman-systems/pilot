@@ -34,7 +34,7 @@ test('BAR-12 evidence is aggregate-only and readiness path is read-only',()=>{
   assert.match(readiness,/channel_type','whatsapp'/);
 });
 
-test('readiness workflow reuses the existing QA runner with short-lived OIDC',()=>{
+test('readiness workflow reuses existing QA runner with short-lived OIDC and no long-lived secrets',()=>{
   assert.match(workflow,/id-token:\s*write/);
   assert.match(workflow,/audience=dabbir-bar12-readiness/);
   assert.match(workflow,/supabase\/functions\/barman-qa-suite-runner/);
