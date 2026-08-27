@@ -26,8 +26,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE --exclude-dir=.git --exclude='ci.yml' '(sk_live_[A-Za-z0-9_-]{16,}|sb_secret_[A-Za-z0-9._-]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^$[:space:]]+|VERCEL_TOKEN[[:space:]]*=[[:space:]]*[^$[:space:]]+|(DABBIR|PILOT)_WHATSAPP_APP_SECRET[[:space:]]*=[[:space:]]*[^$[:space:]]+)' .; then
-            echo 'Potential secret material detected.'
+          if git grep -nE '(sk_live_[A-Za-z0-9_-]{16,}|sb_secret_[A-Za-z0-9._-]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^$[:space:]]+|VERCEL_TOKEN[[:space:]]*=[[:space:]]*[^$[:space:]]+|(DABBIR|PILOT)_WHATSAPP_APP_SECRET[[:space:]]*=[[:space:]]*[^$[:space:]]+)' -- . ':(exclude).github/workflows/ci.yml'; then
+            echo 'Potential secret material detected in committed source.'
             exit 1
           fi
-          echo 'Secret pattern scan PASS'
+          echo 'Committed-source secret pattern scan PASS'
