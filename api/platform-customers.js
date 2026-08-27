@@ -59,6 +59,9 @@ function rpcError(error){
   if(raw.includes('DABBIR_CUSTOMER_BUSINESS_MISMATCH'))return [409,'CUSTOMER_BUSINESS_MISMATCH'];
   if(raw.includes('DABBIR_RECOVERY_CASE_NOT_FOUND'))return [404,'RECOVERY_CASE_NOT_FOUND'];
   if(raw.includes('DABBIR_CUSTOMER_ACCOUNT_NOT_FOUND'))return [404,'CUSTOMER_ACCOUNT_NOT_FOUND'];
+  if(raw.includes('DABBIR_PLATFORM_ADMIN_IMMUTABLE'))return [409,'PLATFORM_ADMIN_IMMUTABLE'];
+  if(raw.includes('DABBIR_SUSPENSION_REASON_REQUIRED'))return [400,'SUSPENSION_REASON_REQUIRED'];
+  if(raw.includes('DABBIR_INVALID_ACCOUNT_ACCESS_STATUS'))return [400,'INVALID_ACCOUNT_ACCESS_STATUS'];
   return [Number(error?.status||500)>=500?503:Number(error?.status||500),'PLATFORM_CUSTOMER_ADMIN_FAILED'];
 }
 
@@ -95,6 +98,22 @@ export default async function handler(req,res){
 
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
     const body=await readJsonBody(req,16384);
+
+    if(body.action==='set_access'){
+      const targetUserId=uuid(body.user_id);
+      const status=String(body.status||'').trim().toLowerCase();
+      const reason=String(body.reason||'').trim().slice(0,500);
+      if(!targetUserId||!['active','suspended'].includes(status))return json(res,400,{ok:false,error:'INVALID_ACCOUNT_ACCESS'});
+      if(status==='suspended'&&reason.length<3)return json(res,400,{ok:false,error:'SUSPENSION_REASON_REQUIRED'});
+      const result=await serviceRpc(context.key,'dabbir_platform_set_account_access',{
+        p_actor_user_id:context.user.id,
+        p_target_user_id:targetUserId,
+        p_status:status,
+        p_reason:reason||null,
+      });
+      return json(res,200,{ok:true,access:result});
+    }
+
     if(body.action==='open_recovery'){
       const targetUserId=uuid(body.user_id),businessId=uuid(body.business_id);
       const targetAt=String(body.target_at||'').trim();
