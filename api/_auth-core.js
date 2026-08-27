@@ -105,10 +105,19 @@ async function verifiedUserBase(accessToken) {
 export async function getVerifiedUserWithAccess(accessToken) {
   const user = await verifiedUserBase(accessToken);
   if (!user) return null;
-  const response = await supabaseRpc('dabbir_account_access_self', accessToken).catch(() => null);
+
+  // This is an ordinary RLS-protected self-read. The authenticated browser/user
+  // can read only its own suspension row and cannot write any access state.
+  const response = await supabaseRest(
+    `account_access_state?select=status,reason,suspended_at&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
+    accessToken,
+  ).catch(() => null);
   if (!response?.ok) return null;
-  const access = await response.json().catch(() => null);
-  if (!access || !['active','suspended'].includes(String(access.status || ''))) return null;
+  const rows = await response.json().catch(() => null);
+  if (!Array.isArray(rows)) return null;
+  const access = rows[0] || { status: 'active', reason: null, suspended_at: null };
+  if (!['active','suspended'].includes(String(access.status || ''))) return null;
+
   return {
     ...user,
     dabbir_access: access.status,
@@ -135,10 +144,8 @@ function decodeJwtPayload(accessToken) {
 
 // IMPORTANT: this helper does not verify the JWT signature itself. Call it only
 // after the same access token has already been accepted by a Supabase API that
-// verifies JWTs (for example the Data API membership lookup). This lets hot
-// authenticated reads avoid a second /auth/v1/user round trip while preserving
-// Supabase as the authority that validates the token. RLS still enforces the
-// DABBIR account-access gate for fast-path membership/data reads.
+// verifies JWTs (for example the Data API membership lookup). RLS still enforces
+// the DABBIR account-access gate for fast-path membership/data reads.
 export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const payload = decodeJwtPayload(accessToken);
   if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
