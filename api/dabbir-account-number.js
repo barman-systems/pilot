@@ -1,45 +1,47 @@
-function getBearerToken(req) {
-  const auth = req.headers.authorization || req.headers.Authorization || '';
-  const match = /^Bearer\s+(.+)$/i.exec(auth);
-  return match?.[1] || null;
-}
+import {
+  accessTokenFromRequest,
+  getBusinessMemberships,
+  getVerifiedUser,
+  json,
+  supabaseRpc,
+} from './_auth-core.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    return res.status(405).json({ error: 'method_not_allowed' });
+    res.setHeader('allow', 'GET');
+    return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
   }
 
-  const token = getBearerToken(req);
-  if (!token) return res.status(401).json({ error: 'authentication_required' });
+  const accessToken = accessTokenFromRequest(req);
+  if (!accessToken) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) return res.status(503).json({ error: 'supabase_not_configured' });
+  const user = await getVerifiedUser(accessToken);
+  if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/dabbir_my_customer_no`, {
-      method: 'POST',
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: '{}'
+    const memberships = await getBusinessMemberships(accessToken);
+    if (!memberships.length) {
+      return json(res, 404, { ok: false, error: 'DABBIR_MEMBERSHIP_NOT_FOUND' });
+    }
+
+    const rpcResponse = await supabaseRpc('dabbir_my_customer_no', accessToken, {});
+    const text = await rpcResponse.text();
+    let customerNo = null;
+    try { customerNo = text ? JSON.parse(text) : null; } catch { customerNo = null; }
+
+    if (!rpcResponse.ok) {
+      return json(res, rpcResponse.status === 401 || rpcResponse.status === 403 ? 401 : 500, {
+        ok: false,
+        error: 'ACCOUNT_NUMBER_LOOKUP_FAILED',
+      });
+    }
+    if (!customerNo) return json(res, 404, { ok: false, error: 'ACCOUNT_NUMBER_NOT_FOUND' });
+
+    return json(res, 200, {
+      ok: true,
+      customer_no: customerNo,
     });
-
-    if (response.status === 401 || response.status === 403) {
-      return res.status(401).json({ error: 'invalid_session' });
-    }
-    if (!response.ok) {
-      return res.status(500).json({ error: 'account_number_lookup_failed' });
-    }
-
-    const customerNo = await response.json();
-    if (!customerNo) return res.status(404).json({ error: 'dabbir_membership_not_found' });
-
-    return res.status(200).json({ customer_no: customerNo });
   } catch {
-    return res.status(503).json({ error: 'account_number_service_unavailable' });
+    return json(res, 503, { ok: false, error: 'ACCOUNT_NUMBER_SERVICE_UNAVAILABLE' });
   }
 }
