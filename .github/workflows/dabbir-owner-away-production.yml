@@ -12,6 +12,8 @@ on:
       - 'api/app-recovery.js'
       - 'supabase/migrations/*owner_away*'
       - 'test/dabbir-owner-away-production-journey.mjs'
+      - 'scripts/dabbir-production-origin-gate.mjs'
+      - 'config/barman-integration-contract.json'
       - '.github/workflows/dabbir-owner-away-production.yml'
 
 permissions:
@@ -24,30 +26,29 @@ concurrency:
 
 jobs:
   owner-away-production:
-    name: Real owner + employee Away Mode journey
+    name: Owner Away public-production gate
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       AWAY_REPORT_PATH: dabbir-owner-away-production-report.json
+    outputs:
+      production_ready: ${{ steps.launch-gate.outputs.ready }}
+      production_state: ${{ steps.launch-gate.outputs.state }}
     steps:
-      - name: Require canonical DABBIR production origin
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
-            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
-            exit 1
-          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Classify canonical DABBIR production origin
+        id: launch-gate
+        run: node scripts/dabbir-production-origin-gate.mjs
       - name: Run real Owner Away Mode journey
+        if: steps.launch-gate.outputs.ready == 'true'
         run: node test/dabbir-owner-away-production-journey.mjs
       - name: Publish Owner Away summary
-        if: always()
+        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
         shell: bash
         run: |
           if [ -f dabbir-owner-away-production-report.json ]; then
@@ -59,7 +60,7 @@ jobs:
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.http_status // 0) | \(.duration_ms // 0) |"' dabbir-owner-away-production-report.json >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload Owner Away evidence
-        if: always()
+        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v6
         with:
           name: dabbir-owner-away-production-evidence
