@@ -8,19 +8,19 @@ import {
 
 test('known production origin is blocked without explicit acknowledgement', () => {
   assert.throws(
-    () => assertCapacityLoadAllowed({ origin: 'https://pilot-taupe.vercel.app' }),
+    () => assertCapacityLoadAllowed({ origin: 'https://dabbir-nd56cm4j5v-3619s-projects.vercel.app' }),
     /PRODUCTION_CAPACITY_LOAD_REQUIRES_EXPLICIT_ACK/,
   );
 });
 
 test('caller cannot relabel known production as staging', () => {
   assert.equal(
-    classifyCapacityTarget('https://pilot-taupe.vercel.app', 'staging'),
+    classifyCapacityTarget('https://dabbir-nd56cm4j5v-3619s-projects.vercel.app', 'staging'),
     'production',
   );
   assert.throws(
     () => assertCapacityLoadAllowed({
-      origin: 'https://pilot-taupe.vercel.app',
+      origin: 'https://dabbir-nd56cm4j5v-3619s-projects.vercel.app',
       declaredTarget: 'staging',
     }),
     /PRODUCTION_CAPACITY_LOAD_REQUIRES_EXPLICIT_ACK/,
@@ -30,7 +30,7 @@ test('caller cannot relabel known production as staging', () => {
 test('production load is allowed only with the exact acknowledgement', () => {
   assert.deepEqual(
     assertCapacityLoadAllowed({
-      origin: 'https://pilot-taupe.vercel.app',
+      origin: 'https://dabbir-nd56cm4j5v-3619s-projects.vercel.app',
       ack: PRODUCTION_CAPACITY_ACK,
     }),
     { target: 'production', production_acknowledged: true },
