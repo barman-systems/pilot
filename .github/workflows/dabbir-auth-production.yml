@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/dabbir-auth-production.yml'
       - 'api/auth/**'
+      - 'config/dabbir-public-runtime.js'
+      - 'test/dabbir-public-origin-preflight.mjs'
   workflow_dispatch:
 
 permissions:
@@ -14,13 +16,28 @@ permissions:
 jobs:
   enforce-auth-production-security:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       PROJECT_REF: spohjzrsymsmzsseygtw
-      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Resolve canonical DABBIR production origin from source of truth
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGIN="$(node --input-type=module -e "import { DABBIR_PUBLIC_RUNTIME as c } from './config/dabbir-public-runtime.js'; process.stdout.write(c.productionOrigin)")"
+          if [[ ! "$ORIGIN" =~ ^https://[^/]+$ ]]; then
+            echo 'Committed DABBIR production origin is invalid.'
+            exit 1
+          fi
+          echo "PRODUCTION_ORIGIN=$ORIGIN" >> "$GITHUB_ENV"
+
       - name: Resolve management credential
         id: credential
         shell: bash
@@ -44,35 +61,21 @@ jobs:
           set -euo pipefail
           TOKEN="${SUPABASE_ACCESS_TOKEN:-${SUPABASE_MANAGEMENT_TOKEN:-}}"
           API="https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth"
-
           curl --silent --show-error --fail-with-body \
             --request PATCH \
             --header "Authorization: Bearer ${TOKEN}" \
             --header 'Content-Type: application/json' \
             --data '{"password_hibp_enabled":true}' \
             "$API" >/dev/null
-
           verified="$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TOKEN}" \
             --header 'Accept: application/json' \
             "$API")"
-
           VERIFIED="$verified" node <<'NODE'
           const config = JSON.parse(process.env.VERIFIED || '{}');
-          if (config.password_hibp_enabled !== true) {
-            throw new Error('Supabase leaked password protection remains disabled');
-          }
+          if (config.password_hibp_enabled !== true) throw new Error('Supabase leaked password protection remains disabled');
           console.log('Supabase leaked password protection verified.');
           NODE
-
-      - name: Require canonical DABBIR production origin
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
-            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
-            exit 1
-          fi
 
       - name: Enforce hosted Supabase Auth URLs
         if: steps.credential.outputs.available == 'true'
@@ -81,19 +84,15 @@ jobs:
           set -euo pipefail
           TOKEN="${SUPABASE_ACCESS_TOKEN:-${SUPABASE_MANAGEMENT_TOKEN:-}}"
           API="https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth"
-
           current="$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TOKEN}" \
             --header 'Accept: application/json' \
             "$API")"
-
           allow_list="$(CURRENT="$current" ORIGIN="$PRODUCTION_ORIGIN" node <<'NODE'
           const current = JSON.parse(process.env.CURRENT || '{}');
           const origin = process.env.ORIGIN;
           const existing = String(current.uri_allow_list || '')
-            .split(',')
-            .map(v => v.trim())
-            .filter(Boolean)
+            .split(',').map(v => v.trim()).filter(Boolean)
             .filter(v => !/^https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|\/|$)/i.test(v));
           for (const value of [origin, `${origin}/`, `${origin}/?password_recovery=1`]) {
             if (!existing.includes(value)) existing.push(value);
@@ -101,41 +100,35 @@ jobs:
           process.stdout.write(existing.join(','));
           NODE
           )"
-
           body="$(ORIGIN="$PRODUCTION_ORIGIN" ALLOW_LIST="$allow_list" node <<'NODE'
-          process.stdout.write(JSON.stringify({
-            site_url: process.env.ORIGIN,
-            uri_allow_list: process.env.ALLOW_LIST,
-          }));
+          process.stdout.write(JSON.stringify({ site_url: process.env.ORIGIN, uri_allow_list: process.env.ALLOW_LIST }));
           NODE
           )"
-
           curl --silent --show-error --fail-with-body \
             --request PATCH \
             --header "Authorization: Bearer ${TOKEN}" \
             --header 'Content-Type: application/json' \
             --data "$body" \
             "$API" >/dev/null
-
           verified="$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TOKEN}" \
             --header 'Accept: application/json' \
             "$API")"
-
           VERIFIED="$verified" ORIGIN="$PRODUCTION_ORIGIN" node <<'NODE'
           const config = JSON.parse(process.env.VERIFIED || '{}');
           const origin = process.env.ORIGIN;
           const allow = String(config.uri_allow_list || '');
           if (config.site_url !== origin) throw new Error('Production Site URL drift remains');
           if (!allow.includes(origin)) throw new Error('Production redirect allow-list is missing DABBIR');
-          if (/(^|,|\s)https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|\/|,|$)/i.test(allow)) {
-            throw new Error('Loopback redirect remains in hosted production Auth config');
-          }
+          if (/(^|,|\s)https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|\/|,|$)/i.test(allow)) throw new Error('Loopback redirect remains in hosted production Auth config');
           console.log('DABBIR hosted Auth production URL configuration verified.');
           NODE
 
-      - name: Credential unavailable
+      - name: Management credential unavailable
         if: steps.credential.outputs.available != 'true'
         shell: bash
-        run: |
-          echo 'Supabase Management API credential is not configured in this repository; no remote Auth configuration was changed.'
+        run: echo 'Supabase Management API credential is unavailable; remote Auth mutation was skipped.'
+
+      - name: Enforce public canonical origin
+        shell: bash
+        run: node test/dabbir-public-origin-preflight.mjs
