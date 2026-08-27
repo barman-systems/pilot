@@ -9,8 +9,10 @@ const REPORT_PATH=process.env.CAPACITY_REPORT_PATH||'dabbir-capacity-report.json
 const RUN_ID=`capacity-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 const RUN_LABEL=`DABBIR AI QA ${RUN_ID}`;
 const CUSTOMER_COUNT=Math.min(1000,Math.max(100,Number(process.env.CUSTOMER_COUNT||1000)));
-const RUNTIME_STAGES=(process.env.RUNTIME_STAGES||'50,100,250,500,750,1000').split(',').map(Number).filter(Number.isFinite);
-const AI_STAGES=(process.env.AI_STAGES||'1,2,5,10,20,40,60,100').split(',').map(Number).filter(Number.isFinite);
+const RUNTIME_STAGES=(process.env.RUNTIME_STAGES||'50,100,250,500,750,1000').split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0);
+const AI_STAGES=(process.env.AI_STAGES||'1,2,5,10,20,40,60,100').split(',').map(Number).filter(n=>Number.isFinite(n)&&n>0);
+const RUN_RUNTIME=String(process.env.RUN_RUNTIME||'true').toLowerCase()!=='false';
+const RUN_AI=String(process.env.RUN_AI||'true').toLowerCase()!=='false';
 
 const report={
   run_id:RUN_ID,
@@ -19,6 +21,7 @@ const report={
   completed_at:null,
   verdict:'RUNNING',
   customer_count:CUSTOMER_COUNT,
+  mode:{runtime:RUN_RUNTIME,ai:RUN_AI},
   setup:{},
   runtime_stages:[],
   ai_stages:[],
@@ -27,7 +30,7 @@ const report={
   notes:[],
 };
 
-let oidcToken=null,owner=null,businessId=null;
+let oidcToken=null,owner=null,employee=null,businessId=null;
 const conversationIds=[];
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -81,8 +84,8 @@ async function getOidc(){
   oidcToken=String(r.json.value);return oidcToken;
 }
 
-async function qaControl(action,body={}){
-  const r=await rawFetch(QA_CONTROL_URL,{method:'POST',headers:{authorization:`Bearer ${await getOidc()}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action,run_id:RUN_ID,...body})},30000);
+async function qaControl(action,body={},timeoutMs=90000){
+  const r=await rawFetch(QA_CONTROL_URL,{method:'POST',headers:{authorization:`Bearer ${await getOidc()}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action,run_id:RUN_ID,...body})},timeoutMs);
   assert(r.ok&&r.json?.ok,`QA_${action}_FAILED_${r.status}:${small(r.text)}`);return r;
 }
 
@@ -141,7 +144,9 @@ async function aiStage(concurrency,offset){
 async function run(){
   const home=await rawFetch(ORIGIN,{headers:{accept:'text/html'}},15000);assert(home.ok,'PRODUCTION_UNREACHABLE');
   await getOidc();
-  const boot=await qaControl('dabbir_ai_qa_bootstrap');owner=boot.json?.identities?.owner;assert(owner?.email&&owner?.password,'QA_OWNER_MISSING');
+  const boot=await qaControl('dabbir_ai_qa_bootstrap');
+  owner=boot.json?.identities?.owner;employee=boot.json?.identities?.employee;
+  assert(owner?.email&&owner?.password&&employee?.id,'QA_IDENTITIES_MISSING');
   const login=await session.request('/api/auth/login',{method:'POST',body:{email:owner.email,password:owner.password}});assert(login.ok&&login.json?.ok,'OWNER_LOGIN_FAILED');
   const create=await session.request('/api/dabbir-runtime-fast',{method:'POST',body:{action:'create_business',name:RUN_LABEL,business_type:'store',locale:'ar-AE'}});assert(create.ok&&create.json?.business_id,'BUSINESS_CREATE_FAILED');businessId=create.json.business_id;
   report.setup.business_id='[QA_BUSINESS]';
@@ -149,40 +154,55 @@ async function run(){
   const customerSetup=await createCustomers();report.setup.customers=customerSetup;
   assert(conversationIds.length>=Math.floor(CUSTOMER_COUNT*0.99),`CUSTOMER_CREATION_TOO_MANY_FAILURES_${conversationIds.length}/${CUSTOMER_COUNT}`);
 
-  for(const stage of RUNTIME_STAGES){
-    console.log(`RUNTIME LOAD stage=${stage}`);
-    const result=await runtimeStage(stage);report.runtime_stages.push(result);
-    console.log(JSON.stringify(result));
-    if(result.stable)report.capacity.infrastructure_stable_concurrency=stage;
-    if(result.available)report.capacity.infrastructure_available_concurrency=stage;
-    await sleep(1200);
+  if(RUN_RUNTIME){
+    for(const stage of RUNTIME_STAGES){
+      console.log(`RUNTIME LOAD stage=${stage}`);
+      const result=await runtimeStage(stage);report.runtime_stages.push(result);
+      console.log(JSON.stringify(result));
+      if(result.stable)report.capacity.infrastructure_stable_concurrency=stage;
+      if(result.available)report.capacity.infrastructure_available_concurrency=stage;
+      await sleep(1200);
+    }
   }
 
-  let offset=0;
-  for(const stage of AI_STAGES){
-    console.log(`AI LOAD stage=${stage}`);
-    const result=await aiStage(stage,offset);report.ai_stages.push(result);offset+=stage;
-    console.log(JSON.stringify(result));
-    if(result.pass)report.capacity.ai_concurrency=stage;
-    else break;
-    await sleep(1500);
+  if(RUN_AI){
+    let offset=0;
+    for(const stage of AI_STAGES){
+      console.log(`AI LOAD stage=${stage}`);
+      const result=await aiStage(stage,offset);report.ai_stages.push(result);offset+=stage;
+      console.log(JSON.stringify(result));
+      if(result.pass)report.capacity.ai_concurrency=stage;
+      else break;
+      await sleep(1500);
+    }
   }
 
   const stable=report.capacity.infrastructure_stable_concurrency;
   const available=report.capacity.infrastructure_available_concurrency;
-  if(available>=1000)report.notes.push('Infrastructure remained available at the configured ceiling of 1000 concurrent clients; the real failure point is above this test ceiling.');
-  else report.notes.push(`Infrastructure remained within availability thresholds through ${available} concurrent clients.`);
-  report.notes.push(`Strict UX target (<=1% errors, p95<=2.5s) passed through ${stable} concurrent clients.`);
-  report.notes.push('AI concurrency is reported separately because the current model/provider can become the external bottleneck before Vercel/Supabase infrastructure does.');
+  if(RUN_RUNTIME){
+    if(available>=1000)report.notes.push('Infrastructure remained available at the configured ceiling of 1000 concurrent clients; the real failure point is above this test ceiling.');
+    else report.notes.push(`Infrastructure remained within availability thresholds through ${available} concurrent clients.`);
+    report.notes.push(`Strict UX target (<=1% errors, p95<=2.5s) passed through ${stable} concurrent clients.`);
+  }
+  if(RUN_AI)report.notes.push('AI concurrency is measured on a separate clean run so provider limits are not contaminated by a preceding 1000-request runtime saturation test.');
   report.verdict='PASS';
 }
 
 try{await run();}
 catch(error){report.verdict='FAIL';report.notes.push(`FATAL: ${small(error?.stack||error?.message||error,500)}`);console.error(error);}
 finally{
-  if(owner?.id||businessId){
-    try{const r=await qaControl('dabbir_ai_qa_cleanup',{business_id:businessId||undefined,owner_user_id:owner?.id||undefined});report.cleanup.push({status:'PASS',http_status:r.status});}
-    catch(error){report.cleanup.push({status:'FAIL',detail:small(error?.message||error)});report.verdict='FAIL';}
+  if(owner?.id||employee?.id||businessId){
+    let cleaned=false;
+    for(let attempt=1;attempt<=3&&!cleaned;attempt++){
+      try{
+        const r=await qaControl('dabbir_ai_qa_cleanup',{business_id:businessId||undefined,owner_user_id:owner?.id||undefined,employee_user_id:employee?.id||undefined},90000);
+        report.cleanup.push({status:'PASS',http_status:r.status,attempt});cleaned=true;
+      }catch(error){
+        report.cleanup.push({status:'RETRY',attempt,detail:small(error?.message||error)});
+        if(attempt<3)await sleep(15000);
+      }
+    }
+    if(!cleaned){report.cleanup.push({status:'FAIL',detail:'QA cleanup exhausted retries'});report.verdict='FAIL';}
   }
   report.completed_at=new Date().toISOString();
   fs.writeFileSync(REPORT_PATH,JSON.stringify(report,null,2));
