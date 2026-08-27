@@ -1,29 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { getWhatsAppConfig, tenantUnconfiguredStatus } from '../api/dabbir-whatsapp-status.js';
+import { tenantUnconfiguredStatus } from '../api/dabbir-whatsapp-status.js';
+import { embeddedPlatformConfig } from '../api/_whatsapp-embedded-core.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
-const dabbirVerifyKey = ['DABBIR', 'WHATSAPP', 'VERIFY', 'TOKEN'].join('_');
-const dabbirSecretKey = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
-const pilotVerifyKey = ['PILOT', 'WHATSAPP', 'VERIFY', 'TOKEN'].join('_');
-const pilotSecretKey = ['PILOT', 'WHATSAPP', 'APP', 'SECRET'].join('_');
-const managedKeys = [
-  dabbirVerifyKey,
-  dabbirSecretKey,
-  pilotVerifyKey,
-  pilotSecretKey,
-  ['DABBIR', 'WHATSAPP', 'ACCESS', 'TOKEN'].join('_'),
-  ['PILOT', 'WHATSAPP', 'ACCESS', 'TOKEN'].join('_'),
-  ['DABBIR', 'WHATSAPP', 'PHONE', 'NUMBER', 'ID'].join('_'),
-  ['PILOT', 'WHATSAPP', 'PHONE', 'NUMBER', 'ID'].join('_'),
-];
-
-function withCleanEnv(fn) {
-  const before = Object.fromEntries(managedKeys.map(key => [key, process.env[key]]));
-  for (const key of managedKeys) delete process.env[key];
+function withEnv(overrides, fn) {
+  const keys = Object.keys(overrides);
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   try { return fn(); }
   finally {
     for (const [key, value] of Object.entries(before)) {
@@ -33,29 +23,7 @@ function withCleanEnv(fn) {
   }
 }
 
-test('legacy PILOT WhatsApp webhook credentials remain recognized after DABBIR rename', () => {
-  withCleanEnv(() => {
-    process.env[pilotVerifyKey] = 'test-verify-token';
-    process.env[pilotSecretKey] = 'test-app-secret';
-    const config = getWhatsAppConfig();
-    assert.equal(config.webhookConfigured, true);
-    assert.equal(config.configured, true);
-  });
-});
-
-test('DABBIR WhatsApp credentials take precedence when both generations exist', () => {
-  withCleanEnv(() => {
-    process.env[pilotVerifyKey] = 'legacy-verify';
-    process.env[pilotSecretKey] = 'legacy-secret';
-    process.env[dabbirVerifyKey] = 'dabbir-verify';
-    process.env[dabbirSecretKey] = 'dabbir-secret';
-    const config = getWhatsAppConfig();
-    assert.equal(config.verifyToken, 'dabbir-verify');
-    assert.equal(config.appSecret, 'dabbir-secret');
-  });
-});
-
-test('tenant without an Embedded Signup connection never inherits the legacy global WhatsApp number', () => {
+test('tenant without Embedded Signup never inherits a phone identity', () => {
   const status = tenantUnconfiguredStatus();
   assert.equal(status.source, 'embedded_signup');
   assert.equal(status.configured, false);
@@ -67,37 +35,59 @@ test('tenant without an Embedded Signup connection never inherits the legacy glo
   assert.equal(status.meta_check_reason, 'TENANT_WHATSAPP_NOT_LINKED');
 });
 
-test('authenticated WhatsApp status fails closed instead of exposing legacy global identity', async () => {
-  const statusApi = await read('api/dabbir-whatsapp-status.js');
-  assert.match(statusApi, /getBusinessMemberships/);
-  assert.match(statusApi, /BUSINESS_CONTEXT_REQUIRED/);
-  assert.doesNotMatch(statusApi, /source:\s*['"]legacy_server_config['"]/);
+test('customer-facing WhatsApp status requires explicit business context', async () => {
+  const source = await read('api/dabbir-whatsapp-status.js');
+  assert.match(source, /BUSINESS_REQUIRED/);
+  assert.doesNotMatch(source, /getBusinessMemberships/);
+  assert.doesNotMatch(source, /legacy_server_config/);
+  assert.doesNotMatch(source, /PILOT_WHATSAPP/);
+  assert.doesNotMatch(source, /WHATSAPP_ACCESS_TOKEN/);
+  assert.doesNotMatch(source, /OUTBOUND_CONFIGURED/);
+  assert.doesNotMatch(source, /WEBHOOK_LINKED/);
 });
 
-test('WhatsApp UI reads live status instead of trusting the stale static red card', async () => {
-  const brandUi = await read('api/brand-ui.js');
-  assert.match(brandUi, /\/api\/dabbir-whatsapp-status/);
-  assert.match(brandUi, /WEBHOOK_LINKED/);
-  assert.match(brandUi, /META_AUTHORIZED/);
-  assert.match(brandUi, /مربوط/);
-  assert.match(brandUi, /Linked/);
+test('Embedded Signup identity is DABBIR-only and cannot be inferred from legacy tokens', async () => {
+  const source = await read('api/_whatsapp-embedded-core.js');
+  assert.match(source, /DABBIR_PUBLIC_RUNTIME/);
+  assert.doesNotMatch(source, /discoverAppIdFromExistingToken/);
+  assert.doesNotMatch(source, /legacyWhatsAppAccessToken/);
+  assert.doesNotMatch(source, /PILOT_META_APP_ID/);
+  assert.doesNotMatch(source, /PILOT_WHATSAPP_APP_ID/);
+  assert.doesNotMatch(source, /FACEBOOK_APP_ID/);
+  assert.doesNotMatch(source, /META_WHATSAPP_ACCESS_TOKEN/);
 });
 
-test('WhatsApp integrations UI explicitly shows the active Meta phone number', async () => {
-  const brandUi = await read('api/brand-ui.js');
-  assert.match(brandUi, /display_phone_number/);
-  assert.match(brandUi, /رقم WhatsApp المفعّل/);
-  assert.match(brandUi, /Active WhatsApp number/);
-  assert.match(brandUi, /verified_name/);
-  assert.match(brandUi, /Waiting for Meta verification/);
+test('legacy generic env cannot override the DABBIR Meta identity', () => {
+  withEnv({
+    DABBIR_META_APP_ID: undefined,
+    DABBIR_WHATSAPP_APP_ID: undefined,
+    DABBIR_WHATSAPP_EMBEDDED_CONFIG_ID: undefined,
+    DABBIR_META_CONFIG_ID: undefined,
+    PILOT_META_APP_ID: '999999999999999',
+    META_APP_ID: '888888888888888',
+    FACEBOOK_APP_ID: '777777777777777',
+    PILOT_WHATSAPP_EMBEDDED_CONFIG_ID: '666666666666666',
+    META_CONFIG_ID: '555555555555555',
+  }, () => {
+    const config = embeddedPlatformConfig();
+    assert.equal(config.appId, '1876008666699823');
+    assert.equal(config.configId, '1984552462260787');
+    assert.equal(config.appIdSource, 'dabbir_public_runtime');
+    assert.equal(config.configIdSource, 'dabbir_public_runtime');
+  });
 });
 
-test('webhook accepts both DABBIR and legacy PILOT credential names', async () => {
-  const webhook = await read('api/dabbir-whatsapp-webhook.js');
-  assert.match(webhook, /DABBIR_WHATSAPP_VERIFY_TOKEN/);
-  assert.match(webhook, /PILOT_WHATSAPP_VERIFY_TOKEN/);
-  assert.match(webhook, /DABBIR_WHATSAPP_APP_SECRET/);
-  assert.match(webhook, /PILOT_WHATSAPP_APP_SECRET/);
-  assert.match(webhook, /pilot_clinics/);
-  assert.match(webhook, /dabbir_clinics/);
+test('invalid provider verification is never presented as connected', async () => {
+  const source = await read('api/dabbir-whatsapp-status.js');
+  assert.match(source, /state:\s*'AUTHORIZATION_INVALID'/);
+  assert.match(source, /connected:\s*false/);
+  assert.match(source, /phone:\s*null/);
+  assert.doesNotMatch(source, /CONNECTED_VERIFICATION_FAILED/);
+});
+
+test('webhook readiness is tenant-derived instead of global-server-derived', async () => {
+  const source = await read('api/dabbir-whatsapp-status.js');
+  assert.match(source, /subscriptionRecorded/);
+  assert.match(source, /webhook_configured:\s*authorized\s*&&\s*subscriptionRecorded/);
+  assert.doesNotMatch(source, /DABBIR_WHATSAPP_VERIFY_TOKEN/);
 });
