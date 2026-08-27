@@ -170,15 +170,16 @@ test('Cash Guardian augments only the top owner exceptions and preserves no-mone
 
 test('database contract is append-only for owner evidence and cron never sends or moves money',()=>{
   const migration=fs.readFileSync('supabase/migrations/20260827131000_dabbir_cash_guardian_v1.sql','utf8');
+  const executable=migration.replace(/--.*$/gm,'');
   assert.match(migration,/alter table public\.dabbir_financial_evidence force row level security/i);
   assert.match(migration,/grant select, insert on public\.dabbir_financial_evidence to authenticated/i);
-  assert.doesNotMatch(migration,/grant[^;]*(update|delete)[^;]*dabbir_financial_evidence[^;]*authenticated/i);
+  assert.doesNotMatch(executable,/grant[^;]*(update|delete)[^;]*dabbir_financial_evidence[^;]*authenticated/i);
   assert.match(migration,/source_kind='owner_attested'/);
   assert.match(migration,/cash_guardian\.capture_internal_followup/);
   assert.match(migration,/cron\.schedule\(/);
   assert.match(migration,/external_side_effects',false/);
   assert.match(migration,/money_movement',false/);
-  assert.doesNotMatch(migration,/net\.http_(post|get)|stripe|payment_intent|bank_transfer|withdraw/i);
+  assert.doesNotMatch(executable,/net\.http_(post|get)|stripe|payment_intent|bank_transfer|withdraw/i);
 });
 
 test('Cash Guardian API is owner-only and same-origin for settings mutations',()=>{
