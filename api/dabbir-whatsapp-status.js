@@ -1,5 +1,5 @@
 import { singleQueryValue } from './_request-query.js';
-import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
+import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -60,7 +60,7 @@ function publicConfig(config) {
   };
 }
 
-export function tenantUnconfiguredStatus() {
+export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') {
   return {
     ok: true,
     channel: 'whatsapp',
@@ -74,7 +74,7 @@ export function tenantUnconfiguredStatus() {
     state: 'NOT_CONFIGURED',
     meta_authorized: false,
     meta_check_attempted: false,
-    meta_check_reason: 'TENANT_WHATSAPP_NOT_LINKED',
+    meta_check_reason: reason,
     provider_status: null,
     phone: null,
     waba_id: null,
@@ -170,6 +170,11 @@ async function embeddedStatus(req, accessToken, businessId) {
   }
 }
 
+async function tenantStatus(req, accessToken, businessId) {
+  const tenant = await embeddedStatus(req, accessToken, businessId);
+  return tenant || tenantUnconfiguredStatus();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
   const accessToken = accessTokenFromRequest(req);
@@ -179,33 +184,28 @@ export default async function handler(req, res) {
   const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
   if (businessId) {
     try {
-      const tenant = await embeddedStatus(req, accessToken, businessId);
-      if (tenant) return json(res, 200, tenant);
-      return json(res, 200, tenantUnconfiguredStatus());
+      return json(res, 200, await tenantStatus(req, accessToken, businessId));
     } catch (error) {
-      return json(res, Number(error?.status || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
+      return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
     }
   }
 
-  const config = getWhatsAppConfig();
-  const base = publicConfig(config);
-  const meta = await verifyMetaAuthorization(config);
-  const metaAuthorized = Boolean(meta.authorized);
-  const state = metaAuthorized ? 'META_AUTHORIZED' : base.state;
-  return json(res, 200, {
-    ok: true,
-    channel: 'whatsapp',
-    source: 'legacy_server_config',
-    ...base,
-    connected: metaAuthorized || base.connected,
-    state,
-    meta_authorized: metaAuthorized,
-    meta_check_attempted: Boolean(meta.attempted),
-    meta_check_reason: meta.reason || null,
-    provider_status: meta.provider_status || null,
-    phone: metaAuthorized ? meta.phone : null,
-    operational: false,
-    operational_reason: 'LIVE_MESSAGE_PATH_NOT_YET_VERIFIED',
-    checked_at: new Date().toISOString(),
-  });
+  // The authenticated DABBIR UI must never inherit a global/server WhatsApp
+  // identity. When the caller omitted business_id, resolve the tenant only if
+  // there is exactly one active membership; otherwise fail closed with a
+  // tenant-unconfigured payload. This keeps old platform credentials usable for
+  // webhook infrastructure without ever presenting that legacy number as the
+  // current customer's WhatsApp number.
+  try {
+    const memberships = await getBusinessMemberships(accessToken);
+    const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])
+      .map(item => String(item?.business_id || '').trim())
+      .filter(Boolean))];
+    if (businessIds.length === 1) {
+      return json(res, 200, await tenantStatus(req, accessToken, businessIds[0]));
+    }
+    return json(res, 200, tenantUnconfiguredStatus(businessIds.length > 1 ? 'BUSINESS_CONTEXT_REQUIRED' : 'TENANT_WHATSAPP_NOT_LINKED'));
+  } catch (error) {
+    return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
+  }
 }

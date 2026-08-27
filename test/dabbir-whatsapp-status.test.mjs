@@ -67,6 +67,13 @@ test('tenant without an Embedded Signup connection never inherits the legacy glo
   assert.equal(status.meta_check_reason, 'TENANT_WHATSAPP_NOT_LINKED');
 });
 
+test('authenticated WhatsApp status fails closed instead of exposing legacy global identity', async () => {
+  const statusApi = await read('api/dabbir-whatsapp-status.js');
+  assert.match(statusApi, /getBusinessMemberships/);
+  assert.match(statusApi, /BUSINESS_CONTEXT_REQUIRED/);
+  assert.doesNotMatch(statusApi, /source:\s*['"]legacy_server_config['"]/);
+});
+
 test('WhatsApp UI reads live status instead of trusting the stale static red card', async () => {
   const brandUi = await read('api/brand-ui.js');
   assert.match(brandUi, /\/api\/dabbir-whatsapp-status/);
