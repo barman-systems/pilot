@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { assertCapacityLoadAllowed } from './dabbir-capacity-safety.mjs';
 
-const ORIGIN=String(process.env.PRODUCTION_ORIGIN||'https://pilot-taupe.vercel.app').replace(/\/$/,'');
+const ORIGIN=String(process.env.PRODUCTION_ORIGIN||'').trim().replace(/\/$/,'');
 const CAPACITY_TARGET=String(process.env.CAPACITY_TARGET||'').trim();
 const CAPACITY_PRODUCTION_ACK=String(process.env.CAPACITY_PRODUCTION_ACK||'').trim();
 const CAPACITY_SAFETY=assertCapacityLoadAllowed({
@@ -10,6 +10,7 @@ const CAPACITY_SAFETY=assertCapacityLoadAllowed({
   declaredTarget:CAPACITY_TARGET,
   ack:CAPACITY_PRODUCTION_ACK,
 });
+if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
 const PROJECT_REF=String(process.env.SUPABASE_PROJECT_REF||'spohjzrsymsmzsseygtw').trim();
 const QA_CONTROL_URL=`https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-suite-runner`;
 const OIDC_AUDIENCE='dabbir-ai-qa';
