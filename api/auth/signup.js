@@ -1,4 +1,5 @@
 import { authCookieHeaders, json, readJsonBody, requireSameOrigin, supabaseAuth } from '../_auth-core.js';
+import { isStrongPassword } from '../_password-policy.js';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req);
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
-    if (!emailPattern.test(email) || email.length > 254 || password.length < 12 || password.length > 256) {
+    if (!emailPattern.test(email) || email.length > 254 || !isStrongPassword(password, { email })) {
       return json(res, 400, { ok: false, error: 'INVALID_SIGNUP_INPUT' });
     }
 

@@ -3,7 +3,7 @@ const script=String.raw`(()=>{
   window.__dabbirUiRefinementLoaded=true;
 
   const style=document.createElement('style');
-  style.dataset.dabbirUiRefinement='v2';
+  style.dataset.dabbirUiRefinement='v3';
   style.textContent=[
     ':root{--dabbir-surface:#111417;--dabbir-surface-2:#171b1f;--dabbir-line:#2b3137;--dabbir-soft:#8f969f;--dabbir-accent:#d7ff5f}',
     'body{background:#080a0c!important}',
@@ -25,6 +25,9 @@ const script=String.raw`(()=>{
     'html[dir="rtl"] #screen-conversations .msgrow.customer .bubble{border-top-left-radius:15px!important;border-top-right-radius:6px!important}',
     '#screen-conversations .msgrow.ai .bubble,#screen-conversations .msgrow.human .bubble{border-top-right-radius:6px!important}',
     'html[dir="rtl"] #screen-conversations .msgrow.ai .bubble,html[dir="rtl"] #screen-conversations .msgrow.human .bubble{border-top-right-radius:15px!important;border-top-left-radius:6px!important}',
+    '.dabbirPasswordHint{display:none;margin-top:6px;color:#aab1ba;font-size:10px;line-height:1.55}',
+    '.dabbirPasswordHint.on{display:block}',
+    '.dabbirRecoveryCard .dabbirPasswordHint{display:block;margin:7px 0 2px}',
     '@media(max-width:700px){',
       'html{background:#080a0c!important}',
       'body{font-size:15px!important}',
@@ -101,6 +104,53 @@ const script=String.raw`(()=>{
     return (ar()?a:e)[s]||String(state||'').replaceAll('_',' ');
   };
 
+  function passwordHint(){
+    return ar()
+      ? '12 حرفًا على الأقل. تجنّب الكلمات الشائعة والتسلسلات واسم بريدك. العبارات الطويلة مسموحة.'
+      : 'Use 12+ characters. Avoid common passwords, sequences, and your email identity. Long passphrases are supported.';
+  }
+
+  function installPasswordGuidance(){
+    const password=document.querySelector('#authPassword');
+    const field=password?.closest('.field');
+    if(password&&field){
+      let hint=field.querySelector('[data-dabbir-password-hint="signup"]');
+      if(!hint){
+        hint=document.createElement('div');
+        hint.className='dabbirPasswordHint';
+        hint.dataset.dabbirPasswordHint='signup';
+        hint.id='dabbirSignupPasswordHint';
+        password.insertAdjacentElement('afterend',hint);
+      }
+      const signup=!!document.querySelector('#signupTab')?.classList.contains('on');
+      hint.classList.toggle('on',signup);
+      hint.textContent=passwordHint();
+      if(signup){
+        password.minLength=12;
+        password.setAttribute('aria-describedby',hint.id);
+        password.title=passwordHint();
+      }
+    }
+
+    const reset=document.querySelector('#dabbirNewPassword');
+    if(reset){
+      let hint=document.querySelector('[data-dabbir-password-hint="reset"]');
+      if(!hint){
+        hint=document.createElement('div');
+        hint.className='dabbirPasswordHint';
+        hint.dataset.dabbirPasswordHint='reset';
+        hint.id='dabbirResetPasswordHint';
+        reset.insertAdjacentElement('afterend',hint);
+      }
+      hint.textContent=passwordHint();
+      reset.setAttribute('aria-describedby',hint.id);
+      reset.title=passwordHint();
+    }
+  }
+
+  document.querySelector('#loginTab')?.addEventListener('click',()=>setTimeout(installPasswordGuidance,0));
+  document.querySelector('#signupTab')?.addEventListener('click',()=>setTimeout(installPasswordGuidance,0));
+
   function translateConversationStates(){
     document.querySelectorAll('#screen-conversations .chatContact').forEach(card=>{
       const span=card.querySelector('span');
@@ -133,7 +183,7 @@ const script=String.raw`(()=>{
     list.classList.toggle('dabbirSingleChat',count===1);
   }
 
-  function polish(){translateConversationStates();compactSingleConversation()}
+  function polish(){translateConversationStates();compactSingleConversation();installPasswordGuidance()}
   if(typeof renderChats==='function'&&!window.__dabbirUiRenderChatsWrapped){
     window.__dabbirUiRenderChatsWrapped=true;
     const base=renderChats;
@@ -148,7 +198,7 @@ const script=String.raw`(()=>{
   observer.observe(document.body,{subtree:true,childList:true});
   setTimeout(polish,0);
   setTimeout(polish,500);
-  window.__dabbirUiRefinementVersion='mobile-premium-v2';
+  window.__dabbirUiRefinementVersion='mobile-premium-v3';
 })();`;
 
 export default function handler(req,res){
@@ -157,6 +207,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-ui-refinement','mobile-premium-v2');
+  res.setHeader('x-dabbir-ui-refinement','mobile-premium-v3');
   return res.end(script);
 }
