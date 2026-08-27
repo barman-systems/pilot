@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
 import {
   embeddedPlatformConfig,
@@ -149,7 +150,7 @@ export default async function handler(req, res) {
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
   if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
-  const businessId = String(req.query?.business_id || '').trim();
+  const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
   if (businessId) {
     try {
       const tenant = await embeddedStatus(req, accessToken, businessId);

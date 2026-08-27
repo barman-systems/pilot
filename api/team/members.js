@@ -1,3 +1,4 @@
+import { singleQueryValue } from '../_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json, readJsonBody, readRpcJson, requireSameOrigin, rpcErrorCode, supabaseRpc } from '../_auth-core.js';
 
 const roles = new Set(['admin','manager','employee','staff','viewer','agent']);
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
   if (!actor) return json(res, 401, { ok:false, error:'AUTH_REQUIRED' });
 
   if (req.method === 'GET') {
-    const businessId = String(req.query?.business_id || '').trim();
+    const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
     if (!businessId) return json(res, 400, { ok:false, error:'BUSINESS_REQUIRED' });
     const response = await supabaseRpc('dabbir_list_team', token, { p_business_id: businessId });
     const payload = await readRpcJson(response);

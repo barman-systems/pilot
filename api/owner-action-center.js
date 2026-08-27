@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -89,7 +90,7 @@ export default async function handler(req,res){
   if(!context)return;
 
   try{
-    const requested=safeId(req.query?.business_id);
+    const requested=safeId(singleQueryValue(req,'business_id'));
     const membership=membershipFor(context.memberships,requested);
     if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
     const businessId=membership.business_id;

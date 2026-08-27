@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -497,8 +498,8 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const businessId = safeId(req.query?.business_id);
-      const conversationId = safeId(req.query?.conversation_id);
+      const businessId = safeId(singleQueryValue(req, 'business_id'));
+      const conversationId = safeId(singleQueryValue(req, 'conversation_id'));
       return json(res, 200, await loadWorkspace(identity, businessId, conversationId));
     }
 

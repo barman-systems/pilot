@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
@@ -122,7 +123,11 @@ export default async function handler(req, res) {
   const project = normalizeProject(firstEnv('DABBIR_PROJECT', 'PILOT_PROJECT') || 'generic');
 
   if (req.method === 'GET') {
-    const result = verifyWebhookChallenge(req.query || {}, verifyToken);
+    const result = verifyWebhookChallenge({
+      'hub.mode': singleQueryValue(req, 'hub.mode'),
+      'hub.verify_token': singleQueryValue(req, 'hub.verify_token'),
+      'hub.challenge': singleQueryValue(req, 'hub.challenge'),
+    }, verifyToken);
     if (!result.ok) {
       logEvent('warn', { correlation_id: cid, component: 'whatsapp_webhook', operation: 'challenge_verification', outcome: 'FAILED', failure_class: 'AUTH' });
       return res.status(403).setHeader('x-dabbir-correlation-id', cid).send('forbidden');

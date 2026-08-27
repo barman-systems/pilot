@@ -1,3 +1,4 @@
+import { singleQueryValue } from '../_request-query.js';
 import crypto from 'node:crypto';
 import {
   accessTokenFromRequest,
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
   if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
   if (req.method === 'GET') {
-    const businessId = String(req.query?.business_id || '').trim();
+    const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     const query = `dabbir_employee_invitations?business_id=eq.${encodeURIComponent(businessId)}&select=id,email,display_name,role,permissions,status,delivery_status,delivery_attempts,expires_at,accepted_at,created_at&order=created_at.desc`;
     const response = await supabaseRest(query, accessToken);

@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -45,7 +46,7 @@ export default async function handler(req,res){
   const ctx=await context(req,res);if(!ctx)return;
   try{
     if(req.method==='GET'){
-      const businessId=safeId(req.query?.business_id);
+      const businessId=safeId(singleQueryValue(req,'business_id'));
       const membership=membershipFor(ctx.memberships,businessId);
       if(!businessId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
       const rows=await rest(ctx.token,`dabbir_businesses?select=id,name,business_type&id=eq.${businessId}&limit=1`,'BUSINESS_LOOKUP_FAILED');

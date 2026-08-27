@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -71,7 +72,7 @@ export default async function handler(req,res){
 
   try{
     const body=req.method==='POST'?await readJsonBody(req):null;
-    const businessId=safeId(req.method==='GET'?req.query?.business_id:body?.business_id);
+    const businessId=safeId(req.method==='GET'?singleQueryValue(req,'business_id'):body?.business_id);
     if(!businessId)return json(res,400,{ok:false,error:'BUSINESS_ID_REQUIRED'});
     if(!membershipFor(ctx.memberships,businessId))return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
 
