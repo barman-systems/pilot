@@ -35,9 +35,11 @@ test('validated Supabase token claims are read without a second Auth request', (
   });
 });
 
-test('validated-token claims fail closed for wrong issuer, role, expiry, nbf or subject', () => {
+test('validated-token claims fail closed for wrong issuer, role, audience, expiry, nbf or subject', () => {
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ iss: 'https://example.test/auth/v1' })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ role: 'anon' })), now), null);
+  assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ aud: 'anon' })), now), null);
+  assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ aud: ['anon', 'service_role'] })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ exp: now })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ nbf: now + 30 })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ sub: 'not-a-uuid' })), now), null);
