@@ -3,19 +3,24 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [migration,api,ui,shell]=await Promise.all([
+const [migration,denyMigration,indexMigration,api,ui,shell]=await Promise.all([
   read('supabase/migrations/20260827161914_dabbir_platform_customer_360_support_v1.sql'),
+  read('supabase/migrations/20260827162326_dabbir_platform_customer_360_support_deny_v2.sql'),
+  read('supabase/migrations/20260827162538_dabbir_platform_customer_360_support_indexes_v3.sql'),
   read('api/platform-customer-support.js'),
   read('api/platform-customer-support-ui.js'),
   read('api/app-recovery.js'),
 ]);
 
-test('support cases and notes are private, RLS hardened and not client writable',()=>{
+test('support cases and notes are private, RLS hardened and explicitly client denied',()=>{
   assert.match(migration,/dabbir_private\.platform_customer_support_cases/);
   assert.match(migration,/dabbir_private\.platform_customer_support_notes/);
   assert.match(migration,/force row level security/i);
   assert.match(migration,/revoke all on dabbir_private\.platform_customer_support_cases from public, anon, authenticated/i);
   assert.match(migration,/revoke all on dabbir_private\.platform_customer_support_notes from public, anon, authenticated/i);
+  assert.match(denyMigration,/platform_customer_support_cases_client_deny/);
+  assert.match(denyMigration,/platform_customer_support_notes_client_deny/);
+  assert.match(denyMigration,/to anon, authenticated[\s\S]*using \(false\)[\s\S]*with check \(false\)/i);
 });
 
 test('support RPCs are service-role only and pin an empty search path',()=>{
@@ -26,6 +31,13 @@ test('support RPCs are service-role only and pin an empty search path',()=>{
   assert.match(migration,/grant execute on function public\.dabbir_platform_support_summary\(uuid,text\) to service_role/i);
   assert.match(migration,/revoke all on function public\.dabbir_platform_support_summary\(uuid,text\) from public, anon, authenticated/i);
   assert.doesNotMatch(migration,/grant execute on function public\.dabbir_platform_support_[^(]+\([^;]+to authenticated/i);
+});
+
+test('support foreign keys have covering indexes',()=>{
+  assert.match(indexMigration,/platform_customer_support_cases_assigned_to_idx/);
+  assert.match(indexMigration,/platform_customer_support_cases_business_idx/);
+  assert.match(indexMigration,/platform_customer_support_cases_created_by_idx/);
+  assert.match(indexMigration,/platform_customer_support_notes_actor_idx/);
 });
 
 test('support API is platform-admin gated and mutations require same origin',()=>{
