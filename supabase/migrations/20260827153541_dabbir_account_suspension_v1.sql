@@ -1,0 +1,5 @@
+-- Historical marker for production migration 20260827153541.
+-- The final reproducible DABBIR-only suspension schema is consolidated and hardened
+-- by 20260827154515_dabbir_account_suspension_hardening_v2.sql.
+-- This marker preserves Supabase migration-history parity without replaying the
+-- superseded intermediate implementation on fresh environments.
