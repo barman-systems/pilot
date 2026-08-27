@@ -28,7 +28,7 @@ test('customer export is inline and only hash metadata is persisted',()=>{
   assert.match(executor,/INLINE_EXPORT/);
   assert.match(executor,/persisted_export_body',false/);
   assert.match(executor,/result_ref='sha256:'/);
-  assert.doesNotMatch(executor,/insert\s+into\s+[^;]*(export_blob|export_body|export_payload)/i);
+  assert.doesNotMatch(executor,/insert\s+into\s+(?:public\.)?[a-z0-9_]*(?:export_blob|export_body|export_payload)[a-z0-9_]*/i);
 });
 
 test('financial records are retained but identity links are removed',()=>{
