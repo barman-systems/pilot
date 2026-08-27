@@ -64,7 +64,8 @@ test('status endpoint prefers business-scoped Embedded Signup when business_id i
   const status = await read('api/dabbir-whatsapp-status.js');
   assert.match(status, /embeddedStatus/);
   assert.match(status, /source:\s*'embedded_signup'/);
-  assert.match(status, /req\.query\?\.business_id/);
+  assert.match(status, /singleQueryValue\(req, 'business_id'\)/);
+  assert.doesNotMatch(status, /req\.query/);
   assert.match(status, /loadBusinessConnection/);
 });
 
