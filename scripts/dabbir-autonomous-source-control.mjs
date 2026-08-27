@@ -9,10 +9,15 @@ const githubRunId = process.env.GITHUB_RUN_ID || '';
 const controlScript = 'scripts/dabbir-autonomous-source-control.mjs';
 const workflowPath = '.github/workflows/dabbir-autonomous-source-control.yml';
 const maxContextFiles = 12;
+const requiredChecks = String(process.env.DABBIR_REQUIRED_CHECKS || 'test')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 if (!oidcToken) throw new Error('DABBIR_GITHUB_OIDC_TOKEN missing');
 if (!githubToken) throw new Error('GITHUB_TOKEN missing');
 if (repository !== 'barman-systems/pilot') throw new Error(`unexpected_repository:${repository}`);
+if (!requiredChecks.length) throw new Error('DABBIR_REQUIRED_CHECKS empty');
 
 function run(command, args = [], options = {}) {
   const result = spawnSync(command, args, {
@@ -74,6 +79,16 @@ async function github(path, options = {}) {
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!response.ok && !options.allowFailure) throw new Error(`github_${options.method || 'GET'}_${path}_${response.status}_${String(body?.message || body || '').slice(0, 300)}`);
   return { ok: response.ok, status: response.status, body };
+}
+
+async function requireProtectedMain() {
+  const branch = await github('/branches/main');
+  if (branch.body?.name !== 'main') throw new Error('main_branch_lookup_unverified');
+  if (branch.body?.protected !== true) throw new Error('main_branch_not_protected');
+  return {
+    protected: true,
+    head_sha: branch.body?.commit?.sha || null,
+  };
 }
 
 function trackedFiles() {
@@ -212,12 +227,14 @@ async function openPullRequest({ branch, claim, headSha, verification }) {
     '- Free-model-only generation path; no paid inference fallback.',
     '- Live payment, KYC/legal authority, secrets, and auth/RLS weakening are blocked.',
     '- External research was treated as untrusted data.',
+    '- Auto-merge requires protected main and exact required DABBIR checks to succeed.',
     '',
     '### Local verification',
     '- npm ci: PASS',
     '- npm test: PASS',
     '- npm audit --omit=dev --audit-level=high: PASS',
     '',
+    `Required CI checks: ${requiredChecks.join(', ')}`,
     `Head: ${headSha}`,
   ].join('\n');
   const result = await github('/pulls', { method: 'POST', body: { title, head: branch, base: 'main', body } });
@@ -238,17 +255,32 @@ async function checkState(prNumber, headSha) {
     github(`/commits/${headSha}/status`),
   ]);
   const runs = Array.isArray(checks.body?.check_runs) ? checks.body.check_runs : [];
-  const allComplete = runs.length > 0 && runs.every((run) => run.status === 'completed');
-  const failed = runs.filter((run) => run.status === 'completed' && !['success', 'neutral', 'skipped'].includes(String(run.conclusion || '')));
-  const pending = runs.filter((run) => run.status !== 'completed');
   const statusContexts = Array.isArray(statuses.body?.statuses) ? statuses.body.statuses : [];
-  const statusOk = statusContexts.length === 0 || statuses.body?.state === 'success';
+  const required = requiredChecks.map((name) => {
+    const matching = runs.filter((run) => run.name === name);
+    const latest = matching.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0] || null;
+    return {
+      name,
+      found: Boolean(latest),
+      status: latest?.status || null,
+      conclusion: latest?.conclusion || null,
+    };
+  });
+  const requiredMissing = required.filter((check) => !check.found);
+  const requiredPending = required.filter((check) => check.found && check.status !== 'completed');
+  const requiredFailed = required.filter((check) => check.found && check.status === 'completed' && check.conclusion !== 'success');
+  const otherFailed = runs.filter((run) => run.status === 'completed' && ['failure', 'cancelled', 'timed_out', 'action_required', 'stale', 'startup_failure'].includes(String(run.conclusion || '')));
+  const pending = runs.filter((run) => run.status !== 'completed');
   const statusFailed = statusContexts.some((item) => ['failure', 'error'].includes(String(item.state || '')));
+  const statusPending = statusContexts.some((item) => ['pending'].includes(String(item.state || '')));
+  const requiredPass = required.length > 0 && required.every((check) => check.found && check.status === 'completed' && check.conclusion === 'success');
   return {
-    pass: allComplete && failed.length === 0 && statusOk,
-    failed: failed.length > 0 || statusFailed,
-    pending: !allComplete || pending.length > 0 || (!statusOk && !statusFailed),
+    pass: requiredPass && otherFailed.length === 0 && !statusFailed && !statusPending,
+    failed: requiredFailed.length > 0 || otherFailed.length > 0 || statusFailed,
+    pending: requiredMissing.length > 0 || requiredPending.length > 0 || pending.length > 0 || statusPending,
     summary: {
+      required_checks: required,
+      required_missing: requiredMissing.map((check) => check.name),
       check_runs: runs.map((run) => ({ name: run.name, status: run.status, conclusion: run.conclusion })).slice(0, 50),
       combined_status: statuses.body?.state || null,
       status_contexts: statusContexts.map((item) => ({ context: item.context, state: item.state })).slice(0, 50),
@@ -257,6 +289,20 @@ async function checkState(prNumber, headSha) {
 }
 
 async function mergePullRequest(prNumber, headSha) {
+  const protection = await requireProtectedMain();
+  const checks = await checkState(prNumber, headSha);
+  if (!checks.pass) {
+    return {
+      ok: false,
+      status: 409,
+      body: {
+        merged: false,
+        message: 'merge_truth_gate_not_satisfied',
+        protection,
+        checks: checks.summary,
+      },
+    };
+  }
   return github(`/pulls/${prNumber}/merge`, { method: 'PUT', body: { sha: headSha, merge_method: 'squash', commit_title: `DABBIR autonomous implementation (#${prNumber})` }, allowFailure: true });
 }
 
@@ -286,13 +332,17 @@ async function handleExisting(claim) {
     await report(claim, 'BLOCKED', { branch_name: existing.branch_name, pr_number: prNumber, head_sha: existing.head_sha, evidence: { reason: `unexpected_pr_state:${pr.body?.state}` } });
     return true;
   }
+  if (pr.body?.draft === true) {
+    await report(claim, 'BLOCKED', { branch_name: pr.body?.head?.ref, pr_number: prNumber, head_sha: pr.body?.head?.sha || existing.head_sha, evidence: { reason: 'draft_pr_not_mergeable_by_autonomy' } });
+    return true;
+  }
 
   const headSha = pr.body?.head?.sha || existing.head_sha;
   const checks = await checkState(prNumber, headSha);
   if (checks.pass) {
     const merged = await mergePullRequest(prNumber, headSha);
     if (merged.ok && merged.body?.merged === true) {
-      await report(claim, 'MERGED', { branch_name: pr.body?.head?.ref, pr_number: prNumber, head_sha: merged.body?.sha || headSha, work_unit_done: true, evidence: { ci: checks.summary, merge_method: 'squash' } });
+      await report(claim, 'MERGED', { branch_name: pr.body?.head?.ref, pr_number: prNumber, head_sha: merged.body?.sha || headSha, work_unit_done: true, evidence: { ci: checks.summary, branch_protection_verified: true, merge_method: 'squash' } });
     } else {
       await report(claim, 'BLOCKED', { branch_name: pr.body?.head?.ref, pr_number: prNumber, head_sha: headSha, evidence: { ci: checks.summary, merge_status: merged.status, merge_error: merged.body?.message || null } });
     }
@@ -326,8 +376,9 @@ async function handleExisting(claim) {
 async function main() {
   git(['fetch', 'origin', 'main']);
   git(['checkout', '-B', 'main', 'origin/main']);
-  const claim = await bridge('claim', { github_run_id: githubRunId });
-  console.log(JSON.stringify({ state: claim.state, objective: claim.objective?.objective_key || claim.objective_key || null, run_id: claim.run_id || claim.run?.id || null }, null, 2));
+  const protection = await requireProtectedMain();
+  const claim = await bridge('claim', { github_run_id: githubRunId, branch_protection_verified: protection.protected, main_head_sha: protection.head_sha });
+  console.log(JSON.stringify({ state: claim.state, objective: claim.objective?.objective_key || claim.objective_key || null, run_id: claim.run_id || claim.run?.id || null, main_protected: true }, null, 2));
 
   if (['IDLE', 'RESEARCHING', 'BLOCKED'].includes(String(claim.state || ''))) return;
   if (!claim.run_id || !claim.lease_token) throw new Error('claim_missing_run_or_lease');
@@ -340,7 +391,7 @@ async function main() {
     const work = await generateAndVerify(claim);
     const headSha = await commitAndPush(branch, claim);
     const pr = await openPullRequest({ branch, claim, headSha, verification: work.verification });
-    await report(claim, 'CI_PENDING', { branch_name: branch, pr_number: pr.number, head_sha: headSha, evidence: { model: work.generated.model, changed: work.guard.changed, local_verification: 'PASS', pr_url: pr.html_url } });
+    await report(claim, 'CI_PENDING', { branch_name: branch, pr_number: pr.number, head_sha: headSha, evidence: { model: work.generated.model, changed: work.guard.changed, local_verification: 'PASS', branch_protection_verified: true, required_checks: requiredChecks, pr_url: pr.html_url } });
     console.log(`Opened PR #${pr.number}: ${pr.html_url}`);
   } catch (error) {
     const detail = String(error?.detail || '').slice(-4000);
