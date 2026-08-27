@@ -15,14 +15,22 @@ test('Vercel uses the fail-closed DABBIR build gate without changing the Functio
   assert.equal(parse.status, 0, parse.stderr || parse.stdout);
 });
 
-test('cached build evidence is commit-scoped and written only after tests succeed', () => {
+test('cached build evidence is scoped to deployment plus commit and written only after tests succeed', () => {
+  assert.match(gate, /VERCEL_DEPLOYMENT_ID/);
   assert.match(gate, /VERCEL_GIT_COMMIT_SHA/);
+  assert.match(gate, /const evidenceKey = `\$\{safeDeploymentId\}-\$\{safeSha\}`/);
   assert.match(gate, /dabbir-vercel-tests-passed-/);
   assert.match(gate, /spawnSync[\s\S]*\['test'\]/);
   const testRun = gate.indexOf("spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test']");
   const markerWrite = gate.indexOf('writeFileSync(marker');
   assert.ok(testRun >= 0 && markerWrite > testRun, 'success evidence must be written only after the test process');
-  assert.match(gate, /if \(result\.status !== 0\) process\.exit/);
+  assert.match(gate, /DABBIR_TEST_GATE_FAILED_/);
+});
+
+test('failure cleanup cannot leave a stale success path', () => {
+  assert.match(gate, /finally \{[\s\S]*closeSync\(lockFd\)[\s\S]*unlinkSync\(lock\)/);
+  assert.match(gate, /process\.exit\(exitCode\)/);
+  assert.doesNotMatch(gate, /if \(result\.status !== 0\) process\.exit/);
 });
 
 test('concurrent duplicate invocations fail closed without fabricating success evidence', () => {
