@@ -13,7 +13,7 @@ const script = String.raw`(()=>{
     access:'وصول DABBIR', accessDesc:'تعليق الحساب يوقف وصول هذا العميل إلى DABBIR فقط ولا يحظر هوية Supabase أو أي نظام آخر.',
     suspend:'تعليق الحساب', reactivate:'إعادة تفعيل الحساب', reason:'سبب التعليق', reasonPlaceholder:'مثال: طلب العميل، إساءة استخدام، مشكلة فوترة قيد المراجعة',
     suspendConfirm:'للتعليق اكتب', suspendedAt:'تم التعليق', accessUpdated:'تم تحديث وصول الحساب.', adminProtected:'لا يمكن تعليق حساب Platform Admin.', reasonRequired:'اكتب سببًا واضحًا للتعليق.', confirmRequired:'عبارة التأكيد غير مطابقة.',
-    recovery:'استرجاع البيانات', recoveryDesc:'اختر وقتًا سابقًا لمساحة العمل. لن يتغير شيء قبل المعاينة والتأكيد.', targetTime:'الوقت المراد الرجوع إليه', preview:'معاينة الاسترجاع', prepare:'إنشاء حالة استرجاع', events:'تغييرات سيتم عكسها', confirmLabel:'للتنفيذ اكتب', apply:'تنفيذ الاسترجاع', restored:'تم تنفيذ الاسترجاع.', danger:'هذا الإجراء يعيد بيانات مساحة العمل إلى الوقت المحدد.',
+    recovery:'استرجاع البيانات', recoveryDesc:'اختر وقتًا سابقًا لمساحة العمل. المعاينة تفصل الاسترجاع الآمن عن البيانات التي تحتاج مصالحة يدوية. يجب تعليق الحساب قبل إنشاء حالة الاسترجاع.', targetTime:'الوقت المراد الرجوع إليه', preview:'معاينة الاسترجاع', prepare:'إنشاء حالة استرجاع', events:'إجمالي التغييرات', safeEvents:'قابلة للاسترجاع الآمن', manualEvents:'تحتاج مصالحة يدوية', confirmLabel:'للتنفيذ اكتب', apply:'تنفيذ الاسترجاع', restored:'تم تنفيذ الاسترجاع.', danger:'سيبقى الحساب معلّقًا بعد الاسترجاع حتى تتم مراجعته وإعادة تفعيله يدويًا.', frozenRequired:'يجب تعليق حساب العميل أولًا قبل إنشاء أو تنفيذ الاسترجاع.', manualRequired:'المعاينة تحتوي بيانات دفع/رسائل/طلبات/خصوصية أو تكاملات. تم منع الاسترجاع التلقائي وتحتاج هذه البيانات مصالحة يدوية.', safeReady:'المعاينة آمنة للاسترجاع التلقائي.',
     empty:'لا توجد نتائج.', loading:'جارٍ التحميل...', failed:'تعذر تحميل لوحة إدارة العملاء.'
   } : {
     nav:'Customer admin', title:'DABBIR customer administration', desc:'Platform customer accounts, support, access control and recovery in one place.',
@@ -23,7 +23,7 @@ const script = String.raw`(()=>{
     access:'DABBIR access', accessDesc:'Suspension blocks this customer from DABBIR only. It does not ban the Supabase identity or other systems.',
     suspend:'Suspend account', reactivate:'Reactivate account', reason:'Suspension reason', reasonPlaceholder:'Example: customer request, abuse, billing review',
     suspendConfirm:'To suspend, type', suspendedAt:'Suspended', accessUpdated:'Account access updated.', adminProtected:'A Platform Admin account cannot be suspended.', reasonRequired:'Enter a clear suspension reason.', confirmRequired:'Confirmation phrase does not match.',
-    recovery:'Data recovery', recoveryDesc:'Choose an earlier workspace time. Nothing changes before preview and explicit confirmation.', targetTime:'Restore point', preview:'Preview recovery', prepare:'Create recovery case', events:'Changes to reverse', confirmLabel:'To apply, type', apply:'Apply recovery', restored:'Recovery applied.', danger:'This action returns workspace data to the selected time.',
+    recovery:'Data recovery', recoveryDesc:'Choose an earlier workspace time. Preview separates safe automatic recovery from data that requires manual reconciliation. The account must be suspended before a recovery case can be created.', targetTime:'Restore point', preview:'Preview recovery', prepare:'Create recovery case', events:'Total changes', safeEvents:'Safe automatic restore', manualEvents:'Manual reconciliation', confirmLabel:'To apply, type', apply:'Apply recovery', restored:'Recovery applied.', danger:'The account remains suspended after recovery until it is reviewed and manually reactivated.', frozenRequired:'Suspend the customer account before creating or applying recovery.', manualRequired:'This preview includes payment, messaging, order, privacy, workflow, or integration state. Automatic recovery is blocked and manual reconciliation is required.', safeReady:'Preview is safe for automatic recovery.',
     empty:'No results.', loading:'Loading...', failed:'Customer administration could not load.'
   };
 
@@ -47,8 +47,8 @@ const script = String.raw`(()=>{
   let recoveryCase = null;
 
   const style = document.createElement('style');
-  style.dataset.dabbirPlatformCustomers = 'v2';
-  style.textContent = '.pcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pcToolbar{display:flex;gap:8px;margin-bottom:12px}.pcToolbar input{flex:1;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;padding:10px}.pcAccount{border:1px solid var(--line);background:#131619;border-radius:16px;padding:13px}.pcAccount b{display:block;font-size:12px}.pcAccount small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.pcCode{direction:ltr;display:inline-block;font-weight:950;letter-spacing:.04em;color:var(--accent)}.pcBiz{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#121416}.pcCounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}.pcCount{background:#191c20;border-radius:10px;padding:8px}.pcCount span{font-size:8px;color:var(--muted);display:block}.pcCount b{font-size:15px}.pcDanger{border:1px solid #5b3030;background:#2b1717;border-radius:14px;padding:11px;margin-top:12px}.pcAccess{border:1px solid #3d4654;background:#151a20;border-radius:14px;padding:12px;margin-top:12px}.pcAccess.suspended{border-color:#6a4c2c;background:#261d12}.pcAccess input{width:100%;border:1px solid var(--line);background:#101316;color:#fff;border-radius:10px;padding:9px;margin-top:7px}.pcRecoveryResult{margin-top:9px;padding:9px;border:1px solid var(--line);border-radius:11px;font-size:10px}.pcMetrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.pcMetric{border:1px solid var(--line);border-radius:14px;padding:12px;background:#131619}.pcMetric span{font-size:9px;color:var(--muted);display:block}.pcMetric strong{font-size:21px}.pcActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}@media(max-width:760px){.pcGrid{grid-template-columns:1fr}.pcMetrics{grid-template-columns:repeat(2,1fr)}.pcToolbar{flex-direction:column}.pcCounts{grid-template-columns:repeat(2,1fr)}}';
+  style.dataset.dabbirPlatformCustomers = 'v3';
+  style.textContent = '.pcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pcToolbar{display:flex;gap:8px;margin-bottom:12px}.pcToolbar input{flex:1;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;padding:10px}.pcAccount{border:1px solid var(--line);background:#131619;border-radius:16px;padding:13px}.pcAccount b{display:block;font-size:12px}.pcAccount small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.pcCode{direction:ltr;display:inline-block;font-weight:950;letter-spacing:.04em;color:var(--accent)}.pcBiz{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#121416}.pcCounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}.pcCount{background:#191c20;border-radius:10px;padding:8px}.pcCount span{font-size:8px;color:var(--muted);display:block}.pcCount b{font-size:15px}.pcDanger{border:1px solid #5b3030;background:#2b1717;border-radius:14px;padding:11px;margin-top:12px}.pcAccess{border:1px solid #3d4654;background:#151a20;border-radius:14px;padding:12px;margin-top:12px}.pcAccess.suspended{border-color:#6a4c2c;background:#261d12}.pcAccess input{width:100%;border:1px solid var(--line);background:#101316;color:#fff;border-radius:10px;padding:9px;margin-top:7px}.pcRecoveryResult{margin-top:9px;padding:9px;border:1px solid var(--line);border-radius:11px;font-size:10px}.pcRecoverySafe{border-color:#28583a;background:#12251a}.pcRecoveryBlocked{border-color:#6c4030;background:#2d1d15}.pcMetrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.pcMetric{border:1px solid var(--line);border-radius:14px;padding:12px;background:#131619}.pcMetric span{font-size:9px;color:var(--muted);display:block}.pcMetric strong{font-size:21px}.pcActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}@media(max-width:760px){.pcGrid{grid-template-columns:1fr}.pcMetrics{grid-template-columns:repeat(2,1fr)}.pcToolbar{flex-direction:column}.pcCounts{grid-template-columns:repeat(2,1fr)}}';
   document.head.appendChild(style);
 
   function ensureScreen(){
@@ -133,12 +133,16 @@ const script = String.raw`(()=>{
     const t=text(), counts=business.counts||{};
     const preview=recoveryPreview?.business_id===business.id ? recoveryPreview : null;
     const caseId=recoveryCase?.business_id===business.id ? recoveryCase.case_id : null;
+    const accountSuspended=String(selected?.access?.status||'active')==='suspended';
+    const blocked=preview ? !preview.auto_restore_ready : false;
     const tableSummary=preview?.tables ? Object.entries(preview.tables).map(([name,count])=>esc(name)+': '+esc(count)).join(' · ') : '';
+    const reconcileSummary=preview?.reconciliation_tables ? Object.entries(preview.reconciliation_tables).map(([name,value])=>esc(name)+': '+Number(value?.events||0)).join(' · ') : '';
     const counterPairs=[[t.customers,counts.customers],[t.chats,counts.conversations],[t.messages,counts.messages],[t.orders,counts.orders],[t.appointments,counts.appointments],[t.tasks,counts.tasks]];
     const counters=counterPairs.map(pair=>'<div class="pcCount"><span>'+esc(pair[0])+'</span><b>'+Number(pair[1]||0)+'</b></div>').join('');
-    const previewHtml=preview ? '<div class="pcRecoveryResult"><b>'+esc(t.events)+': '+Number(preview.events_to_reverse||0)+'</b><div>'+tableSummary+'</div></div>' : '';
+    const previewHtml=preview ? '<div class="pcRecoveryResult '+(blocked?'pcRecoveryBlocked':'pcRecoverySafe')+'"><b>'+esc(t.events)+': '+Number(preview.events_to_reverse||0)+'</b><div>'+esc(t.safeEvents)+': '+Number(preview.auto_restore_events||0)+' · '+esc(t.manualEvents)+': '+Number(preview.reconciliation_events||0)+'</div>'+(tableSummary?'<div>'+tableSummary+'</div>':'')+(blocked?'<small style="display:block;margin-top:6px;color:var(--red)">'+esc(t.manualRequired)+(reconcileSummary?' · '+reconcileSummary:'')+'</small>':'<small style="display:block;margin-top:6px">'+esc(t.safeReady)+'</small>')+(!accountSuspended?'<small style="display:block;margin-top:6px;color:var(--red)">'+esc(t.frozenRequired)+'</small>':'')+'</div>' : '';
+    const canPrepare=preview && !blocked && accountSuspended;
     const caseHtml=caseId ? '<div class="pcRecoveryResult"><div>'+esc(t.confirmLabel)+' <span class="pcCode">RESTORE '+esc(selected.account.customer_no)+'</span></div><input style="width:100%;margin-top:7px" data-pc-confirm="'+esc(business.id)+'" placeholder="RESTORE '+esc(selected.account.customer_no)+'"><button style="margin-top:7px" class="primary" data-pc-apply="'+esc(business.id)+'">'+esc(t.apply)+'</button><small style="display:block;color:var(--red);margin-top:6px">'+esc(t.danger)+'</small></div>' : '';
-    return '<div class="pcBiz"><div class="row space"><div><b>'+esc(business.name)+'</b><small>'+esc(business.business_type)+' · '+esc(business.role)+' · '+esc(business.membership_status)+'</small></div><span class="badge gray">'+esc(business.locale||'')+'</span></div><div class="pcCounts">'+counters+'</div><div class="pcDanger"><b>'+esc(t.recovery)+'</b><small style="display:block;color:var(--muted);margin-top:4px">'+esc(t.recoveryDesc)+'</small><div class="field"><label>'+esc(t.targetTime)+'</label><input type="datetime-local" data-pc-time="'+esc(business.id)+'"></div><div class="pcActions"><button class="secondary" data-pc-preview="'+esc(business.id)+'">'+esc(t.preview)+'</button>'+(preview?'<button class="primary" data-pc-open="'+esc(business.id)+'">'+esc(t.prepare)+'</button>':'')+'</div>'+previewHtml+caseHtml+'</div></div>';
+    return '<div class="pcBiz"><div class="row space"><div><b>'+esc(business.name)+'</b><small>'+esc(business.business_type)+' · '+esc(business.role)+' · '+esc(business.membership_status)+'</small></div><span class="badge gray">'+esc(business.locale||'')+'</span></div><div class="pcCounts">'+counters+'</div><div class="pcDanger"><b>'+esc(t.recovery)+'</b><small style="display:block;color:var(--muted);margin-top:4px">'+esc(t.recoveryDesc)+'</small><div class="field"><label>'+esc(t.targetTime)+'</label><input type="datetime-local" data-pc-time="'+esc(business.id)+'"></div><div class="pcActions"><button class="secondary" data-pc-preview="'+esc(business.id)+'">'+esc(t.preview)+'</button>'+(canPrepare?'<button class="primary" data-pc-open="'+esc(business.id)+'">'+esc(t.prepare)+'</button>':'')+'</div>'+previewHtml+caseHtml+'</div></div>';
   }
 
   function renderDetail(){
@@ -185,18 +189,31 @@ const script = String.raw`(()=>{
   }
 
   async function openRecovery(businessId){
+    const t=text();
     if(!recoveryPreview||recoveryPreview.business_id!==businessId) return;
+    if(!recoveryPreview.auto_restore_ready) return notify(t.manualRequired);
+    if(String(selected?.access?.status||'active')!=='suspended') return notify(t.frozenRequired);
     const {response,payload}=await api('/api/platform-customers',{method:'POST',body:JSON.stringify({action:'open_recovery',user_id:selected.user.id,business_id:businessId,target_at:recoveryPreview.target_at,reason:'Platform owner customer support recovery'})});
-    if(!response.ok) return notify(payload.error||text().failed);
+    if(!response.ok){
+      if(payload.error==='RECOVERY_ACCOUNT_MUST_BE_SUSPENDED') return notify(t.frozenRequired);
+      if(payload.error==='RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED') return notify(t.manualRequired);
+      return notify(payload.error||t.failed);
+    }
     recoveryCase={business_id:businessId,case_id:payload.case_id}; renderDetail();
   }
 
   async function applyRecovery(businessId){
+    const t=text();
     if(!recoveryCase||recoveryCase.business_id!==businessId) return;
+    if(String(selected?.access?.status||'active')!=='suspended') return notify(t.frozenRequired);
     const input=q('[data-pc-confirm="'+CSS.escape(businessId)+'"]');
     const {response,payload}=await api('/api/platform-customers',{method:'POST',body:JSON.stringify({action:'apply_recovery',user_id:selected.user.id,case_id:recoveryCase.case_id,confirmation:input?.value||''})});
-    if(!response.ok) return notify(payload.error||text().failed);
-    notify(text().restored); recoveryPreview=null; recoveryCase=null; await openAccount(selected.user.id);
+    if(!response.ok){
+      if(payload.error==='RECOVERY_ACCOUNT_MUST_BE_SUSPENDED') return notify(t.frozenRequired);
+      if(payload.error==='RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED') return notify(t.manualRequired);
+      return notify(payload.error||t.failed);
+    }
+    notify(t.restored); recoveryPreview=null; recoveryCase=null; await openAccount(selected.user.id);
   }
 
   const langObserver=new MutationObserver(()=>{ if(enabled){ applyLabels(); selected ? renderDetail() : renderAccounts(); } });
@@ -216,6 +233,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-platform-customer-admin-ui','v2');
+  res.setHeader('x-dabbir-platform-customer-admin-ui','v3');
   return res.end(script);
 }
