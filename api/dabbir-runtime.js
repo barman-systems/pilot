@@ -76,6 +76,27 @@ function cleanText(value, max = 500) {
   return String(value || '').trim().slice(0, max);
 }
 
+export function requirePersistedRow(rows, errorCode = 'PERSISTENCE_UNVERIFIED') {
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row?.id) {
+    const error = new Error(errorCode);
+    error.status = 502;
+    throw error;
+  }
+  return row;
+}
+
+function truthEvidence(entity, row, extra = {}) {
+  return {
+    state: 'VERIFIED',
+    source: 'SUPABASE_RETURN_REPRESENTATION',
+    entity,
+    entity_id: row.id,
+    verified_at: new Date().toISOString(),
+    ...extra,
+  };
+}
+
 function projectForBusinessType(type) {
   if (type === 'clinic') return 'dabbir_clinics';
   if (type === 'creator') return 'dabbir_celebrities';
@@ -187,6 +208,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
       needs_onboarding: identity.memberships.length === 0,
       memberships: identity.memberships,
       operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
+      truth_mode: 'FAIL_CLOSED_VERIFIED_WRITES',
       whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
       ai: getDABBIRAiConfig(),
     };
@@ -219,6 +241,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
     user: identity.user,
     needs_onboarding: false,
     operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
+    truth_mode: 'FAIL_CLOSED_VERIFIED_WRITES',
     membership,
     memberships: identity.memberships,
     business,
@@ -261,7 +284,19 @@ async function createBusiness(identity, body) {
     body: JSON.stringify({ demo_mode: false, updated_at: new Date().toISOString() }),
   }, 'BUSINESS_ACTIVATION_FAILED');
 
-  return { ok: true, action: 'create_business', business_id: businessId, verified_persisted: true };
+  const activatedBusiness = await getBusiness(identity.accessToken, businessId);
+  if (!activatedBusiness?.id || activatedBusiness.demo_mode !== false) {
+    throw Object.assign(new Error('BUSINESS_ACTIVATION_UNVERIFIED'), { status: 502 });
+  }
+
+  return {
+    ok: true,
+    action: 'create_business',
+    state: 'VERIFIED_PERSISTED',
+    business_id: businessId,
+    verified_persisted: true,
+    truth: truthEvidence('business', activatedBusiness, { expected_demo_mode: false }),
+  };
 }
 
 async function startConversation(identity, body) {
@@ -279,8 +314,7 @@ async function startConversation(identity, body) {
       metadata: { source: 'dabbir_web_runtime' },
     }),
   }, 'CUSTOMER_CREATE_FAILED');
-  const customer = customers?.[0];
-  if (!customer?.id) throw Object.assign(new Error('CUSTOMER_CREATE_FAILED'), { status: 502 });
+  const customer = requirePersistedRow(customers, 'CUSTOMER_CREATE_UNVERIFIED');
 
   const conversations = await rest(identity.accessToken, 'dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at', {
     method: 'POST',
@@ -293,16 +327,25 @@ async function startConversation(identity, body) {
       demo_mode: false,
     }),
   }, 'CONVERSATION_CREATE_FAILED');
-  const conversation = conversations?.[0];
-  if (!conversation?.id) throw Object.assign(new Error('CONVERSATION_CREATE_FAILED'), { status: 502 });
+  const conversation = requirePersistedRow(conversations, 'CONVERSATION_CREATE_UNVERIFIED');
 
   return {
     ok: true,
     action: 'start_conversation',
+    state: 'VERIFIED_PERSISTED',
     customer,
     conversation,
     channel: 'web',
     verified_persisted: true,
+    truth: {
+      state: 'VERIFIED',
+      source: 'SUPABASE_RETURN_REPRESENTATION',
+      verified_at: new Date().toISOString(),
+      evidence: [
+        { entity: 'customer', entity_id: customer.id },
+        { entity: 'conversation', entity_id: conversation.id },
+      ],
+    },
     external_side_effects: false,
   };
 }
@@ -345,6 +388,7 @@ async function sendMessage(identity, body) {
       simulated: false,
     }),
   }, 'CUSTOMER_MESSAGE_PERSIST_FAILED');
+  const customerMessage = requirePersistedRow(insertedCustomer, 'CUSTOMER_MESSAGE_PERSIST_UNVERIFIED');
 
   const language = languageFor(message, business.locale);
   const aiResult = await generateDABBIRAiReply({
@@ -364,10 +408,12 @@ async function sendMessage(identity, body) {
     return {
       ok: false,
       action: 'send_message',
+      state: 'FAILED_AFTER_CUSTOMER_MESSAGE_PERSISTED',
       error: aiResult.error || aiResult.state || 'AI_PROVIDER_FAILED',
       ai_state: aiResult.state,
       customer_message_persisted: true,
-      customer_message: insertedCustomer?.[0] || null,
+      customer_message: customerMessage,
+      truth: truthEvidence('customer_message', customerMessage, { ai_reply_persisted: false }),
       external_side_effects: false,
     };
   }
@@ -384,6 +430,7 @@ async function sendMessage(identity, body) {
       simulated: false,
     }),
   }, 'AI_MESSAGE_PERSIST_FAILED');
+  const aiMessage = requirePersistedRow(insertedAi, 'AI_MESSAGE_PERSIST_UNVERIFIED');
 
   await rest(identity.accessToken, `dabbir_conversations?business_id=eq.${businessId}&id=eq.${conversationId}`, {
     method: 'PATCH',
@@ -391,21 +438,38 @@ async function sendMessage(identity, body) {
     body: JSON.stringify({ state: 'waiting_customer', updated_at: new Date().toISOString() }),
   }, 'CONVERSATION_STATE_UPDATE_FAILED');
 
+  const verifiedConversations = await rest(identity.accessToken, `dabbir_conversations?select=id,state&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_STATE_VERIFY_FAILED');
+  const verifiedConversation = verifiedConversations?.[0];
+  if (!verifiedConversation?.id || verifiedConversation.state !== 'waiting_customer') {
+    throw Object.assign(new Error('CONVERSATION_STATE_UNVERIFIED'), { status: 502 });
+  }
+
   return {
     ok: true,
     action: 'send_message',
+    state: 'VERIFIED_PERSISTED',
     channel: 'web',
     provider: aiResult.provider,
     model: aiResult.model,
     cost_mode: aiResult.cost_mode,
     grounding_state: aiResult.grounding_state,
     guarded: aiResult.guarded,
-    customer_message: insertedCustomer?.[0] || null,
-    ai_message: insertedAi?.[0] || null,
+    customer_message: customerMessage,
+    ai_message: aiMessage,
     verified: {
       customer_message_persisted: true,
       ai_message_persisted: true,
       conversation_state_persisted: true,
+    },
+    truth: {
+      state: 'VERIFIED',
+      source: 'SUPABASE_RETURN_REPRESENTATION_AND_READBACK',
+      verified_at: new Date().toISOString(),
+      evidence: [
+        { entity: 'customer_message', entity_id: customerMessage.id },
+        { entity: 'ai_message', entity_id: aiMessage.id },
+        { entity: 'conversation', entity_id: verifiedConversation.id, state: verifiedConversation.state },
+      ],
     },
     external_side_effects: false,
   };
@@ -430,7 +494,7 @@ async function createAppointment(identity, body) {
         metadata: { source: 'dabbir_appointment_runtime' },
       }),
     }, 'CUSTOMER_CREATE_FAILED');
-    customerId = customers?.[0]?.id || null;
+    customerId = requirePersistedRow(customers, 'CUSTOMER_CREATE_UNVERIFIED').id;
   }
 
   const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at', {
@@ -445,12 +509,15 @@ async function createAppointment(identity, body) {
       simulated: false,
     }),
   }, 'APPOINTMENT_CREATE_FAILED');
+  const appointment = requirePersistedRow(rows, 'APPOINTMENT_PERSISTENCE_UNVERIFIED');
 
   return {
     ok: true,
     action: 'create_appointment',
-    appointment: rows?.[0] || null,
-    verified_persisted: Boolean(rows?.[0]?.id),
+    state: 'VERIFIED_PERSISTED',
+    appointment,
+    verified_persisted: true,
+    truth: truthEvidence('appointment', appointment),
     external_side_effects: false,
   };
 }
@@ -482,12 +549,15 @@ async function createFollowup(identity, body) {
       metadata: { source: 'dabbir_web_runtime' },
     }),
   }, 'FOLLOWUP_CREATE_FAILED');
+  const followup = requirePersistedRow(rows, 'FOLLOWUP_PERSISTENCE_UNVERIFIED');
 
   return {
     ok: true,
     action: 'create_followup',
-    followup: rows?.[0] || null,
-    verified_persisted: Boolean(rows?.[0]?.id),
+    state: 'VERIFIED_PERSISTED',
+    followup,
+    verified_persisted: true,
+    truth: truthEvidence('followup', followup),
     external_side_effects: false,
   };
 }
@@ -522,8 +592,10 @@ export default async function handler(req, res) {
     const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(status) ? status : 500;
     return json(res, safeStatus, {
       ok: false,
+      state: 'FAILED_OR_UNVERIFIED',
       error: cleanText(error?.message || 'RUNTIME_FAILED', 120) || 'RUNTIME_FAILED',
       detail: error?.detail || undefined,
+      truth: { state: 'UNVERIFIED' },
       external_side_effects: false,
     });
   }

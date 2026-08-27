@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { classifyClinicMessage, classifyCelebrityMessage } from '../api/dabbir-runtime.js';
+import { classifyClinicMessage, classifyCelebrityMessage, requirePersistedRow } from '../api/dabbir-runtime.js';
 
 const root = new URL('../', import.meta.url);
 const runtimeSource = await readFile(new URL('api/dabbir-runtime.js', root), 'utf8');
@@ -63,6 +63,41 @@ test('appointments and followups are persisted through tenant RLS instead of pre
   assert.match(runtimeSource, /action === 'create_followup'/);
   assert.match(runtimeSource, /dabbir_followups\?select=/);
   assert.match(runtimeSource, /verified_persisted/);
+});
+
+test('runtime truth contract fails closed when persistence evidence is missing', () => {
+  const persisted = { id: '018f5b3a-7b36-7e87-8c91-6e0438140d3f' };
+  assert.equal(requirePersistedRow([persisted], 'TEST_UNVERIFIED'), persisted);
+  assert.throws(
+    () => requirePersistedRow([], 'TEST_UNVERIFIED'),
+    error => error?.message === 'TEST_UNVERIFIED' && error?.status === 502,
+  );
+  assert.throws(
+    () => requirePersistedRow([{ id: null }], 'TEST_UNVERIFIED'),
+    error => error?.message === 'TEST_UNVERIFIED' && error?.status === 502,
+  );
+  assert.match(runtimeSource, /truth_mode:\s*'FAIL_CLOSED_VERIFIED_WRITES'/);
+  assert.match(runtimeSource, /state:\s*'VERIFIED_PERSISTED'/);
+  assert.match(runtimeSource, /APPOINTMENT_PERSISTENCE_UNVERIFIED/);
+  assert.match(runtimeSource, /FOLLOWUP_PERSISTENCE_UNVERIFIED/);
+  assert.match(runtimeSource, /CUSTOMER_MESSAGE_PERSIST_UNVERIFIED/);
+  assert.match(runtimeSource, /AI_MESSAGE_PERSIST_UNVERIFIED/);
+  assert.match(runtimeSource, /CONVERSATION_STATE_UNVERIFIED/);
+  assert.match(runtimeSource, /BUSINESS_ACTIVATION_UNVERIFIED/);
+  assert.doesNotMatch(runtimeSource, /verified_persisted:\s*Boolean\(/);
+});
+
+test('successful message handling includes persisted entity evidence and conversation readback', () => {
+  assert.match(runtimeSource, /SUPABASE_RETURN_REPRESENTATION_AND_READBACK/);
+  assert.match(runtimeSource, /CONVERSATION_STATE_VERIFY_FAILED/);
+  assert.match(runtimeSource, /entity:\s*'customer_message'/);
+  assert.match(runtimeSource, /entity:\s*'ai_message'/);
+  assert.match(runtimeSource, /state:\s*verifiedConversation\.state/);
+});
+
+test('runtime errors are explicitly failed or unverified instead of success-shaped', () => {
+  assert.match(runtimeSource, /state:\s*'FAILED_OR_UNVERIFIED'/);
+  assert.match(runtimeSource, /truth:\s*\{\s*state:\s*'UNVERIFIED'\s*\}/);
 });
 
 test('WhatsApp stays explicitly outside the operational runtime until Meta authorization', () => {
