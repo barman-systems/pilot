@@ -5,6 +5,7 @@ import {
   getBusinessMemberships,
   supabaseRest,
 } from './_auth-core.js';
+import { DABBIR_PUBLIC_RUNTIME } from '../config/dabbir-public-runtime.js';
 
 function firstEnv(...names) {
   for (const name of names) {
@@ -14,39 +15,16 @@ function firstEnv(...names) {
   return '';
 }
 
-function legacyWhatsAppAccessToken() {
-  return firstEnv(
-    'DABBIR_WHATSAPP_ACCESS_TOKEN',
-    'PILOT_WHATSAPP_ACCESS_TOKEN',
-    'WHATSAPP_ACCESS_TOKEN',
-    'META_WHATSAPP_ACCESS_TOKEN',
-  );
-}
-
 export function embeddedPlatformConfig() {
-  const appId = firstEnv(
-    'DABBIR_META_APP_ID',
-    'DABBIR_WHATSAPP_APP_ID',
-    'PILOT_META_APP_ID',
-    'PILOT_WHATSAPP_APP_ID',
-    'META_APP_ID',
-    'FACEBOOK_APP_ID',
-  );
-  const appSecret = firstEnv(
-    'DABBIR_WHATSAPP_APP_SECRET',
-    'PILOT_WHATSAPP_APP_SECRET',
-    'META_APP_SECRET',
-    'FACEBOOK_APP_SECRET',
-  );
-  const configId = firstEnv(
-    'DABBIR_WHATSAPP_EMBEDDED_CONFIG_ID',
-    'DABBIR_META_CONFIG_ID',
-    'PILOT_WHATSAPP_EMBEDDED_CONFIG_ID',
-    'PILOT_META_CONFIG_ID',
-    'WHATSAPP_EMBEDDED_CONFIG_ID',
-    'META_CONFIG_ID',
-  );
-  const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION') || 'v23.0';
+  // Embedded Signup has one DABBIR identity. Do not infer it from legacy PILOT,
+  // generic Meta env vars, or an old tenant token. App/config IDs are public
+  // product configuration; the app secret remains server-only.
+  const envAppId = firstEnv('DABBIR_META_APP_ID', 'DABBIR_WHATSAPP_APP_ID');
+  const envConfigId = firstEnv('DABBIR_WHATSAPP_EMBEDDED_CONFIG_ID', 'DABBIR_META_CONFIG_ID');
+  const appId = envAppId || DABBIR_PUBLIC_RUNTIME.metaAppId;
+  const appSecret = firstEnv('DABBIR_WHATSAPP_APP_SECRET');
+  const configId = envConfigId || DABBIR_PUBLIC_RUNTIME.whatsappEmbeddedConfigId;
+  const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION') || DABBIR_PUBLIC_RUNTIME.metaGraphVersion;
   const encryptionSecret = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY') || appSecret;
   return {
     appId,
@@ -54,51 +32,14 @@ export function embeddedPlatformConfig() {
     configId,
     graphVersion,
     encryptionSecret,
-    appIdSource: appId ? 'environment' : null,
-    legacyAccessTokenAvailable: Boolean(legacyWhatsAppAccessToken()),
+    appIdSource: envAppId ? 'dabbir_environment' : 'dabbir_public_runtime',
+    configIdSource: envConfigId ? 'dabbir_environment' : 'dabbir_public_runtime',
     ready: Boolean(appId && appSecret && configId && encryptionSecret),
   };
 }
 
-let discoveredAppIdCache = null;
-let discoveredAppIdExpiresAt = 0;
-
-async function discoverAppIdFromExistingToken(config) {
-  if (config.appId) return config.appId;
-  if (discoveredAppIdCache && Date.now() < discoveredAppIdExpiresAt) return discoveredAppIdCache;
-  const token = legacyWhatsAppAccessToken();
-  if (!token) return '';
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/app`);
-    url.searchParams.set('fields', 'id');
-    url.searchParams.set('access_token', token);
-    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
-    const payload = await response.json().catch(() => ({}));
-    const id = String(payload?.id || '').trim();
-    if (!response.ok || !/^[0-9]{5,40}$/.test(id)) return '';
-    discoveredAppIdCache = id;
-    discoveredAppIdExpiresAt = Date.now() + 15 * 60 * 1000;
-    return id;
-  } catch {
-    return '';
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 export async function resolveEmbeddedPlatformConfig() {
-  const base = embeddedPlatformConfig();
-  if (base.appId) return base;
-  const appId = await discoverAppIdFromExistingToken(base);
-  return {
-    ...base,
-    appId,
-    appIdSource: appId ? 'existing_whatsapp_token' : null,
-    ready: Boolean(appId && base.appSecret && base.configId && base.encryptionSecret),
-  };
+  return embeddedPlatformConfig();
 }
 
 export async function ownerContext(req, businessId) {
@@ -202,6 +143,7 @@ export async function exchangeEmbeddedCode(config, code) {
       const error = new Error(String(payload?.error?.message || 'META_CODE_EXCHANGE_FAILED').slice(0, 300));
       error.status = 502;
       error.providerStatus = response.status;
+      error.providerCode = payload?.error?.code || null;
       throw error;
     }
     return {
