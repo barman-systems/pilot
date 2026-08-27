@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 function getBearerToken(req) {
   const auth = req.headers.authorization || req.headers.Authorization || '';
   const match = /^Bearer\s+(.+)$/i.exec(auth);
@@ -19,14 +17,29 @@ export default async function handler(req, res) {
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) return res.status(503).json({ error: 'supabase_not_configured' });
 
-  const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/dabbir_my_customer_no`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: '{}'
+    });
 
-  const { data, error } = await supabase.rpc('dabbir_my_customer_no');
-  if (error) return res.status(500).json({ error: 'account_number_lookup_failed' });
-  if (!data) return res.status(404).json({ error: 'dabbir_membership_not_found' });
+    if (response.status === 401 || response.status === 403) {
+      return res.status(401).json({ error: 'invalid_session' });
+    }
+    if (!response.ok) {
+      return res.status(500).json({ error: 'account_number_lookup_failed' });
+    }
 
-  return res.status(200).json({ customer_no: data });
+    const customerNo = await response.json();
+    if (!customerNo) return res.status(404).json({ error: 'dabbir_membership_not_found' });
+
+    return res.status(200).json({ customer_no: customerNo });
+  } catch {
+    return res.status(503).json({ error: 'account_number_service_unavailable' });
+  }
 }
