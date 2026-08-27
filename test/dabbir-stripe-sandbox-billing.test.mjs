@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import {
   DABBIR_OWNER_MONTHLY_AED,
   DABBIR_OWNER_PRICE_ID,
@@ -10,15 +9,15 @@ import {
   publicBillingState,
   requestOrigin,
   safeBusinessId,
-  verifyStripeSignature,
 } from '../api/_billing-core.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [core, checkout, portal, webhook, ui, shell, migration] = await Promise.all([
+const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration] = await Promise.all([
   read('api/_billing-core.js'),
   read('api/billing/checkout.js'),
   read('api/billing/portal.js'),
-  read('api/billing/webhook.js'),
+  read('supabase/functions/barman-stripe-checkout/index.ts'),
+  read('supabase/functions/barman-stripe-webhook/index.ts'),
   read('api/dabbir-billing-ui.js'),
   read('api/app-recovery.js'),
   read('supabase/migrations/20260827173500_dabbir_stripe_sandbox_billing_v1.sql'),
@@ -28,40 +27,41 @@ test('DABBIR owner plan is server-fixed to verified sandbox price and seven-day 
   assert.equal(DABBIR_OWNER_PRICE_ID, 'price_1U8yRWLYIkiZam7bHaP2NhtT');
   assert.equal(DABBIR_OWNER_MONTHLY_AED, 129);
   assert.equal(DABBIR_TRIAL_DAYS, 7);
-  assert.match(checkout, /line_items:\[\{price:DABBIR_OWNER_PRICE_ID,quantity:1\}\]/);
-  assert.match(checkout, /trial_period_days=DABBIR_TRIAL_DAYS/);
+  assert.match(edgeCheckout, /DABBIR_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT'/);
+  assert.match(edgeCheckout, /line_items\[0\]\[price\].*DABBIR_PRICE_ID/s);
+  assert.match(edgeCheckout, /trial_available===true.*trial_period_days.*'7'/s);
   assert.doesNotMatch(checkout, /body\?\.price|body\.price|price_id.*body/i);
-  assert.doesNotMatch(checkout, /automatic_tax/);
+  assert.doesNotMatch(edgeCheckout, /automatic_tax/);
 });
 
-test('sandbox key policy fails closed on live or malformed Stripe secrets', () => {
-  assert.match(core, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
-  assert.match(core, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
-  assert.match(checkout, /LIVE_CHECKOUT_REJECTED/);
-  assert.match(webhook, /event\.livemode.*LIVE_EVENT_REJECTED/s);
+test('Stripe execution is isolated in Supabase and DABBIR rejects live or malformed keys', () => {
+  assert.doesNotMatch(core, /process\.env\.STRIPE_SECRET_KEY|api\.stripe\.com/);
+  assert.match(core, /functions\/v1\/barman-stripe-checkout/);
+  assert.match(core, /x-dabbir-billing-bridge':'v1'/);
+  assert.match(edgeCheckout, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
+  assert.match(edgeCheckout, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
+  assert.match(edgeWebhook, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
+  assert.match(edgeWebhook, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
 });
 
-test('billing mutations are same-origin and owner-only', () => {
+test('billing mutations are same-origin, owner-only, and bridge calls are server-authenticated', () => {
   assert.match(checkout, /requireSameOrigin\(req\)/);
   assert.match(portal, /requireSameOrigin\(req\)/);
-  assert.match(core, /membership\.role\|\|' '\)\.toLowerCase\(\)!=='owner'|membership\.role\|\|''\)\.toLowerCase\(\)!=='owner'/);
+  assert.match(core, /membership\.role\|\|''\)\.toLowerCase\(\)!=='owner'/);
   assert.match(core, /OWNER_APPROVAL_REQUIRED/);
+  assert.match(edgeCheckout, /actual===`Bearer \$\{expected\}`/);
+  assert.match(edgeCheckout, /x-dabbir-billing-bridge.*==='v1'/);
   assert.match(ui, /function owner\(\).*membership\?\.role/s);
   assert.match(ui, /if\(!owner\(\)\)return/);
 });
 
-test('Stripe webhook requires a recent HMAC signature before parsing or persistence', () => {
-  const secret = 'whsec_test_secret';
-  const payload = Buffer.from('{"id":"evt_test","type":"noop","data":{"object":{}},"livemode":false}');
-  const timestamp = 2_000_000_000;
-  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${payload.toString('utf8')}`).digest('hex');
-  assert.equal(verifyStripeSignature(payload, `t=${timestamp},v1=${signature}`, secret, timestamp), true);
-  assert.throws(() => verifyStripeSignature(payload, `t=${timestamp},v1=${'0'.repeat(64)}`, secret, timestamp), /INVALID_WEBHOOK_SIGNATURE/);
-  assert.throws(() => verifyStripeSignature(payload, `t=${timestamp - 301},v1=${signature}`, secret, timestamp), /INVALID_WEBHOOK_TIMESTAMP/);
-  const verifyAt = webhook.indexOf('verifyStripeSignature');
-  const parseAt = webhook.indexOf('JSON.parse');
-  const persistAt = webhook.indexOf('processedEvent(event.id)');
-  assert.ok(verifyAt > 0 && parseAt > verifyAt && persistAt > parseAt);
+test('shared Stripe webhook verifies signature and timestamp before parsing or persistence', () => {
+  assert.match(edgeWebhook, /Math\.abs\(Date\.now\(\)\/1000-ts\)>300/);
+  assert.match(edgeWebhook, /crypto\.subtle\.sign\('HMAC'/);
+  const verifyAt = edgeWebhook.indexOf("if(!(await verify(raw,sig,secret)))");
+  const parseAt = edgeWebhook.indexOf('JSON.parse(raw)');
+  const classifyAt = edgeWebhook.indexOf('classification=await classifyDabbir(evt)');
+  assert.ok(verifyAt > 0 && parseAt > verifyAt && classifyAt > parseAt);
 });
 
 test('billing data is tenant-owner readable, FORCE RLS, and event ledger is server-only', () => {
@@ -75,14 +75,30 @@ test('billing data is tenant-owner readable, FORCE RLS, and event ledger is serv
   assert.match(migration, /revoke all on table public\.dabbir_stripe_events from public, anon, authenticated/i);
 });
 
-test('no card data is stored and subscription truth is webhook-driven', () => {
+test('subscription truth is DABBIR-metadata scoped and webhook-driven with no card storage', () => {
   assert.doesNotMatch(migration, /card_number|card_cvc|payment_method_details|client_secret/i);
-  assert.match(webhook, /checkout\.session\.completed/);
-  assert.match(webhook, /customer\.subscription\.updated/);
-  assert.match(webhook, /invoice\.paid/);
-  assert.match(webhook, /invoice\.payment_failed/);
-  assert.match(webhook, /on_conflict=business_id/);
-  assert.match(webhook, /on_conflict=stripe_event_id/);
+  assert.match(edgeWebhook, /isDabbirMetadata/);
+  assert.match(edgeWebhook, /checkout\.session\.completed/);
+  assert.match(edgeWebhook, /customer\.subscription\./);
+  assert.match(edgeWebhook, /invoice\.paid/);
+  assert.match(edgeWebhook, /invoice\.payment_failed/);
+  assert.match(edgeWebhook, /dabbir_stripe_events/);
+  assert.match(edgeWebhook, /onConflict:'business_id'/);
+  assert.match(edgeWebhook, /onConflict:'stripe_event_id'/);
+});
+
+test('legacy ZAJEL Stripe behavior stays outside the DABBIR bridge branch', () => {
+  const bridgeAt=edgeCheckout.indexOf("if(req.headers.get('x-dabbir-billing-bridge')==='v1')");
+  const zajelAt=edgeCheckout.indexOf("p_project_key:'ZAJEL'");
+  assert.ok(bridgeAt>0&&zajelAt>bridgeAt);
+  assert.match(edgeCheckout, /PAYMENT_LIVE_NOT_APPROVED/);
+  assert.match(edgeCheckout, /barman_get_sellable_product/);
+  assert.match(edgeWebhook, /barman_record_stripe_checkout/);
+  assert.match(edgeWebhook, /barman_update_stripe_payment_intent/);
+});
+
+test('Vercel has no competing billing webhook handler', async () => {
+  await assert.rejects(access(new URL('../api/billing/webhook.js', import.meta.url)));
 });
 
 test('public billing state and identifiers stay deterministic', () => {
