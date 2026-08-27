@@ -1,7 +1,7 @@
 {
   "version": 2,
   "authority": "DABBIR",
-  "runtime": "api/pilot-runtime.js",
+  "runtime": "api/dabbir-runtime.js",
   "environment": "PRODUCTION_DABBIR",
   "operational_mode": "AUTHENTICATED_WEB_RUNTIME",
   "ai": {
