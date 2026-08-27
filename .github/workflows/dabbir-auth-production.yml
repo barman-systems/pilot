@@ -17,10 +17,18 @@ jobs:
     timeout-minutes: 5
     env:
       PROJECT_REF: spohjzrsymsmzsseygtw
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
+      - name: Require canonical DABBIR production origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
+            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
+            exit 1
+          fi
       - name: Resolve management credential
         id: credential
         shell: bash
