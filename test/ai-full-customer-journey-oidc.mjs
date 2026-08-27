@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
-const ORIGIN = String(process.env.PRODUCTION_ORIGIN || 'https://pilot-taupe.vercel.app').replace(/\/$/, '');
+const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
+if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
 const PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || 'spohjzrsymsmzsseygtw').trim();
 const QA_CONTROL_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-suite-runner`;
 const OIDC_AUDIENCE = 'dabbir-ai-qa';
