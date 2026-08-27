@@ -31,7 +31,7 @@ test('DABBIR signup metadata provisions a customer number without making signup 
   assert.match(sql, /PROVISIONING_DEFERRED/);
 });
 
-test('customer-number endpoint returns only the authenticated user account number', async t => {
+test('customer-number endpoint returns only the authenticated active DABBIR user account number', async t => {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
 
@@ -41,6 +41,10 @@ test('customer-number endpoint returns only the authenticated user account numbe
     calls.push(String(url));
     if (String(url).includes('/auth/v1/user')) {
       return new Response(JSON.stringify({ id: userId, email: 'owner@example.com', aud: 'authenticated' }), { status: 200 });
+    }
+    if (String(url).includes('/rest/v1/account_access_state')) {
+      assert.match(String(url), new RegExp(`user_id=eq\\.${userId}`));
+      return new Response(JSON.stringify([]), { status: 200 });
     }
     if (String(url).includes('/rest/v1/dabbir_user_accounts')) {
       assert.match(String(url), new RegExp(`user_id=eq\\.${userId}`));
@@ -59,7 +63,7 @@ test('customer-number endpoint returns only the authenticated user account numbe
     customer_no: 'DAB-100001',
     created_at: '2026-08-27T00:00:00Z',
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
 });
 
 test('customer-number UI is injected into the authoritative recovery shell', async () => {
