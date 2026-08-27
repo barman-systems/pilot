@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/dabbir-auth-production.yml'
+      - 'scripts/dabbir-production-origin-gate.mjs'
+      - 'config/barman-integration-contract.json'
       - 'api/auth/**'
   workflow_dispatch:
 
@@ -21,6 +23,11 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       - name: Resolve management credential
         id: credential
         shell: bash
@@ -65,17 +72,12 @@ jobs:
           console.log('Supabase leaked password protection verified.');
           NODE
 
-      - name: Require canonical DABBIR production origin
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
-            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
-            exit 1
-          fi
+      - name: Classify canonical DABBIR production origin
+        id: launch-gate
+        run: node scripts/dabbir-production-origin-gate.mjs
 
       - name: Enforce hosted Supabase Auth URLs
-        if: steps.credential.outputs.available == 'true'
+        if: steps.credential.outputs.available == 'true' && steps.launch-gate.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
