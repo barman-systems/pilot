@@ -7,7 +7,7 @@ const QA_CONTROL_URL=`https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-
 const OIDC_AUDIENCE='dabbir-ai-qa';
 const REPORT_PATH=process.env.CAPACITY_REPORT_PATH||'dabbir-capacity-report.json';
 const RUN_ID=`capacity-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
-const RUN_LABEL=`DABBIR AI QA CAPACITY ${RUN_ID}`;
+const RUN_LABEL=`DABBIR AI QA ${RUN_ID}`;
 const CUSTOMER_COUNT=Math.min(1000,Math.max(100,Number(process.env.CUSTOMER_COUNT||1000)));
 const RUNTIME_STAGES=(process.env.RUNTIME_STAGES||'50,100,250,500,750,1000').split(',').map(Number).filter(Number.isFinite);
 const AI_STAGES=(process.env.AI_STAGES||'1,2,5,10,20').split(',').map(Number).filter(Number.isFinite);
@@ -168,7 +168,6 @@ async function run(){
   }
 
   const infraMax=report.capacity.infrastructure_concurrency;
-  const aiMax=report.capacity.ai_concurrency;
   if(infraMax>=1000)report.notes.push('Infrastructure passed the configured 1000-concurrent-client ceiling; true breaking point is above this test ceiling.');
   else report.notes.push(`Infrastructure first failed after ${infraMax} concurrent clients under current thresholds.`);
   report.notes.push('AI concurrency is reported separately because the current free-tier model/provider rate limit is an external bottleneck and should not be treated as core DABBIR infrastructure capacity.');
