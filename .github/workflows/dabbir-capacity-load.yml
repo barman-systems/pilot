@@ -1,0 +1,74 @@
+name: DABBIR 1000 Customer Capacity
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'test/dabbir-capacity-load.mjs'
+      - '.github/workflows/dabbir-capacity-load.yml'
+      - 'api/dabbir-runtime*.js'
+      - 'api/start-conversation.js'
+      - 'api/chat-customer.js'
+      - 'api/chat-control.js'
+      - 'api/chat-send.js'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dabbir-production-capacity
+  cancel-in-progress: true
+
+jobs:
+  capacity:
+    name: 1000 customers + staged concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      CUSTOMER_COUNT: '1000'
+      RUNTIME_STAGES: '50,100,250,500,750,1000'
+      AI_STAGES: '1,2,5,10,20'
+      CAPACITY_REPORT_PATH: dabbir-capacity-report.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Run isolated production capacity test
+        run: node test/dabbir-capacity-load.mjs
+      - name: Publish capacity summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f dabbir-capacity-report.json ]; then
+            echo '## DABBIR Production Capacity' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**QA customers created:** $(jq -r '.customer_count' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Infrastructure concurrency passed:** $(jq -r '.capacity.infrastructure_concurrency' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**AI concurrency passed:** $(jq -r '.capacity.ai_concurrency' dabbir-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '### Runtime stages' >> "$GITHUB_STEP_SUMMARY"
+            echo '| Concurrent | Error rate | p95 ms | p99 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.runtime_stages[] | "| \(.concurrency) | \(.error_rate) | \(.p95_ms) | \(.p99_ms) | \(.pass) |"' dabbir-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '### AI stages' >> "$GITHUB_STEP_SUMMARY"
+            echo '| Concurrent | Error rate | AI reply rate | p95 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.ai_stages[] | "| \(.concurrency) | \(.error_rate) | \(.ai_reply_rate // 0) | \(.p95_ms) | \(.pass) |"' dabbir-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Capacity report missing.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-capacity-evidence
+          path: dabbir-capacity-report.json
+          if-no-files-found: warn
+          retention-days: 14
