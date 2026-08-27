@@ -60,10 +60,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
     steps:
+      - name: Require canonical DABBIR production origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${PRODUCTION_ORIGIN:-}" =~ ^https://[^/]+$ ]]; then
+            echo 'DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin.'
+            exit 1
+          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -104,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
@@ -146,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PRODUCTION_ORIGIN: https://pilot-taupe.vercel.app
+      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
