@@ -1,0 +1,61 @@
+name: DABBIR Autonomous Source Control
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-autonomous-source-control.yml'
+      - 'scripts/dabbir-autonomous-source-control.mjs'
+      - 'test/dabbir-autonomous-source-control.test.mjs'
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+  id-token: write
+
+concurrency:
+  group: dabbir-autonomous-source-control
+  cancel-in-progress: false
+
+jobs:
+  evolve:
+    name: One governed DABBIR implementation unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Acquire short-lived GitHub OIDC identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          OIDC_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=barman-dabbir-source-control"
+          TOKEN="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${OIDC_URL}" | jq -r '.value')"
+          test -n "${TOKEN}"
+          test "${TOKEN}" != "null"
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
+
+      - name: Execute one DABBIR evolution source-control cycle
+        env:
+          DABBIR_GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          DABBIR_SOURCE_CONTROL_BRIDGE_URL: https://barman-browser-worker.vercel.app/api/dabbir-source-control-bridge
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/dabbir-autonomous-source-control.mjs
