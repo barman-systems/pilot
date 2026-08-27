@@ -1,5 +1,5 @@
 export const DABBIR_STRIPE_SANDBOX_CONTRACT = Object.freeze({
-  version: 'sandbox-v2',
+  version: 'sandbox-v2.1',
   mode: 'sandbox',
   price_id: 'price_1U8yRWLYIkiZam7bHaP2NhtT',
   monthly_aed: 129,
@@ -14,6 +14,7 @@ export const DABBIR_STRIPE_SANDBOX_CONTRACT = Object.freeze({
   webhook_tolerance_seconds: 300,
   webhook_truth_source: true,
   force_rls: true,
+  stripe_event_ledger_client_policy: 'explicit_deny',
   card_data_stored_in_dabbir: false,
   vercel_stripe_secret_required: false,
   live_billing_enabled: false,
