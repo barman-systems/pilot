@@ -13,7 +13,7 @@ const script=String.raw`(()=>{
   const CACHE_MS=30000;
 
   const style=document.createElement('style');
-  style.dataset.dabbirCustomerActivation='v1';
+  style.dataset.dabbirCustomerActivation='v2';
   style.textContent=[
     '.dabbirActivation{margin:0 0 14px;border:1px solid #334061;background:linear-gradient(145deg,#12182b 0%,#101526 54%,#111827 100%);border-radius:22px;padding:16px;box-shadow:0 18px 55px #0005}',
     '.daHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.daHead h2{margin:0;font-size:16px;line-height:1.35}.daHead p{margin:5px 0 0;color:#a9b4c8;font-size:10px;line-height:1.65}',
@@ -25,18 +25,19 @@ const script=String.raw`(()=>{
     '.daPrimary{border:0;color:white;background:linear-gradient(135deg,#7c3aed,#2563eb)}.daSecondary{border:1px solid #34415f;background:#151d2f;color:#e9eef8}',
     '.daProofGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.daProofItem{border:1px solid #26324e;background:#11192a;border-radius:12px;padding:9px}.daProofItem strong{display:block;font-size:16px}.daProofItem span{display:block;margin-top:3px;color:#8f9db2;font-size:7px}',
     '.daSteps{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.daStep{display:inline-flex;align-items:center;gap:5px;border:1px solid #303c5c;background:#121a2b;border-radius:999px;padding:6px 8px;font-size:8px;color:#aab6ca}.daStep.done{border-color:#285d4a;background:#10261f;color:#8ce6a1}.daStep:before{content:"•";font-size:14px;line-height:0}.daStep.done:before{content:"✓";font-size:9px}',
+    '.daIntentWrap{margin-top:10px;border-top:1px solid #26324a;padding-top:10px}.daIntentTitle{font-size:9px;font-weight:900;color:#cbd5e7;margin-bottom:7px}.daIntentGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.daIntent{border:1px solid #34415f;background:#121a2c;color:#e9eef8;border-radius:12px;min-height:42px;padding:8px;font-size:8px;font-weight:850;text-align:center}.daIntent:hover,.daIntent:focus-visible{border-color:#5472b4;background:#17233b}',
     '.daLoading{padding:12px;color:#9aa8bd;font-size:9px}',
-    '@media(max-width:700px){.dabbirActivation{padding:13px;border-radius:18px;margin-bottom:10px}.daHead h2{font-size:15px}.daScore{min-width:58px;padding:8px}.daGrid{grid-template-columns:1fr}.daProofGrid{gap:5px}.daProofItem{padding:8px}.daActions button{flex:1;min-width:120px;min-height:44px}.daSteps{gap:5px}}',
+    '@media(max-width:700px){.dabbirActivation{padding:13px;border-radius:18px;margin-bottom:10px}.daHead h2{font-size:15px}.daScore{min-width:58px;padding:8px}.daGrid{grid-template-columns:1fr}.daProofGrid{gap:5px}.daProofItem{padding:8px}.daActions button{flex:1;min-width:120px;min-height:44px}.daSteps{gap:5px}.daIntentGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.daIntent{min-height:46px;font-size:9px}}',
     '@media(prefers-reduced-motion:reduce){.daProgress i{transition:none}}'
   ].join('');
   document.head.append(style);
 
   function copy(){return ar()?{
-    title:'جهّز دَبِّر ليعمل عنك',readyTitle:'دَبِّر جاهز للعمل',desc:'دقيقة واحدة هنا تختصر عليك البحث داخل الإعدادات. نعرض فقط ما تم التحقق منه فعليًا.',readyDesc:'الأساسيات التشغيلية جاهزة. راقب ما أنجزه دَبِّر وما يحتاج قرارك فقط.',score:'الجاهزية',next:'الخطوة الأفضل الآن',proof:'دليل القيمة',
-    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل'
+    title:'جهّز دَبِّر ليعمل عنك',readyTitle:'دَبِّر جاهز للعمل',desc:'دقيقة واحدة هنا تختصر عليك البحث داخل الإعدادات. نعرض فقط ما تم التحقق منه فعليًا.',readyDesc:'الأساسيات التشغيلية جاهزة. راقب ما أنجزه دَبِّر وما يحتاج قرارك فقط.',score:'الجاهزية',next:'الخطوة الأفضل الآن',proof:'دليل القيمة',intentTitle:'ماذا تريد من دَبِّر الآن؟',
+    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
   }:{
-    title:'Get DABBIR working for you',readyTitle:'DABBIR is ready to operate',desc:'One minute here saves hunting through settings. Only verified setup state is shown.',readyDesc:'Core operations are ready. Focus on what DABBIR completed and what actually needs your decision.',score:'Readiness',next:'Best next step',proof:'Proof of value',
-    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete'
+    title:'Get DABBIR working for you',readyTitle:'DABBIR is ready to operate',desc:'One minute here saves hunting through settings. Only verified setup state is shown.',readyDesc:'Core operations are ready. Focus on what DABBIR completed and what actually needs your decision.',score:'Readiness',next:'Best next step',proof:'Proof of value',intentTitle:'What do you want DABBIR to do now?',
+    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
   }}
 
   function profileReady(){
@@ -83,6 +84,17 @@ const script=String.raw`(()=>{
     return {title:t.priorities,body:t.readyDesc,action:t.priorities,screen:'dashboard',target:'#dabbirActionCenter'};
   }
 
+  function intents(){
+    const t=copy();
+    const type=String(workspace?.business?.business_type||'other').toLowerCase();
+    const common=[{label:t.reply,screen:'conversations'},{label:t.follow,screen:'tasks'}];
+    if(type==='store')return [...common,{label:t.operations,screen:'operations'},{label:t.customerRecords,screen:'customers'}];
+    if(type==='clinic'||type==='salon'||type==='services')return [...common,{label:t.appointments,screen:'appointments'},{label:t.customerRecords,screen:'customers'}];
+    if(type==='real_estate')return [...common,{label:t.viewings,screen:'appointments'},{label:t.customerRecords,screen:'customers'}];
+    if(type==='creator')return [...common,{label:t.schedule,screen:'appointments'},{label:t.customerRecords,screen:'customers'}];
+    return [...common,{label:t.customerRecords,screen:'customers'},{label:t.settings,screen:'settings'}];
+  }
+
   function render(){
     const panel=ensure();if(!panel||!workspace?.business)return;
     const t=copy();
@@ -97,9 +109,11 @@ const script=String.raw`(()=>{
     const aiReplies=exactMetric('ai_messages');
     const metric=(value,label)=>'<div class="daProofItem"><strong>'+esc(value==null?t.unverified:value)+'</strong><span>'+esc(label)+'</span></div>';
     const step=(label,value)=>'<span class="daStep '+(value?'done':'')+'">'+esc(label)+'</span>';
-    panel.innerHTML='<div class="daHead"><div><h2>'+esc(ready?t.readyTitle:t.title)+'</h2><p>'+esc(ready?t.readyDesc:t.desc)+'</p></div><div class="daScore"><strong>'+score+'%</strong><span>'+esc(t.score)+'</span></div></div><div class="daProgress" aria-label="'+esc(t.score)+' '+score+'%"><i style="width:'+score+'%"></i></div><div class="daGrid"><div class="daNext"><span class="daLabel">'+esc(t.next)+'</span><b>'+esc(next.title)+'</b><p>'+esc(next.body)+'</p><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(next.action)+'</button><button type="button" class="daSecondary" id="daPriorities">'+esc(t.priorities)+'</button></div><div class="daSteps">'+step(t.profile,states[0])+step(t.channel,states[1])+step(t.ai,states[2])+'</div></div><div class="daProof"><span class="daLabel">'+esc(t.proof)+'</span><div class="daProofGrid">'+metric(customers,t.customers)+metric(chats,t.chats)+metric(aiReplies,t.aiReplies)+'</div></div></div>';
+    const intentButtons=intents().map(item=>'<button type="button" class="daIntent" data-da-screen="'+esc(item.screen)+'">'+esc(item.label)+'</button>').join('');
+    panel.innerHTML='<div class="daHead"><div><h2>'+esc(ready?t.readyTitle:t.title)+'</h2><p>'+esc(ready?t.readyDesc:t.desc)+'</p></div><div class="daScore"><strong>'+score+'%</strong><span>'+esc(t.score)+'</span></div></div><div class="daProgress" aria-label="'+esc(t.score)+' '+score+'%"><i style="width:'+score+'%"></i></div><div class="daGrid"><div class="daNext"><span class="daLabel">'+esc(t.next)+'</span><b>'+esc(next.title)+'</b><p>'+esc(next.body)+'</p><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(next.action)+'</button><button type="button" class="daSecondary" id="daPriorities">'+esc(t.priorities)+'</button></div><div class="daSteps">'+step(t.profile,states[0])+step(t.channel,states[1])+step(t.ai,states[2])+'</div></div><div class="daProof"><span class="daLabel">'+esc(t.proof)+'</span><div class="daProofGrid">'+metric(customers,t.customers)+metric(chats,t.chats)+metric(aiReplies,t.aiReplies)+'</div></div></div><div class="daIntentWrap"><div class="daIntentTitle">'+esc(t.intentTitle)+'</div><div class="daIntentGrid">'+intentButtons+'</div></div>';
     const nextButton=q('#daNextAction');if(nextButton)nextButton.onclick=()=>{openScreen(next.screen);if(next.target)setTimeout(()=>q(next.target)?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
     const priorities=q('#daPriorities');if(priorities)priorities.onclick=()=>{openScreen('dashboard');setTimeout(()=>q('#dabbirActionCenter')?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
+    panel.querySelectorAll('[data-da-screen]').forEach(button=>button.onclick=()=>openScreen(button.dataset.daScreen));
   }
 
   async function fetchJson(url){
@@ -135,7 +149,7 @@ const script=String.raw`(()=>{
     setLanguage=function(next){const result=base(next);setTimeout(render,0);return result};
   }
   setTimeout(()=>{render();load(false)},500);
-  window.__dabbirCustomerActivation={version:'customer-activation-v1',refresh:()=>load(true)};
+  window.__dabbirCustomerActivation={version:'customer-activation-v2',refresh:()=>load(true)};
 })();`;
 
 export default function handler(req,res){
@@ -144,6 +158,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-customer-activation','v1');
+  res.setHeader('x-dabbir-customer-activation','v2');
   return res.end(script);
 }
