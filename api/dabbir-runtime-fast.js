@@ -97,14 +97,30 @@ async function loadMessages(accessToken, businessId, conversationId) {
   );
 }
 
+function buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, duration, summaryOnly }) {
+  return {
+    state: 'VERIFIED_TENANT_READ',
+    source: 'SUPABASE_RLS_TENANT_DATA',
+    read_at: new Date().toISOString(),
+    business_updated_at: business?.updated_at || null,
+    runtime_ms: duration,
+    summary_only: summaryOnly,
+    counts: {
+      conversations: Array.isArray(conversations) ? conversations.length : 0,
+      customers: Array.isArray(customers) ? customers.length : 0,
+      appointments: Array.isArray(appointments) ? appointments.length : 0,
+      handoffs: Array.isArray(handoffs) ? handoffs.length : 0,
+      followups: Array.isArray(followups) ? followups.length : 0,
+      loaded_messages: Array.isArray(messages) ? messages.length : 0,
+    },
+  };
+}
+
 async function handleFastGet(req, res) {
   const started = Date.now();
   const accessToken = accessTokenFromRequest(req);
   if (!accessToken) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
-  // The membership read goes through Supabase Data API, which validates the
-  // same JWT before applying RLS. Reuse that successful validation instead of
-  // sending every hot-path request through /auth/v1/user as well.
   let memberships;
   try {
     memberships = await getBusinessMemberships(accessToken);
@@ -117,8 +133,6 @@ async function handleFastGet(req, res) {
   }
 
   let user = userClaimsFromValidatedAccessToken(accessToken);
-  // Compatibility fallback for an unexpected/legacy token shape. Normal
-  // Supabase Auth access tokens stay on the local claims path above.
   if (!user) user = await getVerifiedUser(accessToken).catch(() => null);
   if (!user) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
@@ -137,6 +151,12 @@ async function handleFastGet(req, res) {
       needs_onboarding: memberships.length === 0,
       memberships,
       operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
+      truth_mode: 'AUTH_VERIFIED_NO_TENANT',
+      data_truth: {
+        state: 'NO_TENANT_SELECTED',
+        source: 'SUPABASE_AUTH_AND_MEMBERSHIP',
+        read_at: new Date().toISOString(),
+      },
       whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
       ai: {
         provider: aiConfig.provider,
@@ -226,14 +246,17 @@ async function handleFastGet(req, res) {
   }
 
   const duration = Date.now() - started;
+  const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v4');
+  res.setHeader('x-dabbir-runtime', 'fast-v5-truth');
   return json(res, 200, {
     ok: true,
     authenticated: true,
     user,
     needs_onboarding: false,
     operational_mode: 'AUTHENTICATED_WEB_RUNTIME',
+    truth_mode: 'VERIFIED_TENANT_READS',
+    data_truth: dataTruth,
     membership,
     memberships,
     business,
@@ -266,8 +289,10 @@ export default async function handler(req, res) {
       const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(status) ? status : 500;
       return json(res, safeStatus, {
         ok: false,
+        state: 'FAILED_OR_UNVERIFIED',
         error: String(error?.message || 'FAST_RUNTIME_FAILED').slice(0, 120),
         detail: error?.detail || undefined,
+        truth: { state: 'UNVERIFIED' },
       });
     }
   }
