@@ -54,7 +54,7 @@ test('fast runtime validates membership before trusting decoded claims and retai
   assert.ok(claimsRead > membershipLookup, 'claims may only be trusted after Supabase Data API accepts the token');
   assert.ok(fallback > claimsRead, 'legacy/unexpected token shapes must retain server verification fallback');
   assert.match(runtimeSource, /AUTH_VERIFICATION_UNAVAILABLE/);
-  assert.match(runtimeSource, /x-dabbir-runtime', 'fast-v4'/);
+  assert.match(runtimeSource, /x-dabbir-runtime', 'fast-v5-truth'/);
 });
 
 test('fast runtime parses query parameters with WHATWG URL instead of legacy req.query', () => {
