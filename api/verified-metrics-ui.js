@@ -1,6 +1,6 @@
 const script=String.raw`(()=>{
   if(window.__dabbirVerifiedMetricsUi)return;
-  const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
+  const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
   const unknown='—';
 
@@ -81,7 +81,7 @@ const script=String.raw`(()=>{
 
   setTimeout(applyAll,0);
   setTimeout(applyAll,400);
-  window.__dabbirVerifiedMetricsUi={apply:applyAll,version:'exact-metrics-v1'};
+  window.__dabbirVerifiedMetricsUi={apply:applyAll,version:'exact-metrics-v1-final',source:'SUPABASE_POSTGREST_COUNT_EXACT'};
 })();`;
 
 export default function handler(req,res){
@@ -89,6 +89,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-verified-metrics-ui','v1');
+  res.setHeader('x-dabbir-verified-metrics-ui','v1-final');
   return res.status(200).send(script);
 }
