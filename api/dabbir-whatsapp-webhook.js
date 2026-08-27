@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { classifyClinicMessage, classifyCelebrityMessage } from './pilot-runtime.js';
+import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 
 export const config = {
