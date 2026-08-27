@@ -20,11 +20,10 @@ jobs:
           package-manager-cache: false
       - name: Generate npm lockfile deterministically
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Emit compressed lockfile evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo 'DABBIR_LOCKFILE_GZIP_BASE64_START'
-          gzip -c package-lock.json | base64 -w0
-          echo
-          echo 'DABBIR_LOCKFILE_GZIP_BASE64_END'
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
