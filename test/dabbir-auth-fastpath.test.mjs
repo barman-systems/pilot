@@ -56,3 +56,12 @@ test('fast runtime validates membership before trusting decoded claims and retai
   assert.match(runtimeSource, /AUTH_VERIFICATION_UNAVAILABLE/);
   assert.match(runtimeSource, /x-dabbir-runtime', 'fast-v4'/);
 });
+
+test('fast runtime parses query parameters with WHATWG URL instead of legacy req.query', () => {
+  assert.match(runtimeSource, /new URL\(String\(req\?\.url \|\| '\/'\), 'https:\/\/dabbir\.invalid'\)/);
+  assert.match(runtimeSource, /url\.searchParams\.getAll\(name\)/);
+  assert.doesNotMatch(runtimeSource, /req\.query/);
+  assert.match(runtimeSource, /singleQueryValue\(req, 'business_id'\)/);
+  assert.match(runtimeSource, /singleQueryValue\(req, 'conversation_id'\)/);
+  assert.match(runtimeSource, /singleQueryValue\(req, 'summary'\)/);
+});
