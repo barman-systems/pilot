@@ -1,13 +1,6 @@
--- DABBIR business onboarding v12
--- Allows the designated owner to read the business row during first-owner bootstrap
--- while preserving tenant RLS, and keeps external channels unconfigured until real authorization.
-
-drop policy if exists dabbir_businesses_owner_select on public.dabbir_businesses;
-create policy dabbir_businesses_owner_select
-on public.dabbir_businesses
-for select
-to authenticated
-using ((select auth.uid()) is not null and owner_id = (select auth.uid()));
+-- DABBIR business slug source alignment v1
+-- Production already creates dabbir-* slugs; codify that behavior in migrations so
+-- a future replay cannot resurrect the retired PILOT prefix.
 
 create or replace function public.dabbir_create_business(
   p_name text,
