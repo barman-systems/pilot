@@ -1,5 +1,6 @@
 import ownerActionCenter from './owner-action-center.js';
 import { accessTokenFromRequest, json, supabaseRest } from './_auth-core.js';
+import { cashGuardianActionCenterItem, loadCashGuardianSnapshot } from './_cash-guardian.js';
 import { applyOwnerAwayEscalation, awayBrief, deriveOwnerAwayState } from './_owner-away-policy.js';
 
 async function readJson(response){
@@ -40,6 +41,54 @@ function capturedResponse(){
 
 function forwardHeaders(res,headers){
   for(const [name,value] of headers.entries())res.setHeader(name,value);
+}
+
+function augmentWithCashGuardian(payload,snapshot){
+  if(!payload?.ok||!Array.isArray(payload.items))return payload;
+  if(!snapshot){
+    return {
+      ...payload,
+      cash_guardian:{available:false,status:'UNAVAILABLE'},
+      truth:{...(payload.truth||{}),cash_guardian_evidence_only:true,cash_guardian_money_movement:false},
+    };
+  }
+
+  const item=cashGuardianActionCenterItem(snapshot);
+  if(!item){
+    return {
+      ...payload,
+      cash_guardian:{available:true,status:snapshot.status,sufficient_data:snapshot.sufficient_data},
+      truth:{...(payload.truth||{}),cash_guardian_evidence_only:true,cash_guardian_money_movement:false},
+    };
+  }
+
+  const items=[...payload.items,item]
+    .sort((a,b)=>(Number(b.priority)||0)-(Number(a.priority)||0)||String(a.due_at||'').localeCompare(String(b.due_at||'')))
+    .slice(0,3);
+  const previousMetrics=payload.metrics||{};
+  const cashUrgent=item.severity==='critical'?1:0;
+  const cashWarning=item.severity==='warning'?1:0;
+  const arPrefix=`حارس السيولة: ${item.title_ar}. `;
+  const enPrefix=`Cash Guardian: ${item.title_en}. `;
+
+  return {
+    ...payload,
+    status:(Number(previousMetrics.urgent)||0)+cashUrgent>0?'needs_attention':(Number(previousMetrics.warning)||0)+cashWarning>0?'watch':payload.status,
+    metrics:{
+      ...previousMetrics,
+      urgent:(Number(previousMetrics.urgent)||0)+cashUrgent,
+      warning:(Number(previousMetrics.warning)||0)+cashWarning,
+      total:(Number(previousMetrics.total)||0)+1,
+      cash_guardian_exceptions:1,
+    },
+    brief:{
+      ar:arPrefix+String(payload.brief?.ar||''),
+      en:enPrefix+String(payload.brief?.en||''),
+    },
+    items,
+    cash_guardian:{available:true,status:snapshot.status,sufficient_data:snapshot.sufficient_data},
+    truth:{...(payload.truth||{}),cash_guardian_evidence_only:true,cash_guardian_money_movement:false},
+  };
 }
 
 function applyPolicy(payload,away){
@@ -84,12 +133,19 @@ export default async function handler(req,res){
   try{payload=JSON.parse(capture.getBody()||'null')}catch{return res.end(capture.getBody())}
   if(res.statusCode!==200||!payload?.ok)return res.end(JSON.stringify(payload));
 
-  const away=await loadAwayMode(accessTokenFromRequest(req),payload.business_id);
-  const next=applyPolicy(payload,away);
+  const token=accessTokenFromRequest(req);
+  let cashSnapshot=null;
+  if(payload.role==='owner'){
+    cashSnapshot=await loadCashGuardianSnapshot({token,businessId:payload.business_id}).catch(()=>null);
+  }
+  const cashAugmented=augmentWithCashGuardian(payload,cashSnapshot);
+  const away=await loadAwayMode(token,payload.business_id);
+  const next=applyPolicy(cashAugmented,away);
   res.setHeader('content-type','application/json; charset=utf-8');
   res.setHeader('cache-control','no-store');
+  res.setHeader('x-dabbir-cash-guardian',cashSnapshot?cashSnapshot.status.toLowerCase():'unavailable');
   res.setHeader('x-dabbir-owner-away-policy',away.active?'active':'inactive');
   return res.end(JSON.stringify(next));
 }
 
-export { applyPolicy };
+export { applyPolicy, augmentWithCashGuardian };
