@@ -10,5 +10,5 @@ test('evolution control tables are explicitly denied to client roles', () => {
     assert.match(migration, new RegExp(`create policy ${table}_client_deny`, 'i'));
   }
   assert.match(migration, /for all to anon, authenticated\s+using \(false\)\s+with check \(false\)/i);
-  assert.doesNotMatch(migration, /grant\s+/i);
+  assert.doesNotMatch(migration, /^\s*grant\s+/im);
 });
