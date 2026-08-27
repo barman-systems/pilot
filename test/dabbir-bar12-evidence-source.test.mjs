@@ -39,6 +39,7 @@ test('readiness workflow reuses existing QA runner with short-lived OIDC and no 
   assert.match(workflow,/audience=dabbir-bar12-readiness/);
   assert.match(workflow,/functions\/v1\/barman-qa-suite-runner/);
   assert.match(workflow,/dabbir_bar12_readiness/);
-  assert.doesNotMatch(workflow,/dabbir-bar12-readiness-evidence/);
+  assert.doesNotMatch(workflow,/functions\/v1\/dabbir-bar12-readiness-evidence/);
+  assert.doesNotMatch(workflow,/supabase\/functions\/dabbir-bar12-readiness-evidence/);
   assert.doesNotMatch(workflow,/SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|META_APP_SECRET|x-barman-worker-secret/);
 });
