@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "app": "DABBIR | دبّر",
+  "package_name": "com.barmansystems.dabbir",
+  "status": "CANDIDATE_REQUIRES_FINAL_PLAY_CONSOLE_RECONCILIATION",
+  "generated_from": [
+    "mobile account authentication flow",
+    "DABBIR runtime/business data APIs",
+    "mobile dependency inventory"
+  ],
+  "security_practices": {
+    "data_encrypted_in_transit": true,
+    "account_deletion_in_app": true,
+    "account_deletion_external_path": "/delete-account",
+    "external_payment_cta_for_digital_subscription": false
+  },
+  "known_data_types": [
+    {
+      "play_category": "Personal info",
+      "play_data_type": "Email address",
+      "collected": true,
+      "required": true,
+      "shared": false,
+      "purposes": ["App functionality", "Account management"],
+      "deletion_supported": true,
+      "evidence": "Email/password authentication is exposed in the native client."
+    },
+    {
+      "play_category": "Personal info",
+      "play_data_type": "User IDs",
+      "collected": true,
+      "required": true,
+      "shared": false,
+      "purposes": ["App functionality", "Account management", "Fraud prevention/security/compliance"],
+      "deletion_supported": true,
+      "evidence": "DABBIR binds sessions, businesses, account deletion, and store entitlements to the authenticated user UUID."
+    }
+  ],
+  "conditional_data_types_to_reconcile_before_production": [
+    {
+      "play_category": "Messages",
+      "play_data_type": "Other in-app messages",
+      "reason": "DABBIR business/WhatsApp workflows may process message content through live backend integrations. Confirm the exact production connector behavior and whether data is collected/shared under Google Play definitions."
+    },
+    {
+      "play_category": "App activity",
+      "play_data_type": "App interactions",
+      "reason": "Confirm whether production observability or analytics records user interaction events beyond operational API requests."
+    },
+    {
+      "play_category": "App info and performance",
+      "play_data_type": "Crash logs / Diagnostics",
+      "reason": "Declare if Sentry or another production crash/diagnostics SDK is enabled before release."
+    },
+    {
+      "play_category": "Device or other IDs",
+      "play_data_type": "Device or other IDs",
+      "reason": "Reconcile identifiers transmitted by Google Play Billing, push notification, analytics, or other SDKs present in the final AAB."
+    }
+  ],
+  "mobile_sdk_inventory": [
+    "expo",
+    "expo-build-properties",
+    "expo-iap",
+    "expo-localization",
+    "expo-secure-store",
+    "expo-status-bar",
+    "react-native-safe-area-context"
+  ],
+  "final_binary_reconciliation_required": true,
+  "play_console_form_submission_required": true
+}
