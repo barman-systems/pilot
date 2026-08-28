@@ -8,7 +8,7 @@ import {
   unsubscribeWaba,
 } from './_whatsapp-embedded-core.js';
 
-function verifiedDeletion(rows, businessId) {
+export function verifiedDeletion(rows, businessId) {
   return Array.isArray(rows)
     && rows.length === 1
     && rows[0]
