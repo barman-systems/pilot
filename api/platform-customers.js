@@ -46,9 +46,11 @@ async function adminContext(req,res){
   const rows=await response.json().catch(()=>[]);
   const admin=Array.isArray(rows)?rows[0]:null;
   if(!admin?.active){json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
-  const key=serviceKey();
-  if(!key){json(res,503,{ok:false,error:'SERVER_ADMIN_NOT_CONFIGURED'});return null}
-  return {user,role:admin.role,key};
+  return {user,role:admin.role,key:serviceKey()};
+}
+
+function adminServiceUnavailable(res){
+  return json(res,503,{ok:false,error:'SERVER_ADMIN_NOT_CONFIGURED'});
 }
 
 function rpcError(error){
@@ -69,17 +71,23 @@ function rpcError(error){
 
 export default async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
-  if(req.method==='GET'){
-    const action=String(singleQueryValue(req,'action')||'capability').trim();
-    if(action==='capability'&&!serviceKey())return json(res,200,{ok:true,allowed:false,reason:'SERVER_ADMIN_NOT_CONFIGURED'});
-  }
   const context=await adminContext(req,res);
   if(!context)return;
 
   try{
     if(req.method==='GET'){
       const action=String(singleQueryValue(req,'action')||'capability').trim();
-      if(action==='capability')return json(res,200,{ok:true,allowed:true,role:context.role});
+      if(action==='capability'){
+        const serviceConfigured=Boolean(context.key);
+        return json(res,200,{
+          ok:true,
+          allowed:serviceConfigured,
+          role:context.role,
+          service_configured:serviceConfigured,
+          reason:serviceConfigured?null:'SERVER_ADMIN_NOT_CONFIGURED',
+        });
+      }
+      if(!context.key)return adminServiceUnavailable(res);
       if(action==='overview'){
         const payload=await serviceRpc(context.key,'dabbir_platform_owner_overview',{p_actor_user_id:context.user.id});
         return json(res,200,{ok:true,overview:payload});
@@ -107,6 +115,7 @@ export default async function handler(req,res){
     }
 
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
+    if(!context.key)return adminServiceUnavailable(res);
     const body=await readJsonBody(req,16384);
 
     if(body.action==='set_access'){
