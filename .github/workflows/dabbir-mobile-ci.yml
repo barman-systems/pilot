@@ -11,6 +11,10 @@ on:
       - 'supabase/migrations/*dabbir_*account_deletion*'
       - 'scripts/dabbir-app-store-preflight.mjs'
       - 'test/dabbir-app-store-preflight.test.mjs'
+      - 'privacy.html'
+      - 'terms.html'
+      - 'support.html'
+      - 'vercel.json'
       - '.github/workflows/dabbir-mobile-ci.yml'
   push:
     branches: [main]
@@ -23,6 +27,10 @@ on:
       - 'supabase/migrations/*dabbir_*account_deletion*'
       - 'scripts/dabbir-app-store-preflight.mjs'
       - 'test/dabbir-app-store-preflight.test.mjs'
+      - 'privacy.html'
+      - 'terms.html'
+      - 'support.html'
+      - 'vercel.json'
       - '.github/workflows/dabbir-mobile-ci.yml'
 
 permissions:
