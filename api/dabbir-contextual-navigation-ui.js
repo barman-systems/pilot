@@ -7,7 +7,19 @@ const script=String.raw`(()=>{
   const q=s=>document.querySelector(s);
   const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
-  const businessType=()=>String(window.workspace?.business?.business_type||'').toLowerCase();
+
+  // index.html intentionally owns workspace as a top-level `let`, which creates a
+  // global lexical binding rather than window.workspace. Read that canonical
+  // binding first; window.workspace is retained only as a compatibility fallback
+  // for alternate shells that explicitly publish their state on window.
+  function currentWorkspace(){
+    try{
+      if(typeof workspace!=='undefined'&&workspace)return workspace;
+    }catch{}
+    return window.workspace||null;
+  }
+
+  const businessType=()=>String(currentWorkspace()?.business?.business_type||'').toLowerCase();
   const isStore=()=>businessType()==='store';
   const isServiceBusiness=()=>Boolean(businessType())&&!isStore();
   const copy=()=>ar()?{
@@ -21,7 +33,7 @@ const script=String.raw`(()=>{
   };
 
   function activitySlots(){
-    qa('#nav [data-screen="appointments"],#bottomNav [data-screen="appointments"],#nav [data-dabbir-activity-slot="true"],#bottomNav [data-dabbir-activity-slot="true"]').forEach(node=>{
+    qa('#nav [data-screen="appointments"],#bottomNav [data-screen="appointments"],#nav [data-screen="operations"],#bottomNav [data-screen="operations"],#nav [data-dabbir-activity-slot="true"],#bottomNav [data-dabbir-activity-slot="true"]').forEach(node=>{
       node.dataset.dabbirActivitySlot='true';
     });
     return qa('[data-dabbir-activity-slot="true"]');
@@ -29,7 +41,9 @@ const script=String.raw`(()=>{
 
   function setActivitySlot(node,target,label){
     node.dataset.screen=target;
-    node.style.display='';
+    node.hidden=false;
+    node.classList.remove('hidden');
+    node.style.removeProperty('display');
     const labelNode=node.querySelector('[data-label]');
     if(labelNode)labelNode.textContent=label;
     node.setAttribute('aria-label',label);
@@ -53,7 +67,7 @@ const script=String.raw`(()=>{
         setActivitySlot(node,'appointments',appointmentLabel||(ar()?'المواعيد':'Appointments'));
       }
     }
-    if(isStore()&&current==='appointments'&&typeof showScreen==='function')showScreen('operations');
+    if(isStore()&&typeof current!=='undefined'&&current==='appointments'&&typeof showScreen==='function')showScreen('operations');
   }
 
   function openServices(){
@@ -109,7 +123,7 @@ const script=String.raw`(()=>{
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v4',authority:'primary-context-router',mobile_menu_resync:true};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v5',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true};
 })();`;
 
 export default function handler(req,res){
@@ -117,6 +131,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v4');
+  res.setHeader('x-dabbir-contextual-navigation','v5');
   return res.status(200).send(script);
 }
