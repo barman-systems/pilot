@@ -14,6 +14,75 @@ function cleanId(value) {
   return /^[0-9]{5,40}$/.test(text) ? text : '';
 }
 
+function firstEnv(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function existingMetaDebugToken() {
+  return firstEnv(
+    'DABBIR_WHATSAPP_ACCESS_TOKEN',
+    'PILOT_WHATSAPP_ACCESS_TOKEN',
+    'WHATSAPP_ACCESS_TOKEN',
+    'META_WHATSAPP_ACCESS_TOKEN',
+  );
+}
+
+function metaProviderError(payload, response, fallback) {
+  const error = new Error(String(payload?.error?.message || fallback).slice(0, 300));
+  error.status = 502;
+  error.providerStatus = response?.status || null;
+  error.providerCode = payload?.error?.code || null;
+  return error;
+}
+
+export async function discoverWabaIdFromAccessToken(platform, token, options = {}) {
+  const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
+  if (!platform?.appId || !platform?.appSecret || !token) {
+    throw Object.assign(new Error('META_WABA_DISCOVERY_CONFIGURATION_MISSING'), { status: 503 });
+  }
+  const authorizationToken = String(options.authorizationToken || existingMetaDebugToken() || appAccessToken).trim();
+  if (!authorizationToken) {
+    throw Object.assign(new Error('META_WABA_DISCOVERY_CONFIGURATION_MISSING'), { status: 503 });
+  }
+
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/debug_token`);
+  url.searchParams.set('input_token', String(token));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${authorizationToken}`, accept: 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.data?.is_valid === false) {
+      throw metaProviderError(payload, response, 'META_WABA_DISCOVERY_FAILED');
+    }
+
+    const granularScopes = Array.isArray(payload?.data?.granular_scopes) ? payload.data.granular_scopes : [];
+    const targetIds = granularScopes
+      .filter(item => String(item?.scope || '') === 'whatsapp_business_management')
+      .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
+      .map(cleanId)
+      .filter(Boolean);
+    const uniqueWabas = [...new Set(targetIds)];
+
+    if (uniqueWabas.length === 1) return uniqueWabas[0];
+    if (uniqueWabas.length > 1) {
+      throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
+    }
+    throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function resolveCoexistencePhoneNumberId(platform, token, wabaId) {
   const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(wabaId)}/phone_numbers`);
   url.searchParams.set('fields', 'id,display_phone_number,verified_name,is_on_biz_app,platform_type');
@@ -29,13 +98,7 @@ async function resolveCoexistencePhoneNumberId(platform, token, wabaId) {
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(String(payload?.error?.message || 'META_PHONE_RESOLUTION_FAILED').slice(0, 300));
-      error.status = 502;
-      error.providerStatus = response.status;
-      error.providerCode = payload?.error?.code || null;
-      throw error;
-    }
+    if (!response.ok) throw metaProviderError(payload, response, 'META_PHONE_RESOLUTION_FAILED');
 
     const phones = Array.isArray(payload?.data) ? payload.data : [];
     const coexistence = phones.filter(item => item?.is_on_biz_app === true && String(item?.platform_type || '').toUpperCase() === 'CLOUD_API');
@@ -56,19 +119,23 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req, 16 * 1024);
     const businessId = String(body?.business_id || '').trim();
     const code = String(body?.code || '').trim();
-    const wabaId = cleanId(body?.waba_id);
+    let wabaId = cleanId(body?.waba_id);
     let phoneNumberId = cleanId(body?.phone_number_id);
     const onboardingMode = String(body?.onboarding_mode || '').trim();
 
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     if (!code || code.length > 4096) return json(res, 400, { ok: false, error: 'META_AUTHORIZATION_CODE_REQUIRED' });
-    if (!wabaId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_WABA_REQUIRED' });
 
     const owner = await ownerContext(req, businessId);
     const platform = applyDabbirMetaPublicIdentifiers(await resolveEmbeddedPlatformConfig());
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
     const exchanged = await exchangeEmbeddedCode(platform, code);
+    if (!wabaId) {
+      wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
+    }
+    if (!wabaId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_WABA_REQUIRED' });
+
     if (!phoneNumberId && onboardingMode === 'whatsapp_business_app_onboarding') {
       phoneNumberId = await resolveCoexistencePhoneNumberId(platform, exchanged.accessToken, wabaId);
     }
@@ -116,6 +183,7 @@ export default async function handler(req, res) {
       waba_id: stored?.waba_id || wabaId,
       phone_number_id: stored?.phone_number_id || phoneNumberId,
       connected_at: stored?.connected_at || now.toISOString(),
+      waba_source: cleanId(body?.waba_id) ? 'embedded_session' : 'debug_token',
       secrets_exposed: false,
     });
   } catch (error) {
