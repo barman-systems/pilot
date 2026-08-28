@@ -1,0 +1,90 @@
+name: DABBIR iOS Maestro Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/dabbir-ios-maestro.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  maestro-smoke:
+    runs-on: macos-26
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      DABBIR_IOS_BUNDLE_ID: com.barmansystems.dabbir
+      DABBIR_IOS_BUILD_NUMBER: '1'
+      EXPO_PUBLIC_DABBIR_API_BASE_URL: https://example.invalid
+      EXPO_PUBLIC_IOS_IAP_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods
+        working-directory: mobile/ios
+        run: pod install
+      - name: Select and boot iPhone simulator
+        shell: bash
+        run: |
+          UDID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x.get("name","").startswith("iPhone")))')"
+          echo "DABBIR_SIMULATOR_UDID=${UDID}" >> "$GITHUB_ENV"
+          xcrun simctl boot "${UDID}" || true
+          open -a Simulator
+          xcrun simctl bootstatus "${UDID}" -b
+      - name: Resolve Xcode workspace and scheme
+        shell: bash
+        run: |
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "${WORKSPACE}"
+          SCHEME="$(xcodebuild -workspace "${WORKSPACE}" -list -json | python3 -c 'import json,sys; data=json.load(sys.stdin); schemes=data.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          test -n "${SCHEME}"
+          echo "DABBIR_XCODE_WORKSPACE=${WORKSPACE}" >> "$GITHUB_ENV"
+          echo "DABBIR_XCODE_SCHEME=${SCHEME}" >> "$GITHUB_ENV"
+      - name: Build app for simulator
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace "${DABBIR_XCODE_WORKSPACE}" \
+            -scheme "${DABBIR_XCODE_SCHEME}" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "id=${DABBIR_SIMULATOR_UDID}" \
+            -derivedDataPath /tmp/dabbir-maestro-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee /tmp/dabbir-maestro-xcodebuild.log
+          APP_PATH="$(find /tmp/dabbir-maestro-derived/Build/Products -path '*iphonesimulator/*.app' -maxdepth 4 -print -quit)"
+          test -n "${APP_PATH}"
+          echo "DABBIR_SIMULATOR_APP_PATH=${APP_PATH}" >> "$GITHUB_ENV"
+      - name: Install app on simulator
+        run: xcrun simctl install "${DABBIR_SIMULATOR_UDID}" "${DABBIR_SIMULATOR_APP_PATH}"
+      - name: Install Maestro
+        shell: bash
+        working-directory: .
+        run: |
+          curl -Ls https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run App Store smoke flow
+        shell: bash
+        run: maestro test .maestro/app-store-smoke.yaml
+      - name: Upload Maestro evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-ios-maestro-evidence
+          path: |
+            /tmp/dabbir-maestro-xcodebuild.log
+            ~/.maestro/tests/**
+          if-no-files-found: warn
+          retention-days: 7
