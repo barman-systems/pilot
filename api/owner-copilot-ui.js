@@ -7,7 +7,7 @@ const script=String.raw`(()=>{
   let loadedBusiness=null,proof=null,proofLoading=false,asking=false,lastScreen='dashboard';
 
   const style=document.createElement('style');
-  style.dataset.dabbirOwnerCopilot='v1';
+  style.dataset.dabbirOwnerCopilot='v2';
   style.textContent=[
     '.dabbirCopilot{margin:0 0 14px;border:1px solid #313c59;background:linear-gradient(155deg,#0e1424,#11182b 55%,#101522);border-radius:22px;padding:16px;box-shadow:0 18px 55px #0004}',
     '.dcHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.dcIdentity{display:flex;align-items:center;gap:10px;min-width:0}.dcLogo{width:38px;height:38px;border-radius:12px;object-fit:cover;flex:0 0 auto}.dcHead h2{margin:0;font-size:16px}.dcHead p{margin:4px 0 0;color:#98a7bf;font-size:9px;line-height:1.6}.dcMode{white-space:nowrap;border:1px solid #2a594d;background:#10271f;color:#86e0b3;border-radius:999px;padding:6px 8px;font-size:7px;font-weight:900}',
@@ -25,15 +25,23 @@ const script=String.raw`(()=>{
     title:'Ask DABBIR about your business',desc:'Ask naturally. Answers use verified business data only.',mode:'Verified read-only',actions:'Done today',time:'Estimated manual time avoided',attention:'Needs you now',ask:'Ask',placeholder:'Example: Who needs follow-up today?',loading:'Reviewing verified business data…',error:'Business analysis is unavailable right now. Try again.',verified:'Based on verified business data',fallback:'Verified answer without AI',unknown:'—',minute:'m',suggestions:['What needs me today?','Who needs follow-up?','What did you do today?'],appointment:'What appointments are in the next 24 hours?',open:{conversations:'Open conversations',tasks:'Open tasks',appointments:'Open appointments',operations:'Open operations',integrations:'Open integrations',settings:'Open settings',dashboard:'Open dashboard'}
   };
 
-  function owner(){return String(window.workspace?.membership?.role||'').toLowerCase()==='owner'}
-  function businessId(){return window.workspace?.business?.id||null}
-  function exactAttention(){const m=window.workspace?.verified_metrics;return m?.state==='VERIFIED_EXACT_COUNTS'&&Number.isSafeInteger(m.needs_attention)?m.needs_attention:null}
-  function suggestions(){const t=copy();const type=String(window.workspace?.business?.business_type||'').toLowerCase();return ['clinic','salon','real_estate','services','creator'].includes(type)?[...t.suggestions,t.appointment]:t.suggestions}
+  function currentWorkspace(){
+    try{
+      if(typeof workspace!=='undefined'&&workspace)return workspace;
+    }catch{}
+    return window.workspace||null;
+  }
+
+  function owner(){return String(currentWorkspace()?.membership?.role||'').toLowerCase()==='owner'}
+  function businessId(){return currentWorkspace()?.business?.id||null}
+  function exactAttention(){const m=currentWorkspace()?.verified_metrics;return m?.state==='VERIFIED_EXACT_COUNTS'&&Number.isSafeInteger(m.needs_attention)?m.needs_attention:null}
+  function suggestions(){const t=copy();const type=String(currentWorkspace()?.business?.business_type||'').toLowerCase();return ['clinic','salon','real_estate','services','creator'].includes(type)?[...t.suggestions,t.appointment]:t.suggestions}
   function reducedMotion(){try{return window.matchMedia('(prefers-reduced-motion: reduce)').matches}catch{return false}}
   function safeScreen(value){return ['dashboard','conversations','tasks','appointments','operations','integrations','settings'].includes(String(value||''))?String(value):'dashboard'}
 
   function ensure(){
-    const dash=q('#screen-dashboard');if(!dash||!owner())return null;
+    const dash=q('#screen-dashboard');
+    if(!dash||!owner())return null;
     let card=q('#dabbirOwnerCopilot');if(card)return card;
     card=document.createElement('section');card.id='dabbirOwnerCopilot';card.className='dabbirCopilot';
     const activation=q('#dabbirActivation');
@@ -43,7 +51,7 @@ const script=String.raw`(()=>{
   }
 
   function render(){
-    const card=ensure();if(!card)return;
+    const card=ensure();if(!card)return false;
     const t=copy();const attention=exactAttention();
     const actions=proof?.available?proof.verified_autonomous_actions:null;
     const minutes=proof?.available?proof.estimated_manual_minutes_saved:null;
@@ -58,6 +66,7 @@ const script=String.raw`(()=>{
     q('#dcAskForm').onsubmit=event=>{event.preventDefault();ask(q('#dcAskInput')?.value||'')};
     card.querySelectorAll('[data-dc-suggest]').forEach(button=>button.onclick=()=>ask(button.dataset.dcSuggest||''));
     const open=q('#dcOpenScreen');if(open)open.onclick=()=>{const target=safeScreen(open.dataset.screen);if(typeof showScreen==='function')showScreen(target)};
+    return true;
   }
 
   function showAnswer(answer,source,screen){
@@ -95,25 +104,31 @@ const script=String.raw`(()=>{
     }catch(error){asking=false;showAnswer(copy().error,'','dashboard');try{if(typeof toast==='function')toast(copy().error)}catch{}}
   }
 
-  if(typeof renderDashboard==='function'){
-    const base=renderDashboard;renderDashboard=function(){const result=base.apply(this,arguments);render();loadProof(false);return result};
-  }
-  if(typeof renderAll==='function'){
-    const base=renderAll;renderAll=function(){const result=base.apply(this,arguments);setTimeout(()=>{render();loadProof(false)},0);return result};
-  }
-  if(typeof setLanguage==='function'){
-    const base=setLanguage;setLanguage=function(next){const result=base.apply(this,arguments);setTimeout(render,0);return result};
-  }
-  setTimeout(()=>{render();loadProof(false)},650);
-  window.__dabbirOwnerCopilot={version:'owner-copilot-v1',refresh:()=>loadProof(true)};
+  function refresh(force=false){render();loadProof(force)}
+
+  try{
+    const base=renderDashboard;renderDashboard=function(){const result=base.apply(this,arguments);refresh(false);return result};
+  }catch{}
+  try{
+    const base=renderAll;renderAll=function(){const result=base.apply(this,arguments);setTimeout(()=>refresh(false),0);return result};
+  }catch{}
+  try{
+    const base=applyLang;applyLang=function(){const result=base.apply(this,arguments);setTimeout(()=>refresh(false),0);return result};
+  }catch{}
+
+  setTimeout(()=>refresh(false),0);
+  setTimeout(()=>refresh(false),650);
+  setTimeout(()=>refresh(false),1600);
+  setTimeout(()=>refresh(false),3200);
+  window.__dabbirOwnerCopilot={version:'owner-copilot-v2-canonical-workspace',refresh:()=>refresh(true)};
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.statusCode=200;
   res.setHeader('content-type','application/javascript; charset=utf-8');
-  res.setHeader('cache-control','public, max-age=300, s-maxage=300');
+  res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-owner-copilot-ui','v1');
+  res.setHeader('x-dabbir-owner-copilot-ui','v2-canonical-workspace');
   return res.end(script);
 }
