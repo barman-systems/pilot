@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const workflow=await readFile(new URL('../.github/workflows/dabbir-protected-live-smoke.yml',import.meta.url),'utf8');
 const runner=await readFile(new URL('./dabbir-protected-live-smoke.mjs',import.meta.url),'utf8');
+const releaseEvidence=await readFile(new URL('../api/release-evidence.js',import.meta.url),'utf8');
 
 test('protected smoke can use short-lived GitHub trusted OIDC without opening production',()=>{
   assert.match(workflow,/id-token:\s*write/);
@@ -18,6 +19,33 @@ test('blocked automation access is a real failing gate, never a green skipped jo
   assert.ok(blocked,'blocked protection access must terminate the job with exit 2');
   assert.match(workflow,/browser journey did not run/);
   assert.match(workflow,/BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'[\s\S]{0,240}?exit 2/);
+});
+
+test('protected smoke is bound to the exact production release SHA',()=>{
+  assert.match(workflow,/EXPECTED_PRODUCTION_SHA:\s*\$\{\{ github\.sha \}\}/);
+  assert.match(runner,/EXPECTED_PRODUCTION_SHA/);
+  assert.match(runner,/00_exact_production_sha/);
+  assert.match(runner,/\/api\/release-evidence/);
+  assert.match(runner,/observed === EXPECTED_SHA/);
+  assert.match(runner,/EXACT_PRODUCTION_SHA_NOT_READY/);
+  assert.match(runner,/verified_production_sha/);
+});
+
+test('every DABBIR runtime release can trigger the protected smoke',()=>{
+  assert.match(workflow,/- 'api\/\*\*'/);
+  assert.match(workflow,/- 'index\.html'/);
+  assert.match(workflow,/- 'package\.json'/);
+  assert.match(workflow,/- 'supabase\/migrations\/\*dabbir\*'/);
+  assert.match(workflow,/- 'db\/dabbir\*\.sql'/);
+});
+
+test('release evidence exposes only safe deployment identity and fails closed without commit evidence',()=>{
+  assert.match(releaseEvidence,/VERCEL_GIT_COMMIT_SHA/);
+  assert.match(releaseEvidence,/VERCEL_DEPLOYMENT_ID/);
+  assert.match(releaseEvidence,/VERCEL_TARGET_ENV/);
+  assert.match(releaseEvidence,/RELEASE_COMMIT_EVIDENCE_UNAVAILABLE/);
+  assert.match(releaseEvidence,/cache-control','no-store/);
+  assert.doesNotMatch(releaseEvidence,/SERVICE_ROLE|SUPABASE_KEY|TOKEN|SECRET|PASSWORD/);
 });
 
 test('smoke runner supports either documented protection access method',()=>{
