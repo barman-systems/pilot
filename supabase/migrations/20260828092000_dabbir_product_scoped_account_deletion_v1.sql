@@ -16,6 +16,33 @@ create table if not exists dabbir_private.account_deletion_receipts (
 
 revoke all on table dabbir_private.account_deletion_receipts from public, anon, authenticated;
 
+-- A deleted DABBIR product account must remain blocked even though the shared
+-- auth.users identity is intentionally retained for other products such as ZAJEL.
+alter table public.account_access_state
+  drop constraint if exists account_access_state_status_check;
+alter table public.account_access_state
+  add constraint account_access_state_status_check
+  check (status in ('active','suspended','deleted'));
+
+create or replace function dabbir_private.account_active()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, auth
+as $function$
+  select (select auth.uid()) is not null
+    and not exists (
+      select 1
+      from public.account_access_state s
+      where s.user_id = (select auth.uid())
+        and s.status in ('suspended','deleted')
+    );
+$function$;
+
+revoke all on function dabbir_private.account_active() from public, anon;
+grant execute on function dabbir_private.account_active() to authenticated;
+
 create or replace function public.dabbir_delete_current_user_account(p_confirmation text)
 returns jsonb
 language plpgsql
@@ -35,6 +62,13 @@ begin
   end if;
   if p_confirmation is distinct from 'DELETE_DABBIR_ACCOUNT' then
     raise exception 'ACCOUNT_DELETE_CONFIRMATION_REQUIRED';
+  end if;
+
+  if exists (
+    select 1 from public.account_access_state
+    where user_id = v_user and status = 'deleted'
+  ) then
+    raise exception 'DABBIR_ACCOUNT_ALREADY_DELETED';
   end if;
 
   -- Platform administrators require a controlled platform-role handoff before
@@ -108,7 +142,22 @@ begin
   -- is intentionally retained because other products in this Supabase project can
   -- reference the same auth.users row.
   delete from public.dabbir_user_accounts where user_id = v_user;
-  delete from public.account_access_state where user_id = v_user;
+
+  -- Product tombstone: block all future DABBIR API access while allowing the same
+  -- auth.users identity to continue serving unrelated products in this project.
+  insert into public.account_access_state(
+    user_id,status,reason,suspended_at,suspended_by,reinstated_at,reinstated_by,updated_at
+  ) values (
+    v_user,'deleted','DABBIR_ACCOUNT_DELETED',null,null,null,null,now()
+  )
+  on conflict (user_id) do update set
+    status='deleted',
+    reason='DABBIR_ACCOUNT_DELETED',
+    suspended_at=null,
+    suspended_by=null,
+    reinstated_at=null,
+    reinstated_by=null,
+    updated_at=now();
 
   select
       (select count(*) from public.dabbir_owner_decision_observations where owner_user_id = v_user)
@@ -139,7 +188,8 @@ begin
     'owned_businesses_deleted', v_owned_business_count,
     'memberships_removed', v_removed_memberships,
     'retained_operational_references', v_retained_refs,
-    'auth_identity_retained_for_shared_products', true
+    'auth_identity_retained_for_shared_products', true,
+    'dabbir_access_revoked', true
   );
 end;
 $function$;
@@ -148,4 +198,4 @@ revoke all on function public.dabbir_delete_current_user_account(text) from publ
 grant execute on function public.dabbir_delete_current_user_account(text) to authenticated;
 
 comment on function public.dabbir_delete_current_user_account(text) is
-  'Deletes the current authenticated user DABBIR product account and owned DABBIR tenant data while preserving the shared Supabase auth identity for other products.';
+  'Deletes the current authenticated user DABBIR product account and owned DABBIR tenant data, revokes future DABBIR access, and preserves the shared Supabase auth identity for other products.';
