@@ -68,6 +68,14 @@ export async function deleteDabbirAccount(accessToken: string): Promise<any> {
   return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
 }
 
+export async function startWhatsAppConnect(accessToken: string, businessId: string): Promise<any> {
+  return post('/api/mobile/whatsapp-connect/start', { business_id: businessId }, accessToken);
+}
+
+export async function completeWhatsAppConnect(accessToken: string, state: string): Promise<any> {
+  return post('/api/mobile/whatsapp-connect/complete', { state }, accessToken);
+}
+
 export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
   return post('/api/mobile/iap/verify', { purchase }, accessToken);
 }
