@@ -22,11 +22,13 @@ test('Apple server verifier module loads with the locked official library', asyn
   const module = await import('../api/_apple-iap-core.js');
   assert.equal(typeof module.verifyAppleTransaction, 'function');
   assert.equal(typeof module.persistAppleEntitlement, 'function');
+  assert.equal(typeof module.verifyAppleNotification, 'function');
 });
 
-test('Apple IAP requires Apple JWS verification, account binding, and server persistence', async () => {
+test('Apple IAP requires Apple JWS verification, account binding, server persistence, and verified notifications', async () => {
   const client = await read('mobile/src/SubscriptionCard.tsx');
   const server = await read('api/mobile/iap/verify.js');
+  const notification = await read('api/apple/app-store-notifications.js');
   const core = await read('api/_apple-iap-core.js');
   const entitlement = await read('supabase/migrations/20260828091500_dabbir_apple_entitlements_v1.sql');
 
@@ -37,8 +39,12 @@ test('Apple IAP requires Apple JWS verification, account binding, and server per
   assert.match(server, /persistAppleEntitlement/);
   assert.match(server, /APPLE_SIGNED_TRANSACTION_JWS/);
   assert.doesNotMatch(server, /IMPLEMENTATION_REQUIRED|verified:\s*true[^]*without/i);
+  assert.match(notification, /verifyAppleNotification/);
+  assert.match(notification, /signedPayload/);
+  assert.match(notification, /persistAppleEntitlement/);
   assert.match(core, /SignedDataVerifier/);
   assert.match(core, /verifyAndDecodeTransaction/);
+  assert.match(core, /verifyAndDecodeNotification/);
   assert.match(core, /APPLE_ROOT_CERTIFICATES_BASE64/);
   assert.match(core, /appAccountToken\.toLowerCase\(\) !== userId\.toLowerCase\(\)/);
   assert.match(core, /DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID/);
@@ -49,9 +55,10 @@ test('Apple IAP requires Apple JWS verification, account binding, and server per
   assert.doesNotMatch(entitlement, /grant\s+(insert|update|delete)/i);
 });
 
-test('DABBIR account deletion is product-scoped, legal-hold aware, and access revoking', async () => {
+test('DABBIR account deletion is product-scoped, legal-hold aware, access revoking, and public invoker only', async () => {
   const migration = await read('supabase/migrations/20260828092000_dabbir_product_scoped_account_deletion_v1.sql');
   const appleCleanup = await read('supabase/migrations/20260828092100_dabbir_account_deletion_apple_cleanup_v1.sql');
+  const hardening = await read('supabase/migrations/20260828095200_dabbir_account_delete_private_executor_v2.sql');
   const endpoint = await read('api/mobile/account-delete.js');
   const mobileLogin = await read('api/mobile/auth/login.js');
   const mobileRefresh = await read('api/mobile/auth/refresh.js');
@@ -68,6 +75,10 @@ test('DABBIR account deletion is product-scoped, legal-hold aware, and access re
   assert.doesNotMatch(migration, /delete\s+from\s+auth\.users/i);
   assert.match(appleCleanup, /delete from public\.dabbir_apple_entitlements/i);
   assert.match(appleCleanup, /after insert or update of status/i);
+  assert.match(hardening, /dabbir_private\.dabbir_delete_current_user_account_impl/);
+  assert.match(hardening, /create or replace function public\.dabbir_delete_current_user_account/);
+  assert.match(hardening, /security invoker/i);
+  assert.doesNotMatch(hardening, /create or replace function public\.dabbir_delete_current_user_account[^]*security definer/i);
   assert.match(endpoint, /dabbir_delete_current_user_account/);
   assert.match(endpoint, /product: null/);
   assert.match(mobileLogin, /getVerifiedUser/);
