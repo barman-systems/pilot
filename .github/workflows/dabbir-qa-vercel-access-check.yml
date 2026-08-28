@@ -13,18 +13,25 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - name: Check Vercel automation credential without exposing it
+      - name: Check Vercel QA credentials without exposing them
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo 'VERCEL_TOKEN_AVAILABLE=false' | tee -a "$GITHUB_STEP_SUMMARY"
+          token=false
+          bypass=false
+          if [ -n "${VERCEL_TOKEN:-}" ]; then token=true; fi
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then bypass=true; fi
+          echo "VERCEL_TOKEN_AVAILABLE=${token}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "VERCEL_AUTOMATION_BYPASS_SECRET_AVAILABLE=${bypass}" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$token" = true ]; then
+            response="$(curl -fsS \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              'https://api.vercel.com/v9/projects/prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq?teamId=team_pwfKq8jHuyW1XFVSZirAJiId')"
+            node -e "const d=JSON.parse(process.argv[1]); if(d.id!=='prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq') process.exit(3); console.log('VERCEL_PROJECT_ACCESS=true')" "$response" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$token" != true ] && [ "$bypass" != true ]; then
             exit 2
           fi
-          echo 'VERCEL_TOKEN_AVAILABLE=true' | tee -a "$GITHUB_STEP_SUMMARY"
-          response="$(curl -fsS \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            'https://api.vercel.com/v9/projects/prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq?teamId=team_pwfKq8jHuyW1XFVSZirAJiId')"
-          node -e "const d=JSON.parse(process.argv[1]); if(d.id!=='prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq') process.exit(3); console.log('VERCEL_PROJECT_ACCESS=true')" "$response" | tee -a "$GITHUB_STEP_SUMMARY"
