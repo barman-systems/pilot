@@ -27,10 +27,13 @@ test('architecture contract is fail-closed and gives contextual navigation one a
   assert.equal(ownership.primary_navigation.feature_modules_may_mutate_primary_destinations, false);
   assert.equal(ownership.authorities.primary_navigation_context_router, 'api/dabbir-contextual-navigation-ui.js');
   assert.equal(ownership.authorities.store_navigation_adaptation, 'api/dabbir-contextual-navigation-ui.js');
+  assert.equal(ownership.authorities.auth_gate_visibility, 'index.html#showGate');
+  assert.equal(ownership.authorities.auth_session_observer, 'api/auth-session-stability-ui.js');
   assert.deepEqual(ownership.temporary_exceptions, {});
   assert.equal(ownership.truth_rules.blocked_or_skipped_qa_is_pass, false);
   assert.equal(ownership.truth_rules.tenant_may_inherit_global_whatsapp_identity, false);
   assert.equal(ownership.truth_rules.meta_authorized_equals_operational_whatsapp, false);
+  assert.equal(ownership.truth_rules.presentation_observer_may_veto_verified_gate, false);
 });
 
 test('desktop and mobile primary navigation are exactly the five owner destinations', () => {
@@ -90,14 +93,17 @@ test('shell UI module growth is frozen to the explicit allowlist', () => {
   assert.deepEqual(modules, expected, 'new shell patch modules require an explicit architecture change');
   assert.equal(new Set(modules).size, modules.length, 'duplicate shell module injection detected');
   assert.ok(modules.length <= ownership.shell.maximum_injected_api_modules, 'shell module ceiling exceeded');
-  assert.equal(modules.at(-1), ownership.shell.final_ui_authority);
+  assert.equal(modules.at(-1), ownership.shell.last_loaded_ui_observer);
 
   for (const retired of ownership.shell.retired_modules_forbidden) {
     assert.equal(modules.includes(retired), false, `retired presentation layer returned: ${retired}`);
   }
 });
 
-test('presentation authorities cannot depend on continuous polling', () => {
+test('presentation observers cannot veto verified gate visibility or depend on continuous polling', () => {
+  assert.match(authStability, /gate_observer_only:true/);
+  assert.doesNotMatch(authStability, /reconcileVerifiedGate/);
+
   for (const [name, source] of [
     ['owner-first', ownerFirst],
     ['contextual-navigation', contextualNavigation],
