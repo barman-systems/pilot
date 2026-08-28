@@ -116,7 +116,8 @@ async function googlePublisher(path, options = {}) {
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     const status = Number(response.status || 503);
-    const error = playError(status === 400 || status === 404 || status === 410 ? 'GOOGLE_PLAY_PURCHASE_NOT_VERIFIED' : 'GOOGLE_PLAY_API_UNAVAILABLE', status === 400 || status === 404 || status === 410 ? 409 : 503);
+    const permanent = status === 400 || status === 404 || status === 410;
+    const error = playError(permanent ? 'GOOGLE_PLAY_PURCHASE_NOT_VERIFIED' : 'GOOGLE_PLAY_API_UNAVAILABLE', permanent ? 409 : 503);
     error.cause = text.slice(0, 500);
     throw error;
   }
@@ -234,6 +235,7 @@ export async function loadGoogleEntitlement(userId, { refresh = true } = {}) {
       const verified = await verifyGoogleSubscription(row.purchase_token, String(userId));
       return persistGoogleEntitlement(verified);
     } catch (error) {
+      if (Number(error?.code || 0) !== 503) throw error;
       const verifiedAt = row.verified_at ? new Date(row.verified_at).getTime() : 0;
       const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : 0;
       const freshEnough = Number.isFinite(verifiedAt) && Date.now() - verifiedAt <= 6 * 60 * 60 * 1000;
