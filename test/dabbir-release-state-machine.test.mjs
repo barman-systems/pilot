@@ -50,12 +50,33 @@ test('production journey requires real external proof plus both iPhone languages
   assert.equal(noArabic.ready,false);
 });
 
-test('architecture and workflow bind release truth to one authority and exact current SHA evidence',()=>{
+test('architecture and workflow bind release truth to one deployed runtime authority without confusing docs-only repository HEAD',()=>{
   assert.equal(architecture.authorities.release_state_machine,'scripts/dabbir-release-state-machine.mjs');
   assert.equal(architecture.truth_rules.release_ready_requires_exact_tested_sha,true);
   assert.equal(architecture.truth_rules.release_ready_requires_exact_ready_deployment,true);
   assert.equal(architecture.truth_rules.release_ready_requires_real_production_journey,true);
-  assert.match(workflow,/candidate_build:\{state:"PASS",source_commit:\$sha/);
-  assert.match(workflow,/exact_sha_tests:\{state:"PASS",source_commit:\$sha/);
+
+  // Repository HEAD is retained as provenance, while the release state machine is
+  // intentionally fed the authoritative deployed runtime SHA. A docs/CI-only
+  // commit may advance main without changing the Production artifact.
+  assert.match(workflow,/repository_main_sha:\$repository_sha/);
+  assert.match(workflow,/expected_main_sha:\$runtime_sha/);
+  assert.match(workflow,/candidate_build:\{state:"PASS",source_commit:\$runtime_sha/);
+  assert.match(workflow,/exact_sha_tests:\{state:"PASS",source_commit:\$runtime_sha/);
+  assert.match(workflow,/production_deployment:\{state:"READY",source_commit:\$runtime_sha/);
+
+  // Runtime equivalence is never guessed: the same fail-closed Vercel classifier
+  // determines whether HEAD must deploy and whether older journey evidence may be
+  // reused for an unchanged runtime artifact.
+  assert.match(workflow,/VERCEL_GIT_PREVIOUS_SHA="\$initial_sha"/);
+  assert.match(workflow,/VERCEL_GIT_PREVIOUS_SHA="\$candidate_sha"/);
+  assert.match(workflow,/bash vercel-ignore-if-unaffected\.sh/);
+  assert.match(workflow,/git merge-base --is-ancestor "\$candidate_sha" "\$RUNTIME_SHA"/);
+  assert.match(workflow,/AUTHORITATIVE_PRODUCTION_RUNTIME_MISMATCH/);
+
+  // Importing the internal owner journey must never promote missing Meta evidence.
+  assert.match(workflow,/real_external_connection:false/);
+  assert.match(workflow,/real_inbound_message:false/);
+  assert.match(workflow,/approved_reply_verified:false/);
   assert.match(workflow,/scripts\/dabbir-release-state-machine\.mjs/);
 });
