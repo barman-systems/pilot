@@ -6,6 +6,7 @@ const shell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url)
 const ownerOperations = fs.readFileSync(new URL('../api/owner-operations-ui.js', import.meta.url), 'utf8');
 const services = fs.readFileSync(new URL('../api/service-operations-ui.js', import.meta.url), 'utf8');
 const router = fs.readFileSync(new URL('../api/dabbir-contextual-navigation-ui.js', import.meta.url), 'utf8');
+const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 test('feature operation modules do not own primary navigation', () => {
   for (const source of [ownerOperations, services]) {
@@ -21,6 +22,21 @@ test('store resolves the shared activity slot to Operations in the router', () =
   assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
   assert.match(router, /setActivitySlot\(node,'appointments'/);
   assert.match(router, /authority:'primary-context-router'/);
+});
+
+test('context router reads the canonical lexical workspace instead of assuming window.workspace', () => {
+  assert.match(index, /let lang=.*workspace=null/);
+  assert.match(router, /function currentWorkspace\(\)/);
+  assert.match(router, /typeof workspace!=='undefined'&&workspace/);
+  assert.match(router, /workspace_source:'global-lexical-first'/);
+  assert.doesNotMatch(router, /const businessType=\(\)=>String\(window\.workspace\?\.business/);
+});
+
+test('activity slots are unhidden when the router maps store Appointments to Operations', () => {
+  assert.match(router, /node\.hidden=false/);
+  assert.match(router, /node\.classList\.remove\('hidden'\)/);
+  assert.match(router, /node\.style\.removeProperty\('display'\)/);
+  assert.match(router, /data-screen="operations"/);
 });
 
 test('opening the mobile menu re-enforces the same activity-slot authority', () => {
