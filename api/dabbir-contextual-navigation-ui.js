@@ -1,3 +1,5 @@
+// BAR-30 invariant: contextual features are discovered under More; they do not create primary navigation destinations.
+// Exact-head build marker: this runtime file intentionally changes only documentation so Vercel executes the full gate on the final Phase-1 branch head.
 const script=String.raw`(()=>{
   if(window.__dabbirContextualNavigationUi)return;
   window.__dabbirContextualNavigationUi=true;
@@ -13,11 +15,6 @@ const script=String.raw`(()=>{
     title:'Services',
     desc:'The real services your business provides. Manage them when needed without adding another primary destination.'
   };
-
-  const style=document.createElement('style');
-  style.dataset.dabbirContextualNavigation='v1';
-  style.textContent='#dabbirServicesNav{display:none!important}';
-  document.head.append(style);
 
   function openServices(){
     if(typeof showScreen==='function')showScreen('operations');
@@ -45,11 +42,6 @@ const script=String.raw`(()=>{
   }
 
   function enforce(){
-    const injected=q('#dabbirServicesNav');
-    if(injected){
-      injected.setAttribute('aria-hidden','true');
-      injected.tabIndex=-1;
-    }
     ensureMoreCard();
   }
 
@@ -65,7 +57,7 @@ const script=String.raw`(()=>{
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v1'};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v2'};
 })();`;
 
 export default function handler(req,res){
@@ -73,6 +65,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v1');
+  res.setHeader('x-dabbir-contextual-navigation','v2');
   return res.status(200).send(script);
 }

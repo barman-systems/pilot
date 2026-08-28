@@ -1,5 +1,5 @@
 const css=String.raw`
-.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:9px}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:9px}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .55fr .55fr auto;gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:10px}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:9px}.svcName b{display:block;font-size:11px}.svcName small{color:var(--muted);font-size:8px}.svcStatus{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:7px 9px;min-height:38px;font-size:9px;font-weight:800}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:10px}.svcNavMark{color:var(--accent)}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(120px,1fr) .6fr auto}.svcRow .svcStateCol{display:none}}
+.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:9px}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:9px}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .55fr .55fr auto;gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:10px}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:9px}.svcName b{display:block;font-size:11px}.svcName small{color:var(--muted);font-size:8px}.svcStatus{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:7px 9px;min-height:38px;font-size:9px;font-weight:800}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:10px}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(120px,1fr) .6fr auto}.svcRow .svcStateCol{display:none}}
 `;
 
 const client=String.raw`
@@ -27,20 +27,6 @@ const client=String.raw`
 
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
   function notify(message){try{if(typeof toast==='function')toast(message)}catch{}}
-
-  function ensureNav(){
-    if(!isServiceBusiness())return;
-    const nav=q('#nav');
-    if(!nav||q('#dabbirServicesNav'))return;
-    const button=document.createElement('button');
-    button.id='dabbirServicesNav';
-    button.className='navBtn';
-    button.dataset.screen='operations';
-    button.innerHTML='<span class="svcNavMark">◇</span> <span id="dabbirServicesNavText"></span>';
-    button.addEventListener('click',()=>{if(typeof showScreen==='function')showScreen('operations');load(false)});
-    const integrations=nav.querySelector('[data-screen="integrations"]');
-    nav.insertBefore(button,integrations||null);
-  }
 
   function ensureScreen(){
     if(!isServiceBusiness())return null;
@@ -70,9 +56,8 @@ const client=String.raw`
 
   function applyCopy(){
     if(!isServiceBusiness())return;
-    ensureNav();ensureScreen();ensureModal();
+    ensureScreen();ensureModal();
     const t=copy();
-    if(q('#dabbirServicesNavText'))q('#dabbirServicesNavText').textContent=t.nav;
     if(q('#svcTitle'))q('#svcTitle').textContent=t.title;
     if(q('#svcDesc'))q('#svcDesc').textContent=t.desc;
     if(q('#svcTruth'))q('#svcTruth').textContent=t.truth;
@@ -173,7 +158,7 @@ const client=String.raw`
   }catch{}
 
   setTimeout(initialize,500);
-  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v2'};
+  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v3'};
 })();
 `;
 
@@ -181,6 +166,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
-  res.setHeader('x-dabbir-service-operations-ui','v2');
+  res.setHeader('x-dabbir-service-operations-ui','v3');
   return res.status(200).send(client);
 }
