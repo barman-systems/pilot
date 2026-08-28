@@ -5,7 +5,7 @@ import { verifyApplePurchase } from './api';
 
 type FinishTransaction = (args: { purchase: Purchase; isConsumable?: boolean }) => Promise<void>;
 
-export function SubscriptionCard({ accessToken }: { accessToken: string }) {
+export function SubscriptionCard({ accessToken, accountToken }: { accessToken: string; accountToken?: string | null }) {
   const enabled = process.env.EXPO_PUBLIC_IOS_IAP_ENABLED === 'true';
   const productId = String(process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID || '').trim();
   const [busy, setBusy] = useState(false);
@@ -49,9 +49,10 @@ export function SubscriptionCard({ accessToken }: { accessToken: string }) {
 
   const buy = async () => {
     if (!productId || !connected) return Alert.alert('غير متاح', 'Apple StoreKit غير جاهز على هذا البناء.');
+    if (!accountToken) return Alert.alert('غير متاح', 'تعذر ربط عملية الشراء بهوية حساب دبّر الحالية.');
     setBusy(true);
     try {
-      await requestPurchase({ request: { apple: { sku: productId } }, type: 'subs' });
+      await requestPurchase({ request: { apple: { sku: productId, appAccountToken: accountToken } }, type: 'subs' });
     } catch {
       setBusy(false);
     }
