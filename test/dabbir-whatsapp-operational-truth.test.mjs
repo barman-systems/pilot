@@ -6,19 +6,24 @@ import { spawnSync } from 'node:child_process';
 const statusPath='api/dabbir-whatsapp-status.js';
 const machinePath='api/_dabbir-whatsapp-state-machine.js';
 const activationPath='api/customer-activation-ui.js';
+const migrationPath='supabase/migrations/20260828043000_dabbir_whatsapp_live_message_path_v1.sql';
 const status=fs.readFileSync(statusPath,'utf8');
 const machine=fs.readFileSync(machinePath,'utf8');
 const activation=fs.readFileSync(activationPath,'utf8');
+const migration=fs.readFileSync(migrationPath,'utf8');
 
 test('WhatsApp operational evidence is tenant-scoped and excludes simulation',()=>{
-  assert.match(status,/dabbir_conversations\?select=id/);
-  assert.match(status,/channel_type=eq\.whatsapp/);
-  assert.match(status,/demo_mode=eq\.false/);
-  assert.match(status,/dabbir_messages\?select=sender_type,simulated/);
-  assert.match(status,/simulated=eq\.false/);
-  assert.match(status,/dabbir_conversation_outcomes\?select=verified_external_result/);
-  assert.match(status,/verified_external_result=eq\.true/);
-  assert.match(status,/business_id=eq\.\$\{encodedBusinessId\}/);
+  assert.match(status,/supabaseRpc/);
+  assert.match(status,/dabbir_whatsapp_operational_evidence/);
+  assert.match(status,/\{ p_business_id: businessId \}/);
+  assert.match(migration,/function public\.dabbir_whatsapp_operational_evidence\(p_business_id uuid\)/);
+  assert.match(migration,/has_permission\(p_business_id,'view_integrations'\)/);
+  assert.match(migration,/c\.business_id=p_business_id and c\.channel_type='whatsapp' and c\.demo_mode=false/);
+  assert.match(migration,/e\.business_id=p_business_id and e\.direction='inbound' and e\.event_type='message' and e\.message_id is not null/);
+  assert.match(migration,/e\.business_id=p_business_id and e\.direction='outbound' and e\.event_type='message' and e\.message_id is not null and e\.provider_status is not null/);
+  assert.match(migration,/e\.business_id=p_business_id and e\.direction='outbound' and e\.event_type='message' and e\.provider_verified=true/);
+  assert.match(migration,/values\(v_connection\.business_id,v_conversation_id,'customer'.*false\)/s);
+  assert.match(migration,/values\(p_business_id,p_conversation_id,'human'.*false,p_sender_user_id\)/s);
 });
 
 test('WhatsApp becomes operational only through the explicit evidence state machine',()=>{
