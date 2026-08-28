@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { getLocales } from 'expo-localization';
 import * as WebBrowser from 'expo-web-browser';
 import { completeWhatsAppConnect, startWhatsAppConnect } from './api';
 
-const ar = true;
-const t = (arabic: string, english: string) => ar ? arabic : english;
+const isArabic = (getLocales()[0]?.languageCode || 'ar').toLowerCase() === 'ar';
+const t = (arabic: string, english: string) => isArabic ? arabic : english;
 
 export function WhatsAppConnectCard({
   accessToken,
