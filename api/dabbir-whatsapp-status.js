@@ -234,6 +234,9 @@ export default async function handler(req, res) {
     }
   }
 
+  // The authenticated DABBIR UI must never inherit a global/server WhatsApp
+  // identity. Platform-level credentials remain webhook/runtime infrastructure
+  // only; tenant display state always resolves from the tenant connection row.
   try {
     const memberships = await getBusinessMemberships(accessToken);
     const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])
