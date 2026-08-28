@@ -66,7 +66,7 @@ Source and route contracts are covered by automated tests and the App Store stat
 This is **source readiness only**. App Store release mode still requires these paths to resolve on a genuinely public, stable HTTPS production hostname. Protected/prelaunch Vercel hosts are intentionally rejected.
 
 ## App Store preflight contract
-The release pipeline must distinguish internal source readiness from Apple/external readiness.
+The release pipeline must distinguish internal source/config readiness from Apple/external verification.
 
 Static preflight is required to verify:
 - Native/non-WebView client.
@@ -81,27 +81,38 @@ Static preflight is required to verify:
 - EAS production profile uses remote app versions, production environment, and build auto-increment.
 - Privacy/Terms/Support source pages remain bilingual and mapped to stable Vercel routes.
 
-Release-mode preflight must additionally fail unless all of these are real and configured:
+Release-mode configuration checks fail unless all of these candidate values are present and structurally valid:
 - Bundle ID exactly `com.barmansystems.dabbir`.
-- Numeric App Store Apple ID.
-- Same subscription product ID on the iOS client and server.
+- Numeric App Store Apple ID candidate.
+- Same configured subscription product ID on the iOS client and server.
 - Apple IAP enabled for the production candidate.
-- Public production HTTPS API URL, not a protected/prelaunch deployment URL.
-- Public HTTPS `/privacy`, `/terms`, and `/support` URLs.
-- Apple root certificates for JWS verification.
-- Server-side entitlement storage credential.
+- HTTPS production API URL that is not a protected/prelaunch Vercel host.
+- HTTPS `/privacy`, `/terms`, and `/support` URL paths.
+- At least two configured Apple root-certificate values.
+- A non-public server-side entitlement storage credential.
+
+Passing those configuration checks is **not** a final release PASS. When configuration is structurally complete, the preflight returns `RELEASE_CONFIG_PASS_EXTERNAL_VERIFICATION_REQUIRED`, `app_store_ready=false`, and a non-zero exit until independent evidence verifies:
+- the real App Store Connect app record and bundle/app ID;
+- the real subscription product and introductory offer;
+- live public reachability of the final API/Privacy/Terms/Support hostname;
+- Apple root-certificate parsing/trust in the release environment;
+- live server entitlement persistence using the intended credential path;
+- the signed Apple Distribution/TestFlight artifact on the exact candidate.
+
+Placeholder-shaped values, example domains, arbitrary base64 blobs, or non-empty credential strings must never manufacture a final RELEASE `PASS`.
 
 The preflight must never print private keys, root certificate bodies, or service-role credentials.
 
 ## Remaining P0 release gates
 1. Register/verify `com.barmansystems.dabbir` in the Apple Developer account and create/verify the App Store Connect app record.
 2. Create the real auto-renewable subscription in App Store Connect and configure the intended introductory free trial there. The client must display only StoreKit-reported offer data; it must not manufacture eligibility or duration.
-3. Bind a genuinely public stable production hostname for the native API and `/privacy`, `/terms`, `/support`; configure the production Apple/IAP values; then obtain a RELEASE preflight PASS.
-4. Reconcile the Privacy Manifest and App Privacy questionnaire against the exact final binary, backend processing, and third-party SDKs.
-5. Produce a signed Apple Distribution archive/IPA from the exact candidate and record its build/artifact identity.
-6. Upload that exact build to TestFlight.
-7. Perform exact TestFlight artifact QA on a real iPhone: install, launch, signup/email verification, login, password recovery, dashboard, native WhatsApp Embedded Signup/pairing, send/receive path, StoreKit purchase, server entitlement, Restore Purchases, logout/login, product-scoped account deletion, reinstall/re-auth behavior.
-8. Capture App Store screenshots from the exact candidate and finish Arabic/English metadata, age rating, export-compliance answers, privacy answers, Support/Privacy/Terms URLs, reviewer demo access, and review notes.
+3. Bind a genuinely public stable production hostname for the native API and `/privacy`, `/terms`, `/support`; configure the production Apple/IAP values; then obtain `RELEASE_CONFIG_PASS_EXTERNAL_VERIFICATION_REQUIRED` with no configuration failures.
+4. Supply independent external verification for the App Store Connect record/product, live public URLs, Apple certificate trust, and entitlement persistence path; do not convert configuration shape into a final PASS.
+5. Reconcile the Privacy Manifest and App Privacy questionnaire against the exact final binary, backend processing, and third-party SDKs.
+6. Produce a signed Apple Distribution archive/IPA from the exact candidate and record its build/artifact identity.
+7. Upload that exact build to TestFlight.
+8. Perform exact TestFlight artifact QA on a real iPhone: install, launch, signup/email verification, login, password recovery, dashboard, native WhatsApp Embedded Signup/pairing, send/receive path, StoreKit purchase, server entitlement, Restore Purchases, logout/login, product-scoped account deletion, reinstall/re-auth behavior.
+9. Capture App Store screenshots from the exact candidate and finish Arabic/English metadata, age rating, export-compliance answers, privacy answers, Support/Privacy/Terms URLs, reviewer demo access, and review notes.
 
 ## Known security warning outside the native source gate
 Supabase Security Advisor still reports Leaked Password Protection disabled. It remains unresolved until Supabase Auth configuration can be changed through an authorized management surface. Do not mark it fixed merely because application tests pass.
