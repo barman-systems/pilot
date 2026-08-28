@@ -34,7 +34,7 @@ async function readResponse(response, fallback) {
   return payload;
 }
 
-export async function serviceRpc(name, params = {}) {
+export async function serviceRpc(name, params = {}, options = {}) {
   const key = serviceKey();
   if (!key) {
     const error = new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
@@ -55,7 +55,11 @@ export async function serviceRpc(name, params = {}) {
       },
       body: JSON.stringify(params),
     }),
-    { label: 'WHATSAPP_SERVER_RPC', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
+    {
+      label: 'WHATSAPP_SERVER_RPC',
+      errorCode: 'WHATSAPP_SERVER_DATA_TIMEOUT',
+      timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+    },
   );
   return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
 }
