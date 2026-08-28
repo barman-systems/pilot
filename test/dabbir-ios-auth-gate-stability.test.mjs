@@ -24,18 +24,18 @@ test('successful login waits for the HttpOnly session to become observable befor
   assert.ok(sessionIndex >= 0 && bootIndex > sessionIndex);
 });
 
-test('a valid server session can reconcile a lagging signed-out presentation gate', () => {
-  assert.match(authUi, /async function reconcileVerifiedGate\(name\)/);
-  assert.match(authUi, /SESSION_RECONCILED_FOR_GATE/);
-  assert.match(authUi, /authStage===authMachine\.stages\.SIGNED_OUT\|\|authStage===authMachine\.stages\.DEGRADED/);
-  assert.match(authUi, /void reconcileVerifiedGate\('app'\)/);
-  assert.match(authUi, /void reconcileVerifiedGate\('onboarding'\)/);
-  assert.match(authUi, /gate_reconciliation:true/);
+test('auth stability observes gate state but never vetoes or delays the base application gate', () => {
+  assert.match(authUi, /const baseShowGate=showGate/);
+  assert.match(authUi, /showGate=function\(name\)\{/);
+  assert.match(authUi, /baseShowGate\(name\);\s*syncStageFromGate\(name\)/);
+  assert.match(authUi, /gate_observer_only:true/);
+  assert.doesNotMatch(authUi, /reconcileVerifiedGate/);
+  assert.doesNotMatch(authUi, /void reconcileVerifiedGate/);
 
-  const reconcileIndex = authUi.indexOf('async function reconcileVerifiedGate(name)');
-  const sessionIndex = authUi.indexOf('const state=await sessionReady()', reconcileIndex);
-  const promoteIndex = authUi.indexOf("baseShowGate(name)", reconcileIndex);
-  assert.ok(reconcileIndex >= 0 && sessionIndex > reconcileIndex && promoteIndex > sessionIndex);
+  const wrapperIndex = authUi.indexOf('showGate=function(name)');
+  const baseIndex = authUi.indexOf('baseShowGate(name)', wrapperIndex);
+  const syncIndex = authUi.indexOf('syncStageFromGate(name)', wrapperIndex);
+  assert.ok(wrapperIndex >= 0 && baseIndex > wrapperIndex && syncIndex > baseIndex);
 });
 
 test('auth stability authority loads last after all owner and contextual presentation layers', () => {
