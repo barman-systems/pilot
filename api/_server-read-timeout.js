@@ -33,6 +33,7 @@ export async function withServerReadTimeout(operation, { label = 'SERVER_READ', 
   try {
     return await Promise.race([operationPromise, timeoutPromise]);
   } finally {
+    if (!controller.signal.aborted) controller.abort();
     if (timer) clearTimeout(timer);
   }
 }
