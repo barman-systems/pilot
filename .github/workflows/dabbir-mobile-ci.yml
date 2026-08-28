@@ -9,6 +9,8 @@ on:
       - 'api/apple/**'
       - 'supabase/migrations/*dabbir_apple*'
       - 'supabase/migrations/*dabbir_*account_deletion*'
+      - 'scripts/dabbir-app-store-preflight.mjs'
+      - 'test/dabbir-app-store-preflight.test.mjs'
       - '.github/workflows/dabbir-mobile-ci.yml'
   push:
     branches: [main]
@@ -19,6 +21,9 @@ on:
       - 'api/apple/**'
       - 'supabase/migrations/*dabbir_apple*'
       - 'supabase/migrations/*dabbir_*account_deletion*'
+      - 'scripts/dabbir-app-store-preflight.mjs'
+      - 'test/dabbir-app-store-preflight.test.mjs'
+      - '.github/workflows/dabbir-mobile-ci.yml'
 
 permissions:
   contents: read
@@ -35,6 +40,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.1'
+      - name: Run App Store static preflight
+        working-directory: .
+        env:
+          DABBIR_APP_STORE_PREFLIGHT_REPORT_PATH: dabbir-app-store-preflight-report.json
+        run: node scripts/dabbir-app-store-preflight.mjs
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Expo doctor
@@ -46,6 +56,14 @@ jobs:
           DABBIR_IOS_BUNDLE_ID: com.barmansystems.dabbir
           DABBIR_IOS_BUILD_NUMBER: '1'
         run: npx expo config --type public >/tmp/dabbir-expo-config.json
+      - name: Upload App Store preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-app-store-preflight-evidence
+          path: dabbir-app-store-preflight-report.json
+          if-no-files-found: warn
+          retention-days: 14
 
   ios-native-compile:
     runs-on: macos-26
