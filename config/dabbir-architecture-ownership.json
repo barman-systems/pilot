@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
@@ -66,6 +66,7 @@
     "workspace_ready_requires_mfa_when_enrolled": true,
     "invalid_auth_transition_may_open_workspace": false,
     "presentation_observer_may_veto_verified_gate": false,
+    "direct_main_push_may_be_release_candidate": false,
     "release_ready_requires_exact_tested_sha": true,
     "release_ready_requires_exact_ready_deployment": true,
     "release_ready_requires_real_production_journey": true
