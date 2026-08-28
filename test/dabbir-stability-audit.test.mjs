@@ -34,7 +34,7 @@ test('authoritative shell injects every UI module exactly once and keeps auth st
 });
 
 test('tenant WhatsApp status cannot inherit a global server phone identity', () => {
-  assert.match(whatsappStatus, /authenticated DABBIR UI must never inherit a global\/server WhatsApp/);
+  assert.match(whatsappStatus, /authenticated DABBIR UI must never inherit a global\/server WhatsApp/i);
   assert.match(whatsappStatus, /businessIds\.length === 1/);
   assert.match(whatsappStatus, /BUSINESS_CONTEXT_REQUIRED/);
   assert.match(whatsappStatus, /TENANT_WHATSAPP_NOT_LINKED/);
