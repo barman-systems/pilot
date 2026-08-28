@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { classifyProductionOrigin } from './dabbir-production-origin-gate.mjs';
+import { deriveReleaseState } from './dabbir-release-state-machine.mjs';
 
+// BAR-30 exact-head preview marker: release state machine v1.
 const CONTRACT_PATH='config/barman-integration-contract.json';
 const EVIDENCE_PATH=process.env.DABBIR_READINESS_EVIDENCE_PATH||'dabbir-bar12-live-evidence.json';
 const REPORT_PATH=process.env.DABBIR_READINESS_REPORT_PATH||'dabbir-bar12-readiness-report.json';
@@ -26,6 +28,24 @@ export function evaluateReadiness({contract,evidence={},productionOrigin=''}){
   const deployment=evidence.production_deployment||{};
   const expectedCommit=String(evidence.expected_main_sha||'').trim();
   const deploymentCommit=String(deployment.source_commit||'').trim();
+  const journey=evidence.end_to_end_journey||{};
+  const release=deriveReleaseState({
+    expectedMainSha:expectedCommit,
+    candidateBuild:evidence.candidate_build||{},
+    exactShaTests:evidence.exact_sha_tests||{},
+    deployment,
+    journey,
+    iphoneSafariAr:evidence.iphone_safari_ar||{},
+    iphoneSafariEn:evidence.iphone_safari_en||{},
+  });
+  const releaseGateState=release.ready?PASS:release.stage?BLOCKED:INSUFFICIENT;
+  gates.push(gate(
+    'release_state_machine',
+    releaseGateState,
+    release.ready?'Release reached production_journey_verified on the exact production SHA.':`Release stopped at ${release.stage||'pre-build'}: ${release.reason}.`,
+    {stage:release.stage,ready:release.ready,reason:release.reason,expected_main_sha:expectedCommit||null},
+  ));
+
   if(!deployment.state||!deploymentCommit||!expectedCommit){
     gates.push(gate('production_deployment',INSUFFICIENT,'Exact READY production deployment and source commit have not both been evidenced.'));
   }else if(String(deployment.state).toUpperCase()!=='READY'||deploymentCommit!==expectedCommit){
@@ -34,7 +54,6 @@ export function evaluateReadiness({contract,evidence={},productionOrigin=''}){
     gates.push(gate('production_deployment',PASS,'Production is READY on the exact expected main SHA.',{deployment_id:deployment.id||null,source_commit:deploymentCommit}));
   }
 
-  const journey=evidence.end_to_end_journey||{};
   const realExternal=journey.real_external_connection===true&&journey.real_inbound_message===true&&journey.approved_reply_verified===true;
   if(journey.verdict!=='PASS')gates.push(gate('end_to_end_journey',journey.verdict?BLOCKED:INSUFFICIENT,'The required signup → business type → connection → inbound → reply/action journey has not passed.'));
   else if(!realExternal)gates.push(gate('end_to_end_journey',BLOCKED,'A Web-only journey cannot satisfy BAR-12; real external connection, inbound message, and approved reply must all be verified.'));
@@ -70,7 +89,7 @@ export function evaluateReadiness({contract,evidence={},productionOrigin=''}){
   }
 
   const blockers=gates.filter(row=>row.state!==PASS);
-  return {schema_version:'dabbir_bar12_readiness_v1',generated_at:new Date().toISOString(),verdict:blockers.length===0?'READY':'BLOCKED',blocker_count:blockers.length,gates};
+  return {schema_version:'dabbir_bar12_readiness_v2',generated_at:new Date().toISOString(),release_stage:release.stage,release_ready:release.ready,verdict:blockers.length===0?'READY':'BLOCKED',blocker_count:blockers.length,gates};
 }
 
 export function runGate({contractPath=CONTRACT_PATH,evidencePath=EVIDENCE_PATH,productionOrigin=process.env.PRODUCTION_ORIGIN||''}={}){
@@ -79,9 +98,9 @@ export function runGate({contractPath=CONTRACT_PATH,evidencePath=EVIDENCE_PATH,p
   const evidence=readJson(evidencePath,{});
   const report=evaluateReadiness({contract,evidence,productionOrigin});
   fs.writeFileSync(REPORT_PATH,JSON.stringify(report,null,2));
-  append(process.env.GITHUB_OUTPUT,`readiness=${report.verdict}\nblocker_count=${report.blocker_count}\n`);
-  append(process.env.GITHUB_STEP_SUMMARY,`## DABBIR BAR-12 Readiness\n\n**Verdict:** ${report.verdict}\n\n**Blockers:** ${report.blocker_count}\n\n| Gate | State | Detail |\n|---|---|---|\n${report.gates.map(row=>`| ${row.key} | ${row.state} | ${String(row.detail).replaceAll('|','\\|')} |`).join('\n')}\n`);
-  console.log(`DABBIR BAR-12 READINESS: ${report.verdict} (${report.blocker_count} blockers)`);
+  append(process.env.GITHUB_OUTPUT,`readiness=${report.verdict}\nrelease_stage=${report.release_stage||'pre-build'}\nblocker_count=${report.blocker_count}\n`);
+  append(process.env.GITHUB_STEP_SUMMARY,`## DABBIR BAR-12 Readiness\n\n**Verdict:** ${report.verdict}\n\n**Release stage:** ${report.release_stage||'pre-build'}\n\n**Blockers:** ${report.blocker_count}\n\n| Gate | State | Detail |\n|---|---|---|\n${report.gates.map(row=>`| ${row.key} | ${row.state} | ${String(row.detail).replaceAll('|','\\|')} |`).join('\n')}\n`);
+  console.log(`DABBIR BAR-12 READINESS: ${report.verdict} (${report.blocker_count} blockers) release=${report.release_stage||'pre-build'}`);
   const publicGate=report.gates.find(row=>row.key==='public_launch_contract');
   const enforcePublic=String(process.env.DABBIR_READINESS_ENFORCE_PUBLIC_ONLY||'true').toLowerCase()!=='false';
   if(enforcePublic&&publicGate?.state===PASS&&report.verdict!=='READY')process.exitCode=1;

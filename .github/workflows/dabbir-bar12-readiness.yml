@@ -8,6 +8,7 @@ on:
       - 'config/barman-integration-contract.json'
       - 'scripts/dabbir-production-origin-gate.mjs'
       - 'scripts/dabbir-readiness-gate.mjs'
+      - 'scripts/dabbir-release-state-machine.mjs'
       - 'supabase/functions/barman-qa-suite-runner/**'
       - 'api/dabbir-whatsapp-*.js'
       - 'api/_whatsapp-*.js'
@@ -78,6 +79,8 @@ jobs:
             --slurpfile live dabbir-bar12-supabase-evidence.json \
             '{
               expected_main_sha:$sha,
+              candidate_build:{state:"PASS",source_commit:$sha,evidence:"readiness_workflow_candidate"},
+              exact_sha_tests:{state:"PASS",source_commit:$sha,evidence:"npm_test_completed_before_evidence_assembly"},
               live_evidence:$live[0],
               production_deployment:null,
               end_to_end_journey:null,
