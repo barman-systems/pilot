@@ -7,7 +7,11 @@ const script=String.raw`(()=>{
   const q=s=>document.querySelector(s);
   const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
-  const businessType=()=>String(window.workspace?.business?.business_type||'').toLowerCase();
+  // The base app owns `workspace` as a top-level lexical binding (`let workspace`),
+  // not as a property on window. Read the canonical binding directly so routing
+  // cannot silently fall back to Appointments for a real store workspace.
+  const workspaceState=()=>{try{return typeof workspace!=='undefined'?workspace:null}catch{return null}};
+  const businessType=()=>String(workspaceState()?.business?.business_type||'').toLowerCase();
   const isStore=()=>businessType()==='store';
   const isServiceBusiness=()=>Boolean(businessType())&&!isStore();
   const copy=()=>ar()?{
@@ -109,7 +113,7 @@ const script=String.raw`(()=>{
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v4',authority:'primary-context-router',mobile_menu_resync:true};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v5',authority:'primary-context-router',mobile_menu_resync:true,workspace_authority:'lexical'};
 })();`;
 
 export default function handler(req,res){
@@ -117,6 +121,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v4');
+  res.setHeader('x-dabbir-contextual-navigation','v5');
   return res.status(200).send(script);
 }
