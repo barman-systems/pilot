@@ -3,12 +3,14 @@ name: DABBIR Public Owner Link
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/dabbir-public-owner-link.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: dabbir-public-owner-link-production
+  cancel-in-progress: true
 
 jobs:
   expose-app-auth-gate:
