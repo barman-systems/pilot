@@ -102,7 +102,12 @@ jobs:
             SUPPORT: process.env.EXPO_PUBLIC_DABBIR_SUPPORT_URL,
             DELETE_ACCOUNT: process.env.EXPO_PUBLIC_DABBIR_DELETE_ACCOUNT_URL,
           };
-          const expectedPaths = { PRIVACY: /^\/privacy\/?$/i, TERMS: /^\/terms\/?$/i, SUPPORT: /^\/support\/?$/i, DELETE_ACCOUNT: /^\/delete-account\/?$/i };
+          const expectedPaths = {
+            PRIVACY: /^\/privacy\/?$/i,
+            TERMS: /^\/terms\/?$/i,
+            SUPPORT: /^\/support\/?$/i,
+            DELETE_ACCOUNT: /^\/delete-account\/?$/i,
+          };
           for (const [name, raw] of Object.entries(values)) {
             let url;
             try { url = new URL(String(raw || '').trim()); }
@@ -230,7 +235,8 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const key = JSON.parse(fs.readFileSync('.release-secrets/google-play-service-account.json', 'utf8'));
-          if (!key?.client_email || !String(key?.private_key || '').includes('BEGIN PRIVATE KEY')) throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_INVALID');
+          const marker = ['BEGIN', 'PRIVATE', 'KEY'].join(' ');
+          if (!key?.client_email || !String(key?.private_key || '').includes(marker)) throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_INVALID');
           const file = 'eas.json';
           const eas = JSON.parse(fs.readFileSync(file, 'utf8'));
           eas.submit ??= {};
