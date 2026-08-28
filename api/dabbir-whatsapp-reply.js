@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { json, readJsonBody, requireSameOrigin, supabaseRest } from './_auth-core.js';
 import { loadBusinessConnection, ownerContext } from './_whatsapp-embedded-core.js';
+import { withServerReadTimeout } from './_server-read-timeout.js';
 import {
   finalizeOutboundReply,
   markOutboundResult,
@@ -10,6 +11,7 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IDEMPOTENCY_RE = /^[A-Za-z0-9:_-]{16,160}$/;
+const WHATSAPP_READBACK_TIMEOUT_MS = 10_000;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const cleanText = (value, max = 4000) => String(value || '').trim().slice(0, max);
 
@@ -29,10 +31,15 @@ async function readRows(response, fallback) {
 
 async function readPersistedMessage(token, businessId, messageId) {
   if (!messageId) return null;
-  const rows = await readRows(await supabaseRest(
-    `dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at,sender_user_id&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(messageId)}&limit=1`,
-    token,
-  ), 'WHATSAPP_REPLY_READBACK_FAILED');
+  const response = await withServerReadTimeout(
+    signal => supabaseRest(
+      `dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at,sender_user_id&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(messageId)}&limit=1`,
+      token,
+      { signal },
+    ),
+    { label: 'WHATSAPP_REPLY_READBACK', timeoutMs: WHATSAPP_READBACK_TIMEOUT_MS },
+  );
+  const rows = await readRows(response, 'WHATSAPP_REPLY_READBACK_FAILED');
   const message = rows[0] || null;
   return message?.id && message.sender_type === 'human' && message.simulated === false ? message : null;
 }
@@ -173,13 +180,13 @@ export default async function handler(req, res) {
       secrets_exposed: false,
     });
   } catch (error) {
-    const status = Number(error?.status || 500);
-    const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(status) ? status : 500;
+    const status = Number(error?.status || error?.code || 500);
+    const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503, 504].includes(status) ? status : 500;
     const ambiguous = error?.ambiguous === true || error?.providerAccepted === true || (providerAccepted && reservation?.reservationId);
     return json(res, safeStatus, {
       ok: false,
       state: ambiguous ? 'AMBIGUOUS_NO_AUTOMATIC_RESEND' : 'FAILED',
-      error: cleanText(error?.message || 'WHATSAPP_REPLY_FAILED', 160),
+      error: cleanText(error?.safeCode || error?.message || 'WHATSAPP_REPLY_FAILED', 160),
       provider_status: error?.providerStatus || null,
       provider_code: error?.providerCode || null,
       automatic_resend_blocked: Boolean(reservation?.reservationId),
