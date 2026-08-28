@@ -56,6 +56,17 @@ test('service businesses reach Services from More instead of a sixth primary des
   assert.match(router, /const isServiceBusiness=\(\)=>Boolean\(businessType\(\)\)&&!isStore\(\)/);
 });
 
+test('team and owner assistant remain explicitly reachable from More on mobile', () => {
+  assert.match(router, /dabbirTeamAccess/);
+  assert.match(router, /teamTitle:'الفريق والموظفون'/);
+  assert.match(router, /window\.location\.assign\('\/team\.html'\)/);
+  assert.match(router, /dabbirAssistantAccess/);
+  assert.match(router, /assistantTitle:'مساعد دبّر'/);
+  assert.match(router, /__dabbirOwnerCopilot\?\.refresh/);
+  assert.match(router, /team_access:'more-and-sidebar'/);
+  assert.match(router, /owner_assistant_access:'more'/);
+});
+
 test('contextual navigation loads after service and owner UX layers', () => {
   assert.match(shell, /\/api\/dabbir-contextual-navigation-ui/);
   assert.ok(shell.indexOf('/api/dabbir-contextual-navigation-ui') > shell.indexOf('/api/service-operations-ui'));
