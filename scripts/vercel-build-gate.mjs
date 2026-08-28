@@ -14,52 +14,6 @@ const lock = path.join(os.tmpdir(), `dabbir-vercel-tests-running-${evidenceKey}`
 const maxWaitMs = 120000;
 const pollMs = 250;
 
-function firstEnv(...names) {
-  for (const name of names) {
-    const value = String(process.env[name] || '').trim();
-    if (value) return value;
-  }
-  return '';
-}
-
-function logMetaReadiness() {
-  const appId = firstEnv(
-    'DABBIR_META_APP_ID',
-    'DABBIR_WHATSAPP_APP_ID',
-    'PILOT_META_APP_ID',
-    'PILOT_WHATSAPP_APP_ID',
-    'META_APP_ID',
-    'FACEBOOK_APP_ID',
-  );
-  const appSecret = firstEnv(
-    'DABBIR_WHATSAPP_APP_SECRET',
-    'PILOT_WHATSAPP_APP_SECRET',
-    'META_APP_SECRET',
-    'FACEBOOK_APP_SECRET',
-  );
-  const configId = firstEnv(
-    'DABBIR_WHATSAPP_EMBEDDED_CONFIG_ID',
-    'DABBIR_META_CONFIG_ID',
-    'PILOT_WHATSAPP_EMBEDDED_CONFIG_ID',
-    'PILOT_META_CONFIG_ID',
-    'WHATSAPP_EMBEDDED_CONFIG_ID',
-    'META_CONFIG_ID',
-  );
-  const encryptionKey = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY');
-  const verifyToken = firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN');
-  const expectedConfigId = '1984552462260787';
-  console.log(
-    '[dabbir-meta-readiness] '
-    + `app_id=${Boolean(appId)} `
-    + `app_secret=${Boolean(appSecret)} `
-    + `config_id=${Boolean(configId)} `
-    + `config_id_matches_expected=${configId === expectedConfigId} `
-    + `dedicated_encryption_key=${Boolean(encryptionKey)} `
-    + `effective_encryption=${Boolean(encryptionKey || appSecret)} `
-    + `verify_token=${Boolean(verifyToken)}`,
-  );
-}
-
 function sleep(milliseconds) {
   const buffer = new SharedArrayBuffer(4);
   Atomics.wait(new Int32Array(buffer), 0, 0, milliseconds);
@@ -67,7 +21,6 @@ function sleep(milliseconds) {
 
 function runTests() {
   console.log(`[dabbir-build-gate:${gateVersion}] verifying deployment ${safeDeploymentId} commit ${safeSha}`);
-  logMetaReadiness();
   const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test'], {
     stdio: 'inherit',
     env: process.env,
