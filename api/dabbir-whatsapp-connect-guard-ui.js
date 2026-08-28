@@ -6,21 +6,21 @@ const script = String.raw`(()=>{
   let cachedBusinessId='';
   let cachedAt=0;
   let patchScheduled=false;
+  let metaSignupStartedAt=0;
   const CACHE_MS=5000;
+  const META_SIGNUP_RESUME_KEY='dabbir_meta_signup_resume_v2';
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
-  function aiConfigured(){try{return Boolean(workspace?.ai?.configured)}catch{return false}}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
-  function setText(node,text){if(node&&node.textContent!==text)node.textContent=text}
-  function openScreen(screen){try{if(typeof showScreen==='function')showScreen(screen)}catch{}}
 
   const style=document.createElement('style');
-  style.dataset.dabbirWhatsAppNoFacebook='v1';
+  style.dataset.dabbirWhatsAppMetaResume='v2';
   style.textContent=[
-    '.dabbirWhatsAppNoFacebook{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.65}',
-    '.dabbirWhatsAppNoFacebook strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
-    '.dabbirWhatsAppNoFacebook button{margin-top:8px;min-height:36px;border:1px solid #34415f;background:#151d2f;color:#eef3fb;border-radius:9px;padding:7px 10px;font-size:9px;font-weight:850;cursor:pointer}'
+    '.dabbirWhatsAppMetaResume{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.55}',
+    '.dabbirWhatsAppMetaResume strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
+    '.dabbirWhatsAppMetaResume button{margin-top:8px;min-height:38px;border:0;background:#1877f2;color:#fff;border-radius:9px;padding:8px 11px;font-size:9px;font-weight:900;cursor:pointer}',
+    '.dabbirWhatsAppMetaResume button:disabled{opacity:.65;cursor:wait}'
   ].join('');
   document.head.appendChild(style);
 
@@ -52,86 +52,85 @@ const script = String.raw`(()=>{
   function blockedText(missing){
     const items=missing.length?missing.join('، '):(ar()?'إعداد Meta للمنصة':'Meta platform configuration');
     return ar()
-      ? 'زر الربط يعمل، لكن Meta لا يمكن فتحها لأن إعداد المنصة غير مكتمل: '+items+'. لم يتم حفظ أي ربط ناقص.'
-      : 'The connect control works, but Meta cannot open because platform setup is incomplete: '+items+'. No incomplete connection was saved.';
+      ? 'تعذر فتح ربط واتساب لأن إعداد المنصة غير مكتمل: '+items+'.'
+      : 'WhatsApp connection cannot open because platform setup is incomplete: '+items+'.';
   }
 
-  function ensureNoFacebookNotice(box){
-    if(!box||box.querySelector('[data-dabbir-no-facebook]')) return;
+  function markMetaSignupResume(){
+    metaSignupStartedAt=Date.now();
+    try{sessionStorage.setItem(META_SIGNUP_RESUME_KEY,JSON.stringify({business_id:businessId(),started_at:metaSignupStartedAt}))}catch{}
+  }
+
+  function clearMetaSignupResume(){
+    metaSignupStartedAt=0;
+    try{sessionStorage.removeItem(META_SIGNUP_RESUME_KEY)}catch{}
+  }
+
+  function pendingMetaSignup(){
+    try{
+      const raw=sessionStorage.getItem(META_SIGNUP_RESUME_KEY);
+      if(!raw)return false;
+      const data=JSON.parse(raw);
+      if(String(data?.business_id||'')!==businessId())return false;
+      const started=Number(data?.started_at||0);
+      if(!Number.isFinite(started)||Date.now()-started>15*60*1000){clearMetaSignupResume();return false}
+      metaSignupStartedAt=started;
+      return true;
+    }catch{return false}
+  }
+
+  function resumeOfficialWhatsAppSignup(){
+    if(!pendingMetaSignup())return;
+    if(Date.now()-metaSignupStartedAt<1500)return;
+    const primary=document.querySelector('.dabbirWhatsAppConnect,.dabbirWhatsAppChange');
+    if(!(primary instanceof HTMLButtonElement)||primary.disabled)return;
+    clearMetaSignupResume();
+    tell(ar()?'جاري إكمال ربط واتساب…':'Continuing WhatsApp connection…');
+    setTimeout(()=>primary.click(),150);
+  }
+
+  function startFacebookAccountCreation(button){
+    if(button.disabled)return;
+    markMetaSignupResume();
+    button.disabled=true;
+    button.textContent=ar()?'أنشئ الحساب ثم ارجع إلى دبّر':'Create the account, then return to DABBIR';
+    const popup=window.open('https://www.facebook.com/r.php','_blank','noopener,noreferrer');
+    if(!popup){
+      button.disabled=false;
+      button.textContent=ar()?'إنشاء الحساب والمتابعة':'Create account and continue';
+      clearMetaSignupResume();
+      tell(ar()?'اسمح بفتح صفحة Facebook ثم أعد المحاولة':'Allow the Facebook page to open, then retry');
+    }
+  }
+
+  function ensureMetaResumeNotice(box){
+    if(!box||box.querySelector('[data-dabbir-meta-resume]')) return;
     const notice=document.createElement('div');
-    notice.className='dabbirWhatsAppNoFacebook';
-    notice.setAttribute('data-dabbir-no-facebook','true');
+    notice.className='dabbirWhatsAppMetaResume';
+    notice.setAttribute('data-dabbir-meta-resume','true');
     const title=document.createElement('strong');
     title.textContent=ar()?'لا تملك حساب Facebook؟':'No Facebook account?';
     const text=document.createElement('span');
     text.textContent=ar()
-      ? 'يمكنك متابعة استخدام دبّر الآن وربط واتساب لاحقًا. ربط رقم WhatsApp Business الخاص بك رسميًا يمر عبر تسجيل Meta/Facebook بحسب متطلبات منصة WhatsApp الحالية، لذلك عدم وجود حساب Facebook لا يمنع إنشاء حساب دبّر أو استخدام بقية النظام.'
-      : 'You can keep using DABBIR now and connect WhatsApp later. Officially connecting your own WhatsApp Business number goes through Meta/Facebook login under the current WhatsApp Business Platform requirements, so not having Facebook does not block your DABBIR account or the rest of the product.';
+      ? 'أنشئ الحساب مرة واحدة فقط، ثم ارجع إلى دبّر وسيكمل ربط WhatsApp Business تلقائيًا.'
+      : 'Create it once, return to DABBIR, and WhatsApp Business setup will resume automatically.';
     const button=document.createElement('button');
     button.type='button';
-    button.textContent=ar()?'متابعة بدون واتساب':'Continue without WhatsApp';
-    button.onclick=()=>{
-      openScreen('dashboard');
-      tell(ar()?'يمكنك ربط واتساب لاحقًا من التكاملات':'You can connect WhatsApp later from Integrations');
-    };
+    button.textContent=ar()?'إنشاء الحساب والمتابعة':'Create account and continue';
+    button.onclick=()=>startFacebookAccountCreation(button);
     notice.append(title,text,button);
     box.appendChild(notice);
   }
 
-  function patchActivation(){
-    const panel=document.querySelector('#dabbirActivation');
-    if(!panel)return;
-    const steps=[...panel.querySelectorAll('.daSteps .daStep')];
-    if(steps.length<3)return;
-
-    const profile=steps[0];
-    const whatsapp=steps[1];
-    const ai=steps[2];
-    setText(whatsapp,ar()?'واتساب (اختياري)':'WhatsApp (optional)');
-
-    const coreDone=[profile,ai].filter(step=>step.classList.contains('done')).length;
-    const score=Math.round(coreDone/2*100);
-    setText(panel.querySelector('.daScore strong'),score+'%');
-    const progress=panel.querySelector('.daProgress i');
-    if(progress&&progress.style.width!==score+'%')progress.style.width=score+'%';
-
-    const whatsappReady=whatsapp.classList.contains('done');
-    if(!profile.classList.contains('done')||whatsappReady)return;
-
-    const nextTitle=panel.querySelector('.daNext b');
-    const nextBody=panel.querySelector('.daNext p');
-    const nextButton=panel.querySelector('#daNextAction');
-
-    if(!aiConfigured()){
-      setText(nextTitle,ar()?'تحقق من جاهزية الذكاء':'Verify AI readiness');
-      setText(nextBody,ar()?'يمكنك استخدام دبّر بدون ربط واتساب الآن. جهّز ذكاء دبّر أولًا، ثم اربط واتساب لاحقًا إذا رغبت.':'You can use DABBIR without connecting WhatsApp now. Set up DABBIR AI first, then connect WhatsApp later if you want.');
-      if(nextButton){
-        setText(nextButton,ar()?'فتح حالة الذكاء':'Open AI status');
-        nextButton.onclick=()=>openScreen('integrations');
-      }
-      return;
-    }
-
-    setText(nextTitle,ar()?'ابدأ باستخدام دبّر':'Start using DABBIR');
-    setText(nextBody,ar()?'حسابك جاهز للاستخدام. ربط WhatsApp Business اختياري ويمكنك إكماله لاحقًا من التكاملات.':'Your account is ready to use. WhatsApp Business connection is optional and can be completed later from Integrations.');
-    if(nextButton){
-      setText(nextButton,ar()?'فتح المحادثات':'Open conversations');
-      nextButton.onclick=()=>openScreen('conversations');
-    }
-    setText(panel.querySelector('.daHead h2'),ar()?'دَبِّر جاهز للعمل':'DABBIR is ready to operate');
-    setText(panel.querySelector('.daHead p'),ar()?'الأساسيات التشغيلية جاهزة. يمكنك ربط واتساب لاحقًا إذا احتجته.':'Core operations are ready. You can connect WhatsApp later if you need it.');
-  }
-
   async function patch(){
     patchScheduled=false;
-    patchActivation();
     const cfg=await config();
     const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
-    document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureNoFacebookNotice);
+    document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureMetaResumeNotice);
     document.querySelectorAll('.dabbirWhatsAppConnect,.dabbirWhatsAppChange').forEach(button=>{
       if(!(button instanceof HTMLButtonElement)) return;
       const box=button.closest('[data-dabbir-whatsapp-actions]');
-      if(box) ensureNoFacebookNotice(box);
+      if(box) ensureMetaResumeNotice(box);
       if(platformReady||button.dataset.platformReady!=='false') return;
       if(button.closest('.dabbirWhatsAppBusy')) return;
       const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
@@ -156,9 +155,12 @@ const script = String.raw`(()=>{
     setTimeout(patch,0);
   }
 
+  window.addEventListener('focus',()=>setTimeout(resumeOfficialWhatsAppSignup,250));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(resumeOfficialWhatsAppSignup,250)});
+
   const observer=new MutationObserver(schedulePatch);
-  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready','class']});
-  setTimeout(patch,800);
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready']});
+  setTimeout(()=>{patch();resumeOfficialWhatsAppSignup()},800);
 })();`;
 
 export default function handler(req,res){
@@ -171,6 +173,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-whatsapp-onboarding','optional-v1');
+  res.setHeader('x-dabbir-whatsapp-onboarding','meta-resume-v2');
   return res.end(script);
 }
