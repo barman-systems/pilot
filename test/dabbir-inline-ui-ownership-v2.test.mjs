@@ -20,11 +20,10 @@ test('duplicate legacy businessAdaptive UI layer cannot return',()=>{
 });
 
 test('app transformer only injects the three remaining inline runtime layers',()=>{
-  const injection=app.match(/html = html\.replace\('<\/body>', `\$\{([\s\S]*?)\}<\/body>`\);/)?.[1]||'';
-  assert.match(injection,/interfacePerformanceUi/);
-  assert.match(injection,/conversationPerformanceUi/);
-  assert.match(injection,/truthVisibilityUi/);
-  assert.doesNotMatch(injection,/businessAdaptiveUi/);
+  assert.match(app,/html = html\.replace\('<\/body>', `\$\{interfacePerformanceUi\}/);
+  assert.match(app,/\$\{conversationPerformanceUi\}/);
+  assert.match(app,/\$\{truthVisibilityUi\}/);
+  assert.doesNotMatch(app,/`\$\{businessAdaptiveUi\}/);
 });
 
 test('primary owner navigation remains authored in index instead of app string replacement',()=>{
