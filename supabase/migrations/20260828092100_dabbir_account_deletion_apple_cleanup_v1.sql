@@ -1,28 +1,7 @@
--- DABBIR product-deletion cleanup.
--- Preserve shared auth.users identity for unrelated products while removing or
--- de-identifying DABBIR-specific subscription and owner-memory references.
+-- Ensure a DABBIR product-account tombstone removes the DABBIR Apple entitlement
+-- while preserving the shared auth.users identity used by unrelated products.
 
--- Owner decision/policy records may need to remain attached to a business after
--- the original owner deletes their DABBIR product account. Keep the business
--- record semantics but allow the personal actor reference to be removed.
-alter table public.dabbir_owner_decision_observations
-  alter column owner_user_id drop not null;
-alter table public.dabbir_owner_policy_versions
-  alter column owner_user_id drop not null;
-
-alter table public.dabbir_owner_decision_observations
-  drop constraint if exists dabbir_owner_decision_observations_owner_user_id_fkey;
-alter table public.dabbir_owner_decision_observations
-  add constraint dabbir_owner_decision_observations_owner_user_id_fkey
-  foreign key (owner_user_id) references auth.users(id) on delete set null;
-
-alter table public.dabbir_owner_policy_versions
-  drop constraint if exists dabbir_owner_policy_versions_owner_user_id_fkey;
-alter table public.dabbir_owner_policy_versions
-  add constraint dabbir_owner_policy_versions_owner_user_id_fkey
-  foreign key (owner_user_id) references auth.users(id) on delete set null;
-
-create or replace function dabbir_private.cleanup_dabbir_identity_on_account_tombstone()
+create or replace function dabbir_private.delete_apple_entitlement_on_account_tombstone()
 returns trigger
 language plpgsql
 security definer
@@ -32,24 +11,17 @@ begin
   if new.status = 'deleted'
      and (tg_op = 'INSERT' or old.status is distinct from 'deleted') then
     delete from public.dabbir_apple_entitlements where user_id = new.user_id;
-    update public.dabbir_owner_decision_observations
-       set owner_user_id = null
-     where owner_user_id = new.user_id;
-    update public.dabbir_owner_policy_versions
-       set owner_user_id = null
-     where owner_user_id = new.user_id;
   end if;
   return new;
 end;
 $function$;
 
-revoke all on function dabbir_private.cleanup_dabbir_identity_on_account_tombstone() from public, anon, authenticated;
+revoke all on function dabbir_private.delete_apple_entitlement_on_account_tombstone() from public, anon, authenticated;
 
 drop trigger if exists dabbir_account_delete_apple_entitlement on public.account_access_state;
-drop trigger if exists dabbir_account_delete_identity_cleanup on public.account_access_state;
-create trigger dabbir_account_delete_identity_cleanup
+create trigger dabbir_account_delete_apple_entitlement
 after insert or update of status on public.account_access_state
-for each row execute function dabbir_private.cleanup_dabbir_identity_on_account_tombstone();
+for each row execute function dabbir_private.delete_apple_entitlement_on_account_tombstone();
 
-comment on function dabbir_private.cleanup_dabbir_identity_on_account_tombstone() is
-  'Removes DABBIR Apple entitlement state and de-identifies retained DABBIR owner-memory records when the DABBIR product account becomes deleted; shared auth identity is preserved.';
+comment on function dabbir_private.delete_apple_entitlement_on_account_tombstone() is
+  'Deletes DABBIR Apple entitlement state when the DABBIR product account becomes deleted; does not delete shared auth identity.';
