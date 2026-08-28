@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="index,follow">
+<title>حذف حساب دبّر | DABBIR</title>
+<style>
+:root{color-scheme:dark;--bg:#08090a;--panel:#121416;--line:#2a2e33;--text:#f7f8f9;--muted:#a8adb4;--accent:#d7ff5f;--danger:#ff7f7f;--ok:#8ce6a1}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.75}.wrap{width:min(760px,calc(100% - 32px));margin:0 auto;padding:40px 0 72px}.brand{font-weight:900;color:var(--accent)}.card{margin-top:18px;padding:24px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}h1{font-size:clamp(28px,5vw,42px);margin:.2em 0}p,li,label{color:#e4e7ea}.muted{color:var(--muted)}.warning{border-inline-start:3px solid var(--danger);padding-inline-start:14px}.field{display:grid;gap:7px;margin-top:16px}input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;background:#090b0d;color:var(--text);padding:11px 13px;font:inherit}button{width:100%;min-height:50px;margin-top:20px;border:0;border-radius:12px;background:var(--danger);color:#161616;font-weight:900;font:inherit;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.check{display:flex;gap:10px;align-items:flex-start;margin-top:18px}.check input{width:20px;min-height:20px;margin-top:4px}.status{margin-top:18px;padding:12px;border-radius:12px;border:1px solid var(--line);display:none}.status.show{display:block}.status.ok{border-color:#31503b;color:var(--ok)}.status.error{border-color:#653636;color:#ffb0b0}.en{direction:ltr;text-align:left;margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}a{color:var(--accent)}
+</style>
+</head>
+<body><main class="wrap">
+<div class="brand">DABBIR | دبّر</div>
+<section class="card">
+<h1>طلب حذف حساب دبّر</h1>
+<p>هذه الصفحة هي المسار الخارجي الرسمي لطلب حذف حساب DABBIR والبيانات التشغيلية المرتبطة به. يمكنك أيضًا بدء الحذف من داخل تطبيق دبّر.</p>
+<p class="warning"><strong>الحذف دائم.</strong> بعد التحقق من بيانات الدخول سيتم إرسال طلب الحذف مباشرة. قد نحتفظ بسجلات محدودة فقط عندما يكون الاحتفاظ مطلوبًا قانونيًا أو أمنيًا أو محاسبيًا وفق سياسة الخصوصية.</p>
+<form id="delete-form" autocomplete="on">
+<div class="field"><label for="email">البريد الإلكتروني للحساب</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254"></div>
+<div class="field"><label for="password">كلمة المرور</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"></div>
+<label class="check"><input id="confirm" type="checkbox" required><span>أفهم أن هذا الإجراء سيحذف حساب DABBIR وبياناته المرتبطة ولا يمكن التراجع عنه.</span></label>
+<button id="submit" type="submit">تحقق واحذف حساب DABBIR</button>
+</form>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<p class="muted">لا يتم تخزين كلمة المرور في هذه الصفحة. تُستخدم فقط لتسجيل الدخول عبر واجهة DABBIR الآمنة ثم تنفيذ طلب الحذف في نفس الجلسة.</p>
+<p><a href="/privacy">سياسة الخصوصية</a> · <a href="/support">الدعم</a></p>
+
+<section class="en" lang="en">
+<h2>Delete your DABBIR account</h2>
+<p>This is DABBIR's official external account-deletion path. You can also initiate deletion inside the DABBIR app.</p>
+<p>Deletion is permanent. After your credentials are verified, the DABBIR account-deletion request is sent immediately. Limited records may be retained only where legally, securely, or financially required, as described in the Privacy Policy.</p>
+</section>
+</section>
+</main>
+<script>
+(() => {
+  const form = document.getElementById('delete-form');
+  const button = document.getElementById('submit');
+  const status = document.getElementById('status');
+  const show = (message, kind) => {
+    status.textContent = message;
+    status.className = `status show ${kind}`;
+  };
+  const parse = async response => {
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!response.ok) throw new Error(String(data?.error || `HTTP_${response.status}`));
+    return data;
+  };
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!document.getElementById('confirm').checked) return;
+    button.disabled = true;
+    show('جارٍ التحقق من الحساب…', '');
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    try {
+      const loginResponse = await fetch('/api/mobile/auth/login', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+      const login = await parse(loginResponse);
+      const token = String(login?.session?.access_token || '');
+      if (!token) throw new Error('AUTH_SESSION_MISSING');
+
+      const deleteResponse = await fetch('/api/mobile/account-delete', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ confirmation: 'DELETE_DABBIR_ACCOUNT' }),
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+      await parse(deleteResponse);
+      document.getElementById('password').value = '';
+      form.reset();
+      show('تم إرسال طلب حذف حساب DABBIR بنجاح. تم إنهاء مسار الحذف لهذا الحساب.', 'ok');
+    } catch (error) {
+      document.getElementById('password').value = '';
+      show('تعذر تنفيذ الحذف. تحقق من بيانات الدخول أو حاول لاحقًا من داخل تطبيق DABBIR.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
