@@ -1,1 +1,0 @@
-DABBIR owner journey simplification v1 reduces daily navigation complexity without removing product capabilities. It introduces progressive disclosure, dashboard quick actions, simplified first-use copy, and actionable empty states while preserving the existing authenticated runtime and backend behavior.
