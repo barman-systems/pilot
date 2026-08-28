@@ -1,14 +1,12 @@
 name: DABBIR iOS TestFlight Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/dabbir-ios-testflight-release.yml'
-      - 'mobile/app.config.ts'
-      - 'api/_apple-iap-core.js'
   workflow_dispatch:
     inputs:
+      release_approval:
+        description: 'Type PUBLISH_DABBIR only after the release is explicitly approved.'
+        required: true
+        default: 'BLOCKED'
       what_to_test:
         description: 'TestFlight What to Test note'
         required: false
@@ -23,6 +21,7 @@ concurrency:
 
 jobs:
   signed-testflight-release:
+    if: ${{ inputs.release_approval == 'PUBLISH_DABBIR' && vars.DABBIR_STORE_RELEASE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
