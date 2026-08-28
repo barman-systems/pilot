@@ -68,8 +68,10 @@ async function verifiedOutcomes(token,businessId){
   try{
     const rows=await rest(token,`dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${enc(day.start)}&order=completed_at.desc&limit=100`,'VERIFIED_OUTCOMES_LOOKUP_FAILED');
     const safeRows=Array.isArray(rows)?rows:[];
-    const seconds=safeRows.reduce((sum,row)=>sum+Math.max(0,Number(row.estimated_manual_seconds)||0),0);
-    return {available:true,verified_autonomous_actions:safeRows.length,estimated_manual_minutes_saved:Math.round(seconds/60),latest:safeRows.slice(0,5).map(row=>({operation_type:clean(row.operation_type,100),completed_at:row.completed_at||null}))};
+    const estimates=safeRows.map(row=>Number(row.estimated_manual_seconds)).filter(value=>Number.isFinite(value)&&value>=0);
+    const seconds=estimates.reduce((sum,value)=>sum+value,0);
+    const minutes=safeRows.length===0?0:(estimates.length?Math.round(seconds/60):null);
+    return {available:true,verified_autonomous_actions:safeRows.length,estimated_manual_minutes_saved:minutes,latest:safeRows.slice(0,5).map(row=>({operation_type:clean(row.operation_type,100),completed_at:row.completed_at||null}))};
   }catch{return {available:false,verified_autonomous_actions:null,estimated_manual_minutes_saved:null,latest:[]}}
 }
 
@@ -78,6 +80,19 @@ function valueText(value){
   if(typeof value==='string')return value;
   if(typeof value==='object'&&typeof value.text==='string')return value.text;
   try{return JSON.stringify(value)}catch{return ''}
+}
+
+function recommendScreen(message,snapshot){
+  const text=String(message||'').toLowerCase();
+  if(/متابع|follow.?up|مهم|task/.test(text))return 'tasks';
+  if(/موعد|appointment|حجز|booking|معاين/.test(text))return 'appointments';
+  if(/طلب|order|مخزون|inventory|منتج|product|مبيعات|sales/.test(text))return 'operations';
+  if(/واتس|whats.?app|ربط|integration|قناة|channel/.test(text))return 'integrations';
+  if(/ساعات|دوام|سياس|policy|معلومات النشاط|business info|setting/.test(text))return 'settings';
+  if(/عميل|customer|محادث|chat|handoff|تدخل/.test(text))return 'conversations';
+  if(snapshot.metrics.active_handoffs>0)return 'conversations';
+  if(snapshot.metrics.open_followups>0)return 'tasks';
+  return 'dashboard';
 }
 
 function fallbackAnswer(message,language,snapshot){
@@ -91,10 +106,11 @@ function fallbackAnswer(message,language,snapshot){
   }
   if(/انجز|أنجز|سويت|عملت|accompl|done today|what did/.test(text)){
     if(!proof.available)return ar?'سجل الإنجازات الموثقة غير متاح الآن، لذلك لن أعرض رقمًا تقديريًا.':'Verified outcome evidence is unavailable right now, so I will not estimate it.';
-    return ar?`أنجز دبّر ${proof.verified_autonomous_actions} إجراءً موثقًا تلقائيًا اليوم، بوقت يدوي مقدر تم توفيره ${proof.estimated_manual_minutes_saved} دقيقة.`:`DABBIR completed ${proof.verified_autonomous_actions} verified autonomous action(s) today, with an estimated ${proof.estimated_manual_minutes_saved} minutes of manual work avoided.`;
+    const time=proof.estimated_manual_minutes_saved==null?(ar?'، ولا يوجد تقدير موثق للوقت الموفر بعد':', and there is no verified time-saved estimate yet'):(ar?`، بوقت يدوي مقدر تم توفيره ${proof.estimated_manual_minutes_saved} دقيقة`:` with an estimated ${proof.estimated_manual_minutes_saved} minutes of manual work avoided`);
+    return ar?`أنجز دبّر ${proof.verified_autonomous_actions} إجراءً موثقًا تلقائيًا اليوم${time}.`:`DABBIR completed ${proof.verified_autonomous_actions} verified autonomous action(s) today${time}.`;
   }
   if(/كم.*عميل|customers?/.test(text))return ar?`لديك ${m.customers} عميلًا موثقًا في النشاط.`:`You have ${m.customers} verified customer(s) in this business.`;
-  if(/موعد|appointment/.test(text))return ar?`لديك ${snapshot.appointments.length} موعدًا موثقًا خلال الـ24 ساعة القادمة.`:`You have ${snapshot.appointments.length} verified appointment(s) in the next 24 hours.`;
+  if(/موعد|appointment/.test(text))return ar?`لديك ${snapshot.appointments.length} موعدًا حقيقيًا موثقًا خلال الـ24 ساعة القادمة.`:`You have ${snapshot.appointments.length} verified non-simulated appointment(s) in the next 24 hours.`;
   const attention=m.active_handoffs+m.open_followups;
   return ar?`الآن لديك ${attention} حالة تحتاج متابعة: ${m.active_handoffs} تدخل بشري نشط و${m.open_followups} متابعة مفتوحة. المحادثات النشطة ${m.active_chats}، والعملاء ${m.customers}.`:`Right now, ${attention} item(s) need follow-up: ${m.active_handoffs} active human handoff(s) and ${m.open_followups} open follow-up(s). Active conversations: ${m.active_chats}; customers: ${m.customers}.`;
 }
@@ -106,11 +122,11 @@ async function buildSnapshot(token,businessId){
   const day=dubaiDay(new Date(now));
   const b=enc(businessId);
   const [businessRows,knowledge,followups,handoffs,appointments,customers,metrics,proof]=await Promise.all([
-    rest(token,`dabbir_businesses?select=id,name,business_type,locale&business_id=eq.${b}&limit=1`.replace('business_id=','id='),'BUSINESS_LOOKUP_FAILED'),
+    rest(token,`dabbir_businesses?select=id,name,business_type,locale&id=eq.${b}&limit=1`,'BUSINESS_LOOKUP_FAILED'),
     rest(token,`dabbir_business_knowledge?select=knowledge_key,value,status&business_id=eq.${b}&status=eq.approved&order=updated_at.desc&limit=30`,'BUSINESS_KNOWLEDGE_LOOKUP_FAILED').catch(()=>[]),
     rest(token,`dabbir_followups?select=customer_id,status,reason,due_at,blocked_reason&business_id=eq.${b}&status=not.in.(completed,cancelled,sent)&due_at=lte.${enc(next24)}&order=due_at.asc&limit=20`,'FOLLOWUPS_LOOKUP_FAILED'),
     rest(token,`dabbir_handoffs?select=customer_id,state,priority,reason,summary,updated_at&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&order=updated_at.desc&limit=20`,'HANDOFFS_LOOKUP_FAILED'),
-    rest(token,`dabbir_appointments?select=customer_id,starts_at,status,simulated&business_id=eq.${b}&starts_at=gte.${enc(nowIso)}&starts_at=lte.${enc(next24)}&simulated=eq.false&order=starts_at.asc&limit=20`,'APPOINTMENTS_LOOKUP_FAILED'),
+    rest(token,`dabbir_appointments?select=customer_id,starts_at,status,simulated&business_id=eq.${b}&starts_at=gte.${enc(nowIso)}&starts_at=lte.${enc(next24)}&simulated=eq.false&status=not.in.(cancelled,completed)&order=starts_at.asc&limit=20`,'APPOINTMENTS_LOOKUP_FAILED'),
     rest(token,`dabbir_customers?select=id,display_name&business_id=eq.${b}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
     Promise.all([
       restCount(token,`dabbir_customers?select=id&business_id=eq.${b}&limit=1`,'CUSTOMERS_COUNT_FAILED'),
@@ -118,7 +134,7 @@ async function buildSnapshot(token,businessId){
       restCount(token,`dabbir_followups?select=id&business_id=eq.${b}&status=not.in.(completed,cancelled,sent)&limit=1`,'OPEN_FOLLOWUPS_COUNT_FAILED'),
       restCount(token,`dabbir_handoffs?select=id&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&limit=1`,'ACTIVE_HANDOFFS_COUNT_FAILED'),
       restCount(token,`dabbir_messages?select=id&business_id=eq.${b}&sender_type=eq.ai&simulated=eq.false&limit=1`,'AI_MESSAGES_COUNT_FAILED'),
-      restCount(token,`dabbir_appointments?select=id&business_id=eq.${b}&starts_at=gte.${enc(day.start)}&starts_at=lt.${enc(day.end)}&limit=1`,'TODAY_APPOINTMENTS_COUNT_FAILED'),
+      restCount(token,`dabbir_appointments?select=id&business_id=eq.${b}&starts_at=gte.${enc(day.start)}&starts_at=lt.${enc(day.end)}&simulated=eq.false&limit=1`,'TODAY_APPOINTMENTS_COUNT_FAILED'),
     ]),
     verifiedOutcomes(token,businessId),
   ]);
@@ -146,12 +162,12 @@ function promptContext(snapshot){
   return [
     'OWNER OPERATIONS SNAPSHOT — VERIFIED TENANT DATA ONLY.',
     `Business: ${clean(snapshot.business?.name,120)} | type=${clean(snapshot.business?.business_type,40)}.`,
-    `Exact metrics: customers=${snapshot.metrics.customers}; active_chats=${snapshot.metrics.active_chats}; open_followups=${snapshot.metrics.open_followups}; active_handoffs=${snapshot.metrics.active_handoffs}; ai_messages=${snapshot.metrics.ai_messages}; today_appointments=${snapshot.metrics.today_appointments}.`,
-    snapshot.proof.available?`Verified autonomous outcomes today=${snapshot.proof.verified_autonomous_actions}; estimated manual minutes avoided=${snapshot.proof.estimated_manual_minutes_saved}.`:'Verified autonomous outcome evidence is unavailable; do not treat it as zero.',
+    `Exact metrics: customers=${snapshot.metrics.customers}; active_web_chats=${snapshot.metrics.active_chats}; open_followups=${snapshot.metrics.open_followups}; active_handoffs=${snapshot.metrics.active_handoffs}; ai_messages=${snapshot.metrics.ai_messages}; today_real_appointments=${snapshot.metrics.today_appointments}.`,
+    snapshot.proof.available?`Verified autonomous outcomes today=${snapshot.proof.verified_autonomous_actions}; estimated manual minutes avoided=${snapshot.proof.estimated_manual_minutes_saved==null?'UNAVAILABLE':snapshot.proof.estimated_manual_minutes_saved}.`:'Verified autonomous outcome evidence is unavailable; do not treat it as zero.',
     facts?`Owner-approved business knowledge:\n${facts}`:'No owner-approved business knowledge was supplied.',
     followups?`Follow-ups due within 24h:\n${followups}`:'No verified follow-ups due within 24h.',
     handoffs?`Active human handoffs:\n${handoffs}`:'No active human handoffs.',
-    appointments?`Appointments within 24h:\n${appointments}`:'No verified appointments within 24h.',
+    appointments?`Real non-simulated appointments within 24h:\n${appointments}`:'No verified real appointments within 24h.',
     'This owner copilot is read-only. Never claim you executed, sent, changed, booked, paid, cancelled, or contacted anyone. Recommend the exact next screen when action is needed: conversations, tasks, appointments, operations, integrations, or settings.',
   ].join('\n').slice(0,3900);
 }
@@ -173,6 +189,7 @@ export default async function handler(req,res){
     const language=String(body?.language||'auto').toLowerCase()==='en'?'en':String(body?.language||'auto').toLowerCase()==='ar'?'ar':'auto';
     const snapshot=await buildSnapshot(ctx.token,businessId);
     const fallback=fallbackAnswer(message,language,snapshot);
+    const recommendedScreen=recommendScreen(message,snapshot);
     let ai=null;
     try{
       ai=await generateDABBIRAiReply({project:'dabbir_businesses',message:`Owner operations question: ${message}\nAnswer the owner directly from the verified snapshot.`,language,businessContext:promptContext(snapshot)});
@@ -183,13 +200,14 @@ export default async function handler(req,res){
       answer:ai?.ok?ai.reply:fallback,
       answer_source:ai?.ok?'AI_GROUNDED_ON_VERIFIED_OWNER_SNAPSHOT':'DETERMINISTIC_VERIFIED_FALLBACK',
       provider_state:ai?.state||'FALLBACK',
+      recommended_screen:recommendedScreen,
       proof:snapshot.proof,
       metrics:snapshot.metrics,
       mode:'READ_ONLY_VERIFIED_OWNER_COPILOT',
       external_side_effects:false,
       generated_at:snapshot.generated_at,
       timezone:snapshot.timezone,
-      truth:{tenant_rls:true,exact_counts:true,owner_only:true,unverified_numbers_forbidden:true},
+      truth:{tenant_rls:true,exact_counts:true,owner_only:true,unverified_numbers_forbidden:true,simulated_appointments_excluded:true},
     });
   }catch(error){
     const status=Number(error?.status||500);
