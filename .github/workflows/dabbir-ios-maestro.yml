@@ -37,11 +37,17 @@ jobs:
       - name: Select and boot iPhone simulator
         shell: bash
         run: |
+          set -euo pipefail
           UDID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x.get("name","").startswith("iPhone")))')"
+          test -n "${UDID}"
           echo "DABBIR_SIMULATOR_UDID=${UDID}" >> "$GITHUB_ENV"
-          xcrun simctl boot "${UDID}" || true
-          open -a Simulator
-          xcrun simctl bootstatus "${UDID}" -b
+          xcrun simctl boot "${UDID}" 2>/dev/null || true
+          DABBIR_SIMULATOR_UDID="${UDID}" python3 <<'PY'
+          import os, subprocess
+          udid = os.environ['DABBIR_SIMULATOR_UDID']
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', udid, '-b'], check=True, timeout=180)
+          PY
+          xcrun simctl list devices | grep -F "${UDID}" | grep -F '(Booted)'
       - name: Resolve Xcode workspace and scheme
         shell: bash
         run: |
