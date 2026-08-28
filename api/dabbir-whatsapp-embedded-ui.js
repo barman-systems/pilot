@@ -3,6 +3,7 @@ const script = String.raw`(()=>{
   window.__dabbirWhatsAppEmbeddedUiLoaded=true;
 
   const SESSION_TIMEOUT_MS=15*60*1000;
+  const POST_LOGIN_SESSION_GRACE_MS=1800;
   const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
   const META_FINISH_EVENTS=new Set([
     'FINISH',
@@ -216,12 +217,13 @@ const script = String.raw`(()=>{
   }
 
   async function completeSignup(code,session){
+    const safeSession=session||{};
     report('complete_start',{
       stage:'server_complete',
       onboarding_mode:COEXISTENCE_FEATURE,
       has_code:Boolean(code),
-      has_waba:Boolean(session?.waba_id),
-      has_phone:Boolean(session?.phone_number_id)
+      has_waba:Boolean(safeSession.waba_id),
+      has_phone:Boolean(safeSession.phone_number_id)
     });
     const response=await fetch('/api/dabbir-whatsapp-embedded-complete',{
       method:'POST',
@@ -230,8 +232,8 @@ const script = String.raw`(()=>{
       body:JSON.stringify({
         business_id:businessId(),
         code,
-        waba_id:session.waba_id,
-        phone_number_id:session.phone_number_id||'',
+        waba_id:safeSession.waba_id||'',
+        phone_number_id:safeSession.phone_number_id||'',
         onboarding_mode:COEXISTENCE_FEATURE
       })
     });
@@ -249,6 +251,8 @@ const script = String.raw`(()=>{
     if(key==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد ربط WhatsApp Business في Meta غير مكتمل بعد':'Meta WhatsApp Business onboarding is not configured yet';
     if(key==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. أغلق نافذة Meta وأعد المحاولة من داخل دبّر.':'Meta did not return an authorization code. Close the Meta window and retry from DABBIR.';
     if(key==='META_EMBEDDED_SIGNUP_SESSION_MISSING') return ar()?'لم يصل تأكيد ربط WhatsApp Business من Meta. لم يتم حفظ أي ربط ناقص.':'Meta did not return the WhatsApp Business connection confirmation. No incomplete connection was saved.';
+    if(key==='META_WABA_DISCOVERY_EMPTY') return ar()?'أكملت Meta تسجيل الدخول، لكن لم تشارك أي حساب WhatsApp Business مع دبّر.':'Meta login completed, but no WhatsApp Business Account was shared with DABBIR.';
+    if(key==='META_WABA_RESOLUTION_REQUIRED') return ar()?'تمت مشاركة أكثر من حساب WhatsApp Business ولا يمكن اختيار أحدها تلقائيًا بأمان.':'More than one WhatsApp Business Account was shared, so DABBIR cannot safely choose one automatically.';
     if(key==='META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED') return ar()?'يوجد أكثر من رقم داخل حساب WhatsApp Business ولم تتمكن Meta من تحديد الرقم المختار تلقائيًا.':'More than one WhatsApp Business number is available and Meta did not identify the selected number.';
     if(key==='META_SDK_NOT_READY'||key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'جاري تجهيز الربط الآمن من Meta. أعد الضغط بعد أن يصبح الزر جاهزًا.':'Meta secure onboarding is still preparing. Retry when the connect button is ready.';
     return ar()?'تعذر ربط WhatsApp Business. لم يتم حفظ أي ربط غير مكتمل.':'WhatsApp Business could not be connected. No incomplete connection was saved.';
@@ -299,8 +303,18 @@ const script = String.raw`(()=>{
       if(!code) throw new Error('META_AUTHORIZATION_CODE_MISSING');
 
       stage='meta_session';
-      const session=await sessionPromise;
-      if(!session?.waba_id) throw new Error('META_EMBEDDED_SIGNUP_SESSION_MISSING');
+      let session=embeddedSession?.waba_id?embeddedSession:null;
+      if(!session){
+        session=await Promise.race([
+          sessionPromise,
+          new Promise(resolve=>setTimeout(()=>resolve(null),POST_LOGIN_SESSION_GRACE_MS))
+        ]);
+      }
+      if(!session?.waba_id){
+        report('session_server_fallback',{stage:'meta_session',has_code:true,has_waba:false,has_phone:false});
+        settleSession(null);
+        session=null;
+      }
 
       stage='server_complete';
       await completeSignup(code,session);
