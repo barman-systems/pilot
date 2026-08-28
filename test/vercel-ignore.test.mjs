@@ -57,6 +57,29 @@ test('test-only changes on main skip Vercel deployment when no runtime drift exi
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
+test('protected Production smoke runner changes on main force exact-SHA Vercel deployment', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(dir, 'test', 'dabbir-protected-live-smoke.mjs'), 'export const smoke = 1;\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'protected smoke contract');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const result = runGuard(dir, head, lastSuccessfulDeployment);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Protected Production smoke contract changed; deploy exact SHA for browser evidence/);
+});
+
+test('protected Production smoke workflow changes on main force exact-SHA Vercel deployment', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.github', 'workflows', 'dabbir-protected-live-smoke.yml'), 'name: protected smoke\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'protected smoke workflow contract');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const result = runGuard(dir, head, lastSuccessfulDeployment);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Protected Production smoke contract changed; deploy exact SHA for browser evidence/);
+});
+
 test('Supabase migrations on main force Vercel deployment so production SHA cannot drift', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
