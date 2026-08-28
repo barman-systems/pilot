@@ -8,22 +8,27 @@ const machinePath='api/_dabbir-whatsapp-state-machine.js';
 const activationPath='api/customer-activation-ui.js';
 const migrationPath='supabase/migrations/20260828044500_dabbir_whatsapp_live_message_path_v2.sql';
 const raceMigrationPath='supabase/migrations/20260828045000_dabbir_whatsapp_inbound_sender_race_hardening_v1.sql';
+const hardeningPath='supabase/migrations/20260828045200_dabbir_whatsapp_rpc_security_invoker_v1.sql';
 const status=fs.readFileSync(statusPath,'utf8');
 const machine=fs.readFileSync(machinePath,'utf8');
 const activation=fs.readFileSync(activationPath,'utf8');
 const migration=fs.readFileSync(migrationPath,'utf8');
 const raceMigration=fs.readFileSync(raceMigrationPath,'utf8');
+const hardening=fs.readFileSync(hardeningPath,'utf8');
 
-test('WhatsApp operational evidence is tenant-scoped, non-demo, and provider-backed',()=>{
-  assert.match(status,/supabaseRpc/);
+test('WhatsApp operational evidence is tenant-scoped, non-demo, provider-backed, and server-only',()=>{
+  assert.match(status,/serviceRpc/);
+  assert.doesNotMatch(status,/supabaseRpc/);
   assert.match(status,/dabbir_whatsapp_operational_evidence/);
   assert.match(status,/\{ p_business_id: businessId \}/);
   assert.match(migration,/function public\.dabbir_whatsapp_operational_evidence\(p_business_id uuid\)/);
-  assert.match(migration,/has_permission\(p_business_id,'view_integrations'\)/);
   assert.match(migration,/c\.business_id=p_business_id and c\.channel_type='whatsapp' and c\.demo_mode=false/);
   assert.match(migration,/e\.business_id=p_business_id and e\.direction='inbound' and e\.event_type='message' and e\.message_id is not null/);
   assert.match(migration,/r\.business_id=p_business_id and r\.message_id is not null and r\.provider_message_id is not null/);
   assert.match(migration,/r\.business_id=p_business_id and r\.provider_verified=true and r\.state in \('DELIVERED','READ'\)/);
+  assert.match(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) from public,anon,authenticated/i);
+  assert.match(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) to service_role/i);
+  assert.doesNotMatch(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) to authenticated/i);
 });
 
 test('distinct inbound messages from one new sender serialize conversation ownership',()=>{
