@@ -18,6 +18,12 @@ test('mobile bearer bridge fails closed without Authorization bearer token', asy
   assert.match(source, /injectNativeBearerSession/);
 });
 
+test('Apple server verifier module loads with the locked official library', async () => {
+  const module = await import('../api/_apple-iap-core.js');
+  assert.equal(typeof module.verifyAppleTransaction, 'function');
+  assert.equal(typeof module.persistAppleEntitlement, 'function');
+});
+
 test('Apple IAP requires Apple JWS verification, account binding, and server persistence', async () => {
   const client = await read('mobile/src/SubscriptionCard.tsx');
   const server = await read('api/mobile/iap/verify.js');
