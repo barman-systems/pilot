@@ -39,6 +39,7 @@ test('static App Store preflight passes internal invariants while reporting exte
   assert.equal(report.ok, true);
   assert.equal(report.mode, 'STATIC');
   assert.equal(report.verdict, 'INTERNAL_PASS_EXTERNAL_BLOCKED');
+  assert.equal(report.app_store_ready, false);
   assert.ok(report.passes.includes('NATIVE_NOT_WEBVIEW'));
   assert.ok(report.passes.includes('NO_UNVERIFIED_ENTITLEMENT'));
   assert.ok(report.passes.includes('SUBSCRIPTION_LEGAL_LINKS'));
@@ -58,13 +59,14 @@ test('release App Store preflight fails closed when Apple/public release configu
   assert.equal(report.ok, false);
   assert.equal(report.mode, 'RELEASE');
   assert.equal(report.verdict, 'FAIL');
+  assert.equal(report.app_store_ready, false);
   const codes = new Set(report.failures.map(item => item.code));
-  for (const required of ['APPLE_BUNDLE_REGISTERED_VALUE', 'APP_STORE_APPLE_ID', 'IAP_PRODUCT_MATCH', 'IAP_ENABLED_RELEASE', 'PUBLIC_PRODUCTION_API', 'PUBLIC_PRIVACY_URL', 'PUBLIC_TERMS_URL', 'PUBLIC_SUPPORT_URL', 'APPLE_ROOT_CERTIFICATES', 'IAP_SERVER_STORAGE_CREDENTIAL']) {
+  for (const required of ['APPLE_BUNDLE_REGISTERED_VALUE', 'APP_STORE_APPLE_ID', 'IAP_PRODUCT_MATCH', 'IAP_ENABLED_RELEASE', 'PUBLIC_PRODUCTION_API', 'PUBLIC_PRIVACY_URL', 'PUBLIC_TERMS_URL', 'PUBLIC_SUPPORT_URL', 'APPLE_ROOT_CERTIFICATES_CONFIG', 'IAP_SERVER_STORAGE_CREDENTIAL_CONFIG']) {
     assert.ok(codes.has(required), `missing fail-closed release blocker ${required}`);
   }
 });
 
-test('release App Store preflight accepts only canonical public legal route paths', () => {
+test('release config cannot manufacture final PASS from placeholder-shaped values', () => {
   const common = {
     DABBIR_APP_STORE_RELEASE_PREFLIGHT: '1',
     DABBIR_IOS_BUNDLE_ID: 'com.barmansystems.dabbir',
@@ -86,14 +88,28 @@ test('release App Store preflight accepts only canonical public legal route path
   assert.equal(wrong.status, 2, wrong.stderr || wrong.stdout);
   assert.ok(JSON.parse(wrong.stdout).failures.some(item => item.code === 'PUBLIC_PRIVACY_URL'));
 
-  const canonical = runPreflight({
+  const shapedOnly = runPreflight({
     ...common,
     EXPO_PUBLIC_DABBIR_PRIVACY_URL: 'https://app.example.com/privacy',
     EXPO_PUBLIC_DABBIR_TERMS_URL: 'https://app.example.com/terms',
     EXPO_PUBLIC_DABBIR_SUPPORT_URL: 'https://app.example.com/support',
   });
-  assert.equal(canonical.status, 0, canonical.stderr || canonical.stdout);
-  assert.equal(JSON.parse(canonical.stdout).verdict, 'PASS');
+  assert.equal(shapedOnly.status, 3, shapedOnly.stderr || shapedOnly.stdout);
+  const report = JSON.parse(shapedOnly.stdout);
+  assert.equal(report.ok, false);
+  assert.equal(report.app_store_ready, false);
+  assert.equal(report.release_config_only, true);
+  assert.equal(report.verdict, 'RELEASE_CONFIG_PASS_EXTERNAL_VERIFICATION_REQUIRED');
+  for (const required of [
+    'APP_STORE_CONNECT_RECORD_VERIFICATION',
+    'APP_STORE_SUBSCRIPTION_PRODUCT_VERIFICATION',
+    'PUBLIC_RELEASE_URL_LIVE_VERIFICATION',
+    'APPLE_ROOT_TRUST_VERIFICATION',
+    'ENTITLEMENT_STORAGE_LIVE_VERIFICATION',
+    'SIGNED_DISTRIBUTION_TESTFLIGHT_VERIFICATION',
+  ]) {
+    assert.ok(report.external_blockers.some(item => item.code === required), `missing external verification blocker ${required}`);
+  }
 });
 
 test('subscription UI discloses StoreKit-derived period/offer and legal links without external payment CTA', async () => {
