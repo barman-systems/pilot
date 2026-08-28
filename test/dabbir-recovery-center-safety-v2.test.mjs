@@ -64,5 +64,5 @@ test('Customer 360 UI hides apply path until preview is safe and account is froz
   assert.match(ui, /RECOVERY_ACCOUNT_MUST_BE_SUSPENDED/);
   assert.match(ui, /RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED/);
   assert.match(ui, /const canPrepare=preview && !blocked && accountSuspended/);
-  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v3'/);
+  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v4'/);
 });

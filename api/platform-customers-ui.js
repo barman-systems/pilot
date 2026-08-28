@@ -41,13 +41,15 @@ const script = String.raw`(()=>{
   const notify = message => { try { if (typeof toast === 'function') toast(message); } catch {} };
 
   let enabled = false;
+  let capabilityDenied = false;
+  let capabilityProbePromise = null;
   let accounts = [];
   let selected = null;
   let recoveryPreview = null;
   let recoveryCase = null;
 
   const style = document.createElement('style');
-  style.dataset.dabbirPlatformCustomers = 'v3';
+  style.dataset.dabbirPlatformCustomers = 'v4';
   style.textContent = '.pcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pcToolbar{display:flex;gap:8px;margin-bottom:12px}.pcToolbar input{flex:1;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;padding:10px}.pcAccount{border:1px solid var(--line);background:#131619;border-radius:16px;padding:13px}.pcAccount b{display:block;font-size:12px}.pcAccount small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.pcCode{direction:ltr;display:inline-block;font-weight:950;letter-spacing:.04em;color:var(--accent)}.pcBiz{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#121416}.pcCounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}.pcCount{background:#191c20;border-radius:10px;padding:8px}.pcCount span{font-size:8px;color:var(--muted);display:block}.pcCount b{font-size:15px}.pcDanger{border:1px solid #5b3030;background:#2b1717;border-radius:14px;padding:11px;margin-top:12px}.pcAccess{border:1px solid #3d4654;background:#151a20;border-radius:14px;padding:12px;margin-top:12px}.pcAccess.suspended{border-color:#6a4c2c;background:#261d12}.pcAccess input{width:100%;border:1px solid var(--line);background:#101316;color:#fff;border-radius:10px;padding:9px;margin-top:7px}.pcRecoveryResult{margin-top:9px;padding:9px;border:1px solid var(--line);border-radius:11px;font-size:10px}.pcRecoverySafe{border-color:#28583a;background:#12251a}.pcRecoveryBlocked{border-color:#6c4030;background:#2d1d15}.pcMetrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.pcMetric{border:1px solid var(--line);border-radius:14px;padding:12px;background:#131619}.pcMetric span{font-size:9px;color:var(--muted);display:block}.pcMetric strong{font-size:21px}.pcActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}@media(max-width:760px){.pcGrid{grid-template-columns:1fr}.pcMetrics{grid-template-columns:repeat(2,1fr)}.pcToolbar{flex-direction:column}.pcCounts{grid-template-columns:repeat(2,1fr)}}';
   document.head.appendChild(style);
 
@@ -67,6 +69,11 @@ const script = String.raw`(()=>{
     applyLabels();
   }
 
+  function removeScreen(){
+    q('#screen-platform-customers')?.remove();
+    q('#nav [data-screen="platform-customers"]')?.remove();
+  }
+
   function applyLabels(){
     const t = text();
     if (q('#pcTitle')) q('#pcTitle').textContent = t.title;
@@ -76,12 +83,21 @@ const script = String.raw`(()=>{
   }
 
   async function capability(){
-    const {response,payload} = await api('/api/platform-customers?action=capability');
-    if (!response.ok || !payload.allowed) return false;
-    enabled = true;
-    ensureScreen();
-    await loadAccounts('');
-    return true;
+    if(enabled||capabilityDenied)return enabled;
+    if(capabilityProbePromise)return capabilityProbePromise;
+    capabilityProbePromise=(async()=>{
+      const {response,payload} = await api('/api/platform-customers?action=capability');
+      if(!response.ok)return false;
+      if(!payload.allowed){
+        if(payload.reason==='PLATFORM_ADMIN_REQUIRED'||payload.reason==='SERVER_ADMIN_NOT_CONFIGURED')capabilityDenied=true;
+        return false;
+      }
+      enabled = true;
+      ensureScreen();
+      await loadAccounts('');
+      return true;
+    })();
+    try{return await capabilityProbePromise}finally{capabilityProbePromise=null}
   }
 
   function loading(){ const body=q('#pcBody'); if(body) body.innerHTML='<div class="empty">'+esc(text().loading)+'</div>'; }
@@ -218,9 +234,21 @@ const script = String.raw`(()=>{
 
   const langObserver=new MutationObserver(()=>{ if(enabled){ applyLabels(); selected ? renderDetail() : renderAccounts(); } });
   langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  let attempts=0;
-  const timer=setInterval(async()=>{ attempts++; if(enabled||attempts>120){clearInterval(timer);return;} await capability(); },1500);
-  capability();
+
+  const authStage=()=>String(document.body?.dataset?.dabbirAuthStage||'');
+  const authReady=()=>authStage()==='session_verified'||authStage()==='workspace_ready';
+  const probeWhenReady=()=>{ if(authReady()&&!enabled&&!capabilityDenied) capability(); };
+  const authObserver=new MutationObserver(()=>{
+    if(authStage()==='signed_out'){
+      enabled=false;
+      capabilityDenied=false;
+      capabilityProbePromise=null;
+      removeScreen();
+    }
+    probeWhenReady();
+  });
+  if(document.body)authObserver.observe(document.body,{attributes:true,attributeFilter:['data-dabbir-auth-stage']});
+  setTimeout(probeWhenReady,0);
 })();`;
 
 export default function handler(req,res){
@@ -233,6 +261,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-platform-customer-admin-ui','v3');
+  res.setHeader('x-dabbir-platform-customer-admin-ui','v4');
   return res.end(script);
 }
