@@ -81,9 +81,20 @@ const script=String.raw`(()=>{
     card.innerHTML='<h3>'+t.servicesTitle+'</h3><p>'+t.servicesDesc+'</p>';
   }
 
+  function bindMobileMenuResync(){
+    const menu=q('#menuBtn');
+    if(!menu||menu.dataset.dabbirContextRouterBound==='true')return;
+    menu.dataset.dabbirContextRouterBound='true';
+    menu.addEventListener('click',()=>{
+      if(typeof requestAnimationFrame==='function')requestAnimationFrame(enforce);
+      else setTimeout(enforce,0);
+    });
+  }
+
   function enforce(){
     adaptPrimaryActivitySlot();
     ensureMoreCard();
+    bindMobileMenuResync();
   }
 
   try{
@@ -98,7 +109,7 @@ const script=String.raw`(()=>{
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v3',authority:'primary-context-router'};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v4',authority:'primary-context-router',mobile_menu_resync:true};
 })();`;
 
 export default function handler(req,res){
@@ -106,6 +117,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v3');
+  res.setHeader('x-dabbir-contextual-navigation','v4');
   return res.status(200).send(script);
 }

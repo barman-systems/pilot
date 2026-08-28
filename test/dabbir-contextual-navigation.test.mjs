@@ -23,6 +23,15 @@ test('store resolves the shared activity slot to Operations in the router', () =
   assert.match(router, /authority:'primary-context-router'/);
 });
 
+test('opening the mobile menu re-enforces the same activity-slot authority', () => {
+  assert.match(router, /function bindMobileMenuResync\(\)/);
+  assert.match(router, /q\('#menuBtn'\)/);
+  assert.match(router, /dabbirContextRouterBound/);
+  assert.match(router, /menu\.addEventListener\('click'/);
+  assert.match(router, /requestAnimationFrame\(enforce\)/);
+  assert.match(router, /mobile_menu_resync:true/);
+});
+
 test('service businesses reach Services from More instead of a sixth primary destination', () => {
   assert.match(router, /id='dabbirContextServices'/);
   assert.match(router, /#screen-more \.moreGrid/);
