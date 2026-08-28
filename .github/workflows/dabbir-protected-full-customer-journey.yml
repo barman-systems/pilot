@@ -1,0 +1,267 @@
+name: DABBIR Protected Full Customer Journey
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-protected-full-journey-preload.mjs'
+      - 'test/dabbir-protected-journey-access.test.mjs'
+      - 'test/support/dabbir-protected-journey-access.mjs'
+      - '.github/workflows/dabbir-protected-full-customer-journey.yml'
+      - 'supabase/migrations/*dabbir*'
+      - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'db/dabbir*.sql'
+      - 'api/**'
+      - 'index.html'
+      - 'team.html'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-protected-full-journey-preload.mjs'
+      - 'test/dabbir-protected-journey-access.test.mjs'
+      - 'test/support/dabbir-protected-journey-access.mjs'
+      - '.github/workflows/dabbir-protected-full-customer-journey.yml'
+      - 'supabase/migrations/*dabbir*'
+      - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'db/dabbir*.sql'
+      - 'api/**'
+      - 'index.html'
+      - 'team.html'
+  schedule:
+    - cron: '41 2 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dabbir-protected-full-customer-journey
+  cancel-in-progress: false
+
+jobs:
+  protected-full-customer-journey:
+    name: Protected production owner + employee + customer + AI journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      PRODUCTION_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      JOURNEY_REPORT_PATH: dabbir-protected-full-customer-journey-report.json
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      EXPECTED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Prepare protected Production automation access
+        id: access
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+            echo 'PROTECTED_ACCESS_FROM_EXISTING_BYPASS'
+            exit 0
+          fi
+
+          if [ -n "${VERCEL_TOKEN:-}" ]; then
+            endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+            response="$(curl --fail-with-body --silent --show-error \
+              -X PATCH "$endpoint" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data '{"generate":{"note":"DABBIR protected full journey temporary"}}')"
+            secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
+            if [ -n "$secret" ]; then
+              echo "::add-mask::$secret"
+              echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
+              echo 'ready=true' >> "$GITHUB_OUTPUT"
+              echo 'generated=true' >> "$GITHUB_OUTPUT"
+              echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+              echo 'PROTECTED_ACCESS_TEMP_BYPASS_GENERATED'
+              exit 0
+            fi
+          fi
+
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          request_token="${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          if [ -n "$request_url" ] && [ -n "$request_token" ]; then
+            oidc_response="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${request_token}" \
+              "$request_url")"
+            oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+            if [ -n "$oidc_token" ]; then
+              echo "::add-mask::$oidc_token"
+              probe_body="$(mktemp)"
+              probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+                -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+                -H 'accept: text/html' \
+                "$PRODUCTION_ORIGIN/")"
+              if [ "$probe_status" = '200' ] && grep -qi 'DABBIR' "$probe_body"; then
+                echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+                echo 'ready=true' >> "$GITHUB_OUTPUT"
+                echo 'generated=false' >> "$GITHUB_OUTPUT"
+                echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
+                echo 'PROTECTED_ACCESS_TRUSTED_OIDC_READY'
+                exit 0
+              fi
+              echo "TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"
+            fi
+          fi
+
+          echo 'ready=false' >> "$GITHUB_OUTPUT"
+          echo 'generated=false' >> "$GITHUB_OUTPUT"
+          echo 'method=none' >> "$GITHUB_OUTPUT"
+          echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'
+          exit 2
+
+      - name: Lock exact Production release before journey
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth_args+=( -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" -H 'x-vercel-set-bypass-cookie: true' )
+          elif [ -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}" ]; then
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          else
+            echo 'PROTECTED_ACCESS_MISSING_AFTER_PREPARE'
+            exit 2
+          fi
+
+          body=''
+          sha=''
+          deployment=''
+          for attempt in $(seq 1 36); do
+            body="$(curl --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
+            deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
+            environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
+            ok="$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || true)"
+            if [ "$ok" = 'true' ] && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] && { [ -z "$environment" ] || [ "$environment" = 'production' ]; }; then
+              break
+            fi
+            sha=''
+            sleep 5
+          done
+          if [ -z "$sha" ]; then
+            echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED: ${body:0:500}"
+            exit 3
+          fi
+          if [ -n "${EXPECTED_BASE_SHA:-}" ] && [ "$sha" != "$EXPECTED_BASE_SHA" ]; then
+            echo "PRODUCTION_SHA_DOES_NOT_MATCH_PR_BASE expected=${EXPECTED_BASE_SHA} observed=${sha}"
+            exit 4
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "LOCKED_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
+      - name: Install WebKit full-journey runner
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps webkit
+
+      - name: Run full customer journey through protected Production
+        run: node --import ./test/dabbir-protected-full-journey-preload.mjs test/ai-full-customer-journey-v2.mjs
+
+      - name: Require a real full-journey PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$JOURNEY_REPORT_PATH"
+          jq -e '.verdict == "PASS" and .required_failures == 0 and (.steps | length) > 10' "$JOURNEY_REPORT_PATH" >/dev/null
+          echo "FULL_JOURNEY_PASS steps=$(jq -r '.steps | length' "$JOURNEY_REPORT_PATH")"
+
+      - name: Prove Production release did not move during journey
+        id: after
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth_args+=( -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" -H 'x-vercel-set-bypass-cookie: true' )
+          elif [ -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}" ]; then
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          else
+            echo 'PROTECTED_ACCESS_MISSING_AFTER_JOURNEY'
+            exit 2
+          fi
+          body="$(curl --fail-with-body --silent --show-error \
+            "${auth_args[@]}" \
+            -H 'accept: application/json' \
+            "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
+          sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
+          deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty')"
+          test "$sha" = "${{ steps.before.outputs.sha }}"
+          if [ -n "${{ steps.before.outputs.deployment }}" ] && [ -n "$deployment" ]; then
+            test "$deployment" = "${{ steps.before.outputs.deployment }}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "STABLE_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
+      - name: Publish protected full-journey summary
+        if: always()
+        shell: bash
+        run: |
+          echo '## DABBIR Protected Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Access method:** ${{ steps.access.outputs.method || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA before:** ${{ steps.before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA after:** ${{ steps.after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Deployment:** ${{ steps.before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$JOURNEY_REPORT_PATH" ]; then
+            echo "**Verdict:** $(jq -r '.verdict' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' "$JOURNEY_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Verdict:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload protected full-journey evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-protected-full-customer-journey-evidence
+          path: |
+            dabbir-protected-full-customer-journey-report.json
+            dabbir-ai-customer-journey-screenshot.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Revoke temporary automation bypass
+        if: ${{ always() && steps.access.outputs.generated == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+          payload="$(jq -nc --arg secret "$VERCEL_AUTOMATION_BYPASS_SECRET" '{revoke:{secret:$secret,regenerate:false}}')"
+          curl --fail-with-body --silent --show-error \
+            -X PATCH "$endpoint" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            >/dev/null
+          echo 'TEMPORARY_AUTOMATION_BYPASS_REVOKED'
