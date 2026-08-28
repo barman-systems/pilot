@@ -16,21 +16,17 @@ test('WhatsApp mobile connect session storage is service-only and force-RLS prot
   assert.match(migration, /grant select, insert, update, delete on table public\.dabbir_whatsapp_mobile_connect_sessions to service_role/i);
 });
 
-test('failed OAuth sessions can terminate before Meta issues an authorization code', () => {
+test('pending and terminal OAuth sessions contain no authorization-code material', () => {
   assert.match(
     migration,
-    /status = 'failed'[\s\S]*code_ciphertext is null[\s\S]*code_iv is null[\s\S]*code_tag is null[\s\S]*code_key_version is null/i,
+    /status in \('pending','consumed','failed'\)[\s\S]*code_ciphertext is null[\s\S]*code_iv is null[\s\S]*code_tag is null[\s\S]*code_key_version is null/i,
   );
 });
 
-test('captured or consumed OAuth state never permits partial encrypted code material', () => {
+test('only captured or completing OAuth sessions can contain a complete encrypted code', () => {
   assert.match(
     migration,
-    /status in \('captured','completing','consumed'\)[\s\S]*code_ciphertext is not null[\s\S]*code_iv is not null[\s\S]*code_tag is not null[\s\S]*code_key_version is not null/i,
-  );
-  assert.match(
-    migration,
-    /status = 'pending'[\s\S]*code_ciphertext is null[\s\S]*code_iv is null[\s\S]*code_tag is null[\s\S]*code_key_version is null/i,
+    /status in \('captured','completing'\)[\s\S]*code_ciphertext is not null[\s\S]*code_iv is not null[\s\S]*code_tag is not null[\s\S]*code_key_version is not null/i,
   );
 });
 
