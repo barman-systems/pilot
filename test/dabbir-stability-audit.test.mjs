@@ -11,13 +11,20 @@ function injectedApiScripts(source) {
   return [...source.matchAll(/<script src=\"(\/api\/[^\"]+)\"><\/script>/g)].map(match => match[1]);
 }
 
-test('platform capability fails closed without emitting a capability 503', () => {
-  assert.match(platformApi, /return \{user,role:admin\.role,key:serviceKey\(\)\}/);
-  assert.match(platformApi, /if\(action==='capability'\)[\s\S]*serviceConfigured=Boolean\(context\.key\)/);
-  assert.match(platformApi, /allowed:serviceConfigured/);
-  assert.match(platformApi, /service_configured:serviceConfigured/);
+test('platform capability is quiet and fail-closed while privileged operations retain admin enforcement', () => {
+  const capabilityRouteIndex = platformApi.indexOf("if(req.method==='GET'&&action==='capability')return platformCapability(req,res)");
+  const adminContextIndex = platformApi.indexOf('const context=await adminContext(req,res)');
+  assert.ok(capabilityRouteIndex >= 0 && adminContextIndex > capabilityRouteIndex, 'capability probe must resolve before privileged admin context');
+  assert.match(platformApi, /function quietCapability\(res,/);
+  assert.match(platformApi, /return json\(res,200,/);
+  assert.match(platformApi, /if\(!token\)return quietCapability\(res,\{reason:'AUTH_REQUIRED'\}\)/);
+  assert.match(platformApi, /if\(!response\?\.ok\)return quietCapability\(res,\{authenticated:true,reason:'PLATFORM_ADMIN_REQUIRED'\}\)/);
+  assert.match(platformApi, /role:allowed\?role:null/);
+  assert.match(platformApi, /service_configured:allowed\?Boolean\(serviceConfigured\):false/);
+  assert.match(platformApi, /const serviceConfigured=Boolean\(serviceKey\(\)\)/);
   assert.match(platformApi, /reason:serviceConfigured\?null:'SERVER_ADMIN_NOT_CONFIGURED'/);
   assert.match(platformApi, /if\(!context\.key\)return adminServiceUnavailable\(res\)/);
+  assert.match(platformApi, /json\(res,response\?\.status===401\?401:403,\{ok:false,error:'PLATFORM_ADMIN_REQUIRED'\}\)/);
   assert.doesNotMatch(platformApi, /if\(!key\)\{json\(res,503,\{ok:false,error:'SERVER_ADMIN_NOT_CONFIGURED'\}\);return null\}/);
 });
 
