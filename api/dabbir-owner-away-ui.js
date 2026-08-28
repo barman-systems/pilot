@@ -27,6 +27,7 @@ const client=String.raw`
 
   let mode=null;
   let checkedBusiness=null;
+  let modeLoaded=false;
   let loading=false;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
@@ -43,14 +44,14 @@ const client=String.raw`
   async function refreshMode(force=false){
     const id=businessId();
     if(!id||!isOwner()||loading)return;
-    if(!force&&checkedBusiness===id&&mode)return renderButton();
+    if(!force&&checkedBusiness===id&&modeLoaded)return renderButton();
     loading=true;
     try{
       const response=await nativeFetch('/api/owner-away-mode?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok)throw new Error(payload?.error||'OWNER_AWAY_LOOKUP_FAILED');
-      mode=payload.mode||null;checkedBusiness=id;renderButton();
-    }catch{mode=null;checkedBusiness=id;renderButton()}
+      mode=payload.mode||null;checkedBusiness=id;modeLoaded=true;renderButton();
+    }catch{mode=null;checkedBusiness=id;modeLoaded=true;renderButton()}
     finally{loading=false}
   }
 
@@ -66,8 +67,10 @@ const client=String.raw`
       if(refresh?.parentNode)refresh.parentNode.insertBefore(button,refresh);else head.append(button);
     }
     const t=copy();
-    button.classList.toggle('active',mode?.active===true);
-    button.textContent=mode?.active?(t.active+' · '+t.until+' '+dateLabel(mode.ends_at)):t.button;
+    const active=mode?.active===true;
+    button.classList.toggle('active',active);
+    const nextLabel=active?(t.active+' · '+t.until+' '+dateLabel(mode.ends_at)):t.button;
+    if(button.textContent!==nextLabel)button.textContent=nextLabel;
   }
 
   function closeDialog(){document.querySelector('#dabbirAwayOverlay')?.remove()}
@@ -99,13 +102,22 @@ const client=String.raw`
       });
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok)throw new Error(payload?.error||'OWNER_AWAY_UPDATE_FAILED');
-      mode=payload.mode;checkedBusiness=id;closeDialog();renderButton();notify(t.saved);
+      mode=payload.mode;checkedBusiness=id;modeLoaded=true;closeDialog();renderButton();notify(t.saved);
       if(window.__dabbirOwnerActionCenter?.refresh)window.__dabbirOwnerActionCenter.refresh();
     }catch(error){notify(String(error?.message||'').includes('LOOKUP')?t.unavailable:t.failed)}
     finally{loading=false}
   }
 
-  const observer=new MutationObserver(()=>{if(document.querySelector('#dabbirActionCenter')){renderButton();refreshMode(false)}});
+  let observerFrame=0;
+  function scheduleObservedSync(){
+    if(observerFrame)return;
+    const run=()=>{
+      observerFrame=0;
+      if(document.querySelector('#dabbirActionCenter')){renderButton();refreshMode(false)}
+    };
+    observerFrame=typeof requestAnimationFrame==='function'?requestAnimationFrame(run):setTimeout(run,0);
+  }
+  const observer=new MutationObserver(scheduleObservedSync);
   observer.observe(document.documentElement,{subtree:true,childList:true});
   setTimeout(()=>refreshMode(true),500);
   window.__dabbirOwnerAway={refresh:()=>refreshMode(true),version:'owner-away-ui-v1'};
