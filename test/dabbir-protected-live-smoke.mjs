@@ -4,6 +4,8 @@ const ORIGIN = String(process.env.PROTECTED_QA_ORIGIN || '').trim().replace(/\/$
 const BYPASS = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
 const TRUSTED_OIDC = String(process.env.VERCEL_TRUSTED_OIDC_TOKEN || '').trim();
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
+const EXPECTED_PROJECT_ID = 'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq';
+const EXPECTED_REPOSITORY = 'barman-systems/pilot';
 const REPORT_PATH = process.env.PROTECTED_QA_REPORT_PATH || 'dabbir-protected-live-smoke-report.json';
 const RELEASE_WAIT_MS = Math.min(Math.max(Number(process.env.PROTECTED_QA_RELEASE_WAIT_MS || 180_000), 15_000), 300_000);
 
@@ -79,6 +81,9 @@ async function waitForExactProductionSha() {
       last = `HTTP_${response.status}:${observed || body?.error || text.slice(0, 120)}`;
       if (response.status === 200 && body?.ok === true && observed === EXPECTED_SHA) {
         assert(!environment || environment === 'production', `EXACT_SHA_NOT_PRODUCTION_${environment}`);
+        assert(body?.project_id === EXPECTED_PROJECT_ID, `EXACT_PROJECT_ID_MISMATCH_${body?.project_id || 'missing'}`);
+        assert(body?.git_provider === 'github', `EXACT_GIT_PROVIDER_MISMATCH_${body?.git_provider || 'missing'}`);
+        assert(body?.repository === EXPECTED_REPOSITORY, `EXACT_REPOSITORY_MISMATCH_${body?.repository || 'missing'}`);
         report.verified_production_sha = observed;
         report.verified_deployment_id = body?.deployment_id || null;
         return body;
@@ -95,7 +100,7 @@ let browser;
 try {
   await step('00_exact_production_sha', async () => {
     const evidence = await waitForExactProductionSha();
-    return `Production release evidence matches ${EXPECTED_SHA}${evidence?.deployment_id ? ` on ${evidence.deployment_id}` : ''}.`;
+    return `Production release evidence matches ${EXPECTED_SHA}${evidence?.deployment_id ? ` on ${evidence.deployment_id}` : ''}, ${evidence.project_id}, ${evidence.repository}.`;
   });
 
   await step('01_protected_home_reachable', async () => {
@@ -149,8 +154,6 @@ try {
     await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
     report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
 
-    // Brand UI intentionally prepends a mobile app-shell brand that stays hidden on auth.
-    // Scope the assertion to the visible auth gate so a hidden sibling can never satisfy or break this check.
     const logo = authGate.locator('.authCard .brand .logo');
     assert(await logo.count() === 1, `AUTH_APPROVED_LOGO_COUNT_${await logo.count()}`);
     await logo.waitFor({ state: 'visible', timeout: 10_000 });
