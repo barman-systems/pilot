@@ -1,14 +1,19 @@
 const secret = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+const trustedOidc = String(process.env.VERCEL_TRUSTED_OIDC_TOKEN || '').trim();
 const originValue = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 
-if (!secret) throw new Error('VERCEL_AUTOMATION_BYPASS_SECRET_REQUIRED');
+if (!secret && !trustedOidc) throw new Error('PROTECTED_QA_AUTH_REQUIRED');
 if (!/^https:\/\/[^/]+$/i.test(originValue)) throw new Error('PROTECTED_QA_ORIGIN_REQUIRED');
 
 const targetOrigin = new URL(originValue).origin;
-const bypassHeaders = {
-  'x-vercel-protection-bypass': secret,
-  'x-vercel-set-bypass-cookie': 'true',
-};
+const protectionHeaders = secret
+  ? {
+      'x-vercel-protection-bypass': secret,
+      'x-vercel-set-bypass-cookie': 'true',
+    }
+  : {
+      'x-vercel-trusted-oidc-idp-token': trustedOidc,
+    };
 
 const originalFetch = globalThis.fetch.bind(globalThis);
 globalThis.fetch = async function protectedQaFetch(input, init = {}) {
@@ -23,8 +28,7 @@ globalThis.fetch = async function protectedQaFetch(input, init = {}) {
 
   const sourceHeaders = init.headers ?? (typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined);
   const headers = new Headers(sourceHeaders || {});
-  headers.set('x-vercel-protection-bypass', secret);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  for (const [key, value] of Object.entries(protectionHeaders)) headers.set(key, value);
   return originalFetch(input, { ...init, headers });
 };
 
@@ -36,7 +40,7 @@ webkit.launch = async function protectedQaLaunch(...args) {
   browser.newContext = async function protectedQaContext(options = {}) {
     const context = await originalNewContext(options);
     await context.route(`${targetOrigin}/**`, async route => {
-      const headers = { ...route.request().headers(), ...bypassHeaders };
+      const headers = { ...route.request().headers(), ...protectionHeaders };
       await route.continue({ headers });
     });
     return context;
