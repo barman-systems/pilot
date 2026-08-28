@@ -49,7 +49,7 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   return <View style={styles.metric}><Text style={styles.metricValue}>{String(value)}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 
-function Workspace({ session, onLogout }: { session: DabbirSession; onLogout: () => Promise<void> }) {
+function Workspace({ session, onLogout, onDeleted }: { session: DabbirSession; onLogout: () => Promise<void>; onDeleted: () => Promise<void> }) {
   const [runtime, setRuntime] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -71,18 +71,22 @@ function Workspace({ session, onLogout }: { session: DabbirSession; onLogout: ()
   const whatsapp = runtime?.whatsapp || {};
 
   const deleteAccount = () => {
-    if (!business?.id) return;
-    Alert.alert(t('حذف الحساب', 'Delete account'), t('سيبدأ هذا طلب حذف حساب النشاط وبياناته. هذه العملية حساسة ولا يمكن التراجع عنها بعد التنفيذ.', 'This starts deletion of the business account and associated data. It cannot be reversed after execution.'), [
-      { text: t('إلغاء', 'Cancel'), style: 'cancel' },
-      { text: t('بدء الحذف', 'Start deletion'), style: 'destructive', onPress: async () => {
-        setDeleting(true);
-        try {
-          await api.requestAccountDeletion(session.access_token, business.id);
-          Alert.alert(t('تم تسجيل الطلب', 'Deletion initiated'), t('تم تسجيل طلب حذف الحساب وربطه بهويتك الحالية.', 'The account-deletion request has been recorded for your current identity.'));
-        } catch (error) { Alert.alert(t('تعذر بدء الحذف', 'Unable to start deletion'), String((error as Error)?.message || 'DELETE_FAILED')); }
-        finally { setDeleting(false); }
-      }},
-    ]);
+    Alert.alert(
+      t('حذف حساب دبّر', 'Delete DABBIR account'),
+      t('سيتم حذف حساب دبّر والأنشطة التي تملكها وبياناتها التشغيلية. قد تبقى سجلات مالية أو تدقيقية ملزمة، ولن نحذف هوية دخول مشتركة تستخدمها منتجات أخرى. حذف الحساب لا يلغي اشتراك Apple تلقائيًا.', 'This deletes your DABBIR account, businesses you own, and operational data. Legally required financial/audit records may remain, and a shared login identity used by other products is not deleted. Account deletion does not automatically cancel an Apple subscription.'),
+      [
+        { text: t('إلغاء', 'Cancel'), style: 'cancel' },
+        { text: t('حذف نهائي', 'Delete'), style: 'destructive', onPress: async () => {
+          setDeleting(true);
+          try {
+            await api.deleteDabbirAccount(session.access_token);
+            await onDeleted();
+            Alert.alert(t('تم حذف حساب دبّر', 'DABBIR account deleted'), t('تم إنهاء وصول هذا الحساب إلى دبّر وحذف نطاق البيانات القابل للحذف.', 'DABBIR access has ended and the deletable DABBIR data scope was removed.'));
+          } catch (error) { Alert.alert(t('تعذر حذف الحساب', 'Unable to delete account'), String((error as Error)?.message || 'DELETE_FAILED')); }
+          finally { setDeleting(false); }
+        }},
+      ],
+    );
   };
 
   return <SafeAreaView style={styles.safe}><ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}>
@@ -97,7 +101,7 @@ function Workspace({ session, onLogout }: { session: DabbirSession; onLogout: ()
     <View style={styles.card}><Text style={styles.cardTitle}>{t('آخر العملاء', 'Recent customers')}</Text>{customers.slice(0, 8).map((item: any) => <View key={item.id} style={styles.row}><Text style={styles.rowTitle}>{item.display_name || t('عميل', 'Customer')}</Text><Text style={styles.muted}>{item.lead_status || ''}</Text></View>)}{!customers.length && <Text style={styles.muted}>{t('لا توجد بيانات بعد.', 'No data yet.')}</Text>}</View>
     <View style={styles.card}><Text style={styles.cardTitle}>{t('المتابعات والتنبيهات', 'Follow-ups and attention')}</Text>{[...handoffs, ...followups].slice(0, 8).map((item: any) => <View key={item.id} style={styles.row}><Text style={styles.rowTitle}>{item.reason || item.summary || t('متابعة', 'Follow-up')}</Text><Text style={styles.muted}>{item.state || item.status || ''}</Text></View>)}{!handoffs.length && !followups.length && <Text style={styles.muted}>{t('لا توجد عناصر معلقة.', 'Nothing pending.')}</Text>}</View>
     <SubscriptionCard accessToken={session.access_token} />
-    <View style={styles.card}><Text style={styles.cardTitle}>{t('الخصوصية والحساب', 'Privacy & account')}</Text><Text style={styles.body}>{t('يمكنك بدء حذف حسابك وبيانات نشاطك من داخل التطبيق.', 'You can initiate deletion of your account and business data in the app.')}</Text><ActionButton secondary disabled={deleting} title={deleting ? t('جارٍ التسجيل…', 'Submitting…') : t('حذف الحساب', 'Delete account')} onPress={deleteAccount} /></View>
+    <View style={styles.card}><Text style={styles.cardTitle}>{t('الخصوصية والحساب', 'Privacy & account')}</Text><Text style={styles.body}>{t('يمكنك حذف حساب دبّر من داخل التطبيق.', 'You can delete your DABBIR account in the app.')}</Text><ActionButton secondary disabled={deleting} title={deleting ? t('جارٍ الحذف…', 'Deleting…') : t('حذف حساب دبّر', 'Delete DABBIR account')} onPress={deleteAccount} /></View>
   </ScrollView></SafeAreaView>;
 }
 
@@ -119,10 +123,11 @@ export default function App() {
 
   const authenticated = async (next: DabbirSession) => { await saveSession(next); setSession(next); };
   const signOut = async () => { if (session) await api.logout(session.access_token).catch(() => undefined); await clearSession(); setSession(null); };
+  const accountDeleted = async () => { await clearSession(); setSession(null); };
 
   const content = useMemo(() => {
     if (!booted) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text>DABBIR | دبّر</Text></View></SafeAreaView>;
-    return session ? <Workspace session={session} onLogout={signOut} /> : <AuthScreen onAuthenticated={authenticated} />;
+    return session ? <Workspace session={session} onLogout={signOut} onDeleted={accountDeleted} /> : <AuthScreen onAuthenticated={authenticated} />;
   }, [booted, session]);
 
   return <SafeAreaProvider><StatusBar style="auto" />{content}</SafeAreaProvider>;

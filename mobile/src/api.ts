@@ -60,12 +60,8 @@ export async function loadRuntime(accessToken: string): Promise<any> {
   return parseJson(response);
 }
 
-export async function requestAccountDeletion(accessToken: string, businessId: string): Promise<any> {
-  return post('/api/mobile/privacy-requests', {
-    business_id: businessId,
-    request_type: 'BUSINESS_DELETE',
-    request_scope: { source: 'ios_app', intent: 'account_deletion' },
-  }, accessToken);
+export async function deleteDabbirAccount(accessToken: string): Promise<any> {
+  return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
 }
 
 export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
