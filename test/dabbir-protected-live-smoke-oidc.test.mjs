@@ -13,14 +13,15 @@ test('protected smoke can use short-lived GitHub trusted OIDC without opening pr
   assert.match(workflow,/steps\.bypass\.outputs\.generated == 'true'/);
 });
 
-test('blocked automation access is a real failing gate, never a green skipped journey',()=>{
-  const blocked=workflow.match(/echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'[\s\S]{0,900}?exit 2/);
-  assert.ok(blocked,'blocked protection access must terminate the job with exit 2');
-  assert.match(workflow,/browser journey did not run/);
-  assert.match(workflow,/BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'[\s\S]{0,240}?exit 2/);
+test('blocked direct Vercel access falls back to a real browser gate and can never become a green skip',()=>{
+  assert.match(workflow,/BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED_FALLING_BACK_TO_ONE_TIME_BROWSER_BRIDGE/);
+  assert.match(workflow,/bridge_required=true/);
+  assert.match(workflow,/Run one-time protected browser bridge/);
+  assert.match(workflow,/jq -e '\.ok == true and \.pass == true'[\s\S]{0,120}?exit 2/);
+  assert.match(workflow,/BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'[\s\S]{0,260}?exit 2/);
 });
 
-test('smoke runner supports either documented protection access method',()=>{
+test('smoke runner supports either documented direct Vercel protection access method',()=>{
   assert.match(runner,/VERCEL_AUTOMATION_BYPASS_SECRET/);
   assert.match(runner,/VERCEL_TRUSTED_OIDC_TOKEN/);
   assert.match(runner,/x-vercel-protection-bypass/);
