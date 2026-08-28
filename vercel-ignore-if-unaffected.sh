@@ -13,10 +13,10 @@ set -u
 #    build whenever any application, database migration, or unknown path changed
 #    in that range. Database schema is part of the Production artifact contract;
 #    a migration must not leave main SHA ahead of the deployed SHA.
-# 3) The protected Production browser-smoke runner and workflow are themselves
-#    release-verification contracts. Because that smoke is exact-SHA-bound, any
-#    change to either contract must deploy the same SHA before it can produce
-#    truthful browser evidence.
+# 3) Exact-SHA Production verification contracts are deployment-affecting even
+#    when their source files live under .github/ or test/. If one of those files
+#    changes, Production must advance to the same commit before the verification
+#    workflow can truthfully claim exact-artifact evidence.
 # 4) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
@@ -62,8 +62,17 @@ fi
 
 while IFS= read -r path; do
   case "$path" in
-    test/dabbir-protected-live-smoke.mjs|.github/workflows/dabbir-protected-live-smoke.yml)
-      echo "Protected Production smoke contract changed; deploy exact SHA for browser evidence: $path"
+    test/dabbir-protected-live-smoke.mjs|\
+    .github/workflows/dabbir-protected-live-smoke.yml|\
+    .github/workflows/dabbir-ai-customer-journey.yml|\
+    test/ai-full-customer-journey-v2.mjs|\
+    test/dabbir-protected-full-journey-preload.mjs|\
+    test/dabbir-protected-journey-access.test.mjs|\
+    test/dabbir-authorized-journey-workflow.test.mjs|\
+    test/support/dabbir-protected-journey-access.mjs|\
+    test/dabbir-capacity-load.mjs|\
+    test/dabbir-activity-regression.test.mjs)
+      echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
       exit 1
       ;;
     .github/*|docs/*|test/*|README.md|.gitignore)
