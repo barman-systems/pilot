@@ -14,6 +14,18 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - name: Reject direct pushes to main before release work
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent_count="$(git cat-file -p "$GITHUB_SHA" | grep -c '^parent ' || true)"
+          if [ "$parent_count" -lt 2 ]; then
+            echo "DIRECT_MAIN_PUSH_FORBIDDEN sha=$GITHUB_SHA parent_count=$parent_count"
+            echo 'DABBIR main must advance through a reviewed merge commit. Enable GitHub branch protection to enforce this before the push.'
+            exit 1
+          fi
+          echo "REVIEWED_MAIN_MERGE_CONFIRMED sha=$GITHUB_SHA parent_count=$parent_count"
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
