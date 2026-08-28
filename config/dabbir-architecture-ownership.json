@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
+  "authorities": {
+    "root_shell": "api/app-recovery.js",
+    "primary_navigation": "index.html",
+    "service_discovery_under_more": "api/dabbir-contextual-navigation-ui.js",
+    "store_navigation_adaptation": "api/owner-operations-ui.js",
+    "auth_session_gate": "api/auth-session-stability-ui.js",
+    "business_activity_profile": "api/activity-profile-ui.js",
+    "tenant_whatsapp_state": "api/dabbir-whatsapp-status.js",
+    "verified_owner_metrics": "api/verified-metrics-ui.js",
+    "owner_visual_system": "api/dabbir-owner-first-ui.js"
+  },
+  "temporary_exceptions": {
+    "store_navigation_adaptation": {
+      "owner": "api/owner-operations-ui.js",
+      "reason": "Store operations currently replace the appointments destination in-place.",
+      "target": "Move this adaptation into the single navigation/router authority during stabilization phase 2."
+    }
+  },
+  "shell": {
+    "maximum_injected_api_modules": 25,
+    "require_unique_modules": true,
+    "final_ui_authority": "/api/auth-session-stability-ui",
+    "retired_modules_forbidden": [
+      "/api/activity-mobile-polish-ui",
+      "/api/dabbir-ui-refinement",
+      "/api/dabbir-mobile-shell-v3",
+      "/api/dabbir-logo-placement-ui"
+    ]
+  },
+  "primary_navigation": {
+    "desktop_and_mobile_destinations": [
+      "dashboard",
+      "conversations",
+      "appointments",
+      "customers",
+      "more"
+    ],
+    "feature_modules_may_add_primary_destinations": false,
+    "service_catalog_must_live_under_more": true
+  },
+  "truth_rules": {
+    "blocked_or_skipped_qa_is_pass": false,
+    "tenant_may_inherit_global_whatsapp_identity": false,
+    "meta_authorized_equals_operational_whatsapp": false,
+    "unverified_metrics_may_fall_back_to_bounded_lists": false
+  },
+  "change_rule": "Any change to this contract must explain the root cause, the removed competing owner, and the regression proof. Raising a limit without removing complexity is not stabilization."
+}
