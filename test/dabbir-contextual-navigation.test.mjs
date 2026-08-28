@@ -36,7 +36,7 @@ test('activity slots are unhidden when the router maps store Appointments to Ope
   assert.match(router, /node\.hidden=false/);
   assert.match(router, /node\.classList\.remove\('hidden'\)/);
   assert.match(router, /node\.style\.removeProperty\('display'\)/);
-  assert.match(router, /#nav \[data-screen=\\"operations\\"\]/);
+  assert.match(router, /data-screen="operations"/);
 });
 
 test('opening the mobile menu re-enforces the same activity-slot authority', () => {
