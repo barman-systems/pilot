@@ -5,12 +5,20 @@ on:
     paths:
       - 'mobile/**'
       - 'api/mobile/**'
+      - 'api/_apple-iap-core.js'
+      - 'api/apple/**'
+      - 'supabase/migrations/*dabbir_apple*'
+      - 'supabase/migrations/*dabbir_*account_deletion*'
       - '.github/workflows/dabbir-mobile-ci.yml'
   push:
     branches: [main]
     paths:
       - 'mobile/**'
       - 'api/mobile/**'
+      - 'api/_apple-iap-core.js'
+      - 'api/apple/**'
+      - 'supabase/migrations/*dabbir_apple*'
+      - 'supabase/migrations/*dabbir_*account_deletion*'
 
 permissions:
   contents: read
@@ -26,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '22.23.1'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Expo doctor
@@ -38,3 +46,74 @@ jobs:
           DABBIR_IOS_BUNDLE_ID: com.barmansystems.dabbir
           DABBIR_IOS_BUILD_NUMBER: '1'
         run: npx expo config --type public >/tmp/dabbir-expo-config.json
+
+  ios-native-compile:
+    runs-on: macos-26
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      DABBIR_IOS_BUNDLE_ID: com.barmansystems.dabbir
+      DABBIR_IOS_BUILD_NUMBER: '1'
+      EXPO_PUBLIC_DABBIR_API_BASE_URL: https://dabbir-git-main-nd56cm4j5v-3619s-projects.vercel.app
+      EXPO_PUBLIC_IOS_IAP_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - name: Verify Xcode 26 toolchain
+        shell: bash
+        run: |
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/Xcode/{split($2,v,"."); print v[1]}')"
+          test "${XCODE_MAJOR}" -ge 26
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods
+        working-directory: mobile/ios
+        run: pod install
+      - name: Resolve workspace and shared scheme
+        shell: bash
+        run: |
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "${WORKSPACE}"
+          SCHEME="$(xcodebuild -workspace "${WORKSPACE}" -list -json | python3 -c 'import json,sys; data=json.load(sys.stdin); schemes=data.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          test -n "${SCHEME}"
+          printf 'DABBIR_XCODE_WORKSPACE=%s\nDABBIR_XCODE_SCHEME=%s\n' "${WORKSPACE}" "${SCHEME}" >> "$GITHUB_ENV"
+      - name: Compile Release for iOS Simulator without signing
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace "${DABBIR_XCODE_WORKSPACE}" \
+            -scheme "${DABBIR_XCODE_SCHEME}" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build | tee /tmp/dabbir-xcodebuild.log
+      - name: Record native compile evidence
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
+            echo "workspace=${DABBIR_XCODE_WORKSPACE}"
+            echo "scheme=${DABBIR_XCODE_SCHEME}"
+            echo "sha=${GITHUB_SHA}"
+          } > /tmp/dabbir-ios-native-compile-evidence.txt
+      - name: Upload native compile evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-ios-native-compile-evidence
+          path: |
+            /tmp/dabbir-ios-native-compile-evidence.txt
+            /tmp/dabbir-xcodebuild.log
+          if-no-files-found: warn
+          retention-days: 7
