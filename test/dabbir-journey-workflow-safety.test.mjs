@@ -10,10 +10,11 @@ const workflow=readFileSync(resolve(here,'../.github/workflows/dabbir-ai-custome
 function must(pattern,message){assert.match(workflow,pattern,message)}
 function mustNot(pattern,message){assert.doesNotMatch(workflow,pattern,message)}
 
-test('trusted production journeys queue instead of cancelling each other',()=>{
-  must(/group:\s*dabbir-ai-full-customer-journey/,'journeys must share one serialized production group');
-  must(/cancel-in-progress:\s*false/,'a newer push must not cancel an in-flight trusted journey');
-  mustNot(/cancel-in-progress:\s*true/,'mid-journey cancellation must not return');
+test('trusted production journeys serialize per exact SHA without cancelling cleanup',()=>{
+  must(/group:\s*dabbir-ai-full-customer-journey-\$\{\{ github\.sha \}\}/,'journey concurrency must be scoped to the exact candidate SHA');
+  must(/cancel-in-progress:\s*false/,'an in-flight exact-SHA journey must retain its finally cleanup path');
+  mustNot(/group:\s*dabbir-ai-full-customer-journey\s*\n/,'a retired SHA must not block validation of a newer Production candidate');
+  mustNot(/cancel-in-progress:\s*true/,'mid-journey cancellation must not strand disposable QA identities');
 });
 
 test('runtime dependency changes trigger the production customer journey',()=>{
