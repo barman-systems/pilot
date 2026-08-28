@@ -1,6 +1,11 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const bundleIdentifier = process.env.DABBIR_IOS_BUNDLE_ID?.trim() || 'com.barmansystems.dabbir';
+const androidPackage = process.env.DABBIR_ANDROID_PACKAGE?.trim() || 'com.barmansystems.dabbir';
+const androidVersionCode = (() => {
+  const value = Number.parseInt(process.env.DABBIR_ANDROID_VERSION_CODE?.trim() || '1', 10);
+  return Number.isSafeInteger(value) && value > 0 ? value : 1;
+})();
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const easProjectId = process.env.DABBIR_EAS_PROJECT_ID?.trim() || '';
@@ -44,6 +49,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ],
       },
     },
+    android: {
+      package: androidPackage,
+      versionCode: androidVersionCode,
+    },
     plugins: [
       ['expo-secure-store', { configureAndroidBackup: false }],
       'expo-iap',
@@ -53,6 +62,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           ios: {
             deploymentTarget: '16.4',
             privacyManifestAggregationEnabled: true,
+          },
+          android: {
+            compileSdkVersion: 36,
+            targetSdkVersion: 36,
+            usesCleartextTraffic: false,
           },
         },
       ],
