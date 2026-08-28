@@ -52,8 +52,12 @@ test('WhatsApp becomes operational only through the explicit evidence state mach
 });
 
 test('Meta verification failure remains fail closed',()=>{
-  const catchStart=status.indexOf('} catch (error) {');
-  const catchBody=status.slice(catchStart, status.indexOf('\n  }\n}\n\nasync function tenantStatus',catchStart));
+  const embeddedStart=status.indexOf('async function embeddedStatus');
+  const tenantStart=status.indexOf('async function tenantStatus',embeddedStart);
+  const embeddedBody=status.slice(embeddedStart,tenantStart);
+  const catchStart=embeddedBody.lastIndexOf('} catch (error) {');
+  const catchBody=embeddedBody.slice(catchStart);
+  assert.ok(catchStart>0,'embedded status catch path missing');
   assert.match(catchBody,/connected: false/);
   assert.match(catchBody,/outbound_configured: false/);
   assert.match(catchBody,/meta_authorized: false/);
