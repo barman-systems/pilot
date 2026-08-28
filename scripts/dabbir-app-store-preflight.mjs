@@ -123,24 +123,40 @@ const supportUrl = httpsUrl(process.env.EXPO_PUBLIC_DABBIR_SUPPORT_URL);
 const rootCerts = String(process.env.APPLE_ROOT_CERTIFICATES_BASE64 || '').trim();
 const serviceRole = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
-requireRelease(bundleId === 'com.barmansystems.dabbir', 'APPLE_BUNDLE_REGISTERED_VALUE', 'Release bundle ID must be com.barmansystems.dabbir.');
-requireRelease(/^\d{5,20}$/.test(appAppleId), 'APP_STORE_APPLE_ID', 'App Store numeric Apple ID must be configured.');
-requireRelease(serverProductId.length > 2 && clientProductId === serverProductId, 'IAP_PRODUCT_MATCH', 'Client and server must use the exact same App Store subscription product ID.');
+requireRelease(bundleId === 'com.barmansystems.dabbir', 'APPLE_BUNDLE_REGISTERED_VALUE', 'Release bundle ID candidate must be com.barmansystems.dabbir; App Store Connect registration is externally verified.');
+requireRelease(/^\d{5,20}$/.test(appAppleId), 'APP_STORE_APPLE_ID', 'A numeric App Store Apple ID candidate must be configured; existence is externally verified.');
+requireRelease(serverProductId.length > 2 && clientProductId === serverProductId, 'IAP_PRODUCT_MATCH', 'Client and server must use the same configured product ID; App Store product existence is externally verified.');
 requireRelease(iapEnabled === 'true', 'IAP_ENABLED_RELEASE', 'Production candidate must enable Apple IAP.');
-requireRelease(Boolean(apiUrl) && !isProtectedPrelaunchHost(apiUrl), 'PUBLIC_PRODUCTION_API', 'Production iOS API base must be public HTTPS and not a protected/prelaunch Vercel host.');
-requireRelease(Boolean(privacyUrl) && !isProtectedPrelaunchHost(privacyUrl) && /^\/privacy\/?$/i.test(privacyUrl.pathname), 'PUBLIC_PRIVACY_URL', 'Privacy Policy URL must be the public HTTPS /privacy route.');
-requireRelease(Boolean(termsUrl) && !isProtectedPrelaunchHost(termsUrl) && /^\/terms\/?$/i.test(termsUrl.pathname), 'PUBLIC_TERMS_URL', 'Terms of Use URL must be the public HTTPS /terms route.');
-requireRelease(Boolean(supportUrl) && !isProtectedPrelaunchHost(supportUrl) && /^\/support\/?$/i.test(supportUrl.pathname), 'PUBLIC_SUPPORT_URL', 'Support URL must be the public HTTPS /support route.');
-requireRelease(rootCerts.split(',').map(v => v.trim()).filter(Boolean).length >= 2, 'APPLE_ROOT_CERTIFICATES', 'Apple root certificates must be configured server-side.');
-requireRelease(Boolean(serviceRole) && !serviceRole.startsWith('sb_publishable_'), 'IAP_SERVER_STORAGE_CREDENTIAL', 'Server-side entitlement persistence credential must exist.');
+requireRelease(Boolean(apiUrl) && !isProtectedPrelaunchHost(apiUrl), 'PUBLIC_PRODUCTION_API', 'Configured production iOS API URL must be HTTPS and not a protected/prelaunch Vercel host; live reachability is externally verified.');
+requireRelease(Boolean(privacyUrl) && !isProtectedPrelaunchHost(privacyUrl) && /^\/privacy\/?$/i.test(privacyUrl.pathname), 'PUBLIC_PRIVACY_URL', 'Configured Privacy URL must use HTTPS /privacy; live public reachability is externally verified.');
+requireRelease(Boolean(termsUrl) && !isProtectedPrelaunchHost(termsUrl) && /^\/terms\/?$/i.test(termsUrl.pathname), 'PUBLIC_TERMS_URL', 'Configured Terms URL must use HTTPS /terms; live public reachability is externally verified.');
+requireRelease(Boolean(supportUrl) && !isProtectedPrelaunchHost(supportUrl) && /^\/support\/?$/i.test(supportUrl.pathname), 'PUBLIC_SUPPORT_URL', 'Configured Support URL must use HTTPS /support; live public reachability is externally verified.');
+requireRelease(rootCerts.split(',').map(v => v.trim()).filter(Boolean).length >= 2, 'APPLE_ROOT_CERTIFICATES_CONFIG', 'At least two Apple root certificate values must be configured; certificate parsing/trust is externally verified before release.');
+requireRelease(Boolean(serviceRole) && !serviceRole.startsWith('sb_publishable_'), 'IAP_SERVER_STORAGE_CREDENTIAL_CONFIG', 'A non-public server storage credential must be configured; live entitlement persistence is externally verified before release.');
 
+const releaseExternalVerification = releaseMode && failures.length === 0 ? [
+  { code: 'APP_STORE_CONNECT_RECORD_VERIFICATION', detail: 'Verify the configured bundle/app ID against the real App Store Connect record.' },
+  { code: 'APP_STORE_SUBSCRIPTION_PRODUCT_VERIFICATION', detail: 'Verify the configured subscription product and introductory offer in App Store Connect.' },
+  { code: 'PUBLIC_RELEASE_URL_LIVE_VERIFICATION', detail: 'Verify the production API, Privacy, Terms and Support URLs are publicly reachable from the final hostname.' },
+  { code: 'APPLE_ROOT_TRUST_VERIFICATION', detail: 'Parse and validate the configured Apple root certificates in the release environment.' },
+  { code: 'ENTITLEMENT_STORAGE_LIVE_VERIFICATION', detail: 'Verify the release server credential can persist and read an entitlement through the intended server path without exposing the credential.' },
+  { code: 'SIGNED_DISTRIBUTION_TESTFLIGHT_VERIFICATION', detail: 'Produce and verify the signed Distribution/TestFlight artifact on the exact release candidate.' },
+] : [];
+
+const releaseConfigOnly = releaseMode && failures.length === 0 && releaseExternalVerification.length > 0;
 const report = {
-  ok: failures.length === 0,
+  ok: failures.length === 0 && !releaseConfigOnly,
   mode: releaseMode ? 'RELEASE' : 'STATIC',
-  verdict: failures.length ? 'FAIL' : (external.length ? 'INTERNAL_PASS_EXTERNAL_BLOCKED' : 'PASS'),
+  verdict: failures.length
+    ? 'FAIL'
+    : releaseConfigOnly
+      ? 'RELEASE_CONFIG_PASS_EXTERNAL_VERIFICATION_REQUIRED'
+      : (external.length ? 'INTERNAL_PASS_EXTERNAL_BLOCKED' : 'PASS'),
   passes: passes.map(item => item.code),
   failures,
-  external_blockers: external,
+  external_blockers: [...external, ...releaseExternalVerification],
+  release_config_only: releaseConfigOnly,
+  app_store_ready: false,
   privacy_manifest_final_binary_reconciliation: 'REQUIRED_BEFORE_SUBMISSION',
   signed_distribution_testflight: 'EXTERNAL_APPLE_GATE',
 };
@@ -149,3 +165,4 @@ const json = JSON.stringify(report, null, 2);
 if (reportPath) fs.writeFileSync(path.resolve(ROOT, reportPath), `${json}\n`);
 console.log(json);
 if (failures.length) process.exit(2);
+if (releaseConfigOnly) process.exit(3);
