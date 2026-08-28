@@ -130,7 +130,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          account="$(eas whoami --non-interactive | tail -n 1 | xargs)"
+          account="$(eas whoami | tail -n 1 | xargs)"
           [[ "${account}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo 'Unable to resolve Expo account from EXPO_TOKEN.' >&2; exit 31; }
           echo "DABBIR_EXPO_ACCOUNT=${account}" >> "$GITHUB_ENV"
 
@@ -272,7 +272,6 @@ jobs:
             --id "${DABBIR_EAS_BUILD_ID}" \
             --non-interactive \
             --wait \
-            --auto-testflight-setup \
             --what-to-test "${DABBIR_WHAT_TO_TEST}"
 
       - name: Record TestFlight status evidence
