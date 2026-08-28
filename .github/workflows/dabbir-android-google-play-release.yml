@@ -1,22 +1,12 @@
 name: DABBIR Android Google Play Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/dabbir-android-google-play-release.yml'
-      - 'mobile/app.config.ts'
-      - 'mobile/eas.json'
-      - 'mobile/src/SubscriptionCard.tsx'
-      - 'mobile/src/api.ts'
-      - 'api/_google-play-iap-core.js'
-      - 'api/mobile/iap/**'
-      - 'supabase/migrations/20260829152000_dabbir_google_entitlements_v1.sql'
-      - 'scripts/dabbir-google-play-preflight.mjs'
-      - 'delete-account.html'
-      - 'vercel.json'
-      - 'compliance/google-play-data-safety-candidate.json'
   workflow_dispatch:
+    inputs:
+      release_approval:
+        description: 'Type PUBLISH_DABBIR only after the release is explicitly approved.'
+        required: true
+        default: 'BLOCKED'
 
 permissions:
   contents: read
@@ -27,6 +17,7 @@ concurrency:
 
 jobs:
   signed-google-play-internal-release:
+    if: ${{ inputs.release_approval == 'PUBLISH_DABBIR' && vars.DABBIR_STORE_RELEASE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
