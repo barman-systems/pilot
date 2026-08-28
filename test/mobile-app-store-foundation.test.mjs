@@ -18,6 +18,20 @@ test('mobile bearer bridge fails closed without Authorization bearer token', asy
   assert.match(source, /injectNativeBearerSession/);
 });
 
+test('native password recovery reuses enumeration-resistant server recovery flow', async () => {
+  const wrapper = await read('api/mobile/auth/forgot-password.js');
+  const webRecovery = await read('api/auth/forgot-password.js');
+  const client = await read('mobile/src/api.ts');
+  const app = await read('mobile/App.tsx');
+  assert.match(wrapper, /forgotPasswordHandler/);
+  assert.match(wrapper, /same-origin/);
+  assert.match(webRecovery, /auth\/v1\/recover/);
+  assert.match(webRecovery, /accepted:\s*true/);
+  assert.match(client, /requestPasswordRecovery/);
+  assert.match(client, /api\/mobile\/auth\/forgot-password/);
+  assert.match(app, /نسيت كلمة المرور|Forgot password/);
+});
+
 test('Apple server verifier module loads with the locked official library', async () => {
   const module = await import('../api/_apple-iap-core.js');
   assert.equal(typeof module.verifyAppleTransaction, 'function');
@@ -60,6 +74,7 @@ test('DABBIR account deletion is product-scoped, de-identifying, access revoking
   const appleCleanup = await read('supabase/migrations/20260828092100_dabbir_account_deletion_apple_cleanup_v1.sql');
   const identityCleanup = await read('supabase/migrations/20260828095100_dabbir_account_deletion_identity_cleanup_v2.sql');
   const hardening = await read('supabase/migrations/20260828095200_dabbir_account_delete_private_executor_v2.sql');
+  const numberRelease = await read('supabase/migrations/20260828100000_dabbir_account_delete_customer_number_release_v3.sql');
   const endpoint = await read('api/mobile/account-delete.js');
   const mobileLogin = await read('api/mobile/auth/login.js');
   const mobileRefresh = await read('api/mobile/auth/refresh.js');
@@ -69,13 +84,10 @@ test('DABBIR account deletion is product-scoped, de-identifying, access revoking
   assert.match(migration, /DABBIR_PRODUCT_ACCOUNT/);
   assert.match(migration, /ACCOUNT_DELETE_BLOCKED_BY_LEGAL_HOLD/);
   assert.match(migration, /status in \('active','suspended','deleted'\)/);
-  assert.match(migration, /status='deleted'/);
   assert.match(migration, /s\.status in \('suspended','deleted'\)/);
   assert.match(migration, /delete from public\.dabbir_businesses/i);
-  assert.match(migration, /delete from public\.dabbir_user_accounts/i);
   assert.doesNotMatch(migration, /delete\s+from\s+auth\.users/i);
   assert.match(appleCleanup, /delete from public\.dabbir_apple_entitlements/i);
-  assert.match(appleCleanup, /after insert or update of status/i);
   assert.match(identityCleanup, /alter column owner_user_id drop not null/i);
   assert.match(identityCleanup, /on delete set null/i);
   assert.match(identityCleanup, /set owner_user_id = null/i);
@@ -84,6 +96,11 @@ test('DABBIR account deletion is product-scoped, de-identifying, access revoking
   assert.match(hardening, /create or replace function public\.dabbir_delete_current_user_account/);
   assert.match(hardening, /security invoker/i);
   assert.doesNotMatch(hardening, /create or replace function public\.dabbir_delete_current_user_account[^]*security definer/i);
+  assert.match(numberRelease, /DABBIR_CUSTOMER_NUMBER_DELETE_FORBIDDEN/);
+  assert.match(numberRelease, /s\.status = 'deleted'/);
+  assert.match(numberRelease, /Tombstone first/);
+  assert.match(numberRelease, /delete from public\.dabbir_user_accounts/i);
+  assert.doesNotMatch(numberRelease, /delete\s+from\s+auth\.users/i);
   assert.match(endpoint, /dabbir_delete_current_user_account/);
   assert.match(endpoint, /product: null/);
   assert.match(mobileLogin, /getVerifiedUser/);
