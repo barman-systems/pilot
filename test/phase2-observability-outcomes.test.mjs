@@ -11,8 +11,10 @@ const read = async path => readFile(new URL(path, root), 'utf8');
 const migration = await read('db/dabbir_phase2_operational_outcomes_v3.sql');
 const translation = await read('api/translate.js');
 const whatsapp = await read('api/dabbir-whatsapp-webhook.js');
+const whatsappLive = await read('api/_whatsapp-live-core.js');
 const appSecretEnv = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
 const projectEnv = ['DABBIR', 'PROJECT'].join('_');
+const serviceRoleEnv = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
 
 test('failure taxonomy includes authorization and classifies provider 403 as external provider', () => {
   assert.equal(FAILURE_CLASSES.has('AUTHORIZATION'), true);
@@ -44,17 +46,19 @@ test('translation failure is truthful and degraded rather than silently switchin
   assert.doesNotMatch(translation, /fallbackModels|models:\s*\[/i);
 });
 
-test('signed WhatsApp webhook response never echoes customer content or identifiers', async () => {
+test('signed WhatsApp webhook never echoes customer content or identifiers and fails closed without server persistence', async () => {
   const oldSecret = process.env[appSecretEnv];
   const oldProject = process.env[projectEnv];
+  const oldServiceRole = process.env[serviceRoleEnv];
   process.env[appSecretEnv] = 'synthetic-test-app-key';
   process.env[projectEnv] = 'dabbir_clinics';
+  delete process.env[serviceRoleEnv];
 
   try {
     const sensitive = {
       text: 'ابا موعد باجر العصر CUSTOMER_PRIVATE_TEXT',
       sender: '971500000000',
-      phoneId: 'phone-id-private-123',
+      phoneId: '123456789012345',
       messageId: 'wamid.private-message-123',
       displayPhone: '+971 50 000 0000',
     };
@@ -88,12 +92,12 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     };
 
     await whatsappHandler(req, res);
-    assert.equal(res.statusCode, 200);
+    assert.equal(res.statusCode, 503);
     assert.equal(res.body.signature_verified, true);
-    assert.equal(res.body.state, 'CONFIGURED_NOT_OPERATIONAL');
+    assert.equal(res.body.state, 'SERVER_PERSISTENCE_NOT_CONFIGURED');
     assert.equal(res.body.persisted, false);
     assert.equal(res.body.outbound_messages_sent, false);
-    assert.equal(res.body.classifications.includes('APPOINTMENT_REQUEST'), true);
+    assert.equal(res.body.retryable, true);
     assert.ok(res.headers['x-dabbir-correlation-id']);
 
     const responseText = JSON.stringify(res.body);
@@ -103,12 +107,16 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     else process.env[appSecretEnv] = oldSecret;
     if (oldProject === undefined) delete process.env[projectEnv];
     else process.env[projectEnv] = oldProject;
+    if (oldServiceRole === undefined) delete process.env[serviceRoleEnv];
+    else process.env[serviceRoleEnv] = oldServiceRole;
   }
 });
 
-test('WhatsApp source does not claim persistence, outbound delivery, or operational connection', () => {
-  assert.match(whatsapp, /state: 'CONFIGURED_NOT_OPERATIONAL'/);
-  assert.match(whatsapp, /persisted: false/);
+test('WhatsApp source persists signed inbound but never sends an unsolicited webhook reply', () => {
+  assert.match(whatsapp, /persistSignedInbound/);
+  assert.match(whatsapp, /applySignedStatus/);
+  assert.match(whatsapp, /SERVER_PERSISTENCE_NOT_CONFIGURED/);
   assert.match(whatsapp, /outbound_messages_sent: false/);
+  assert.match(whatsappLive, /WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED/);
   assert.doesNotMatch(whatsapp, /state: 'CONNECTED'/);
 });
