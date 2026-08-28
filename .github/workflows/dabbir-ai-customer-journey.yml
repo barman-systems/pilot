@@ -19,6 +19,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-cross-tenant-isolation.mjs'
       - 'test/dabbir-protected-full-journey-preload.mjs'
       - 'test/dabbir-protected-journey-access.test.mjs'
       - 'test/dabbir-authorized-journey-workflow.test.mjs'
@@ -70,6 +71,7 @@ jobs:
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
+      ISOLATION_REPORT_PATH: dabbir-cross-tenant-isolation-report.json
       EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       EXPECTED_GIT_PROVIDER: github
       EXPECTED_GIT_REPOSITORY: barman-systems/pilot
@@ -228,6 +230,20 @@ jobs:
             node test/ai-full-customer-journey-v2.mjs
           fi
 
+      - name: Run cross-tenant and WhatsApp isolation attack
+        if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            node --import ./test/dabbir-protected-full-journey-preload.mjs test/dabbir-cross-tenant-isolation.mjs
+          else
+            node test/dabbir-cross-tenant-isolation.mjs
+          fi
+          test -f "$ISOLATION_REPORT_PATH"
+          jq -e '.verdict == "PASS" and .required_failures == 0 and (.checks | length) >= 9' "$ISOLATION_REPORT_PATH" >/dev/null
+          echo "CROSS_TENANT_ISOLATION_PASS checks=$(jq -r '.checks | length' "$ISOLATION_REPORT_PATH")"
+
       - name: Require a real full-journey PASS
         if: steps.journey-mode.outputs.ready == 'true'
         shell: bash
@@ -289,6 +305,11 @@ jobs:
           else
             echo '**Verdict:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ -f "$ISOLATION_REPORT_PATH" ]; then
+            echo "**Cross-tenant isolation:** $(jq -r '.verdict' "$ISOLATION_REPORT_PATH") ($(jq -r '.checks | length' "$ISOLATION_REPORT_PATH") checks)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Cross-tenant isolation:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload journey evidence
         if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
@@ -298,6 +319,7 @@ jobs:
           path: |
             dabbir-ai-customer-journey-report.json
             dabbir-ai-customer-journey-screenshot.png
+            dabbir-cross-tenant-isolation-report.json
           if-no-files-found: warn
           retention-days: 14
 
