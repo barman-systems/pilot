@@ -11,14 +11,25 @@ test('no-Facebook onboarding stays inside the existing WhatsApp guard module',()
   assert.doesNotMatch(recovery,/dabbir-optional-whatsapp-ui/);
 });
 
-test('DABBIR account can continue without Facebook or WhatsApp',()=>{
-  assert.match(guardUi,/واتساب \(اختياري\)/);
-  assert.match(guardUi,/WhatsApp \(optional\)/);
-  assert.match(guardUi,/حسابك جاهز للاستخدام/);
+test('DABBIR offers one-action Facebook creation and automatic WhatsApp resume',()=>{
   assert.match(guardUi,/لا تملك حساب Facebook؟/);
-  assert.match(guardUi,/متابعة بدون واتساب/);
-  assert.match(guardUi,/not having Facebook does not block your DABBIR account/);
-  assert.match(guardUi,/x-dabbir-whatsapp-onboarding/);
+  assert.match(guardUi,/إنشاء الحساب والمتابعة/);
+  assert.match(guardUi,/Create account and continue/);
+  assert.match(guardUi,/https:\/\/www\.facebook\.com\/r\.php/);
+  assert.match(guardUi,/META_SIGNUP_RESUME_KEY/);
+  assert.match(guardUi,/sessionStorage\.setItem/);
+  assert.match(guardUi,/resumeOfficialWhatsAppSignup/);
+  assert.match(guardUi,/window\.addEventListener\('focus'/);
+  assert.match(guardUi,/visibilitychange/);
+  assert.match(guardUi,/primary\.click\(\)/);
+  assert.match(guardUi,/meta-resume-v2/);
+});
+
+test('the rejected skip-WhatsApp workaround is gone',()=>{
+  assert.doesNotMatch(guardUi,/متابعة بدون واتساب/);
+  assert.doesNotMatch(guardUi,/Continue without WhatsApp/);
+  assert.doesNotMatch(guardUi,/واتساب \(اختياري\)/);
+  assert.doesNotMatch(guardUi,/WhatsApp \(optional\)/);
 });
 
 test('WhatsApp onboarding guard parses as a Node module',()=>{
