@@ -77,6 +77,10 @@ const script = String.raw`(()=>{
     return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
   }
 
+  function validNumericMfaCode(code){
+    return code.length>=6&&code.length<=8&&[...code].every(char=>char>='0'&&char<='9');
+  }
+
   function ensureMfaContinuation(){
     let panel=document.querySelector('#mfaContinuation');
     if(panel) return panel;
@@ -97,7 +101,7 @@ const script = String.raw`(()=>{
         if(msg) msg.textContent=localized('تعذر تحديد عامل المصادقة الآمن. أعد تسجيل الدخول.','A supported secure authentication factor is unavailable. Sign in again.');
         return;
       }
-      if(!/^\\d{6,8}$/.test(code)){
+      if(!validNumericMfaCode(code)){
         if(msg) msg.textContent=localized('أدخل رمز التحقق الصحيح.','Enter a valid verification code.');
         return;
       }
