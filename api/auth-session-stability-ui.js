@@ -9,8 +9,8 @@ const authSessionMachine = JSON.stringify({
 });
 
 const script = String.raw`(()=>{
-  if(window.__dabbirAuthSessionStabilityV5) return;
-  window.__dabbirAuthSessionStabilityV5=true;
+  if(window.__dabbirAuthSessionStabilityV6) return;
+  window.__dabbirAuthSessionStabilityV6=true;
 
   const authMachine=${authSessionMachine};
   let authStage=authMachine.stages.SIGNED_OUT;
@@ -38,7 +38,7 @@ const script = String.raw`(()=>{
   }
 
   const style=document.createElement('style');
-  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v5';
+  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v6-mfa-code';
   style.textContent=[
     '.bottomNav.hidden{display:none!important}',
     '#appShell.hidden{display:none!important}',
@@ -97,7 +97,7 @@ const script = String.raw`(()=>{
         if(msg) msg.textContent=localized('تعذر تحديد عامل المصادقة الآمن. أعد تسجيل الدخول.','A supported secure authentication factor is unavailable. Sign in again.');
         return;
       }
-      if(!/^\\d{6,8}$/.test(code)){
+      if(!/^\d{6,8}$/.test(code)){
         if(msg) msg.textContent=localized('أدخل رمز التحقق الصحيح.','Enter a valid verification code.');
         return;
       }
@@ -301,7 +301,7 @@ const script = String.raw`(()=>{
     document.body.dataset.dabbirGate=authVisible?'auth':'';
   }
 
-  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v5',session_retry:true,gate_isolation:true,state_machine:true,gate_observer_only:true,mfa_continuation:true};
+  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v6-mfa-code',session_retry:true,gate_isolation:true,state_machine:true,gate_observer_only:true,mfa_continuation:true};
 })();`;
 
 export default function handler(req,res){
