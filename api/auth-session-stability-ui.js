@@ -12,6 +12,7 @@ const script = String.raw`(()=>{
 
   const authMachine=${authSessionMachine};
   let authStage=authMachine.stages.SIGNED_OUT;
+  let gateRecoveryPromise=null;
 
   function publishAuthStage(stage,reason=null){
     authStage=stage;
@@ -60,7 +61,48 @@ const script = String.raw`(()=>{
     return {ready:false,suspended:false};
   }
 
+  function localized(keyAr,keyEn){
+    return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
+  }
+
+  function showSessionError(textAr,textEn){
+    const msg=document.querySelector('#authMsg');
+    if(msg) msg.textContent=localized(textAr,textEn);
+  }
+
   const baseShowGate=showGate;
+
+  async function reconcileVerifiedGate(name){
+    if(gateRecoveryPromise) return gateRecoveryPromise;
+    gateRecoveryPromise=(async()=>{
+      const state=await sessionReady();
+      if(state.suspended){
+        setAuthStage(authMachine.stages.SUSPENDED,'ACCOUNT_SUSPENDED',{bootstrap:true});
+        baseShowGate('auth');
+        document.body.dataset.dabbirGate='auth';
+        showSessionError('الحساب موقوف. تواصل مع دعم دبّر.','This account is suspended. Contact DABBIR support.');
+        return;
+      }
+      if(!state.ready){
+        publishAuthStage(authMachine.stages.DEGRADED,'GATE_SESSION_RECONCILIATION_FAILED');
+        baseShowGate('auth');
+        document.body.dataset.dabbirGate='auth';
+        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
+        return;
+      }
+
+      setAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_RECONCILED_FOR_GATE',{bootstrap:true});
+      if(name==='app'){
+        setAuthStage(authMachine.stages.WORKSPACE_READY,'WORKSPACE_RENDERED');
+      }
+      baseShowGate(name);
+      document.body.dataset.dabbirGate=String(name||'');
+      const bottom=document.querySelector('#bottomNav');
+      if(bottom&&name!=='app') bottom.classList.add('hidden');
+    })().finally(()=>{gateRecoveryPromise=null});
+    return gateRecoveryPromise;
+  }
+
   showGate=function(name){
     if(name==='auth'){
       if(authStage!==authMachine.stages.SUSPENDED){
@@ -68,20 +110,26 @@ const script = String.raw`(()=>{
       }
     }else if(name==='onboarding'){
       if(authStage!==authMachine.stages.SESSION_VERIFIED){
+        if(authStage===authMachine.stages.SIGNED_OUT||authStage===authMachine.stages.DEGRADED){
+          void reconcileVerifiedGate('onboarding');
+          return;
+        }
         publishAuthStage(authMachine.stages.DEGRADED,'ONBOARDING_WITHOUT_VERIFIED_SESSION');
         baseShowGate('auth');
-        const msg=document.querySelector('#authMsg');
-        if(msg) msg.textContent=localized('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
+        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
         return;
       }
     }else if(name==='app'){
       if(authStage===authMachine.stages.SESSION_VERIFIED){
         setAuthStage(authMachine.stages.WORKSPACE_READY,'WORKSPACE_RENDERED');
       }else if(authStage!==authMachine.stages.WORKSPACE_READY){
+        if(authStage===authMachine.stages.SIGNED_OUT||authStage===authMachine.stages.DEGRADED){
+          void reconcileVerifiedGate('app');
+          return;
+        }
         publishAuthStage(authMachine.stages.DEGRADED,'WORKSPACE_WITHOUT_VERIFIED_SESSION');
         baseShowGate('auth');
-        const msg=document.querySelector('#authMsg');
-        if(msg) msg.textContent=localized('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
+        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
         return;
       }
     }
@@ -91,10 +139,6 @@ const script = String.raw`(()=>{
     const bottom=document.querySelector('#bottomNav');
     if(bottom&&name!=='app') bottom.classList.add('hidden');
   };
-
-  function localized(keyAr,keyEn){
-    return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
-  }
 
   const form=document.querySelector('#authForm');
   if(form){
@@ -172,7 +216,7 @@ const script = String.raw`(()=>{
   }
   document.body.dataset.dabbirGate=authVisible?'auth':onboardingVisible?'onboarding':appVisible?'app':'';
 
-  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v2',session_retry:true,gate_isolation:true,state_machine:true};
+  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v3',session_retry:true,gate_isolation:true,state_machine:true,gate_reconciliation:true};
 })();`;
 
 export default function handler(req,res){
