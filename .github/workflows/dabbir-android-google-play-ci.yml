@@ -1,0 +1,135 @@
+name: DABBIR Android Google Play CI
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'api/_google-play-iap-core.js'
+      - 'api/mobile/iap/**'
+      - 'supabase/migrations/**'
+      - 'delete-account.html'
+      - 'privacy.html'
+      - 'vercel.json'
+      - 'compliance/google-play-data-safety-candidate.json'
+      - 'scripts/dabbir-google-play-preflight.mjs'
+      - '.github/workflows/dabbir-android-google-play-ci.yml'
+      - '.github/workflows/dabbir-android-google-play-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'api/_google-play-iap-core.js'
+      - 'api/mobile/iap/**'
+      - 'supabase/migrations/**'
+      - 'delete-account.html'
+      - 'privacy.html'
+      - 'vercel.json'
+      - 'compliance/google-play-data-safety-candidate.json'
+      - 'scripts/dabbir-google-play-preflight.mjs'
+      - '.github/workflows/dabbir-android-google-play-ci.yml'
+      - '.github/workflows/dabbir-android-google-play-release.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-android-google-play-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  play-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - name: Run Google Play static preflight
+        run: node scripts/dabbir-google-play-preflight.mjs
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
+      - name: TypeScript
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Validate Android Expo config
+        working-directory: mobile
+        run: |
+          npx expo config --type public --json > /tmp/dabbir-android-expo-config.json
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('/tmp/dabbir-android-expo-config.json', 'utf8'));
+          if (config?.android?.package !== 'com.barmansystems.dabbir') throw new Error('ANDROID_PACKAGE_MISMATCH');
+          NODE
+      - name: Upload Google Play preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-google-play-static-evidence
+          path: |
+            /tmp/dabbir-android-expo-config.json
+            compliance/google-play-data-safety-candidate.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  android-native-bundle-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install mobile dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Verify generated Android 16 / API 36 configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R "36" android/gradle.properties android/build.gradle android/app/build.gradle >/tmp/dabbir-api36-evidence.txt || {
+            echo 'Generated Android project does not expose API 36 configuration evidence.' >&2
+            exit 31
+          }
+          grep -R "com.barmansystems.dabbir" android/app/build.gradle android/app/src/main/AndroidManifest.xml >>/tmp/dabbir-api36-evidence.txt || {
+            echo 'Generated Android package evidence missing.' >&2
+            exit 32
+          }
+      - name: Compile Release Android App Bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          ./gradlew :app:bundleRelease --no-daemon --stacktrace
+      - name: Record Android bundle evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$(find android/app/build/outputs/bundle/release -name '*.aab' -type f | head -n 1)"
+          [[ -n "${bundle}" && -s "${bundle}" ]] || { echo 'Release AAB compile artifact not found.' >&2; exit 33; }
+          sha256sum "${bundle}" > /tmp/dabbir-android-bundle-sha256.txt
+          printf 'commit=%s\nartifact=%s\n' "${GITHUB_SHA}" "${bundle}" >> /tmp/dabbir-android-bundle-sha256.txt
+      - name: Upload Android compile evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-android-native-compile-evidence
+          path: |
+            mobile/android/app/build/outputs/bundle/release/*.aab
+            /tmp/dabbir-api36-evidence.txt
+            /tmp/dabbir-android-bundle-sha256.txt
+          if-no-files-found: warn
+          retention-days: 14
