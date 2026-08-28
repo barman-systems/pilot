@@ -7,10 +7,12 @@ const statusPath='api/dabbir-whatsapp-status.js';
 const machinePath='api/_dabbir-whatsapp-state-machine.js';
 const activationPath='api/customer-activation-ui.js';
 const migrationPath='supabase/migrations/20260828044500_dabbir_whatsapp_live_message_path_v2.sql';
+const raceMigrationPath='supabase/migrations/20260828045000_dabbir_whatsapp_inbound_sender_race_hardening_v1.sql';
 const status=fs.readFileSync(statusPath,'utf8');
 const machine=fs.readFileSync(machinePath,'utf8');
 const activation=fs.readFileSync(activationPath,'utf8');
 const migration=fs.readFileSync(migrationPath,'utf8');
+const raceMigration=fs.readFileSync(raceMigrationPath,'utf8');
 
 test('WhatsApp operational evidence is tenant-scoped, non-demo, and provider-backed',()=>{
   assert.match(status,/supabaseRpc/);
@@ -22,6 +24,15 @@ test('WhatsApp operational evidence is tenant-scoped, non-demo, and provider-bac
   assert.match(migration,/e\.business_id=p_business_id and e\.direction='inbound' and e\.event_type='message' and e\.message_id is not null/);
   assert.match(migration,/r\.business_id=p_business_id and r\.message_id is not null and r\.provider_message_id is not null/);
   assert.match(migration,/r\.business_id=p_business_id and r\.provider_verified=true and r\.state in \('DELIVERED','READ'\)/);
+});
+
+test('distinct inbound messages from one new sender serialize conversation ownership',()=>{
+  assert.match(raceMigration,/hashtextextended\(v_connection\.business_id::text \|\| ':wa-sender:' \|\| v_sender, 0\)/);
+  const senderLock=raceMigration.indexOf("':wa-sender:'");
+  const customerUpsert=raceMigration.indexOf('insert into public.dabbir_customers');
+  const conversationLookup=raceMigration.indexOf('select c.id into v_conversation_id');
+  assert.ok(senderLock>0&&senderLock<customerUpsert&&customerUpsert<conversationLookup);
+  assert.match(raceMigration,/on conflict \(business_id,channel_handle\) where channel_handle is not null/);
 });
 
 test('WhatsApp becomes operational only through the explicit evidence state machine',()=>{
