@@ -10,7 +10,10 @@ const script = String.raw`(()=>{
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
+  function aiConfigured(){try{return Boolean(workspace?.ai?.configured)}catch{return false}}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
+  function setText(node,text){if(node&&node.textContent!==text)node.textContent=text}
+  function openScreen(screen){try{if(typeof showScreen==='function')showScreen(screen)}catch{}}
 
   const style=document.createElement('style');
   style.dataset.dabbirWhatsAppNoFacebook='v1';
@@ -68,15 +71,60 @@ const script = String.raw`(()=>{
     button.type='button';
     button.textContent=ar()?'متابعة بدون واتساب':'Continue without WhatsApp';
     button.onclick=()=>{
-      try{if(typeof showScreen==='function')showScreen('dashboard')}catch{}
+      openScreen('dashboard');
       tell(ar()?'يمكنك ربط واتساب لاحقًا من التكاملات':'You can connect WhatsApp later from Integrations');
     };
     notice.append(title,text,button);
     box.appendChild(notice);
   }
 
+  function patchActivation(){
+    const panel=document.querySelector('#dabbirActivation');
+    if(!panel)return;
+    const steps=[...panel.querySelectorAll('.daSteps .daStep')];
+    if(steps.length<3)return;
+
+    const profile=steps[0];
+    const whatsapp=steps[1];
+    const ai=steps[2];
+    setText(whatsapp,ar()?'واتساب (اختياري)':'WhatsApp (optional)');
+
+    const coreDone=[profile,ai].filter(step=>step.classList.contains('done')).length;
+    const score=Math.round(coreDone/2*100);
+    setText(panel.querySelector('.daScore strong'),score+'%');
+    const progress=panel.querySelector('.daProgress i');
+    if(progress&&progress.style.width!==score+'%')progress.style.width=score+'%';
+
+    const whatsappReady=whatsapp.classList.contains('done');
+    if(!profile.classList.contains('done')||whatsappReady)return;
+
+    const nextTitle=panel.querySelector('.daNext b');
+    const nextBody=panel.querySelector('.daNext p');
+    const nextButton=panel.querySelector('#daNextAction');
+
+    if(!aiConfigured()){
+      setText(nextTitle,ar()?'تحقق من جاهزية الذكاء':'Verify AI readiness');
+      setText(nextBody,ar()?'يمكنك استخدام دبّر بدون ربط واتساب الآن. جهّز ذكاء دبّر أولًا، ثم اربط واتساب لاحقًا إذا رغبت.':'You can use DABBIR without connecting WhatsApp now. Set up DABBIR AI first, then connect WhatsApp later if you want.');
+      if(nextButton){
+        setText(nextButton,ar()?'فتح حالة الذكاء':'Open AI status');
+        nextButton.onclick=()=>openScreen('integrations');
+      }
+      return;
+    }
+
+    setText(nextTitle,ar()?'ابدأ باستخدام دبّر':'Start using DABBIR');
+    setText(nextBody,ar()?'حسابك جاهز للاستخدام. ربط WhatsApp Business اختياري ويمكنك إكماله لاحقًا من التكاملات.':'Your account is ready to use. WhatsApp Business connection is optional and can be completed later from Integrations.');
+    if(nextButton){
+      setText(nextButton,ar()?'فتح المحادثات':'Open conversations');
+      nextButton.onclick=()=>openScreen('conversations');
+    }
+    setText(panel.querySelector('.daHead h2'),ar()?'دَبِّر جاهز للعمل':'DABBIR is ready to operate');
+    setText(panel.querySelector('.daHead p'),ar()?'الأساسيات التشغيلية جاهزة. يمكنك ربط واتساب لاحقًا إذا احتجته.':'Core operations are ready. You can connect WhatsApp later if you need it.');
+  }
+
   async function patch(){
     patchScheduled=false;
+    patchActivation();
     const cfg=await config();
     const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
     document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureNoFacebookNotice);
@@ -91,12 +139,12 @@ const script = String.raw`(()=>{
       button.disabled=false;
       button.setAttribute('aria-disabled','false');
       button.title=text;
-      if(hint) hint.textContent=text;
+      if(hint&&hint.textContent!==text) hint.textContent=text;
       if(button.dataset.dabbirWhatsAppGuardBound!=='true'){
         button.dataset.dabbirWhatsAppGuardBound='true';
         button.addEventListener('click',()=>{
           const currentHint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
-          if(currentHint) currentHint.textContent=text;
+          if(currentHint&&currentHint.textContent!==text) currentHint.textContent=text;
         },true);
       }
     });
@@ -109,7 +157,7 @@ const script = String.raw`(()=>{
   }
 
   const observer=new MutationObserver(schedulePatch);
-  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready']});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready','class']});
   setTimeout(patch,800);
 })();`;
 
@@ -123,5 +171,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
+  res.setHeader('x-dabbir-whatsapp-onboarding','optional-v1');
   return res.end(script);
 }
