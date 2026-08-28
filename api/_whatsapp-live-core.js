@@ -42,26 +42,28 @@ export async function serviceRpc(name, params = {}, options = {}) {
     error.code = 'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED';
     throw error;
   }
-  const response = await withServerReadTimeout(
-    signal => fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
-      method: 'POST',
-      cache: 'no-store',
-      signal,
-      headers: {
-        apikey: key,
-        authorization: `Bearer ${key}`,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify(params),
-    }),
+  return withServerReadTimeout(
+    async signal => {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        cache: 'no-store',
+        signal,
+        headers: {
+          apikey: key,
+          authorization: `Bearer ${key}`,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+      return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
+    },
     {
       label: 'WHATSAPP_SERVER_RPC',
       errorCode: 'WHATSAPP_SERVER_DATA_TIMEOUT',
       timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
     },
   );
-  return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
 }
 
 function oneRow(payload) {
