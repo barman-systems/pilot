@@ -1,6 +1,7 @@
 import { singleQueryValue } from './_request-query.js';
-import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRest } from './_auth-core.js';
+import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRpc } from './_auth-core.js';
 import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
+import { whatsappLiveServerCapability } from './_whatsapp-live-core.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -79,40 +80,16 @@ async function rowsOrNull(response) {
 
 export async function loadOperationalEvidence(accessToken, businessId) {
   try {
-    const encodedBusinessId = encodeURIComponent(String(businessId));
-    const conversationResponse = await supabaseRest(
-      `dabbir_conversations?select=id&business_id=eq.${encodedBusinessId}&channel_type=eq.whatsapp&demo_mode=eq.false&order=created_at.desc&limit=100`,
-      accessToken,
-    );
-    const conversations = await rowsOrNull(conversationResponse);
-    if (conversations === null) return emptyOperationalEvidence(false);
-    const conversationIds = conversations.map(row => String(row?.id || '')).filter(Boolean);
-    if (!conversationIds.length) return emptyOperationalEvidence(true);
-
-    const conversationFilter = `in.(${conversationIds.join(',')})`;
-    const [messageResponse, outcomeResponse] = await Promise.all([
-      supabaseRest(
-        `dabbir_messages?select=sender_type,simulated&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&simulated=eq.false&limit=200`,
-        accessToken,
-      ),
-      supabaseRest(
-        `dabbir_conversation_outcomes?select=verified_external_result&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&verified_external_result=eq.true&limit=1`,
-        accessToken,
-      ),
-    ]);
-    const messages = await rowsOrNull(messageResponse);
-    const outcomes = await rowsOrNull(outcomeResponse);
-    if (messages === null || outcomes === null) return emptyOperationalEvidence(false);
-
-    const inbound = messages.some(row => row?.simulated === false && String(row?.sender_type || '') === 'customer');
-    const outbound = messages.some(row => row?.simulated === false && ['ai', 'human'].includes(String(row?.sender_type || '')));
-    const verifiedExternal = outcomes.some(row => row?.verified_external_result === true);
+    const response = await supabaseRpc('dabbir_whatsapp_operational_evidence', accessToken, { p_business_id: businessId });
+    const rows = await rowsOrNull(response);
+    const row = rows?.[0];
+    if (!row) return emptyOperationalEvidence(false);
     return {
-      available: true,
-      real_whatsapp_conversation: true,
-      real_inbound_message: inbound,
-      real_outbound_reply: outbound,
-      verified_external_result: verifiedExternal,
+      available: row.available === true,
+      real_whatsapp_conversation: row.real_whatsapp_conversation === true,
+      real_inbound_message: row.real_inbound_message === true,
+      real_outbound_reply: row.real_outbound_reply === true,
+      verified_external_result: row.verified_external_result === true,
     };
   } catch {
     return emptyOperationalEvidence(false);
@@ -131,6 +108,7 @@ export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') 
     outbound_configured: false,
     phone_number_configured: false,
     waba_configured: false,
+    server_runtime_configured: whatsappLiveServerCapability().service_data_access,
     state: machine.state,
     operational_stage: machine.stage,
     meta_authorized: false,
@@ -197,6 +175,7 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: Boolean(verified.authorized),
       phone_number_configured: true,
       waba_configured: true,
+      server_runtime_configured: whatsappLiveServerCapability().service_data_access,
       state: machine.state,
       operational_stage: machine.stage,
       meta_authorized: Boolean(verified.authorized),
@@ -233,6 +212,7 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: true,
       phone_number_configured: true,
       waba_configured: true,
+      server_runtime_configured: whatsappLiveServerCapability().service_data_access,
       state: machine.state,
       operational_stage: machine.stage,
       meta_authorized: false,
