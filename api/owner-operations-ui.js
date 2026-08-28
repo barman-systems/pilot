@@ -81,19 +81,6 @@ const script=String.raw`(()=>{
     return screen;
   }
 
-  function ensureNav(){
-    if(!isStore())return;
-    const t=text();
-    qa('[data-screen="appointments"]').forEach(node=>{
-      node.dataset.screen='operations';
-      node.style.display='';
-      if(node.closest('#bottomNav'))node.innerHTML='▦<br><span>'+escapeHtml(t.nav)+'</span>';
-      else node.innerHTML='▦ <span>'+escapeHtml(t.nav)+'</span>';
-      node.onclick=()=>showScreen('operations');
-    });
-    qa('[data-screen="operations"]').forEach(node=>{node.style.display='';});
-  }
-
   function applyCopy(){
     const t=text();
     if(q('#opsTitle'))q('#opsTitle').textContent=t.title;
@@ -111,7 +98,6 @@ const script=String.raw`(()=>{
     if(q('#opsStockCancel'))q('#opsStockCancel').textContent=t.cancel;
     if(q('#opsStockSave'))q('#opsStockSave').textContent=t.update;
     if(current==='operations'&&q('#pageTitle'))q('#pageTitle').textContent=t.nav;
-    ensureNav();
     render();
   }
 
@@ -203,14 +189,13 @@ const script=String.raw`(()=>{
   }
 
   ensureScreen();
-  ensureNav();
 
   try{
     const baseShowScreen=showScreen;
     showScreen=function(name){
       const result=baseShowScreen(name);
       if(name==='operations'){
-        ensureScreen();ensureNav();if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;load();
+        ensureScreen();if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;load();
       }
       return result;
     };
@@ -218,11 +203,11 @@ const script=String.raw`(()=>{
 
   try{
     const baseRenderAll=renderAll;
-    renderAll=function(){const result=baseRenderAll.apply(this,arguments);ensureScreen();ensureNav();applyCopy();if(current==='operations')load();return result};
+    renderAll=function(){const result=baseRenderAll.apply(this,arguments);ensureScreen();applyCopy();if(current==='operations')load();return result};
   }catch{}
 
   new MutationObserver(applyCopy).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
-  setTimeout(()=>{ensureScreen();ensureNav();if(isStore())load()},600);
+  setTimeout(()=>{ensureScreen();if(isStore())load()},600);
 })();`;
 
 export default function handler(req,res){

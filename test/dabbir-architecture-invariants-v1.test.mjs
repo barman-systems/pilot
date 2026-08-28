@@ -7,6 +7,7 @@ const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 const ownership = JSON.parse(read('config/dabbir-architecture-ownership.json'));
 const shell = read('api/app-recovery.js');
 const index = read('index.html');
+const ownerOperations = read('api/owner-operations-ui.js');
 const serviceOperations = read('api/service-operations-ui.js');
 const contextualNavigation = read('api/dabbir-contextual-navigation-ui.js');
 const ownerFirst = read('api/dabbir-owner-first-ui.js');
@@ -21,8 +22,12 @@ function navBody(id) {
   return index.match(new RegExp(`<nav class=\"[^\"]*\" id=\"${id}\">([\\s\\S]*?)<\\/nav>`))?.[1] || '';
 }
 
-test('architecture contract is fail-closed and does not permit feature-owned primary navigation', () => {
+test('architecture contract is fail-closed and gives contextual navigation one authority', () => {
   assert.equal(ownership.primary_navigation.feature_modules_may_add_primary_destinations, false);
+  assert.equal(ownership.primary_navigation.feature_modules_may_mutate_primary_destinations, false);
+  assert.equal(ownership.authorities.primary_navigation_context_router, 'api/dabbir-contextual-navigation-ui.js');
+  assert.equal(ownership.authorities.store_navigation_adaptation, 'api/dabbir-contextual-navigation-ui.js');
+  assert.deepEqual(ownership.temporary_exceptions, {});
   assert.equal(ownership.truth_rules.blocked_or_skipped_qa_is_pass, false);
   assert.equal(ownership.truth_rules.tenant_may_inherit_global_whatsapp_identity, false);
   assert.equal(ownership.truth_rules.meta_authorized_equals_operational_whatsapp, false);
@@ -38,11 +43,15 @@ test('desktop and mobile primary navigation are exactly the five owner destinati
   }
 });
 
-test('service catalog cannot inject or mutate primary navigation', () => {
-  assert.doesNotMatch(serviceOperations, /function\s+ensureNav\s*\(/);
+test('feature modules cannot own primary navigation', () => {
+  for (const source of [ownerOperations, serviceOperations]) {
+    assert.doesNotMatch(source, /function\s+ensureNav\s*\(/);
+    assert.doesNotMatch(source, /\.dataset\.screen\s*=/);
+    assert.doesNotMatch(source, /querySelector\(['\"]#nav['\"]\)/);
+  }
   assert.doesNotMatch(serviceOperations, /dabbirServicesNav/);
-  assert.doesNotMatch(serviceOperations, /\.dataset\.screen\s*=/);
-  assert.doesNotMatch(serviceOperations, /querySelector\(['\"]#nav['\"]\)/);
+  assert.match(contextualNavigation, /data-dabbir-activity-slot/);
+  assert.match(contextualNavigation, /setActivitySlot\(node,'operations'/);
   assert.match(contextualNavigation, /#screen-more \.moreGrid/);
   assert.match(contextualNavigation, /showScreen\('operations'\)/);
   assert.doesNotMatch(contextualNavigation, /dabbirServicesNav/);
