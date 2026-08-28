@@ -19,6 +19,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: DabbirSess
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const submit = async () => {
     setBusy(true);
@@ -35,13 +36,28 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: DabbirSess
     } finally { setBusy(false); }
   };
 
+  const recoverPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert(t('أدخل البريد الإلكتروني', 'Enter your email'), t('اكتب بريد الحساب أولًا ثم اطلب استعادة كلمة المرور.', 'Enter the account email first, then request password recovery.'));
+      return;
+    }
+    setRecovering(true);
+    try {
+      await api.requestPasswordRecovery(email.trim());
+      Alert.alert(t('تحقق من بريدك', 'Check your email'), t('إذا كان هناك حساب بهذا البريد فسيصلك رابط آمن لإعادة تعيين كلمة المرور.', 'If an account exists for this email, a secure password reset link will be sent.'));
+    } catch (error) {
+      Alert.alert(t('تعذر طلب الاستعادة', 'Recovery unavailable'), String((error as Error)?.message || 'RECOVERY_FAILED'));
+    } finally { setRecovering(false); }
+  };
+
   return <SafeAreaView style={styles.safe}><View style={styles.authWrap}>
     <Text style={styles.brand}>DABBIR | دبّر</Text>
     <Text style={styles.hero}>{t('إدارة عملك من مكان واحد', 'Run your business from one place')}</Text>
     <TextInput accessibilityLabel={t('البريد الإلكتروني', 'Email')} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder={t('البريد الإلكتروني', 'Email')} style={styles.input} />
     <TextInput accessibilityLabel={t('كلمة المرور', 'Password')} secureTextEntry value={password} onChangeText={setPassword} placeholder={t('كلمة المرور', 'Password')} style={styles.input} />
-    <ActionButton disabled={busy || !email || !password} title={busy ? t('جارٍ التنفيذ…', 'Working…') : mode === 'login' ? t('تسجيل الدخول', 'Sign in') : t('إنشاء حساب', 'Create account')} onPress={() => void submit()} />
-    <Pressable onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}><Text style={styles.link}>{mode === 'login' ? t('إنشاء حساب جديد', 'Create a new account') : t('لدي حساب بالفعل', 'I already have an account')}</Text></Pressable>
+    <ActionButton disabled={busy || recovering || !email || !password} title={busy ? t('جارٍ التنفيذ…', 'Working…') : mode === 'login' ? t('تسجيل الدخول', 'Sign in') : t('إنشاء حساب', 'Create account')} onPress={() => void submit()} />
+    {mode === 'login' ? <Pressable accessibilityRole="button" disabled={recovering || busy} onPress={() => void recoverPassword()}><Text style={styles.link}>{recovering ? t('جارٍ إرسال رابط الاستعادة…', 'Sending recovery link…') : t('نسيت كلمة المرور؟', 'Forgot password?')}</Text></Pressable> : null}
+    <Pressable accessibilityRole="button" disabled={busy || recovering} onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}><Text style={styles.link}>{mode === 'login' ? t('إنشاء حساب جديد', 'Create a new account') : t('لدي حساب بالفعل', 'I already have an account')}</Text></Pressable>
   </View></SafeAreaView>;
 }
 
