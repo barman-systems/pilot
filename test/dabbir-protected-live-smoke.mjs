@@ -137,7 +137,8 @@ try {
 
     const response = await page.goto(ORIGIN, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     assert(response?.status() === 200, `BROWSER_HOME_STATUS_${response?.status()}`);
-    await page.locator('#authGate:not(.hidden)').waitFor({ state: 'visible', timeout: 20_000 });
+    const authGate = page.locator('#authGate:not(.hidden)');
+    await authGate.waitFor({ state: 'visible', timeout: 20_000 });
     await page.locator('#authEmail').waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#authPassword').waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#authSubmit').waitFor({ state: 'visible', timeout: 10_000 });
@@ -145,17 +146,21 @@ try {
     const authority = await page.evaluate(() => window.__dabbirUiAuthority || null);
     assert(authority?.version === 'owner-first-v4', `UI_AUTHORITY_INVALID_${JSON.stringify(authority)}`);
 
-    const logo = page.locator('.brand .logo').first();
-    await logo.waitFor({ state: 'visible', timeout: 10_000 });
-    const logoBg = await logo.evaluate(element => getComputedStyle(element).backgroundImage);
-    assert(String(logoBg).includes('dabbir-approved-icon'), 'APPROVED_LOGO_NOT_RENDERED');
-
     await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
     report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
+
+    // Brand UI intentionally prepends a mobile app-shell brand that stays hidden on auth.
+    // Scope the assertion to the visible auth gate so a hidden sibling can never satisfy or break this check.
+    const logo = authGate.locator('.authCard .brand .logo');
+    assert(await logo.count() === 1, `AUTH_APPROVED_LOGO_COUNT_${await logo.count()}`);
+    await logo.waitFor({ state: 'visible', timeout: 10_000 });
+    const logoBg = await logo.evaluate(element => getComputedStyle(element).backgroundImage);
+    assert(String(logoBg).includes('dabbir-approved-icon'), 'AUTH_APPROVED_LOGO_NOT_RENDERED');
+
     assert(pageErrors.length === 0, `PAGE_ERRORS:${pageErrors.join(' | ')}`);
     assert(consoleErrors.length === 0, `CONSOLE_ERRORS:${consoleErrors.slice(0, 8).join(' | ')}`);
     await context.close();
-    return `WebKit rendered the iPhone-size Arabic login gate on exact production SHA ${EXPECTED_SHA}, approved logo, and authoritative owner-first-v4 shell without page errors.`;
+    return `WebKit rendered the iPhone-size Arabic login gate on exact production SHA ${EXPECTED_SHA}, visible approved auth logo, and authoritative owner-first-v4 shell without page errors.`;
   });
 
   report.verdict = 'PASS';
