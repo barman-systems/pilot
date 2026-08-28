@@ -52,8 +52,8 @@ const script = String.raw`(()=>{
   function blockedText(missing){
     const items=missing.length?missing.join('، '):(ar()?'إعداد Meta للمنصة':'Meta platform configuration');
     return ar()
-      ? 'تعذر فتح ربط واتساب لأن إعداد المنصة غير مكتمل: '+items+'.'
-      : 'WhatsApp connection cannot open because platform setup is incomplete: '+items+'.';
+      ? 'تعذر فتح ربط واتساب لأن إعداد المنصة غير مكتمل: '+items+'. لم يتم حفظ أي ربط ناقص.'
+      : 'WhatsApp connection cannot open because platform setup is incomplete: '+items+'. No incomplete connection was saved.';
   }
 
   function markMetaSignupResume(){
