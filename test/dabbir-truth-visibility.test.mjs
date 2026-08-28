@@ -22,7 +22,9 @@ test('fast runtime exposes verified tenant read provenance and exact read timest
   assert.match(runtime, /read_at:\s*new Date\(\)\.toISOString\(\)/);
   assert.match(runtime, /business_updated_at/);
   assert.match(runtime, /exact_metrics_state/);
-  assert.match(runtime, /x-dabbir-runtime', 'fast-v6-exact-metrics'/);
+  assert.match(runtime, /const DABBIR_FAST_RUNTIME_VERSION = 'fast-v7-timeout-guarded'/);
+  assert.match(runtime, /x-dabbir-runtime', DABBIR_FAST_RUNTIME_VERSION/);
+  assert.match(runtime, /runtime_version: DABBIR_FAST_RUNTIME_VERSION/);
 });
 
 test('fast runtime failures are explicit unverified states', () => {
