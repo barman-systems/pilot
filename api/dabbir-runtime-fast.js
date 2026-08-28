@@ -352,7 +352,7 @@ async function handleFastGet(req, res) {
   const duration = Date.now() - started;
   const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v7-timeout-guarded');
+  res.setHeader('x-dabbir-runtime', 'fast-v6-exact-metrics');
   return json(res, 200, {
     ok: true,
     authenticated: true,
