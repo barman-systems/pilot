@@ -6,6 +6,8 @@ const script=String.raw`(()=>{
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function openScreen(screen){try{if(typeof showScreen==='function')showScreen(screen)}catch{}}
+  function aiConfigured(){try{return Boolean(workspace?.ai?.configured)}catch{return false}}
+  function setText(node,text){if(node&&node.textContent!==text)node.textContent=text}
 
   function patchActivation(){
     scheduled=false;
@@ -17,16 +19,16 @@ const script=String.raw`(()=>{
       const profile=steps[0];
       const whatsapp=steps[1];
       const ai=steps[2];
-      whatsapp.textContent=ar()?'واتساب (اختياري)':'WhatsApp (optional)';
+      setText(whatsapp,ar()?'واتساب (اختياري)':'WhatsApp (optional)');
 
       const coreDone=[profile,ai].filter(step=>step.classList.contains('done')).length;
       const score=Math.round(coreDone/2*100);
       const scoreNode=panel.querySelector('.daScore strong');
       const progress=panel.querySelector('.daProgress i');
-      if(scoreNode)scoreNode.textContent=score+'%';
-      if(progress)progress.style.width=score+'%';
+      setText(scoreNode,score+'%');
+      if(progress&&progress.style.width!==score+'%')progress.style.width=score+'%';
 
-      const aiReady=Boolean(window.workspace?.ai?.configured);
+      const aiReady=aiConfigured();
       const whatsappReady=whatsapp.classList.contains('done');
       const nextTitle=panel.querySelector('.daNext b');
       const nextBody=panel.querySelector('.daNext p');
@@ -34,23 +36,23 @@ const script=String.raw`(()=>{
 
       if(profile.classList.contains('done')&&!whatsappReady){
         if(!aiReady){
-          if(nextTitle)nextTitle.textContent=ar()?'تحقق من جاهزية الذكاء':'Verify AI readiness';
-          if(nextBody)nextBody.textContent=ar()?'يمكنك استخدام دبّر بدون ربط واتساب الآن. جهّز ذكاء دبّر أولًا، ثم اربط واتساب لاحقًا إذا رغبت.':'You can use DABBIR without connecting WhatsApp now. Set up DABBIR AI first, then connect WhatsApp later if you want.';
+          setText(nextTitle,ar()?'تحقق من جاهزية الذكاء':'Verify AI readiness');
+          setText(nextBody,ar()?'يمكنك استخدام دبّر بدون ربط واتساب الآن. جهّز ذكاء دبّر أولًا، ثم اربط واتساب لاحقًا إذا رغبت.':'You can use DABBIR without connecting WhatsApp now. Set up DABBIR AI first, then connect WhatsApp later if you want.');
           if(nextButton){
-            nextButton.textContent=ar()?'فتح حالة الذكاء':'Open AI status';
+            setText(nextButton,ar()?'فتح حالة الذكاء':'Open AI status');
             nextButton.onclick=()=>openScreen('integrations');
           }
         }else{
-          if(nextTitle)nextTitle.textContent=ar()?'ابدأ باستخدام دبّر':'Start using DABBIR';
-          if(nextBody)nextBody.textContent=ar()?'حسابك جاهز للاستخدام. ربط WhatsApp Business اختياري ويمكنك إكماله لاحقًا من التكاملات.':'Your account is ready to use. WhatsApp Business connection is optional and can be completed later from Integrations.';
+          setText(nextTitle,ar()?'ابدأ باستخدام دبّر':'Start using DABBIR');
+          setText(nextBody,ar()?'حسابك جاهز للاستخدام. ربط WhatsApp Business اختياري ويمكنك إكماله لاحقًا من التكاملات.':'Your account is ready to use. WhatsApp Business connection is optional and can be completed later from Integrations.');
           if(nextButton){
-            nextButton.textContent=ar()?'فتح المحادثات':'Open conversations';
+            setText(nextButton,ar()?'فتح المحادثات':'Open conversations');
             nextButton.onclick=()=>openScreen('conversations');
           }
           const title=panel.querySelector('.daHead h2');
           const desc=panel.querySelector('.daHead p');
-          if(title)title.textContent=ar()?'دَبِّر جاهز للعمل':'DABBIR is ready to operate';
-          if(desc)desc.textContent=ar()?'الأساسيات التشغيلية جاهزة. يمكنك ربط واتساب لاحقًا إذا احتجته.':'Core operations are ready. You can connect WhatsApp later if you need it.';
+          setText(title,ar()?'دَبِّر جاهز للعمل':'DABBIR is ready to operate');
+          setText(desc,ar()?'الأساسيات التشغيلية جاهزة. يمكنك ربط واتساب لاحقًا إذا احتجته.':'Core operations are ready. You can connect WhatsApp later if you need it.');
         }
       }
     }
@@ -63,7 +65,7 @@ const script=String.raw`(()=>{
   }
 
   const observer=new MutationObserver(schedule);
-  observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style']});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   setTimeout(patchActivation,900);
 })();`;
 
