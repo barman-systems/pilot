@@ -1,5 +1,6 @@
 import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
+import { withServerReadTimeout } from './_bounded-server-read.js';
 
 const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 
@@ -32,7 +33,7 @@ async function readResponse(response, fallback) {
   return payload;
 }
 
-export async function serviceRpc(name, params = {}) {
+export async function serviceRpc(name, params = {}, options = {}) {
   const key = serviceKey();
   if (!key) {
     const error = new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
@@ -40,18 +41,21 @@ export async function serviceRpc(name, params = {}) {
     error.code = 'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED';
     throw error;
   }
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      'content-type': 'application/json',
-      accept: 'application/json',
-    },
-    body: JSON.stringify(params),
-  });
-  return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
+  return withServerReadTimeout(async signal => {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
+      method: 'POST',
+      cache: 'no-store',
+      signal,
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+    return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
+  }, { timeoutMs: options.timeoutMs, errorCode: 'WHATSAPP_SERVER_DATA_TIMEOUT' });
 }
 
 function oneRow(payload) {
