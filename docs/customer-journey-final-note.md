@@ -1,0 +1,1 @@
+This branch is ready for PR validation: simplified primary navigation, progressive disclosure for advanced tools, dashboard quick actions, one-step onboarding language, actionable empty states, and regression tests.
