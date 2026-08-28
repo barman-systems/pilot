@@ -11,6 +11,18 @@
   },
   "routes": [
     {
+      "src": "^/privacy/?$",
+      "dest": "/privacy.html"
+    },
+    {
+      "src": "^/terms/?$",
+      "dest": "/terms.html"
+    },
+    {
+      "src": "^/support/?$",
+      "dest": "/support.html"
+    },
+    {
       "src": "^/owner/?$",
       "dest": "/api/owner-login"
     },
@@ -24,6 +36,18 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/support",
+      "destination": "/support.html"
+    },
     {
       "source": "/owner",
       "destination": "/api/owner-login"
