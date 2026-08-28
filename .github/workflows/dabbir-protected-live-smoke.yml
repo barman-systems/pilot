@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'test/dabbir-protected-live-smoke.mjs'
+      - 'test/dabbir-protected-live-smoke-oidc.test.mjs'
       - '.github/workflows/dabbir-protected-live-smoke.yml'
 
 permissions:
@@ -55,7 +56,7 @@ jobs:
               echo 'generated=false' >> "$GITHUB_OUTPUT"
               echo 'method=none' >> "$GITHUB_OUTPUT"
               echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
-              exit 1
+              exit 2
             fi
             echo "::add-mask::$secret"
             echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
@@ -95,7 +96,8 @@ jobs:
           echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo '**State:** BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
-          echo 'No existing bypass, Vercel API token, or accepted GitHub Trusted OIDC source is available. Production remains protected.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No existing bypass, Vercel API token, or accepted GitHub Trusted OIDC source is available. Production remains protected and the browser journey did not run.' >> "$GITHUB_STEP_SUMMARY"
+          exit 2
       - name: Install WebKit journey runner
         if: steps.bypass.outputs.ready == 'true'
         run: |
