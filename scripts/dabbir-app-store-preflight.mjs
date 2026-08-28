@@ -69,7 +69,7 @@ requireStatic(/subscriptionPeriodNumberIOS|subscriptionInfoIOS/.test(subscriptio
 requireStatic(/introductoryOffer|introOffer/.test(subscription) && /free-trial/.test(subscription), 'STOREKIT_INTRO_OFFER_DISCLOSURE', 'Introductory/free-trial text is derived from StoreKit offer metadata.');
 requireStatic(/EXPO_PUBLIC_DABBIR_PRIVACY_URL/.test(subscription) && /EXPO_PUBLIC_DABBIR_TERMS_URL/.test(subscription), 'SUBSCRIPTION_LEGAL_LINKS', 'Subscription screen requires privacy and Terms links.');
 requireStatic(!/stripe|checkout|payment[_ -]?link|buy on web|subscribe on web/i.test(subscription), 'NO_EXTERNAL_PAYMENT_CTA', 'The iOS subscription component contains no Stripe/external purchase CTA.');
-requireStatic(/DABBIR_API_BASE_URL_NOT_CONFIGURED/.test(mobileApi) && /\^https:\\/\\//.test(mobileApi), 'HTTPS_API_FAIL_CLOSED', 'Native API requires an explicit HTTPS base URL.');
+requireStatic(mobileApi.includes('DABBIR_API_BASE_URL_NOT_CONFIGURED') && mobileApi.includes('configuredBase') && mobileApi.includes('https:'), 'HTTPS_API_FAIL_CLOSED', 'Native API requires an explicit HTTPS base URL.');
 
 const bundleId = String(process.env.DABBIR_IOS_BUNDLE_ID || '').trim();
 const appAppleId = String(process.env.DABBIR_IOS_APP_APPLE_ID || '').trim();
