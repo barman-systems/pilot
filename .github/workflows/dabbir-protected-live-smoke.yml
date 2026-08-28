@@ -1,0 +1,72 @@
+name: DABBIR Protected Live Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'test/dabbir-protected-live-smoke.mjs'
+      - '.github/workflows/dabbir-protected-live-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  protected-live-smoke:
+    name: Protected production iPhone smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      PROTECTED_QA_REPORT_PATH: dabbir-protected-live-smoke-report.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Classify automation bypass readiness
+        id: bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'BLOCKED_AUTOMATION_BYPASS_NOT_CONFIGURED'
+            echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '**State:** BLOCKED_AUTOMATION_BYPASS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Production remains protected; no credential value was exposed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'AUTOMATION_BYPASS_READY'
+          fi
+      - name: Install WebKit journey runner
+        if: steps.bypass.outputs.ready == 'true'
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps webkit
+      - name: Run protected production smoke
+        if: steps.bypass.outputs.ready == 'true'
+        run: node test/dabbir-protected-live-smoke.mjs
+      - name: Publish protected smoke summary
+        if: ${{ always() && steps.bypass.outputs.ready == 'true' }}
+        shell: bash
+        run: |
+          if [ -f dabbir-protected-live-smoke-report.json ]; then
+            echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' dabbir-protected-live-smoke-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-protected-live-smoke-report.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload protected smoke evidence
+        if: ${{ always() && steps.bypass.outputs.ready == 'true' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-protected-live-smoke-evidence
+          path: |
+            dabbir-protected-live-smoke-report.json
+            dabbir-protected-live-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
