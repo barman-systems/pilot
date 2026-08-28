@@ -38,6 +38,7 @@ test('DABBIR prefers WhatsApp Business app coexistence so verification happens t
   assert.match(ui, /whatsapp_business_app_onboarding/);
   assert.match(ui, /featureType:COEXISTENCE_FEATURE/);
   assert.match(ui, /FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/);
+  assert.match(ui, /FINISH_ONLY_WABA/);
   assert.match(ui, /onboarding_mode:COEXISTENCE_FEATURE/);
   assert.doesNotMatch(ui, /featureType:''/);
 
@@ -66,12 +67,13 @@ test('iPhone Meta login preserves the original user activation by prewarming the
   assert.match(body, /login_invoked/);
 });
 
-test('Embedded Signup does not time out during a normal multi-step Meta mobile journey', async () => {
+test('Embedded Signup does not time out during a normal multi-step Meta mobile journey and trusts only HTTPS facebook.com hosts', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   assert.match(ui, /SESSION_TIMEOUT_MS=15\*60\*1000/);
   assert.doesNotMatch(ui, /waitForSession\(timeoutMs=12000\)/);
-  assert.match(ui, /https:\/\/m\.facebook\.com/);
-  assert.match(ui, /https:\/\/business\.facebook\.com/);
+  assert.match(ui, /function trustedMetaOrigin\(origin\)/);
+  assert.match(ui, /url\.protocol==='https:'/);
+  assert.match(ui, /host==='facebook\.com'\|\|host\.endsWith\('\.facebook\.com'\)/);
 });
 
 test('Embedded Signup reports safe client stages to production logs without tokens or asset IDs', async () => {

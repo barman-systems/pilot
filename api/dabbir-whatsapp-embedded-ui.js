@@ -4,11 +4,10 @@ const script = String.raw`(()=>{
 
   const SESSION_TIMEOUT_MS=15*60*1000;
   const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
-  const META_MESSAGE_ORIGINS=new Set([
-    'https://www.facebook.com',
-    'https://web.facebook.com',
-    'https://m.facebook.com',
-    'https://business.facebook.com'
+  const META_FINISH_EVENTS=new Set([
+    'FINISH',
+    'FINISH_ONLY_WABA',
+    'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
   ]);
 
   const css=document.createElement('style');
@@ -35,6 +34,13 @@ const script = String.raw`(()=>{
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
+  function trustedMetaOrigin(origin){
+    try{
+      const url=new URL(String(origin||''));
+      const host=String(url.hostname||'').toLowerCase();
+      return url.protocol==='https:'&&(host==='facebook.com'||host.endsWith('.facebook.com'));
+    }catch{return false}
+  }
 
   function report(event,extra={}){
     try{
@@ -61,33 +67,33 @@ const script = String.raw`(()=>{
   }
 
   function parseMetaMessage(event){
-    if(!META_MESSAGE_ORIGINS.has(String(event.origin||''))) return;
+    if(!trustedMetaOrigin(event.origin)) return;
     let data=event.data;
     if(typeof data==='string'){
       try{data=JSON.parse(data)}catch{return}
     }
     if(!data||data.type!=='WA_EMBEDDED_SIGNUP') return;
 
-    const finished=data.event==='FINISH'||data.event==='FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
-    if(finished){
+    const metaEvent=String(data.event||'');
+    if(META_FINISH_EVENTS.has(metaEvent)){
       const payload=data.data||{};
       embeddedSession={
         waba_id:String(payload.waba_id||payload.whatsapp_business_account_id||''),
         phone_number_id:String(payload.phone_number_id||''),
-        onboarding_mode:data.event==='FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'?COEXISTENCE_FEATURE:COEXISTENCE_FEATURE
+        onboarding_mode:COEXISTENCE_FEATURE
       };
       report('session_finish',{
         stage:'meta_session',
-        meta_event:String(data.event||''),
+        meta_event:metaEvent,
         onboarding_mode:embeddedSession.onboarding_mode,
         has_waba:Boolean(embeddedSession.waba_id),
         has_phone:Boolean(embeddedSession.phone_number_id)
       });
-      settleSession(embeddedSession);
-    }else if(data.event==='CANCEL'){
+      if(embeddedSession.waba_id) settleSession(embeddedSession);
+    }else if(metaEvent==='CANCEL'){
       report('session_cancel',{stage:'meta_session'});
       settleSession(null);
-    }else if(data.event==='ERROR'){
+    }else if(metaEvent==='ERROR'){
       report('session_error',{stage:'meta_session',error:String(data?.data?.error_message||data?.data?.error||'META_EMBEDDED_SIGNUP_ERROR').slice(0,160)});
       settleSession(null);
       tell(ar()?'تعذر إكمال ربط WhatsApp Business من Meta':'Meta could not complete WhatsApp Business setup');
