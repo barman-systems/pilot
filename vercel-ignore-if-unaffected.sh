@@ -61,7 +61,7 @@ while IFS= read -r path; do
     .github/*|docs/*|test/*|README.md|.gitignore)
       ;;
     *)
-      echo "Runtime, database, or unknown path changed since verification baseline: $path; continue deployment."
+      echo "Runtime or unknown path changed since verification baseline (database paths are runtime-affecting): $path; continue deployment."
       exit 1
       ;;
   esac
