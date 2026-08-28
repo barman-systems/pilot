@@ -13,7 +13,11 @@ set -u
 #    build whenever any application, database migration, or unknown path changed
 #    in that range. Database schema is part of the Production artifact contract;
 #    a migration must not leave main SHA ahead of the deployed SHA.
-# 3) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
+# 3) The protected Production browser-smoke runner and workflow are themselves
+#    release-verification contracts. Because that smoke is exact-SHA-bound, any
+#    change to either contract must deploy the same SHA before it can produce
+#    truthful browser evidence.
+# 4) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
 previous_success="${VERCEL_GIT_PREVIOUS_SHA:-}"
@@ -58,6 +62,10 @@ fi
 
 while IFS= read -r path; do
   case "$path" in
+    test/dabbir-protected-live-smoke.mjs|.github/workflows/dabbir-protected-live-smoke.yml)
+      echo "Protected Production smoke contract changed; deploy exact SHA for browser evidence: $path"
+      exit 1
+      ;;
     .github/*|docs/*|test/*|README.md|.gitignore)
       ;;
     *)
