@@ -44,6 +44,10 @@ export async function signup(email: string, password: string): Promise<{ session
   return { session: payload.session || null, verification_required: Boolean(payload.verification_required) };
 }
 
+export async function requestPasswordRecovery(email: string): Promise<void> {
+  await post('/api/mobile/auth/forgot-password', { email });
+}
+
 export async function refresh(refreshToken: string): Promise<DabbirSession> {
   const payload = await post('/api/mobile/auth/refresh', { refresh_token: refreshToken });
   return payload.session as DabbirSession;
