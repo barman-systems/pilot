@@ -3,6 +3,12 @@ import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
+import {
+  applySandboxStatus,
+  isSandboxPhoneNumber,
+  persistSandboxInbound,
+  replyToSandboxInbound,
+} from './_whatsapp-sandbox-core.js';
 
 export const config = {
   api: {
@@ -138,6 +144,13 @@ function unlinkedTenant(error) {
   return String(error?.code || error?.message || '').includes('WHATSAPP_TENANT_CONNECTION_NOT_FOUND');
 }
 
+function unroutedSandbox(error) {
+  const code = String(error?.code || error?.message || '');
+  return code.includes('WHATSAPP_SANDBOX_SESSION_NOT_FOUND')
+    || code.includes('WHATSAPP_SANDBOX_TOKEN_BOUND_TO_ANOTHER_SENDER')
+    || code.includes('WHATSAPP_SANDBOX_SESSION_NOT_ACTIVE');
+}
+
 export default async function handler(req, res) {
   const cid = correlationId(req);
   attachCorrelation(res, cid);
@@ -183,9 +196,42 @@ export default async function handler(req, res) {
   let matchedStatuses = 0;
   let providerVerifiedStatuses = 0;
   let unlinkedMessages = 0;
+  let sandboxMessages = 0;
+  let sandboxReplies = 0;
+  let sandboxDuplicateMessages = 0;
+  let sandboxUnroutedMessages = 0;
+  let sandboxMatchedStatuses = 0;
+  let sandboxAmbiguousReplies = 0;
 
   try {
     for (const event of routed) {
+      const sandbox = isSandboxPhoneNumber(event.phoneNumberId);
+      if (sandbox && event.type === 'message') {
+        try {
+          const route = await persistSandboxInbound(event);
+          sandboxMessages += 1;
+          if (route.duplicate) sandboxDuplicateMessages += 1;
+          const reply = await replyToSandboxInbound(route);
+          if (reply.sent) sandboxReplies += 1;
+        } catch (error) {
+          if (unroutedSandbox(error)) {
+            sandboxUnroutedMessages += 1;
+            continue;
+          }
+          if (error?.ambiguous === true) {
+            sandboxAmbiguousReplies += 1;
+            continue;
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (sandbox && event.type === 'status') {
+        const result = await applySandboxStatus(event);
+        if (result.matched) sandboxMatchedStatuses += 1;
+        continue;
+      }
+
       if (event.type === 'message') {
         try {
           const result = await persistSignedInbound(event);
@@ -216,6 +262,8 @@ export default async function handler(req, res) {
       event_count: routed.length,
       message_count: messageCount,
       status_count: statusCount,
+      sandbox_messages: sandboxMessages,
+      sandbox_replies: sandboxReplies,
     });
     return json(res, status, {
       ok: false,
@@ -223,16 +271,20 @@ export default async function handler(req, res) {
       state: missingService ? 'SERVER_PERSISTENCE_NOT_CONFIGURED' : 'SIGNED_EVENT_PERSISTENCE_FAILED',
       signature_verified: true,
       persisted: false,
-      outbound_messages_sent: false,
+      sandbox_mode: 'OWNER_SANDBOX',
+      outbound_messages_sent: sandboxReplies > 0,
       retryable: true,
       correlation_id: cid,
     }, cid);
   }
 
-  const persistenceVerified = messageCount === 0 || persistedMessages === messageCount - unlinkedMessages;
-  const state = unlinkedMessages > 0 && persistedMessages === 0
-    ? 'TENANT_NOT_LINKED'
-    : (persistedMessages > 0 || matchedStatuses > 0 ? 'LIVE_EVENT_PERSISTED' : 'SIGNED_EVENT_NO_ACTION');
+  const routedMessageCount = persistedMessages + sandboxMessages;
+  const ignoredMessageCount = unlinkedMessages + sandboxUnroutedMessages;
+  const persistenceVerified = messageCount === 0 || routedMessageCount === messageCount - ignoredMessageCount;
+  let state = 'SIGNED_EVENT_NO_ACTION';
+  if (sandboxMessages > 0 || sandboxMatchedStatuses > 0) state = 'OWNER_SANDBOX_EVENT_PROCESSED';
+  else if (unlinkedMessages > 0 && persistedMessages === 0) state = 'TENANT_NOT_LINKED';
+  else if (persistedMessages > 0 || matchedStatuses > 0) state = 'LIVE_EVENT_PERSISTED';
 
   logEvent('info', {
     correlation_id: cid,
@@ -249,7 +301,13 @@ export default async function handler(req, res) {
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
     unlinked_messages: unlinkedMessages,
-    outbound_messages_sent: false,
+    sandbox_messages: sandboxMessages,
+    sandbox_replies: sandboxReplies,
+    sandbox_duplicate_messages: sandboxDuplicateMessages,
+    sandbox_unrouted_messages: sandboxUnroutedMessages,
+    sandbox_matched_statuses: sandboxMatchedStatuses,
+    sandbox_ambiguous_replies: sandboxAmbiguousReplies,
+    outbound_messages_sent: sandboxReplies > 0,
   });
 
   return json(res, 200, {
@@ -262,14 +320,24 @@ export default async function handler(req, res) {
     message_count: messageCount,
     status_count: statusCount,
     classifications,
-    persisted: persistedMessages > 0,
+    persisted: persistedMessages > 0 || sandboxMessages > 0,
     persistence_verified: persistenceVerified,
     duplicate_messages: duplicateMessages,
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
     tenant_unlinked_events: unlinkedMessages,
-    outbound_messages_sent: false,
-    external_side_effects: false,
+    sandbox: {
+      mode: 'OWNER_SANDBOX',
+      messages: sandboxMessages,
+      replies: sandboxReplies,
+      duplicate_messages: sandboxDuplicateMessages,
+      unrouted_messages: sandboxUnroutedMessages,
+      matched_statuses: sandboxMatchedStatuses,
+      ambiguous_replies: sandboxAmbiguousReplies,
+      production_operational_evidence: false,
+    },
+    outbound_messages_sent: sandboxReplies > 0,
+    external_side_effects: sandboxReplies > 0,
     correlation_id: cid,
     timestamp: new Date().toISOString(),
   }, cid);
