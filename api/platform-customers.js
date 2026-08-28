@@ -36,17 +36,52 @@ async function serviceRpc(key,name,params={}){
   return readResponse(response,'PLATFORM_ADMIN_RPC_FAILED');
 }
 
-async function adminContext(req,res){
+async function authenticatedContext(req,res){
   const token=accessTokenFromRequest(req);
   if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   const user=await getVerifiedUser(token).catch(()=>null);
   if(!user?.id){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
-  const response=await supabaseRest(`dabbir_platform_admins?select=role,active&user_id=eq.${user.id}&active=eq.true&limit=1`,token).catch(()=>null);
-  if(!response?.ok){json(res,response?.status===401?401:403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
-  const rows=await response.json().catch(()=>[]);
-  const admin=Array.isArray(rows)?rows[0]:null;
-  if(!admin?.active){json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
-  return {user,role:admin.role,key:serviceKey()};
+  return {token,user};
+}
+
+async function readPlatformAdmin(token,user){
+  const response=await supabaseRest(`dabbir_platform_admins?select=role,active&user_id=eq.${user.id}&active=eq.true&limit=1`,token);
+  if(!response.ok){
+    const error=new Error('PLATFORM_ADMIN_LOOKUP_FAILED');
+    error.status=Number(response.status||500);
+    throw error;
+  }
+  const rows=await response.json().catch(()=>null);
+  if(!Array.isArray(rows)){
+    const error=new Error('PLATFORM_ADMIN_LOOKUP_INVALID');
+    error.status=502;
+    throw error;
+  }
+  const admin=rows[0]||null;
+  return admin?.active?admin:null;
+}
+
+async function adminContext(req,res,{capabilityProbe=false}={}){
+  const auth=await authenticatedContext(req,res);
+  if(!auth)return null;
+  let admin=null;
+  try{
+    admin=await readPlatformAdmin(auth.token,auth.user);
+  }catch(error){
+    const status=Number(error?.status||500);
+    if(status===401){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
+    if(status===403&&capabilityProbe){
+      return {user:auth.user,role:null,key:'',allowed:false};
+    }
+    json(res,status>=500?503:403,{ok:false,error:status>=500?'PLATFORM_ADMIN_LOOKUP_FAILED':'PLATFORM_ADMIN_REQUIRED'});
+    return null;
+  }
+  if(!admin){
+    if(capabilityProbe)return {user:auth.user,role:null,key:'',allowed:false};
+    json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});
+    return null;
+  }
+  return {user:auth.user,role:admin.role,key:serviceKey(),allowed:true};
 }
 
 function adminServiceUnavailable(res){
@@ -71,13 +106,22 @@ function rpcError(error){
 
 export default async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
-  const context=await adminContext(req,res);
+  const action=req.method==='GET'?String(singleQueryValue(req,'action')||'capability').trim():null;
+  const context=await adminContext(req,res,{capabilityProbe:req.method==='GET'&&action==='capability'});
   if(!context)return;
 
   try{
     if(req.method==='GET'){
-      const action=String(singleQueryValue(req,'action')||'capability').trim();
       if(action==='capability'){
+        if(!context.allowed){
+          return json(res,200,{
+            ok:true,
+            allowed:false,
+            role:null,
+            service_configured:false,
+            reason:'PLATFORM_ADMIN_REQUIRED',
+          });
+        }
         const serviceConfigured=Boolean(context.key);
         return json(res,200,{
           ok:true,
