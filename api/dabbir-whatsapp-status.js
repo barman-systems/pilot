@@ -207,9 +207,9 @@ async function embeddedStatus(req, accessToken, businessId) {
       channel: 'whatsapp',
       source: 'embedded_signup',
       configured: true,
-      connected: true,
+      connected: false,
       webhook_configured: Boolean(firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN') && platform.appSecret),
-      outbound_configured: true,
+      outbound_configured: false,
       phone_number_configured: true,
       waba_configured: true,
       server_runtime_configured: whatsappLiveServerCapability().service_data_access,
@@ -251,12 +251,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // The authenticated DABBIR UI must never inherit a global/server WhatsApp
-  // identity. When the caller omitted business_id, resolve the tenant only if
-  // there is exactly one active membership; otherwise fail closed with a
-  // tenant-unconfigured payload. This keeps old platform credentials usable for
-  // webhook infrastructure without ever presenting that legacy number as the
-  // current customer's WhatsApp number.
   try {
     const memberships = await getBusinessMemberships(accessToken);
     const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])
