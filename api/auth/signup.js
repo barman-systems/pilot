@@ -1,4 +1,5 @@
 import { authCookieHeaders, json, readJsonBody, requireSameOrigin, supabaseAuth } from '../_auth-core.js';
+import { checkPasswordCompromise } from '../_password-breach-check.js';
 import { isStrongPassword } from '../_password-policy.js';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -13,6 +14,11 @@ export default async function handler(req, res) {
     const password = String(body.password || '');
     if (!emailPattern.test(email) || email.length > 254 || !isStrongPassword(password, { email })) {
       return json(res, 400, { ok: false, error: 'INVALID_SIGNUP_INPUT' });
+    }
+
+    const breach = await checkPasswordCompromise(password);
+    if (breach.compromised) {
+      return json(res, 400, { ok: false, error: 'COMPROMISED_PASSWORD' });
     }
 
     const response = await supabaseAuth('/auth/v1/signup', {
@@ -31,6 +37,9 @@ export default async function handler(req, res) {
     }
     return json(res, 202, { ok: true, authenticated: false, verification_required: true });
   } catch (error) {
+    if (error?.code === 'PASSWORD_BREACH_CHECK_UNAVAILABLE') {
+      return json(res, 503, { ok: false, error: 'PASSWORD_SECURITY_CHECK_UNAVAILABLE' });
+    }
     return json(res, error?.code === 413 ? 413 : error?.code === 400 ? 400 : 500, { ok: false, error: error?.message === 'PAYLOAD_TOO_LARGE' ? 'PAYLOAD_TOO_LARGE' : error?.message === 'INVALID_JSON' ? 'INVALID_JSON' : 'AUTH_UNAVAILABLE' });
   }
 }
