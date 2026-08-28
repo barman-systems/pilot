@@ -20,14 +20,24 @@ const script=String.raw`(()=>{
   const businessType=()=>String(currentWorkspace()?.business?.business_type||'').toLowerCase();
   const isStore=()=>businessType()==='store';
   const isServiceBusiness=()=>Boolean(businessType())&&!isStore();
+  const isOwner=()=>String(currentWorkspace()?.membership?.role||'').toLowerCase()==='owner';
+  const hasBusiness=()=>Boolean(currentWorkspace()?.business?.id);
   const copy=()=>ar()?{
     servicesTitle:'الخدمات',
     servicesDesc:'الخدمات الفعلية التي يقدمها نشاطك. عدّلها عند الحاجة بدون زيادة القوائم الرئيسية.',
-    operations:'العمليات'
+    operations:'العمليات',
+    teamTitle:'الفريق والموظفون',
+    teamDesc:'إدارة أعضاء الفريق والدعوات والصلاحيات من مكان واضح.',
+    assistantTitle:'مساعد دبّر',
+    assistantDesc:'اسأل دبّر عن نشاطك وما يحتاج انتباهك الآن.'
   }:{
     servicesTitle:'Services',
     servicesDesc:'The real services your business provides. Manage them when needed without adding another primary destination.',
-    operations:'Operations'
+    operations:'Operations',
+    teamTitle:'Team & employees',
+    teamDesc:'Manage team members, invitations and permissions from one clear place.',
+    assistantTitle:'DABBIR Assistant',
+    assistantDesc:'Ask DABBIR about your business and what needs attention now.'
   };
 
   function activitySlots(){
@@ -73,6 +83,19 @@ const script=String.raw`(()=>{
     setTimeout(()=>window.__dabbirServiceOperations?.refresh?.(),0);
   }
 
+  function openTeam(){
+    window.location.assign('/team.html');
+  }
+
+  function openAssistant(){
+    if(typeof showScreen==='function')showScreen('dashboard');
+    setTimeout(()=>{
+      window.__dabbirOwnerCopilot?.refresh?.();
+      const card=q('#dabbirOwnerCopilot');
+      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+    },60);
+  }
+
   function ensureMoreCard(){
     const grid=q('#screen-more .moreGrid');
     let card=q('#dabbirContextServices');
@@ -93,6 +116,47 @@ const script=String.raw`(()=>{
     card.innerHTML='<h3>'+t.servicesTitle+'</h3><p>'+t.servicesDesc+'</p>';
   }
 
+  function ensureUtilityCards(){
+    const grid=q('#screen-more .moreGrid');
+    if(!grid||!hasBusiness())return;
+    const t=copy();
+
+    let team=q('#dabbirTeamAccess');
+    if(!team){
+      team=document.createElement('button');
+      team.type='button';
+      team.id='dabbirTeamAccess';
+      team.className='moreCard';
+      team.addEventListener('click',openTeam);
+      grid.append(team);
+    }
+    team.innerHTML='<h3>'+t.teamTitle+'</h3><p>'+t.teamDesc+'</p>';
+
+    const sideTeam=q('#teamLink');
+    if(sideTeam){
+      sideTeam.hidden=false;
+      sideTeam.classList.remove('hidden');
+      sideTeam.style.removeProperty('display');
+      sideTeam.textContent=t.teamTitle;
+      sideTeam.setAttribute('aria-label',t.teamTitle);
+    }
+
+    let assistant=q('#dabbirAssistantAccess');
+    if(!isOwner()){
+      assistant?.remove();
+      return;
+    }
+    if(!assistant){
+      assistant=document.createElement('button');
+      assistant.type='button';
+      assistant.id='dabbirAssistantAccess';
+      assistant.className='moreCard';
+      assistant.addEventListener('click',openAssistant);
+      grid.prepend(assistant);
+    }
+    assistant.innerHTML='<h3>'+t.assistantTitle+'</h3><p>'+t.assistantDesc+'</p>';
+  }
+
   function bindMobileMenuResync(){
     const menu=q('#menuBtn');
     if(!menu||menu.dataset.dabbirContextRouterBound==='true')return;
@@ -106,6 +170,7 @@ const script=String.raw`(()=>{
   function enforce(){
     adaptPrimaryActivitySlot();
     ensureMoreCard();
+    ensureUtilityCards();
     bindMobileMenuResync();
   }
 
@@ -121,7 +186,8 @@ const script=String.raw`(()=>{
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v5',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true};
+  setTimeout(enforce,1600);
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v6',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true,team_access:'more-and-sidebar',owner_assistant_access:'more'};
 })();`;
 
 export default function handler(req,res){
@@ -129,6 +195,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v5');
+  res.setHeader('x-dabbir-contextual-navigation','v6');
   return res.status(200).send(script);
 }
