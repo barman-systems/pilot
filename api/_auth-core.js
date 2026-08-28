@@ -93,17 +93,19 @@ export async function supabaseRpc(name, accessToken, params = {}) {
   });
 }
 
-async function verifiedUserBase(accessToken) {
+async function verifiedUserBase(accessToken, options = {}) {
   if (!accessToken) return null;
-  const response = await supabaseAuth('/auth/v1/user', { headers: { authorization: `Bearer ${accessToken}` } });
+  const headers = new Headers(options.headers || {});
+  headers.set('authorization', `Bearer ${accessToken}`);
+  const response = await supabaseAuth('/auth/v1/user', { ...options, headers });
   if (!response.ok) return null;
   const user = await response.json();
   if (!UUID_RE.test(String(user?.id || ''))) return null;
   return { id: user.id, email: user.email ?? null, aud: user.aud ?? null };
 }
 
-export async function getVerifiedUserWithAccess(accessToken) {
-  const user = await verifiedUserBase(accessToken);
+export async function getVerifiedUserWithAccess(accessToken, options = {}) {
+  const user = await verifiedUserBase(accessToken, options);
   if (!user) return null;
 
   // This is an ordinary RLS-protected self-read. The authenticated browser/user
@@ -111,7 +113,11 @@ export async function getVerifiedUserWithAccess(accessToken) {
   const response = await supabaseRest(
     `account_access_state?select=status,reason,suspended_at&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
     accessToken,
-  ).catch(() => null);
+    options,
+  ).catch(error => {
+    if (options.signal?.aborted) throw error;
+    return null;
+  });
   if (!response?.ok) return null;
   const rows = await response.json().catch(() => null);
   if (!Array.isArray(rows)) return null;
@@ -126,8 +132,8 @@ export async function getVerifiedUserWithAccess(accessToken) {
   };
 }
 
-export async function getVerifiedUser(accessToken) {
-  const user = await getVerifiedUserWithAccess(accessToken);
+export async function getVerifiedUser(accessToken, options = {}) {
+  const user = await getVerifiedUserWithAccess(accessToken, options);
   if (!user || user.dabbir_access === 'suspended') return null;
   return user;
 }
@@ -164,8 +170,12 @@ export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Mat
   };
 }
 
-export async function getBusinessMemberships(accessToken) {
-  const response = await supabaseRest('dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active', accessToken);
+export async function getBusinessMemberships(accessToken, options = {}) {
+  const response = await supabaseRest(
+    'dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active',
+    accessToken,
+    options,
+  );
   if (!response.ok) {
     const status = Number(response.status || 500);
     const error = new Error(status === 401 || status === 403 ? 'AUTH_REQUIRED' : 'MEMBERSHIP_LOOKUP_FAILED');

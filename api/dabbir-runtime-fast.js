@@ -13,23 +13,32 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const DABBIR_TIME_ZONE = 'Asia/Dubai';
 const DABBIR_UTC_OFFSET = '+04:00';
+const DABBIR_FAST_RUNTIME_VERSION = 'fast-v7-timeout-guarded';
 
-// === إصلاح: مهلة زمنية لكل استعلام على حدة ===
-// كل استعلام Supabase له مهلة قصوى مستقلة. إذا تعلّق أي استعلام واحد،
-// يفشل هو فقط بعد DB_TIMEOUT_MS بدل ما يعلّق الطلب كامل حتى حد Vercel (300 ثانية).
+// Every required Supabase request in the fast runtime is bounded independently
+// so a hung auth or tenant-data call cannot consume the full Vercel function
+// lifetime. Required workspace reads remain fail-fast as a group.
 const DB_TIMEOUT_MS = 10_000;
 
 function withTimeout(promiseFactory, label, ms = DB_TIMEOUT_MS) {
   const controller = new AbortController();
+  const timeoutError = () => {
+    const error = new Error(`${label}_TIMEOUT`);
+    error.status = 504;
+    return error;
+  };
   const timer = setTimeout(() => controller.abort(), ms);
+  const operation = Promise.resolve()
+    .then(() => promiseFactory(controller.signal))
+    .catch(error => {
+      if (controller.signal.aborted) throw timeoutError();
+      throw error;
+    })
+    .finally(() => clearTimeout(timer));
   return Promise.race([
-    promiseFactory(controller.signal).finally(() => clearTimeout(timer)),
+    operation,
     new Promise((_, reject) => {
-      controller.signal.addEventListener('abort', () => {
-        const error = new Error(`${label}_TIMEOUT`);
-        error.status = 504;
-        reject(error);
-      });
+      controller.signal.addEventListener('abort', () => reject(timeoutError()), { once: true });
     }),
   ]);
 }
@@ -108,7 +117,6 @@ async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
   return payload;
 }
 
-// === إصلاح: rest() و restCount() الآن تلتزم بمهلة زمنية عبر withTimeout ===
 const rest = (token, path, fallback) =>
   withTimeout(
     signal => supabaseRest(path, token, { signal }).then(response => readData(response, fallback)),
@@ -199,6 +207,7 @@ function buildDataTruth({ business, conversations, customers, appointments, hand
   return {
     state: 'VERIFIED_TENANT_READ',
     source: 'SUPABASE_RLS_TENANT_DATA',
+    runtime_version: DABBIR_FAST_RUNTIME_VERSION,
     read_at: new Date().toISOString(),
     business_updated_at: business?.updated_at || null,
     runtime_ms: duration,
@@ -222,17 +231,31 @@ async function handleFastGet(req, res) {
 
   let memberships;
   try {
-    memberships = await getBusinessMemberships(accessToken);
+    memberships = await withTimeout(
+      signal => getBusinessMemberships(accessToken, { signal }),
+      'MEMBERSHIP_LOOKUP_FAILED',
+    );
   } catch (error) {
-    const status = Number(error?.code || 500);
+    const status = Number(error?.status || error?.code || 500);
     if (status === 401 || status === 403) {
       return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
     }
+    if (status === 504) throw error;
     return json(res, 503, { ok: false, authenticated: false, error: 'AUTH_VERIFICATION_UNAVAILABLE' });
   }
 
   let user = userClaimsFromValidatedAccessToken(accessToken);
-  if (!user) user = await getVerifiedUser(accessToken).catch(() => null);
+  if (!user) {
+    try {
+      user = await withTimeout(
+        signal => getVerifiedUser(accessToken, { signal }),
+        'AUTH_USER_VERIFICATION_FAILED',
+      );
+    } catch (error) {
+      if (Number(error?.status || 0) === 504) throw error;
+      user = null;
+    }
+  }
   if (!user) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
 
   const requestedBusinessId = safeId(singleQueryValue(req, 'business_id'));
@@ -254,6 +277,7 @@ async function handleFastGet(req, res) {
       data_truth: {
         state: 'NO_TENANT_SELECTED',
         source: 'SUPABASE_AUTH_AND_MEMBERSHIP',
+        runtime_version: DABBIR_FAST_RUNTIME_VERSION,
         read_at: new Date().toISOString(),
       },
       verified_metrics: null,
@@ -307,7 +331,8 @@ async function handleFastGet(req, res) {
     ? loadMessages(accessToken, businessId, requestedConversationId)
     : Promise.resolve(null);
 
-  // === إصلاح: كل استعلام يفشل بمفرده عند التعليق بدل تعليق الطلب كامل ===
+  // These reads are all required to claim a verified workspace response. Promise.all
+  // intentionally fails the whole request if any required read times out or fails.
   const [businessRows, rawConversations, customers, appointments, handoffs, followups, metrics, requestedMessages] =
     await Promise.all([
       businessPromise,
@@ -352,7 +377,6 @@ async function handleFastGet(req, res) {
   const duration = Date.now() - started;
   const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v6-exact-metrics');
   return json(res, 200, {
     ok: true,
     authenticated: true,
@@ -381,12 +405,13 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
+    performance: { runtime_ms: duration, runtime_version: DABBIR_FAST_RUNTIME_VERSION, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
   });
 }
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    res.setHeader('x-dabbir-runtime', DABBIR_FAST_RUNTIME_VERSION);
     try {
       return await handleFastGet(req, res);
     } catch (error) {
@@ -395,9 +420,10 @@ export default async function handler(req, res) {
       return json(res, safeStatus, {
         ok: false,
         state: 'FAILED_OR_UNVERIFIED',
+        runtime_version: DABBIR_FAST_RUNTIME_VERSION,
         error: String(error?.message || 'FAST_RUNTIME_FAILED').slice(0, 120),
         detail: error?.detail || undefined,
-        truth: { state: 'UNVERIFIED' },
+        truth: { state: 'UNVERIFIED', runtime_version: DABBIR_FAST_RUNTIME_VERSION },
       });
     }
   }
