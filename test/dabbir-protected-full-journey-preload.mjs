@@ -12,6 +12,7 @@ const { webkit } = await import('playwright');
 installProtectedPlaywrightAccess(webkit, installed.accessHeaders);
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const operationsNavSelector = '#side.open [data-screen="operations"]:visible';
 const diagnosticSelectors = new Set([
   '#authGate:not(.hidden)',
   '#mfaContinuation:not(.hidden)',
@@ -22,7 +23,7 @@ const diagnosticSelectors = new Set([
   '#screen-conversations.active',
   '#menuBtn',
   '#side.open',
-  '#side.open [data-screen="operations"]:visible',
+  operationsNavSelector,
   '#screen-operations.active',
   '#opsBody',
 ]);
@@ -30,6 +31,41 @@ const diagnosticSelectors = new Set([
 function checkpoint(stage, detail = '') {
   const suffix = detail ? ` ${detail}` : '';
   console.log(`DABBIR_WEBKIT_STAGE=${stage}${suffix}`);
+}
+
+async function captureOperationsNavDiagnostic(page) {
+  return page.evaluate(() => {
+    const summarize = selector => [...document.querySelectorAll(selector)].map(node => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return {
+        screen: node.dataset.screen || null,
+        activity_slot: node.dataset.dabbirActivitySlot || null,
+        display: style.display,
+        visibility: style.visibility,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    });
+    const router = globalThis.__dabbirContextualNavigation || null;
+    return {
+      business_type: globalThis.workspace?.business?.business_type || null,
+      auth_stage: document.body?.dataset?.dabbirAuthStage || null,
+      current_screen: typeof globalThis.current === 'string' ? globalThis.current : null,
+      side_open: document.querySelector('#side')?.classList.contains('open') || false,
+      router: router ? {
+        version: router.version || null,
+        authority: router.authority || null,
+        mobile_menu_resync: router.mobile_menu_resync === true,
+        refresh_available: typeof router.refresh === 'function',
+      } : null,
+      side_destinations: summarize('#nav [data-screen]'),
+      bottom_destinations: summarize('#bottomNav [data-screen]'),
+      activity_slots: summarize('[data-dabbir-activity-slot="true"]'),
+      operations_screen_present: Boolean(document.querySelector('#screen-operations')),
+      owner_operations_loaded: Boolean(globalThis.__dabbirOwnerOperationsLoaded),
+    };
+  });
 }
 
 // Keep application behavior untouched while making WebKit acceptance fail-fast.
@@ -137,6 +173,35 @@ webkit.launch = async (...launchArgs) => {
               checkpoint('click_fail', selectorText);
               throw error;
             }
+          };
+        }
+
+        if (selectorText === operationsNavSelector && typeof locator.count === 'function') {
+          const protectedCount = locator.count.bind(locator);
+          locator.count = async () => {
+            const count = await protectedCount();
+            if (count !== 0) return count;
+            let diagnostic = { diagnostic_error: 'OPERATIONS_NAV_SNAPSHOT_UNAVAILABLE' };
+            try {
+              const before = await captureOperationsNavDiagnostic(page);
+              let refresh = 'UNAVAILABLE';
+              try {
+                refresh = await page.evaluate(() => {
+                  const fn = globalThis.__dabbirContextualNavigation?.refresh;
+                  if (typeof fn !== 'function') return 'NO_REFRESH';
+                  fn();
+                  return 'CALLED';
+                });
+              } catch (refreshError) {
+                refresh = `FAILED_${String(refreshError?.name || 'ERROR')}`;
+              }
+              const after = await captureOperationsNavDiagnostic(page);
+              diagnostic = { before, refresh, after };
+            } catch (diagnosticError) {
+              diagnostic = { diagnostic_error: `OPERATIONS_NAV_SNAPSHOT_FAILED_${String(diagnosticError?.name || 'ERROR')}` };
+            }
+            console.log(`DABBIR_OPERATIONS_NAV_DIAGNOSTIC=${JSON.stringify(diagnostic)}`);
+            return count;
           };
         }
         return locator;
