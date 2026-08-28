@@ -89,7 +89,8 @@ test('state-changing auth endpoints require same-origin and bounded request bodi
 test('session identity is verified server-side and memberships are resolved under user bearer RLS', () => {
   assert.match(authCore, /\/auth\/v1\/user/);
   assert.match(authCore, /dabbir_memberships\?select=business_id,role/);
-  assert.match(authCore, /authorization: `Bearer \$\{accessToken\}`/);
+  assert.match(authCore, /headers\.set\('authorization', `Bearer \$\{accessToken\}`\)/);
+  assert.match(authCore, /supabaseRest\([\s\S]*accessToken,[\s\S]*options/);
   assert.match(session, /getVerifiedUser/);
   assert.match(session, /getBusinessMemberships/);
   assert.doesNotMatch(session, /dabbir_customers/);
