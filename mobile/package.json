@@ -1,16 +1,21 @@
 {
-  "name": "dabbir-ios",
+  "name": "dabbir-mobile",
   "version": "1.0.0",
   "private": true,
   "main": "expo/AppEntry",
   "scripts": {
     "start": "expo start --dev-client",
     "ios": "expo run:ios",
+    "android": "expo run:android",
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
     "prebuild:ios": "expo prebuild --platform ios --clean",
+    "prebuild:android": "expo prebuild --platform android --clean",
     "build:ios": "eas build --platform ios --profile production",
-    "submit:ios": "eas submit --platform ios --profile production"
+    "submit:ios": "eas submit --platform ios --profile production",
+    "build:android": "eas build --platform android --profile production",
+    "submit:android": "eas submit --platform android --profile production",
+    "play:preflight": "node ../scripts/dabbir-google-play-preflight.mjs"
   },
   "dependencies": {
     "expo": "~57.0.9",
