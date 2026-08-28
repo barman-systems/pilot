@@ -43,6 +43,9 @@ test('static App Store preflight passes internal invariants while reporting exte
   assert.ok(report.passes.includes('NO_UNVERIFIED_ENTITLEMENT'));
   assert.ok(report.passes.includes('SUBSCRIPTION_LEGAL_LINKS'));
   assert.ok(report.passes.includes('STOREKIT_INTRO_OFFER_DISCLOSURE'));
+  assert.ok(report.passes.includes('EAS_PRODUCTION_PROFILE'));
+  assert.ok(report.passes.includes('APP_STORE_PUBLIC_PAGE_SOURCE'));
+  assert.ok(report.passes.includes('APP_STORE_PUBLIC_PAGE_ROUTES'));
   assert.ok(report.external_blockers.some(item => item.code === 'APP_STORE_APPLE_ID'));
   assert.ok(report.external_blockers.some(item => item.code === 'PUBLIC_PRODUCTION_API'));
   assert.equal(report.signed_distribution_testflight, 'EXTERNAL_APPLE_GATE');
@@ -59,6 +62,38 @@ test('release App Store preflight fails closed when Apple/public release configu
   for (const required of ['APPLE_BUNDLE_REGISTERED_VALUE', 'APP_STORE_APPLE_ID', 'IAP_PRODUCT_MATCH', 'IAP_ENABLED_RELEASE', 'PUBLIC_PRODUCTION_API', 'PUBLIC_PRIVACY_URL', 'PUBLIC_TERMS_URL', 'PUBLIC_SUPPORT_URL', 'APPLE_ROOT_CERTIFICATES', 'IAP_SERVER_STORAGE_CREDENTIAL']) {
     assert.ok(codes.has(required), `missing fail-closed release blocker ${required}`);
   }
+});
+
+test('release App Store preflight accepts only canonical public legal route paths', () => {
+  const common = {
+    DABBIR_APP_STORE_RELEASE_PREFLIGHT: '1',
+    DABBIR_IOS_BUNDLE_ID: 'com.barmansystems.dabbir',
+    DABBIR_IOS_APP_APPLE_ID: '1234567890',
+    DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID: 'com.barmansystems.dabbir.owner.monthly',
+    EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID: 'com.barmansystems.dabbir.owner.monthly',
+    EXPO_PUBLIC_IOS_IAP_ENABLED: 'true',
+    EXPO_PUBLIC_DABBIR_API_BASE_URL: 'https://app.example.com',
+    APPLE_ROOT_CERTIFICATES_BASE64: `${Buffer.alloc(400).toString('base64')},${Buffer.alloc(400, 1).toString('base64')}`,
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-value',
+  };
+
+  const wrong = runPreflight({
+    ...common,
+    EXPO_PUBLIC_DABBIR_PRIVACY_URL: 'https://app.example.com/privacy-policy',
+    EXPO_PUBLIC_DABBIR_TERMS_URL: 'https://app.example.com/terms',
+    EXPO_PUBLIC_DABBIR_SUPPORT_URL: 'https://app.example.com/support',
+  });
+  assert.equal(wrong.status, 2, wrong.stderr || wrong.stdout);
+  assert.ok(JSON.parse(wrong.stdout).failures.some(item => item.code === 'PUBLIC_PRIVACY_URL'));
+
+  const canonical = runPreflight({
+    ...common,
+    EXPO_PUBLIC_DABBIR_PRIVACY_URL: 'https://app.example.com/privacy',
+    EXPO_PUBLIC_DABBIR_TERMS_URL: 'https://app.example.com/terms',
+    EXPO_PUBLIC_DABBIR_SUPPORT_URL: 'https://app.example.com/support',
+  });
+  assert.equal(canonical.status, 0, canonical.stderr || canonical.stdout);
+  assert.equal(JSON.parse(canonical.stdout).verdict, 'PASS');
 });
 
 test('subscription UI discloses StoreKit-derived period/offer and legal links without external payment CTA', async () => {
