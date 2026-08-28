@@ -3,16 +3,24 @@
 ## Current release verdict
 `APP_STORE_READY=FALSE`
 
-The native application, server-side Apple entitlement path, account deletion, web/auth journey, and cross-tenant isolation now have executable evidence. A signed Apple Distribution artifact and TestFlight device run do not yet exist, so App Store readiness must remain false.
+The native application, server-side Apple entitlement path, account deletion, web/auth journey, cross-tenant isolation, App Store public-page source, and unsigned native Release compile now have executable evidence. A signed Apple Distribution artifact and TestFlight device run do not yet exist, so App Store readiness must remain false.
 
 ## Verified native foundation
 PR #158 created the first native DABBIR iPhone implementation without wrapping the website.
 
-Verified on final PR #158 head `04ba4aecbf8318ffc4068bd41739e484efaa21b0`:
+Foundational PR #158 evidence on head `04ba4aecbf8318ffc4068bd41739e484efaa21b0`:
 - DABBIR Mobile CI run `33161772286` completed successfully.
 - `mobile-static` job `98817684658` completed successfully.
 - `ios-native-compile` job `98817684653` completed successfully.
-- The native compile job runs on `macos-26`, explicitly requires Xcode major >= 26, generates the native iOS project, installs CocoaPods, and compiles the Release configuration for the iOS Simulator with code signing disabled.
+
+The native compile gate was subsequently strengthened by PR #202. Verified on main commit `2f721876a8014d1bea302149f26f164a97d03dff`:
+- DABBIR Mobile CI run `33181956120` (#52) completed successfully.
+- The native job runs on `macos-26`, explicitly requires Xcode major >= 26, generates the native iOS project, installs CocoaPods, and compiles the Release configuration twice with signing disabled:
+  - generic iOS Simulator Release compile;
+  - generic physical iOS device (`iphoneos`) Release compile.
+- These unsigned compile gates prove the source/native dependency graph compiles for both simulator and device targets; they do **not** substitute for Apple Distribution signing, an archive/IPA, or TestFlight.
+
+Verified native capabilities:
 - Native React Native / Expo SDK 57 iPhone app; no WebView wrapper.
 - Secure device session storage via iOS Keychain (`expo-secure-store`).
 - Native Bearer auth bridge preserving browser CSRF/same-origin behavior.
@@ -47,6 +55,16 @@ Canonical Full Customer Journey run `33175328444` (#138) completed successfully 
 
 This verifies server/web authentication, tenant isolation and WhatsApp cross-tenant authorization. It does **not** substitute for a real iPhone/TestFlight Meta WhatsApp pairing and message test.
 
+## App Store public pages
+The repository contains bilingual Arabic/English App Store-facing pages and stable Vercel routes:
+- `/privacy` → `privacy.html`
+- `/terms` → `terms.html`
+- `/support` → `support.html`
+
+Source and route contracts are covered by automated tests and the App Store static preflight. These pages do not contain a Stripe/web purchase CTA. The privacy page records the current no-tracking declaration and product-scoped deletion behavior.
+
+This is **source readiness only**. App Store release mode still requires these paths to resolve on a genuinely public, stable HTTPS production hostname. Protected/prelaunch Vercel hosts are intentionally rejected.
+
 ## App Store preflight contract
 The release pipeline must distinguish internal source readiness from Apple/external readiness.
 
@@ -57,9 +75,11 @@ Static preflight is required to verify:
 - No entitlement before server verification.
 - Restore Purchases.
 - StoreKit-derived subscription period and introductory-offer disclosure; no hardcoded 7-day trial claim in the client.
-- Public Privacy Policy and Terms links are required by the subscription UI before purchase is enabled.
+- Privacy Policy and Terms links are required by the subscription UI before purchase is enabled.
 - No Stripe, web checkout, or external purchase CTA in the iOS subscription component.
 - Native API base remains explicit HTTPS and fail-closed.
+- EAS production profile uses remote app versions, production environment, and build auto-increment.
+- Privacy/Terms/Support source pages remain bilingual and mapped to stable Vercel routes.
 
 Release-mode preflight must additionally fail unless all of these are real and configured:
 - Bundle ID exactly `com.barmansystems.dabbir`.
@@ -67,7 +87,7 @@ Release-mode preflight must additionally fail unless all of these are real and c
 - Same subscription product ID on the iOS client and server.
 - Apple IAP enabled for the production candidate.
 - Public production HTTPS API URL, not a protected/prelaunch deployment URL.
-- Public HTTPS Privacy Policy, Terms of Use, and Support URLs.
+- Public HTTPS `/privacy`, `/terms`, and `/support` URLs.
 - Apple root certificates for JWS verification.
 - Server-side entitlement storage credential.
 
@@ -76,7 +96,7 @@ The preflight must never print private keys, root certificate bodies, or service
 ## Remaining P0 release gates
 1. Register/verify `com.barmansystems.dabbir` in the Apple Developer account and create/verify the App Store Connect app record.
 2. Create the real auto-renewable subscription in App Store Connect and configure the intended introductory free trial there. The client must display only StoreKit-reported offer data; it must not manufacture eligibility or duration.
-3. Configure production Apple/IAP values and public API/legal/support URLs, then obtain a RELEASE preflight PASS.
+3. Bind a genuinely public stable production hostname for the native API and `/privacy`, `/terms`, `/support`; configure the production Apple/IAP values; then obtain a RELEASE preflight PASS.
 4. Reconcile the Privacy Manifest and App Privacy questionnaire against the exact final binary, backend processing, and third-party SDKs.
 5. Produce a signed Apple Distribution archive/IPA from the exact candidate and record its build/artifact identity.
 6. Upload that exact build to TestFlight.
