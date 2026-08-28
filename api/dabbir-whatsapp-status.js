@@ -1,5 +1,6 @@
 import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRest } from './_auth-core.js';
+import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -118,17 +119,8 @@ export async function loadOperationalEvidence(accessToken, businessId) {
   }
 }
 
-function operationalReason(authorized, evidence) {
-  if (!authorized) return 'META_AUTHORIZATION_NOT_VERIFIED';
-  if (!evidence?.available) return 'OPERATIONAL_EVIDENCE_UNAVAILABLE';
-  if (!evidence.real_whatsapp_conversation) return 'REAL_WHATSAPP_CONVERSATION_NOT_VERIFIED';
-  if (!evidence.real_inbound_message) return 'REAL_WHATSAPP_INBOUND_NOT_VERIFIED';
-  if (!evidence.real_outbound_reply) return 'REAL_WHATSAPP_REPLY_NOT_RECORDED';
-  if (!evidence.verified_external_result) return 'EXTERNAL_REPLY_RESULT_NOT_VERIFIED';
-  return null;
-}
-
 export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') {
+  const machine = deriveWhatsAppOperationalState({ hasConnection: false });
   return {
     ok: true,
     channel: 'whatsapp',
@@ -139,7 +131,8 @@ export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') 
     outbound_configured: false,
     phone_number_configured: false,
     waba_configured: false,
-    state: 'NOT_CONFIGURED',
+    state: machine.state,
+    operational_stage: machine.stage,
     meta_authorized: false,
     meta_check_attempted: false,
     meta_check_reason: reason,
@@ -148,8 +141,8 @@ export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') 
     waba_id: null,
     phone_number_id: null,
     connected_at: null,
-    operational: false,
-    operational_reason: 'WHATSAPP_NOT_LINKED',
+    operational: machine.operational,
+    operational_reason: machine.reason,
     operational_evidence: emptyOperationalEvidence(true),
     checked_at: new Date().toISOString(),
   };
@@ -189,8 +182,11 @@ async function embeddedStatus(req, accessToken, businessId) {
       verifyStoredConnection(platform, row),
       loadOperationalEvidence(accessToken, businessId),
     ]);
-    const reason = operationalReason(Boolean(verified.authorized), evidence);
-    const operational = reason === null;
+    const machine = deriveWhatsAppOperationalState({
+      hasConnection: true,
+      authorized: Boolean(verified.authorized),
+      evidence,
+    });
     return {
       ok: true,
       channel: 'whatsapp',
@@ -201,7 +197,8 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: Boolean(verified.authorized),
       phone_number_configured: true,
       waba_configured: true,
-      state: operational ? 'OPERATIONAL' : verified.authorized ? 'META_AUTHORIZED' : 'AUTHORIZATION_INVALID',
+      state: machine.state,
+      operational_stage: machine.stage,
       meta_authorized: Boolean(verified.authorized),
       meta_check_attempted: true,
       meta_check_reason: verified.authorized ? null : 'META_AUTHORIZATION_CHECK_FAILED',
@@ -213,12 +210,19 @@ async function embeddedStatus(req, accessToken, businessId) {
       waba_id: row.waba_id,
       phone_number_id: row.phone_number_id,
       connected_at: row.connected_at,
-      operational,
-      operational_reason: reason,
+      operational: machine.operational,
+      operational_reason: machine.reason,
       operational_evidence: evidence,
       checked_at: new Date().toISOString(),
     };
   } catch (error) {
+    const evidence = emptyOperationalEvidence(false);
+    const machine = deriveWhatsAppOperationalState({
+      hasConnection: true,
+      authorized: false,
+      evidence,
+      verificationFailed: true,
+    });
     return {
       ok: true,
       channel: 'whatsapp',
@@ -229,7 +233,8 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: true,
       phone_number_configured: true,
       waba_configured: true,
-      state: 'CONNECTED_VERIFICATION_FAILED',
+      state: machine.state,
+      operational_stage: machine.stage,
       meta_authorized: false,
       meta_check_attempted: true,
       meta_check_reason: String(error?.message || 'META_AUTHORIZATION_CHECK_UNAVAILABLE').slice(0, 200),
@@ -238,9 +243,9 @@ async function embeddedStatus(req, accessToken, businessId) {
       waba_id: row.waba_id,
       phone_number_id: row.phone_number_id,
       connected_at: row.connected_at,
-      operational: false,
-      operational_reason: 'META_AUTHORIZATION_NOT_VERIFIED',
-      operational_evidence: emptyOperationalEvidence(false),
+      operational: machine.operational,
+      operational_reason: machine.reason,
+      operational_evidence: evidence,
       checked_at: new Date().toISOString(),
     };
   }
