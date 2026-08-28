@@ -24,6 +24,20 @@ test('successful login waits for the HttpOnly session to become observable befor
   assert.ok(sessionIndex >= 0 && bootIndex > sessionIndex);
 });
 
+test('a valid server session can reconcile a lagging signed-out presentation gate', () => {
+  assert.match(authUi, /async function reconcileVerifiedGate\(name\)/);
+  assert.match(authUi, /SESSION_RECONCILED_FOR_GATE/);
+  assert.match(authUi, /authStage===authMachine\.stages\.SIGNED_OUT\|\|authStage===authMachine\.stages\.DEGRADED/);
+  assert.match(authUi, /void reconcileVerifiedGate\('app'\)/);
+  assert.match(authUi, /void reconcileVerifiedGate\('onboarding'\)/);
+  assert.match(authUi, /gate_reconciliation:true/);
+
+  const reconcileIndex = authUi.indexOf('async function reconcileVerifiedGate(name)');
+  const sessionIndex = authUi.indexOf('const state=await sessionReady()', reconcileIndex);
+  const promoteIndex = authUi.indexOf("baseShowGate(name)", reconcileIndex);
+  assert.ok(reconcileIndex >= 0 && sessionIndex > reconcileIndex && promoteIndex > sessionIndex);
+});
+
 test('auth stability authority loads last after all owner and contextual presentation layers', () => {
   const ownerIndex = appRecovery.indexOf('/api/dabbir-owner-first-ui');
   const copilotIndex = appRecovery.indexOf('/api/owner-copilot-ui');
@@ -38,5 +52,5 @@ test('auth stability authority loads last after all owner and contextual present
 test('auth stability handler is no-store JavaScript and rejects non-GET requests', () => {
   assert.match(authUi, /application\/javascript; charset=utf-8/);
   assert.match(authUi, /cache-control','no-store/);
-  assert.match(authUi, /req\.method!=='GET'/);
+  assert.match(authUi, /req\.method!==\'GET\'/);
 });
