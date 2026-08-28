@@ -36,25 +36,52 @@ async function serviceRpc(key,name,params={}){
   return readResponse(response,'PLATFORM_ADMIN_RPC_FAILED');
 }
 
-async function adminContext(req,res,{capabilityProbe=false}={}){
+function quietCapability(res,{authenticated=false,role=null,allowed=false,serviceConfigured=false,reason=null}={}){
+  return json(res,200,{
+    ok:true,
+    allowed:Boolean(allowed),
+    authenticated:Boolean(authenticated),
+    role:allowed?role:null,
+    service_configured:allowed?Boolean(serviceConfigured):false,
+    reason:reason||null,
+  });
+}
+
+async function platformCapability(req,res){
+  const token=accessTokenFromRequest(req);
+  if(!token)return quietCapability(res,{reason:'AUTH_REQUIRED'});
+
+  const user=await getVerifiedUser(token).catch(()=>null);
+  if(!user?.id)return quietCapability(res,{reason:'AUTH_REQUIRED'});
+
+  const response=await supabaseRest(`dabbir_platform_admins?select=role,active&user_id=eq.${user.id}&active=eq.true&limit=1`,token).catch(()=>null);
+  if(!response?.ok)return quietCapability(res,{authenticated:true,reason:'PLATFORM_ADMIN_REQUIRED'});
+
+  const rows=await response.json().catch(()=>[]);
+  const admin=Array.isArray(rows)?rows[0]:null;
+  if(!admin?.active)return quietCapability(res,{authenticated:true,reason:'PLATFORM_ADMIN_REQUIRED'});
+
+  const serviceConfigured=Boolean(serviceKey());
+  return quietCapability(res,{
+    authenticated:true,
+    role:admin.role,
+    allowed:serviceConfigured,
+    serviceConfigured,
+    reason:serviceConfigured?null:'SERVER_ADMIN_NOT_CONFIGURED',
+  });
+}
+
+async function adminContext(req,res){
   const token=accessTokenFromRequest(req);
   if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   const user=await getVerifiedUser(token).catch(()=>null);
   if(!user?.id){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   const response=await supabaseRest(`dabbir_platform_admins?select=role,active&user_id=eq.${user.id}&active=eq.true&limit=1`,token).catch(()=>null);
-  if(!response?.ok){
-    if(capabilityProbe&&response?.status===403)return {user,role:null,key:null,allowed:false};
-    json(res,response?.status===401?401:403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});
-    return null;
-  }
+  if(!response?.ok){json(res,response?.status===401?401:403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
   const rows=await response.json().catch(()=>[]);
   const admin=Array.isArray(rows)?rows[0]:null;
-  if(!admin?.active){
-    if(capabilityProbe)return {user,role:null,key:null,allowed:false};
-    json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});
-    return null;
-  }
-  return {user,role:admin.role,key:serviceKey(),allowed:true};
+  if(!admin?.active){json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
+  return {user,role:admin.role,key:serviceKey()};
 }
 
 function adminServiceUnavailable(res){
@@ -79,26 +106,15 @@ function rpcError(error){
 
 export default async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
-  const getAction=req.method==='GET'?String(singleQueryValue(req,'action')||'capability').trim():null;
-  const context=await adminContext(req,res,{capabilityProbe:getAction==='capability'});
+
+  const action=req.method==='GET'?String(singleQueryValue(req,'action')||'capability').trim():null;
+  if(req.method==='GET'&&action==='capability')return platformCapability(req,res);
+
+  const context=await adminContext(req,res);
   if(!context)return;
 
   try{
     if(req.method==='GET'){
-      const action=getAction;
-      if(action==='capability'){
-        if(!context.allowed){
-          return json(res,200,{ok:true,allowed:false,reason:'PLATFORM_ADMIN_REQUIRED'});
-        }
-        const serviceConfigured=Boolean(context.key);
-        return json(res,200,{
-          ok:true,
-          allowed:serviceConfigured,
-          role:context.role,
-          service_configured:serviceConfigured,
-          reason:serviceConfigured?null:'SERVER_ADMIN_NOT_CONFIGURED',
-        });
-      }
       if(!context.key)return adminServiceUnavailable(res);
       if(action==='overview'){
         const payload=await serviceRpc(context.key,'dabbir_platform_owner_overview',{p_actor_user_id:context.user.id});
