@@ -1,0 +1,73 @@
+import type { DabbirSession } from './session';
+
+const configuredBase = String(process.env.EXPO_PUBLIC_DABBIR_API_BASE_URL || '').trim().replace(/\/$/, '');
+
+function apiBase(): string {
+  if (!configuredBase || !/^https:\/\//i.test(configuredBase)) {
+    throw new Error('DABBIR_API_BASE_URL_NOT_CONFIGURED');
+  }
+  return configuredBase;
+}
+
+async function parseJson(response: Response) {
+  const text = await response.text();
+  let payload: any = null;
+  try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+  if (!response.ok) {
+    const error = new Error(String(payload?.error || `HTTP_${response.status}`));
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function post(path: string, body: unknown, accessToken?: string) {
+  const response = await fetch(`${apiBase()}${path}`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  return parseJson(response);
+}
+
+export async function login(email: string, password: string): Promise<DabbirSession> {
+  const payload = await post('/api/mobile/auth/login', { email, password });
+  return payload.session as DabbirSession;
+}
+
+export async function signup(email: string, password: string): Promise<{ session: DabbirSession | null; verification_required: boolean }> {
+  const payload = await post('/api/mobile/auth/signup', { email, password });
+  return { session: payload.session || null, verification_required: Boolean(payload.verification_required) };
+}
+
+export async function refresh(refreshToken: string): Promise<DabbirSession> {
+  const payload = await post('/api/mobile/auth/refresh', { refresh_token: refreshToken });
+  return payload.session as DabbirSession;
+}
+
+export async function logout(accessToken: string): Promise<void> {
+  await post('/api/mobile/auth/logout', {}, accessToken);
+}
+
+export async function loadRuntime(accessToken: string): Promise<any> {
+  const response = await fetch(`${apiBase()}/api/mobile/runtime?summary=1`, {
+    headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+  });
+  return parseJson(response);
+}
+
+export async function requestAccountDeletion(accessToken: string, businessId: string): Promise<any> {
+  return post('/api/mobile/privacy-requests', {
+    business_id: businessId,
+    request_type: 'BUSINESS_DELETE',
+    request_scope: { source: 'ios_app', intent: 'account_deletion' },
+  }, accessToken);
+}
+
+export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
+  return post('/api/mobile/iap/verify', { purchase }, accessToken);
+}
