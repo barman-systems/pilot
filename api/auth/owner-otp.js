@@ -21,6 +21,10 @@ function publicAuthError(status) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('cache-control', 'no-store, max-age=0');
+  res.setHeader('pragma', 'no-cache');
+  res.setHeader('x-dabbir-owner-auth', 'username-otp-v1');
+
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   }
