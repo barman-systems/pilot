@@ -47,12 +47,12 @@ test('validated-token claims fail closed for wrong issuer, role, audience, expir
 });
 
 test('fast runtime validates membership before trusting decoded claims and retains fallback verification', () => {
-  const membershipLookup = runtimeSource.indexOf('memberships = await getBusinessMemberships(accessToken)');
+  const membershipLookup = runtimeSource.indexOf('signal => getBusinessMemberships(accessToken, { signal })');
   const claimsRead = runtimeSource.indexOf('userClaimsFromValidatedAccessToken(accessToken)');
-  const fallback = runtimeSource.indexOf('getVerifiedUser(accessToken)');
-  assert.ok(membershipLookup >= 0, 'membership validation must exist');
+  const fallback = runtimeSource.indexOf('signal => getVerifiedUser(accessToken, { signal })');
+  assert.ok(membershipLookup >= 0, 'abort-bounded membership validation must exist');
   assert.ok(claimsRead > membershipLookup, 'claims may only be trusted after Supabase Data API accepts the token');
-  assert.ok(fallback > claimsRead, 'legacy/unexpected token shapes must retain server verification fallback');
+  assert.ok(fallback > claimsRead, 'legacy/unexpected token shapes must retain abort-bounded server verification fallback');
   assert.match(runtimeSource, /AUTH_VERIFICATION_UNAVAILABLE/);
   assert.match(runtimeSource, /const DABBIR_FAST_RUNTIME_VERSION = 'fast-v7-timeout-guarded'/);
   assert.match(runtimeSource, /x-dabbir-runtime', DABBIR_FAST_RUNTIME_VERSION/);
