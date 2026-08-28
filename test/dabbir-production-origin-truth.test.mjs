@@ -28,7 +28,7 @@ test('retired PILOT origin cannot return to DABBIR release controls', () => {
   }
 });
 
-test('all release workflows use the same strict canonical DABBIR origin gate', () => {
+test('all release workflows use the same strict canonical DABBIR public-origin gate', () => {
   for (const path of releaseWorkflows) {
     const source = fs.readFileSync(path, 'utf8');
     assert.match(source, /vars\.DABBIR_PRODUCTION_ORIGIN/, path);
@@ -42,12 +42,17 @@ test('all release workflows use the same strict canonical DABBIR origin gate', (
   assert.match(gate, /FAIL_CLOSED_PREVIEW_ONLY/);
 });
 
-test('production journeys and capacity cannot execute while the public launch gate is blocked', () => {
+test('protected prelaunch permits verification journey only while public launch and capacity stay blocked', () => {
   const journey=fs.readFileSync('.github/workflows/dabbir-ai-customer-journey.yml','utf8');
   const away=fs.readFileSync('.github/workflows/dabbir-owner-away-production.yml','utf8');
   const auth=fs.readFileSync('.github/workflows/dabbir-auth-production.yml','utf8');
-  assert.match(journey,/steps\.launch-gate\.outputs\.ready == 'true'/);
+
+  assert.match(journey,/steps\.journey-mode\.outputs\.ready == 'true'/);
+  assert.match(journey,/JOURNEY_MODE_PROTECTED_PRELAUNCH/);
+  assert.match(journey,/dabbir-protected-full-journey-preload\.mjs/);
+  assert.match(journey,/production_ready: \$\{\{ steps\.launch-gate\.outputs\.ready \}\}/);
   assert.match(journey,/needs\.full-customer-journey\.outputs\.production_ready == 'true'/);
+  assert.match(journey,/production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION'/);
   assert.match(away,/steps\.launch-gate\.outputs\.ready == 'true'/);
   assert.match(auth,/steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
 });
