@@ -15,7 +15,12 @@ function responseMock(){
     status(code){this.statusCode=code;return this},
     setHeader(name,value){this.headers[String(name).toLowerCase()]=value;return this},
     json(value){this.body=value;return this},
-    end(value=''){this.body=value;return this},
+    end(value=''){
+      if(typeof value==='string'&&String(this.headers['content-type']||'').includes('application/json')){
+        try{this.body=JSON.parse(value)}catch{this.body=value}
+      }else this.body=value;
+      return this;
+    },
   };
 }
 
