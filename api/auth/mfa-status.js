@@ -49,11 +49,11 @@ export default async function handler(req, res) {
     }
 
     const factors = safeVerifiedFactors(authUser);
-    const totp = factors.filter(factor => factor.factor_type === 'totp');
     const claims = decodeJwtPayload(accessToken);
     const currentLevel = claims?.aal === 'aal2' ? 'aal2' : 'aal1';
     const nextLevel = factors.length ? 'aal2' : currentLevel;
-    const mfaRequired = currentLevel !== 'aal2' && totp.length > 0;
+    const challengeFactor = currentLevel !== 'aal2' ? factors[0] || null : null;
+    const mfaRequired = Boolean(challengeFactor);
 
     return json(res, 200, {
       ok: true,
@@ -61,8 +61,8 @@ export default async function handler(req, res) {
       current_level: currentLevel,
       next_level: nextLevel,
       mfa_required: mfaRequired,
-      factor_id: mfaRequired ? totp[0].id : null,
-      factor_type: mfaRequired ? 'totp' : null,
+      factor_id: challengeFactor?.id || null,
+      factor_type: challengeFactor?.factor_type || null,
       factors,
     });
   } catch {
