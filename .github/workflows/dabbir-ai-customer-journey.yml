@@ -1,11 +1,11 @@
 name: DABBIR AI Full Customer Journey
-# Real production journey on push/schedule; protected pre-launch is classified without pretending production was tested.
+# Real production journey. Before public launch, the same broker-authorized workflow tests the protected canonical Vercel Production release without widening Supabase OIDC policy.
 
 on:
   workflow_dispatch:
     inputs:
       run_capacity:
-        description: 'Run production AI/runtime capacity after a successful full journey'
+        description: 'Run production AI/runtime capacity after a successful public-production full journey'
         required: false
         default: false
         type: boolean
@@ -19,6 +19,10 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-protected-full-journey-preload.mjs'
+      - 'test/dabbir-protected-journey-access.test.mjs'
+      - 'test/dabbir-authorized-journey-workflow.test.mjs'
+      - 'test/support/dabbir-protected-journey-access.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
       - 'scripts/dabbir-production-origin-gate.mjs'
@@ -57,46 +61,205 @@ concurrency:
 
 jobs:
   full-customer-journey:
-    name: Public-production owner + customer + employee + AI journey
+    name: Production owner + customer + employee + AI journey
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 22
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
+      PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
     outputs:
+      # Capacity remains locked until a real public launch origin exists.
       production_ready: ${{ steps.launch-gate.outputs.ready }}
       production_state: ${{ steps.launch-gate.outputs.state }}
+      journey_ready: ${{ steps.journey-mode.outputs.ready }}
+      journey_mode: ${{ steps.journey-mode.outputs.mode }}
+      verified_production_sha: ${{ steps.release-before.outputs.sha }}
+      verified_deployment_id: ${{ steps.release-before.outputs.deployment }}
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Classify canonical DABBIR production origin
+
+      - name: Classify canonical public DABBIR production origin
         id: launch-gate
         run: node scripts/dabbir-production-origin-gate.mjs
+
+      - name: Resolve public or protected-prelaunch journey mode
+        id: journey-mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.launch-gate.outputs.ready }}" = 'true' ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'mode=public' >> "$GITHUB_OUTPUT"
+            echo 'state=PUBLIC_PRODUCTION_READY' >> "$GITHUB_OUTPUT"
+            echo 'JOURNEY_MODE_PUBLIC'
+            exit 0
+          fi
+
+          if [ "${{ steps.launch-gate.outputs.state }}" != 'BLOCKED_PRELAUNCH' ]; then
+            echo "UNEXPECTED_PRODUCTION_GATE_STATE=${{ steps.launch-gate.outputs.state }}"
+            exit 2
+          fi
+
+          echo "PRODUCTION_ORIGIN=${PROTECTED_QA_ORIGIN}" >> "$GITHUB_ENV"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+          echo 'mode=protected' >> "$GITHUB_OUTPUT"
+          echo 'state=PROTECTED_PRELAUNCH' >> "$GITHUB_OUTPUT"
+          echo 'JOURNEY_MODE_PROTECTED_PRELAUNCH'
+
+      - name: Prepare trusted Vercel access for protected prelaunch
+        id: protected-access
+        if: steps.journey-mode.outputs.mode == 'protected'
+        shell: bash
+        run: |
+          set -euo pipefail
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          request_token="${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          if [ -z "$request_url" ] || [ -z "$request_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_CONTEXT_REQUIRED'
+            exit 2
+          fi
+
+          oidc_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${request_token}" \
+            "$request_url")"
+          oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+          if [ -z "$oidc_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_TOKEN_MISSING'
+            exit 3
+          fi
+          echo "::add-mask::$oidc_token"
+
+          probe_body="$(mktemp)"
+          probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+            -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+            -H 'accept: text/html' \
+            "$PROTECTED_QA_ORIGIN/")"
+          if [ "$probe_status" != '200' ] || ! grep -qi 'DABBIR' "$probe_body"; then
+            echo "VERCEL_TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"
+            exit 4
+          fi
+
+          echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+          echo 'TRUSTED_VERCEL_OIDC_READY'
+
+      - name: Lock exact Production release before journey
+        id: release-before
+        if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          fi
+
+          body=''
+          sha=''
+          deployment=''
+          for attempt in $(seq 1 36); do
+            body="$(curl --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
+            deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
+            environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
+            ok="$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || true)"
+            if [ "$ok" = 'true' ] && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] && { [ -z "$environment" ] || [ "$environment" = 'production' ]; }; then
+              break
+            fi
+            sha=''
+            sleep 5
+          done
+          if [ -z "$sha" ]; then
+            echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED: ${body:0:500}"
+            exit 3
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "LOCKED_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
       - name: Install WebKit journey runner
-        if: steps.launch-gate.outputs.ready == 'true'
+        if: steps.journey-mode.outputs.ready == 'true'
         run: |
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps webkit
-      - name: Run AI full customer journey against production
-        if: steps.launch-gate.outputs.ready == 'true'
-        run: node test/ai-full-customer-journey-v2.mjs
-      - name: Publish journey summary
-        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
+
+      - name: Run AI full customer journey against exact Production
+        if: steps.journey-mode.outputs.ready == 'true'
         shell: bash
         run: |
-          if [ -f dabbir-ai-customer-journey-report.json ]; then
-            echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
-            echo "**Verdict:** $(jq -r '.verdict' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Required failures:** $(jq -r '.required_failures' dabbir-ai-customer-journey-report.json)" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            node --import ./test/dabbir-protected-full-journey-preload.mjs test/ai-full-customer-journey-v2.mjs
+          else
+            node test/ai-full-customer-journey-v2.mjs
+          fi
+
+      - name: Require a real full-journey PASS
+        if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$JOURNEY_REPORT_PATH"
+          jq -e '.verdict == "PASS" and .required_failures == 0 and (.steps | length) > 10' "$JOURNEY_REPORT_PATH" >/dev/null
+          echo "FULL_JOURNEY_PASS steps=$(jq -r '.steps | length' "$JOURNEY_REPORT_PATH")"
+
+      - name: Prove Production release did not move during journey
+        id: release-after
+        if: ${{ always() && steps.release-before.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_args=()
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          fi
+          body="$(curl --fail-with-body --silent --show-error \
+            "${auth_args[@]}" \
+            -H 'accept: application/json' \
+            "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
+          sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
+          deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty')"
+          test "$sha" = "${{ steps.release-before.outputs.sha }}"
+          if [ -n "${{ steps.release-before.outputs.deployment }}" ] && [ -n "$deployment" ]; then
+            test "$deployment" = "${{ steps.release-before.outputs.deployment }}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "STABLE_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
+      - name: Publish journey summary
+        if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
+        shell: bash
+        run: |
+          echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Mode:** ${{ steps.journey-mode.outputs.mode }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA before:** ${{ steps.release-before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA after:** ${{ steps.release-after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Deployment:** ${{ steps.release-before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$JOURNEY_REPORT_PATH" ]; then
+            echo "**Verdict:** $(jq -r '.verdict' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
-            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-ai-customer-journey-report.json >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' "$JOURNEY_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Verdict:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
           fi
+
       - name: Upload journey evidence
-        if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
+        if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v6
         with:
           name: dabbir-ai-customer-journey-evidence
@@ -107,7 +270,7 @@ jobs:
           retention-days: 14
 
   ai-capacity:
-    name: AI capacity — manual production gate
+    name: AI capacity — manual public-production gate
     needs: full-customer-journey
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.full-customer-journey.result == 'success' && needs.full-customer-journey.outputs.production_ready == 'true' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
@@ -149,7 +312,7 @@ jobs:
           retention-days: 14
 
   runtime-capacity-1000:
-    name: Runtime capacity — manual 1000-customer gate
+    name: Runtime capacity — manual public-production 1000-customer gate
     needs: [full-customer-journey, ai-capacity]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_capacity == true && needs.ai-capacity.result == 'success' && needs.full-customer-journey.outputs.production_ready == 'true' && inputs.production_capacity_ack == 'ALLOW_CAPACITY_LOAD_ON_PRODUCTION' }}
     runs-on: ubuntu-latest
