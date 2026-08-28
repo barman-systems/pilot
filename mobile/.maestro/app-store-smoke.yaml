@@ -1,0 +1,6 @@
+appId: com.barmansystems.dabbir
+---
+- launchApp:
+    clearState: true
+- assertVisible: "DABBIR | دبّر"
+- takeScreenshot: dabbir-app-store-smoke

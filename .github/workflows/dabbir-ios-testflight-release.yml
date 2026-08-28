@@ -1,0 +1,155 @@
+name: DABBIR iOS TestFlight Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-ios-testflight-release.yml'
+  workflow_dispatch:
+    inputs:
+      what_to_test:
+        description: 'TestFlight What to Test note'
+        required: false
+        default: 'DABBIR iOS release-candidate validation.'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-ios-testflight-release
+  cancel-in-progress: false
+
+jobs:
+  signed-testflight-release:
+    runs-on: macos-26
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      DABBIR_IOS_BUNDLE_ID: com.barmansystems.dabbir
+      DABBIR_IOS_APP_APPLE_ID: ${{ vars.DABBIR_IOS_APP_APPLE_ID }}
+      DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID: ${{ vars.DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID }}
+      EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID: ${{ vars.DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID }}
+      EXPO_PUBLIC_IOS_IAP_ENABLED: 'true'
+      EXPO_PUBLIC_DABBIR_API_BASE_URL: ${{ vars.DABBIR_IOS_API_BASE_URL }}
+      EXPO_PUBLIC_DABBIR_PRIVACY_URL: ${{ vars.DABBIR_IOS_PRIVACY_URL }}
+      EXPO_PUBLIC_DABBIR_TERMS_URL: ${{ vars.DABBIR_IOS_TERMS_URL }}
+      EXPO_PUBLIC_DABBIR_SUPPORT_URL: ${{ vars.DABBIR_IOS_SUPPORT_URL }}
+      APPLE_ROOT_CERTIFICATES_BASE64: ${{ secrets.APPLE_ROOT_CERTIFICATES_BASE64 }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DABBIR_APP_STORE_RELEASE_PREFLIGHT: '1'
+      DABBIR_APP_STORE_PREFLIGHT_REPORT_PATH: dabbir-testflight-release-preflight.json
+      DABBIR_WHAT_TO_TEST: ${{ inputs.what_to_test || 'DABBIR iOS release-candidate validation.' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+
+      - name: Verify release credential/config contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          require_value() {
+            local name="$1"
+            local value="$2"
+            if [[ -z "${value}" ]]; then
+              missing+=("${name}")
+            fi
+          }
+          require_value EXPO_TOKEN "${EXPO_TOKEN:-}"
+          require_value DABBIR_IOS_APP_APPLE_ID "${DABBIR_IOS_APP_APPLE_ID:-}"
+          require_value DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID "${DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID:-}"
+          require_value DABBIR_IOS_API_BASE_URL "${EXPO_PUBLIC_DABBIR_API_BASE_URL:-}"
+          require_value DABBIR_IOS_PRIVACY_URL "${EXPO_PUBLIC_DABBIR_PRIVACY_URL:-}"
+          require_value DABBIR_IOS_TERMS_URL "${EXPO_PUBLIC_DABBIR_TERMS_URL:-}"
+          require_value DABBIR_IOS_SUPPORT_URL "${EXPO_PUBLIC_DABBIR_SUPPORT_URL:-}"
+          require_value APPLE_ROOT_CERTIFICATES_BASE64 "${APPLE_ROOT_CERTIFICATES_BASE64:-}"
+          require_value SUPABASE_SERVICE_ROLE_KEY "${SUPABASE_SERVICE_ROLE_KEY:-}"
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing release configuration: %s\n' "${missing[*]}" >&2
+            exit 11
+          fi
+          [[ "${DABBIR_IOS_APP_APPLE_ID}" =~ ^[0-9]{5,20}$ ]] || { echo 'DABBIR_IOS_APP_APPLE_ID must be the numeric App Store Connect Apple ID.' >&2; exit 12; }
+
+      - name: Install mobile dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install current EAS CLI
+        run: npm install --global eas-cli@latest
+
+      - name: Verify Expo authentication
+        run: eas whoami --non-interactive
+
+      - name: Run release-mode App Store preflight
+        working-directory: .
+        run: node scripts/dabbir-app-store-preflight.mjs
+
+      - name: Inject App Store Connect app ID into runtime submit profile
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'eas.json';
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          data.submit ??= {};
+          data.submit.production ??= {};
+          data.submit.production.ios ??= {};
+          data.submit.production.ios.ascAppId = process.env.DABBIR_IOS_APP_APPLE_ID;
+          fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+          NODE
+
+      - name: Build signed production IPA on EAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform ios --profile production --non-interactive --wait --json > /tmp/dabbir-eas-build.json
+          node <<'NODE'
+          const fs = require('fs');
+          const raw = fs.readFileSync('/tmp/dabbir-eas-build.json', 'utf8');
+          const parsed = JSON.parse(raw);
+          const build = Array.isArray(parsed) ? parsed[0] : parsed;
+          const id = build?.id;
+          if (!id) throw new Error('EAS_BUILD_ID_NOT_FOUND');
+          fs.appendFileSync(process.env.GITHUB_ENV, `DABBIR_EAS_BUILD_ID=${id}\n`);
+          NODE
+
+      - name: Submit exact signed build to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build:submit \
+            --platform ios \
+            --profile production \
+            --id "${DABBIR_EAS_BUILD_ID}" \
+            --non-interactive \
+            --wait \
+            --auto-testflight-setup \
+            --what-to-test "${DABBIR_WHAT_TO_TEST}"
+
+      - name: Record TestFlight status evidence
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          eas submit:status --platform ios --profile production --json --non-interactive > /tmp/dabbir-testflight-status.json 2>/tmp/dabbir-testflight-status.err
+          printf 'commit=%s\nbuild_id=%s\n' "${GITHUB_SHA}" "${DABBIR_EAS_BUILD_ID:-UNAVAILABLE}" > /tmp/dabbir-testflight-release-evidence.txt
+
+      - name: Upload signed release evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-ios-testflight-release-evidence
+          path: |
+            dabbir-testflight-release-preflight.json
+            /tmp/dabbir-eas-build.json
+            /tmp/dabbir-testflight-status.json
+            /tmp/dabbir-testflight-status.err
+            /tmp/dabbir-testflight-release-evidence.txt
+          if-no-files-found: warn
+          retention-days: 30
