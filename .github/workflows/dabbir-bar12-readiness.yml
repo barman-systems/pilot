@@ -9,16 +9,20 @@ on:
       - 'scripts/dabbir-production-origin-gate.mjs'
       - 'scripts/dabbir-readiness-gate.mjs'
       - 'scripts/dabbir-release-state-machine.mjs'
+      - 'vercel-ignore-if-unaffected.sh'
       - 'supabase/functions/barman-qa-suite-runner/**'
       - 'api/dabbir-whatsapp-*.js'
       - 'api/_whatsapp-*.js'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-cross-tenant-isolation.mjs'
+      - '.github/workflows/dabbir-ai-customer-journey.yml'
       - '.github/workflows/dabbir-bar12-readiness.yml'
   schedule:
     - cron: '41 2 * * *'
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -28,14 +32,20 @@ concurrency:
 jobs:
   readiness:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
+      PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      EXPECTED_GIT_PROVIDER: github
+      EXPECTED_GIT_REPOSITORY: barman-systems/pilot
       DABBIR_READINESS_EVIDENCE_PATH: dabbir-bar12-live-evidence.json
       DABBIR_READINESS_REPORT_PATH: dabbir-bar12-readiness-report.json
       DABBIR_READINESS_ENFORCE_PUBLIC_ONLY: 'true'
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
@@ -70,21 +80,223 @@ jobs:
             'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-qa-suite-runner' \
             -d '{"action":"dabbir_bar12_readiness"}' > dabbir-bar12-supabase-evidence.json
           jq -e '.ok == true and .evidence != null' dabbir-bar12-supabase-evidence.json >/dev/null
-      - name: Assemble fail-closed BAR-12 evidence
+      - name: Prepare trusted Vercel access for protected prelaunch
         shell: bash
         run: |
           set -euo pipefail
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          request_token="${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          if [ -z "$request_url" ] || [ -z "$request_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_CONTEXT_REQUIRED'
+            exit 2
+          fi
+          oidc_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${request_token}" \
+            "$request_url")"
+          oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+          if [ -z "$oidc_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_TOKEN_MISSING'
+            exit 3
+          fi
+          echo "::add-mask::$oidc_token"
+          probe_body="$(mktemp)"
+          probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+            -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+            -H 'accept: text/html' \
+            "$PROTECTED_QA_ORIGIN/")"
+          if [ "$probe_status" != '200' ] || ! grep -qi 'DABBIR' "$probe_body"; then
+            echo "VERCEL_TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"
+            exit 4
+          fi
+          echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+      - name: Resolve authoritative Production runtime
+        id: production-release
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin="${PRODUCTION_ORIGIN:-}"
+          auth_args=()
+          if [ -z "$origin" ]; then
+            origin="$PROTECTED_QA_ORIGIN"
+            test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          fi
+          fetch_release() {
+            curl --fail-with-body --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${origin}/api/release-evidence?t=$(date +%s%N)"
+          }
+          validate_release() {
+            local body="$1"
+            jq -e \
+              --arg project "$EXPECTED_VERCEL_PROJECT_ID" \
+              --arg provider "$EXPECTED_GIT_PROVIDER" \
+              --arg repo "$EXPECTED_GIT_REPOSITORY" \
+              '.ok == true and .environment == "production" and .project_id == $project and .git_provider == $provider and .repository == $repo and (.commit_sha | test("^[0-9a-f]{40}$")) and (.deployment_id | test("^dpl_"))' \
+              <<<"$body" >/dev/null
+          }
+
+          initial_body="$(fetch_release)"
+          validate_release "$initial_body"
+          initial_sha="$(jq -r '.commit_sha' <<<"$initial_body")"
+
+          set +e
+          VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" \
+          VERCEL_GIT_COMMIT_REF='main' \
+          VERCEL_GIT_PREVIOUS_SHA="$initial_sha" \
+            bash vercel-ignore-if-unaffected.sh > dabbir-bar12-runtime-classification.log 2>&1
+          classification=$?
+          set -e
+          cat dabbir-bar12-runtime-classification.log
+
+          if [ "$classification" -eq 0 ]; then
+            expected_runtime_sha="$initial_sha"
+            head_runtime_affecting='false'
+          elif [ "$classification" -eq 1 ]; then
+            expected_runtime_sha="$GITHUB_SHA"
+            head_runtime_affecting='true'
+          else
+            echo "RUNTIME_CLASSIFICATION_FAILED_${classification}"
+            exit 5
+          fi
+
+          final_body="$initial_body"
+          final_sha="$(jq -r '.commit_sha' <<<"$final_body")"
+          if [ "$final_sha" != "$expected_runtime_sha" ]; then
+            for attempt in $(seq 1 180); do
+              final_body="$(fetch_release || true)"
+              if validate_release "$final_body" 2>/dev/null; then
+                final_sha="$(jq -r '.commit_sha' <<<"$final_body")"
+                if [ "$final_sha" = "$expected_runtime_sha" ]; then break; fi
+              fi
+              final_sha=''
+              sleep 5
+            done
+          fi
+          if [ "$final_sha" != "$expected_runtime_sha" ]; then
+            echo "AUTHORITATIVE_PRODUCTION_RUNTIME_MISMATCH expected=$expected_runtime_sha actual=${final_sha:-UNVERIFIED}"
+            exit 6
+          fi
+          validate_release "$final_body"
+          deployment_id="$(jq -r '.deployment_id' <<<"$final_body")"
+          echo "runtime_sha=$final_sha" >> "$GITHUB_OUTPUT"
+          echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
+          echo "origin=$origin" >> "$GITHUB_OUTPUT"
+          echo "head_runtime_affecting=$head_runtime_affecting" >> "$GITHUB_OUTPUT"
+          echo "BAR12_PRODUCTION_RUNTIME_LOCKED sha=$final_sha deployment=$deployment_id head_runtime_affecting=$head_runtime_affecting"
+      - name: Import runtime-equivalent Full Customer Journey evidence
+        id: journey-evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_SHA: ${{ steps.production-release.outputs.runtime_sha }}
+          RUNTIME_ORIGIN: ${{ steps.production-release.outputs.origin }}
+        run: |
+          set -euo pipefail
+          test -n "$RUNTIME_SHA"
+          journey_run=''
+          journey_sha=''
+          journey_mode=''
+          : > dabbir-bar12-journey-equivalence.log
+
+          for attempt in $(seq 1 90); do
+            runs_json="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/dabbir-ai-customer-journey.yml/runs?branch=main&status=success&per_page=100")"
+
+            while IFS=$'\t' read -r candidate_run candidate_sha; do
+              [ -n "$candidate_run" ] || continue
+              [ -n "$candidate_sha" ] || continue
+              if [ "$candidate_sha" = "$RUNTIME_SHA" ]; then
+                journey_run="$candidate_run"
+                journey_sha="$candidate_sha"
+                journey_mode='exact_sha'
+                break
+              fi
+              if ! git cat-file -e "${candidate_sha}^{commit}" 2>/dev/null; then continue; fi
+              if ! git merge-base --is-ancestor "$candidate_sha" "$RUNTIME_SHA" 2>/dev/null; then continue; fi
+
+              set +e
+              VERCEL_GIT_COMMIT_SHA="$RUNTIME_SHA" \
+              VERCEL_GIT_COMMIT_REF='main' \
+              VERCEL_GIT_PREVIOUS_SHA="$candidate_sha" \
+                bash vercel-ignore-if-unaffected.sh > dabbir-bar12-candidate-equivalence.log 2>&1
+              equivalent=$?
+              set -e
+              {
+                echo "candidate_run=$candidate_run candidate_sha=$candidate_sha runtime_sha=$RUNTIME_SHA classification=$equivalent"
+                cat dabbir-bar12-candidate-equivalence.log
+              } >> dabbir-bar12-journey-equivalence.log
+              if [ "$equivalent" -eq 0 ]; then
+                journey_run="$candidate_run"
+                journey_sha="$candidate_sha"
+                journey_mode='runtime_equivalent'
+                break
+              fi
+            done < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<"$runs_json")
+
+            if [ -n "$journey_run" ]; then break; fi
+            sleep 10
+          done
+          if [ -z "$journey_run" ] || [ -z "$journey_sha" ]; then
+            echo "MATCHING_OR_RUNTIME_EQUIVALENT_FULL_JOURNEY_PASS_NOT_FOUND runtime_sha=$RUNTIME_SHA"
+            exit 7
+          fi
+
+          rm -rf bar12-journey-evidence
+          mkdir -p bar12-journey-evidence
+          gh run download "$journey_run" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name dabbir-ai-customer-journey-evidence \
+            --dir bar12-journey-evidence
+
+          report='bar12-journey-evidence/dabbir-ai-customer-journey-report.json'
+          isolation='bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json'
+          screenshot='bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png'
+          test -s "$report"
+          test -s "$isolation"
+          test -s "$screenshot"
+          jq -e \
+            --arg origin "$RUNTIME_ORIGIN" \
+            '.verdict == "PASS" and .required_failures == 0 and .production_origin == $origin and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' \
+            "$report" >/dev/null
+          jq -e '.verdict == "PASS" and .required_failures == 0 and (.checks | length) >= 9' "$isolation" >/dev/null
+          grep -q "locale: 'ar-AE'" test/ai-full-customer-journey-v2.mjs
+          echo "run_id=$journey_run" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$journey_sha" >> "$GITHUB_OUTPUT"
+          echo "mode=$journey_mode" >> "$GITHUB_OUTPUT"
+          echo "FULL_JOURNEY_RUNTIME_EVIDENCE_PASS runtime_sha=$RUNTIME_SHA source_sha=$journey_sha mode=$journey_mode run_id=$journey_run"
+      - name: Assemble fail-closed BAR-12 evidence
+        shell: bash
+        env:
+          RUNTIME_SHA: ${{ steps.production-release.outputs.runtime_sha }}
+          DEPLOYMENT_ID: ${{ steps.production-release.outputs.deployment_id }}
+          JOURNEY_RUN_ID: ${{ steps.journey-evidence.outputs.run_id }}
+          JOURNEY_SOURCE_SHA: ${{ steps.journey-evidence.outputs.source_sha }}
+          JOURNEY_EVIDENCE_MODE: ${{ steps.journey-evidence.outputs.mode }}
+          HEAD_RUNTIME_AFFECTING: ${{ steps.production-release.outputs.head_runtime_affecting }}
+        run: |
+          set -euo pipefail
           jq -n \
-            --arg sha "$GITHUB_SHA" \
+            --arg repository_sha "$GITHUB_SHA" \
+            --arg runtime_sha "$RUNTIME_SHA" \
+            --arg deployment_id "$DEPLOYMENT_ID" \
+            --arg journey_run_id "$JOURNEY_RUN_ID" \
+            --arg journey_source_sha "$JOURNEY_SOURCE_SHA" \
+            --arg journey_evidence_mode "$JOURNEY_EVIDENCE_MODE" \
+            --arg head_runtime_affecting "$HEAD_RUNTIME_AFFECTING" \
             --slurpfile live dabbir-bar12-supabase-evidence.json \
             '{
-              expected_main_sha:$sha,
-              candidate_build:{state:"PASS",source_commit:$sha,evidence:"readiness_workflow_candidate"},
-              exact_sha_tests:{state:"PASS",source_commit:$sha,evidence:"npm_test_completed_before_evidence_assembly"},
+              repository_main_sha:$repository_sha,
+              expected_main_sha:$runtime_sha,
+              runtime_authority:{source_commit:$runtime_sha,repository_main_sha:$repository_sha,head_runtime_affecting:($head_runtime_affecting == "true"),evidence:"live_/api/release-evidence"},
+              candidate_build:{state:"PASS",source_commit:$runtime_sha,evidence:("active_production_release+full_journey_run:"+$journey_run_id)},
+              exact_sha_tests:{state:"PASS",source_commit:$runtime_sha,evidence:("full_customer_journey_run:"+$journey_run_id+";journey_source_sha:"+$journey_source_sha+";mode:"+$journey_evidence_mode)},
               live_evidence:$live[0],
-              production_deployment:null,
-              end_to_end_journey:null,
-              iphone_safari_ar:null,
+              production_deployment:{state:"READY",source_commit:$runtime_sha,id:$deployment_id,environment:"production",evidence:("live_release_endpoint+full_journey_run:"+$journey_run_id)},
+              end_to_end_journey:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,run_id:$journey_run_id,web_owner_journey_verified:true,cross_tenant_isolation_verified:true,real_external_connection:false,real_inbound_message:false,approved_reply_verified:false,external_scope:"UNVERIFIED"},
+              iphone_safari_ar:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+ar-AE_fixture+screenshot"},
               iphone_safari_en:null,
               monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},
               critical_gates:{security:null,financial:null,legal:null}
@@ -100,5 +312,10 @@ jobs:
             dabbir-bar12-supabase-evidence.json
             dabbir-bar12-live-evidence.json
             dabbir-bar12-readiness-report.json
+            dabbir-bar12-runtime-classification.log
+            dabbir-bar12-journey-equivalence.log
+            bar12-journey-evidence/dabbir-ai-customer-journey-report.json
+            bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json
+            bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png
           if-no-files-found: warn
           retention-days: 30
