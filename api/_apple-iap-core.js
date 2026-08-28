@@ -1,6 +1,8 @@
 import { Environment, SignedDataVerifier } from '@apple/app-store-server-library';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const CANONICAL_BUNDLE_ID = 'com.barmansystems.dabbir';
+const CANONICAL_PRODUCT_ID = 'com.barmansystems.dabbir.owner.subscription';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const JWS_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 
@@ -12,6 +14,14 @@ function requiredText(name, max = 4096) {
   const value = String(process.env[name] || '').trim();
   if (!value || value.length > max) throw appleError(`${name}_NOT_CONFIGURED`, 503);
   return value;
+}
+
+function bundleIdentifier() {
+  return String(process.env.DABBIR_IOS_BUNDLE_ID || CANONICAL_BUNDLE_ID).trim() || CANONICAL_BUNDLE_ID;
+}
+
+function subscriptionProductId() {
+  return String(process.env.DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID || CANONICAL_PRODUCT_ID).trim() || CANONICAL_PRODUCT_ID;
 }
 
 function serviceRoleKey() {
@@ -104,7 +114,7 @@ function verifierFor(environment, roots, bundleId) {
 }
 
 async function verifyAcrossEnvironments(jws, method) {
-  const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
+  const bundleId = bundleIdentifier();
   const roots = rootCertificates();
   let sandboxError = null;
 
@@ -134,9 +144,7 @@ async function verifiedTransactionPayload(jwsValue) {
 export async function verifyAppleTransaction(jwsValue, userId) {
   if (!UUID_RE.test(String(userId || ''))) throw appleError('APPLE_IAP_USER_INVALID', 400);
   const decoded = await verifiedTransactionPayload(jwsValue);
-  const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
-  const productId = requiredText('DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID', 255);
-  return assertTransaction(decoded, String(userId), productId, bundleId);
+  return assertTransaction(decoded, String(userId), subscriptionProductId(), bundleIdentifier());
 }
 
 export async function verifyAppleNotification(signedPayloadValue) {
@@ -150,9 +158,7 @@ export async function entitlementFromVerifiedNotification(notification) {
   const decoded = await verifiedTransactionPayload(transactionJws);
   const userId = String(decoded?.appAccountToken || '').trim();
   if (!UUID_RE.test(userId)) throw appleError('APPLE_NOTIFICATION_ACCOUNT_TOKEN_INVALID', 409);
-  const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
-  const productId = requiredText('DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID', 255);
-  return assertTransaction(decoded, userId, productId, bundleId);
+  return assertTransaction(decoded, userId, subscriptionProductId(), bundleIdentifier());
 }
 
 export async function persistAppleEntitlement(entitlement) {
