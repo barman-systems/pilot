@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const sourceScript = path.resolve('vercel-ignore-if-unaffected.sh');
+const journeyWorkflow = fs.readFileSync(path.resolve('.github/workflows/dabbir-ai-customer-journey.yml'), 'utf8');
 
 function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -64,6 +65,35 @@ test('test-only changes on main skip Vercel deployment when no runtime drift exi
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'test only');
   const head = git(dir, 'rev-parse', 'HEAD');
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
+});
+
+test('native mobile and App Store preflight changes on main reuse the last verified web runtime', () => {
+  const paths = [
+    'mobile/src/SubscriptionCard.tsx',
+    'mobile/app.json',
+    'scripts/dabbir-app-store-preflight.mjs',
+  ];
+  for (const relativePath of paths) {
+    const dir = setupRepo();
+    const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+    const head = commitPath(dir, relativePath, 'native-only\n');
+    const result = runGuard(dir, head, lastSuccessfulDeployment);
+    assert.equal(result.status, 0, `${relativePath}: ${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /Only explicitly non-runtime DABBIR paths changed/);
+  }
+});
+
+test('unlisted scripts remain fail-safe and force a web deployment', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  const head = commitPath(dir, 'scripts/unknown-release-hook.mjs', 'export {};\n');
+  const result = runGuard(dir, head, lastSuccessfulDeployment);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Runtime or unknown path changed/);
+});
+
+test('customer journey tracks changes to the web-runtime classification contract', () => {
+  assert.match(journeyWorkflow, /- 'vercel-ignore-if-unaffected\.sh'/);
 });
 
 test('protected Production smoke runner changes on main force exact-SHA Vercel deployment', () => {
