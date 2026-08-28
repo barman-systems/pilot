@@ -70,6 +70,9 @@ jobs:
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
+      EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      EXPECTED_GIT_PROVIDER: github
+      EXPECTED_GIT_REPOSITORY: barman-systems/pilot
     outputs:
       # Capacity remains locked until a real public launch origin exists.
       production_ready: ${{ steps.launch-gate.outputs.ready }}
@@ -84,6 +87,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+
+      - name: Require authoritative main workflow identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_REPOSITORY" = 'barman-systems/pilot'
+          test "$GITHUB_WORKFLOW_REF" = 'barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main'
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "AUTHORIZED_MAIN_JOURNEY_SHA=$GITHUB_SHA"
 
       - name: Classify canonical public DABBIR production origin
         id: launch-gate
@@ -165,7 +178,7 @@ jobs:
           body=''
           sha=''
           deployment=''
-          for attempt in $(seq 1 36); do
+          for attempt in $(seq 1 60); do
             body="$(curl --silent --show-error \
               "${auth_args[@]}" \
               -H 'accept: application/json' \
@@ -173,20 +186,30 @@ jobs:
             sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
             deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
             environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
+            project_id="$(printf '%s' "$body" | jq -r '.project_id // empty' 2>/dev/null || true)"
+            git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty' 2>/dev/null || true)"
+            repository="$(printf '%s' "$body" | jq -r '.repository // empty' 2>/dev/null || true)"
             ok="$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || true)"
-            if [ "$ok" = 'true' ] && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] && { [ -z "$environment" ] || [ "$environment" = 'production' ]; }; then
+            if [ "$ok" = 'true' ] \
+              && [ "$sha" = "$GITHUB_SHA" ] \
+              && [ "$environment" = 'production' ] \
+              && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] \
+              && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] \
+              && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ] \
+              && [[ "$deployment" == dpl_* ]]; then
               break
             fi
             sha=''
+            deployment=''
             sleep 5
           done
           if [ -z "$sha" ]; then
-            echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED: ${body:0:500}"
+            echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED expected_sha=$GITHUB_SHA body=${body:0:500}"
             exit 3
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
-          echo "LOCKED_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+          echo "LOCKED_EXACT_PRODUCTION_SHA=$sha deployment=$deployment"
 
       - name: Install WebKit journey runner
         if: steps.journey-mode.outputs.ready == 'true'
@@ -231,13 +254,20 @@ jobs:
             "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
           sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
           deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty')"
+          environment="$(printf '%s' "$body" | jq -r '.environment // empty')"
+          project_id="$(printf '%s' "$body" | jq -r '.project_id // empty')"
+          git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty')"
+          repository="$(printf '%s' "$body" | jq -r '.repository // empty')"
+          test "$sha" = "$GITHUB_SHA"
           test "$sha" = "${{ steps.release-before.outputs.sha }}"
-          if [ -n "${{ steps.release-before.outputs.deployment }}" ] && [ -n "$deployment" ]; then
-            test "$deployment" = "${{ steps.release-before.outputs.deployment }}"
-          fi
+          test "$deployment" = "${{ steps.release-before.outputs.deployment }}"
+          test "$environment" = 'production'
+          test "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID"
+          test "$git_provider" = "$EXPECTED_GIT_PROVIDER"
+          test "$repository" = "$EXPECTED_GIT_REPOSITORY"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
-          echo "STABLE_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+          echo "STABLE_EXACT_PRODUCTION_SHA=$sha deployment=$deployment"
 
       - name: Publish journey summary
         if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
@@ -246,6 +276,7 @@ jobs:
           echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo "**Mode:** ${{ steps.journey-mode.outputs.mode }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Expected SHA:** $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "**Production SHA before:** ${{ steps.release-before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Production SHA after:** ${{ steps.release-after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Deployment:** ${{ steps.release-before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
