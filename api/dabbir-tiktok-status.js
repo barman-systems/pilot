@@ -7,6 +7,7 @@ import {
 } from './_tiktok-pilot-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SEND_SAFETY_BLOCKER = 'TIKTOK_SEND_SAFETY_GATE_REQUIRED';
 
 function businessIdFromRequest(req) {
   try {
@@ -26,10 +27,16 @@ export default async function handler(req, res) {
     await tiktokOwnerContext(req, businessId);
     const config = tiktokPilotConfig(req);
     const connection = await findTikTokConnection(businessId);
+    const status = safeTikTokStatus(connection, config);
     return json(res, 200, {
       ok: true,
       provider: 'tiktok',
-      ...safeTikTokStatus(connection, config),
+      ...status,
+      messaging_send_scope: status.messaging_send === true,
+      messaging_send: false,
+      messaging_ready: false,
+      live_send_enabled: false,
+      send_blocker: SEND_SAFETY_BLOCKER,
     });
   } catch (error) {
     const status = Number(error?.status || error?.code || 500);
