@@ -1,14 +1,21 @@
-# DABBIR
+# DABBIR | دبّر
 
-Standalone source package for DABBIR products.
+Authoritative source repository for the DABBIR product runtime, web experience, native iPhone client, database contracts, release gates, and channel integrations.
 
-## Scope
+## Authority boundary
 
-This repository boundary owns DABBIR product runtime and channel integrations. It does not own the BARMAN control plane, ZAJEL commerce runtime, or R&A.
+`main` in `barman-systems/pilot` is the code source of truth for DABBIR. Historical research and retired PILOT-era surfaces are non-authoritative and must not be used as runtime or release truth.
 
-Current product modes:
-- `dabbir_clinics` — synthetic-only; no patient data persistence.
-- `dabbir_celebrities` — synthetic-only.
+This repository does not own the BARMAN control plane, ZAJEL commerce runtime, or R&A. BARMAN may govern and observe DABBIR only through authenticated API/event contracts; DABBIR must not import BARMAN source code, share raw secrets, or directly read another product database.
+
+## Product scope
+
+The runtime recognizes these DABBIR contexts:
+- `dabbir_businesses` — primary small-business owner context.
+- `dabbir_clinics` — specialized clinic context; medical diagnosis/prescribing is outside DABBIR scope.
+- `dabbir_celebrities` — specialized creator/celebrity coordination context.
+
+A context name is not evidence that every vertical capability is production-ready. Release/readiness status comes from executable gates and exact-artifact evidence, not from module presence.
 
 ## Mandatory bilingual product standard
 
@@ -25,16 +32,33 @@ This requirement applies to web and app surfaces including authentication, onboa
 
 The machine-readable source of truth is `config/i18n-contract.json`; locale parity is enforced by automated tests.
 
-## Boundary
+## Security and tenant truth
 
-BARMAN may govern and observe DABBIR only through authenticated API/event contracts. DABBIR must not import BARMAN source code, share raw secrets, or directly read another product database.
+- Authentication and tenant authorization fail closed.
+- DABBIR tenant data is protected by RLS/authorization contracts; service credentials must never be exposed to clients.
+- A tenant must never inherit another/global WhatsApp identity.
+- Meta authorization alone does not mean WhatsApp is `OPERATIONAL`; operational status requires real verified message-path evidence.
+- Mock, synthetic, preview, or fixture data must never count as production proof.
+- External actions must preserve permission, provider, idempotency, timeout, and verification gates rather than assuming success.
 
-## Safety state
+## Current release truth
 
-- Preview-only runtime.
-- External side effects disabled.
-- Payments disabled.
-- WhatsApp inbound signature verification is fail-closed.
+- DABBIR has protected/prelaunch Vercel production deployments and exact-SHA release verification; this does not mean public general availability.
+- The native iPhone application is React Native/Expo, not a WebView wrapper.
+- Native static checks and unsigned Release compilation gates are executable in CI.
+- `APP_STORE_READY=FALSE` until Apple signing, App Store Connect configuration, signed Distribution/TestFlight artifact, and exact-build real-device QA are verified.
+- Stripe/App Store billing must not be described as live unless the corresponding production provider configuration and verified transaction evidence exist.
+- Supabase leaked-password protection and GitHub `main` branch protection remain external platform controls until their live platform state verifies them as enabled.
+
+See `docs/app-store/APP_STORE_RELEASE_PLAN.md`, `docs/root-cause-registry.md`, and `config/dabbir-architecture-ownership.json` for the current release, recurrence-prevention, and ownership contracts.
+
+## Verification rule
+
+A completion claim must follow:
+
+`ACTION → ARTIFACT → TEST → EVIDENCE → VERIFICATION`
+
+CI success on source is not a substitute for exact production/TestFlight verification when the claim depends on a deployed or signed artifact.
 
 ## Commands
 
@@ -42,4 +66,4 @@ BARMAN may govern and observe DABBIR only through authenticated API/event contra
 npm test
 ```
 
-Target canonical repository: `barman-systems/pilot`.
+Canonical repository: `barman-systems/pilot`.
