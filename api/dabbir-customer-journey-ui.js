@@ -51,13 +51,9 @@ const script = String.raw`(()=>{
   function simplifyNavigation(){
     const t=copy();
     const labels={dashboard:t.today,conversations:t.conversations,appointments:t.appointments,customers:t.customers,tasks:t.needsYou,settings:t.settings};
-    Object.entries(labels).forEach(([name,text])=>{
-      const node=q('#nav [data-screen="'+name+'"] [data-label]');if(node)node.textContent=text;
-    });
+    Object.entries(labels).forEach(([name,text])=>{const node=q('#nav [data-screen="'+name+'"] [data-label]');if(node)node.textContent=text;});
     const bottomLabels={dashboard:t.today,conversations:t.conversations,appointments:t.appointments,tasks:t.needsYou,settings:t.more};
-    Object.entries(bottomLabels).forEach(([name,text])=>{
-      const node=q('#bottomNav [data-screen="'+name+'"] [data-label]');if(node)node.textContent=text;
-    });
+    Object.entries(bottomLabels).forEach(([name,text])=>{const node=q('#bottomNav [data-screen="'+name+'"] [data-label]');if(node)node.textContent=text;});
     const nav=q('#nav');if(!nav)return;
     let details=q('#journeyAdvancedNav');
     if(!details){
@@ -90,10 +86,7 @@ const script = String.raw`(()=>{
   function ensureQuickActions(){
     const t=copy(),cards=q('#dashCards');if(!cards)return;
     let panel=q('#journeyQuick');
-    if(!panel){
-      panel=document.createElement('section');panel.id='journeyQuick';panel.className='journeyQuick';
-      cards.parentNode.insertBefore(panel,cards);
-    }
+    if(!panel){panel=document.createElement('section');panel.id='journeyQuick';panel.className='journeyQuick';cards.parentNode.insertBefore(panel,cards);}
     panel.innerHTML='<div class="journeyQuickHead"><div><b>'+t.quickTitle+'</b><span>'+t.quickDesc+'</span></div></div><div class="journeyQuickActions"></div>';
     const actions=panel.querySelector('.journeyQuickActions');
     const add=(label,kind,fn)=>{const b=document.createElement('button');b.type='button';b.className=kind;b.textContent=label;b.onclick=fn;actions.append(b)};
@@ -114,7 +107,7 @@ const script = String.raw`(()=>{
 
   function improveEmptyStates(){
     const t=copy();
-    const chat=q('#chatList .empty');if(chat){chat.textContent=t.noChat;if(!chat.querySelector('button')){const b=document.createElement('button');b.type='button';b.className='secondary journeyEmptyAction';b.textContent=t.startChat;b.onclick=()=>click('#newChatBtn');chat.append(document.createElement('br'),b)}}
+    const chat=q('#chatList .empty');if(chat){chat.textContent=t.noChat;const b=document.createElement('button');b.type='button';b.className='secondary journeyEmptyAction';b.textContent=t.startChat;b.onclick=()=>click('#newChatBtn');chat.append(document.createElement('br'),b)}
     const appt=q('#appointmentsTable .empty');if(appt){appt.textContent=t.noAppointments;const b=document.createElement('button');b.type='button';b.className='secondary journeyEmptyAction';b.textContent=t.addAppointment;b.onclick=()=>click('#newApptBtn');appt.append(document.createElement('br'),b)}
     const cust=q('#customersTable .empty');if(cust)cust.textContent=t.noCustomers;
     qa('#handoffList .empty,#followupList .empty').forEach(el=>el.textContent=t.allClear);
@@ -126,8 +119,6 @@ const script = String.raw`(()=>{
 
   if(typeof renderAll==='function'&&!window.__dabbirJourneyRenderWrapped){window.__dabbirJourneyRenderWrapped=true;const base=renderAll;renderAll=function(){const out=base.apply(this,arguments);schedule();return out}}
   if(typeof applyLang==='function'&&!window.__dabbirJourneyLangWrapped){window.__dabbirJourneyLangWrapped=true;const base=applyLang;applyLang=function(){const out=base.apply(this,arguments);schedule();return out}}
-  const observer=new MutationObserver(schedule);if(document.body)observer.observe(document.body,{subtree:true,childList:true});
-  setTimeout(()=>observer.disconnect(),5000);
   setTimeout(schedule,0);setTimeout(schedule,300);
 })();`;
 
