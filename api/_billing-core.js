@@ -67,7 +67,13 @@ export async function getBillingAccount(accessToken,businessId,options={}){
     const response=await supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal});
     const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');
     if(!Array.isArray(rows))throw billingError('BILLING_STATUS_INVALID_RESPONSE',502);
-    return rows[0]||null;
+    if(rows.length===0)return null;
+    if(rows.length!==1)throw billingError('BILLING_STATUS_INVALID_RESPONSE',502);
+    const account=rows[0];
+    if(!account||typeof account!=='object'||Array.isArray(account)||String(account.business_id||'')!==String(businessId)){
+      throw billingError('BILLING_STATUS_INVALID_RESPONSE',502);
+    }
+    return account;
   },{label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS});
 }
 
