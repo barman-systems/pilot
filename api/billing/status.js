@@ -9,6 +9,6 @@ export default async function handler(req,res){
     const account=await getBillingAccount(context.accessToken,context.businessId);
     return json(res,200,{ok:true,livemode:false,billing:publicBillingState(account)});
   }catch(error){
-    const status=Number(error?.code||500);return json(res,[400,401,403,429,503].includes(status)?status:500,{ok:false,error:String(error?.message||'BILLING_STATUS_UNAVAILABLE').slice(0,120),livemode:false});
+    const status=Number(error?.code||500);return json(res,[400,401,403,429,503,504].includes(status)?status:500,{ok:false,error:String(error?.message||'BILLING_STATUS_UNAVAILABLE').slice(0,120),livemode:false});
   }
 }
