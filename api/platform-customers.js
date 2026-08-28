@@ -36,17 +36,25 @@ async function serviceRpc(key,name,params={}){
   return readResponse(response,'PLATFORM_ADMIN_RPC_FAILED');
 }
 
-async function adminContext(req,res){
+async function adminContext(req,res,{capabilityProbe=false}={}){
   const token=accessTokenFromRequest(req);
   if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   const user=await getVerifiedUser(token).catch(()=>null);
   if(!user?.id){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   const response=await supabaseRest(`dabbir_platform_admins?select=role,active&user_id=eq.${user.id}&active=eq.true&limit=1`,token).catch(()=>null);
-  if(!response?.ok){json(res,response?.status===401?401:403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
+  if(!response?.ok){
+    if(capabilityProbe&&response?.status===403)return {user,role:null,key:null,allowed:false};
+    json(res,response?.status===401?401:403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});
+    return null;
+  }
   const rows=await response.json().catch(()=>[]);
   const admin=Array.isArray(rows)?rows[0]:null;
-  if(!admin?.active){json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});return null}
-  return {user,role:admin.role,key:serviceKey()};
+  if(!admin?.active){
+    if(capabilityProbe)return {user,role:null,key:null,allowed:false};
+    json(res,403,{ok:false,error:'PLATFORM_ADMIN_REQUIRED'});
+    return null;
+  }
+  return {user,role:admin.role,key:serviceKey(),allowed:true};
 }
 
 function adminServiceUnavailable(res){
@@ -71,13 +79,17 @@ function rpcError(error){
 
 export default async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
-  const context=await adminContext(req,res);
+  const getAction=req.method==='GET'?String(singleQueryValue(req,'action')||'capability').trim():null;
+  const context=await adminContext(req,res,{capabilityProbe:getAction==='capability'});
   if(!context)return;
 
   try{
     if(req.method==='GET'){
-      const action=String(singleQueryValue(req,'action')||'capability').trim();
+      const action=getAction;
       if(action==='capability'){
+        if(!context.allowed){
+          return json(res,200,{ok:true,allowed:false,reason:'PLATFORM_ADMIN_REQUIRED'});
+        }
         const serviceConfigured=Boolean(context.key);
         return json(res,200,{
           ok:true,
