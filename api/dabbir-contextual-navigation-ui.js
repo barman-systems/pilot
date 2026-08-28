@@ -1,4 +1,5 @@
 // BAR-30 router authority: feature modules do not create or mutate primary destinations.
+// The activity slot is reversible so switching business context cannot leave a stale target, label, or icon behind.
 const script=String.raw`(()=>{
   if(window.__dabbirContextualNavigationUi)return;
   window.__dabbirContextualNavigationUi=true;
@@ -35,9 +36,9 @@ const script=String.raw`(()=>{
     const icon=node.querySelector(':scope > .d4-nav-icon');
     if(icon&&icon.dataset.routerTarget!==target){
       icon.dataset.routerTarget=target;
-      if(target==='operations'){
-        icon.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg>';
-      }
+      icon.innerHTML=target==='operations'
+        ? '<svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg>'
+        : '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg>';
     }
   }
 
@@ -50,11 +51,6 @@ const script=String.raw`(()=>{
         let appointmentLabel='';
         try{appointmentLabel=String(T()?.appointments||'').trim()}catch{}
         setActivitySlot(node,'appointments',appointmentLabel||(ar()?'المواعيد':'Appointments'));
-        const icon=node.querySelector(':scope > .d4-nav-icon');
-        if(icon&&icon.dataset.routerTarget==='operations'){
-          icon.dataset.routerTarget='appointments';
-          icon.innerHTML='<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg>';
-        }
       }
     }
     if(isStore()&&current==='appointments'&&typeof showScreen==='function')showScreen('operations');
