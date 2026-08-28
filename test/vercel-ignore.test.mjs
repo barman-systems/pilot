@@ -26,12 +26,24 @@ function setupRepo() {
   return dir;
 }
 
-function runGuard(cwd, current, previousDeployment = '', ref = 'main') {
+function reviewedMergeCommit(cwd, current) {
+  const raw = execFileSync('git', ['cat-file', '-p', current], { cwd, encoding: 'utf8' });
+  const parents = raw.split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
+  if (parents.length !== 1) return current;
+  const tree = git(cwd, 'rev-parse', `${current}^{tree}`);
+  return execFileSync('git', ['commit-tree', tree, '-p', current, '-p', parents[0], '-m', 'reviewed merge'], {
+    cwd,
+    encoding: 'utf8',
+  }).trim();
+}
+
+function runGuard(cwd, current, previousDeployment = '', ref = 'main', { directMain = false } = {}) {
+  const effectiveCurrent = ref === 'main' && !directMain ? reviewedMergeCommit(cwd, current) : current;
   return spawnSync('bash', ['vercel-ignore-if-unaffected.sh'], {
     cwd,
     env: {
       ...process.env,
-      VERCEL_GIT_COMMIT_SHA: current,
+      VERCEL_GIT_COMMIT_SHA: effectiveCurrent,
       VERCEL_GIT_PREVIOUS_SHA: previousDeployment,
       VERCEL_GIT_COMMIT_REF: ref,
     },
@@ -57,7 +69,16 @@ test('all non-main branches run the full Vercel verification gate even for test-
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment, 'fix/runtime-proof').status, 1);
 });
 
-test('test-only changes on main skip Vercel deployment when no runtime drift exists since last success', () => {
+test('one-parent direct commits on main are not Production release candidates', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  const head = commitPath(dir, 'api/app.js', 'export default 2;\n');
+  const result = runGuard(dir, head, lastSuccessfulDeployment, 'main', { directMain: true });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /DIRECT_MAIN_RELEASE_BLOCKED/);
+});
+
+test('test-only changes on reviewed main merge may skip Vercel deployment when no runtime drift exists since last success', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'test', 'new.test.mjs'), 'export {};\n');
@@ -66,7 +87,7 @@ test('test-only changes on main skip Vercel deployment when no runtime drift exi
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
-test('protected Production smoke runner changes on main force exact-SHA Vercel deployment', () => {
+test('protected Production smoke runner changes on reviewed main merge force exact-SHA Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'test', 'dabbir-protected-live-smoke.mjs'), 'export const smoke = 1;\n');
@@ -77,7 +98,7 @@ test('protected Production smoke runner changes on main force exact-SHA Vercel d
   assert.match(result.stdout, /Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence/);
 });
 
-test('protected Production smoke workflow changes on main force exact-SHA Vercel deployment', () => {
+test('protected Production smoke workflow changes on reviewed main merge force exact-SHA Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
@@ -111,7 +132,7 @@ test('every ignored-path trigger of the canonical exact-SHA customer journey for
   }
 });
 
-test('Supabase migrations on main force Vercel deployment so production SHA cannot drift', () => {
+test('Supabase migrations on reviewed main merge force Vercel deployment so production SHA cannot drift', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.mkdirSync(path.join(dir, 'supabase', 'migrations'), { recursive: true });
@@ -121,7 +142,7 @@ test('Supabase migrations on main force Vercel deployment so production SHA cann
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('db paths on main are production-affecting and force Vercel deployment', () => {
+test('db paths on reviewed main merge are production-affecting and force Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.mkdirSync(path.join(dir, 'db'), { recursive: true });
@@ -131,7 +152,7 @@ test('db paths on main are production-affecting and force Vercel deployment', ()
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('failed or unverified runtime change on main cannot be hidden by a later test-only commit', () => {
+test('failed or unverified runtime change on reviewed main cannot be hidden by a later test-only commit', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
 
@@ -145,7 +166,7 @@ test('failed or unverified runtime change on main cannot be hidden by a later te
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('test-only follow-up on main may skip after the runtime commit itself is the last successful deployment', () => {
+test('test-only follow-up on reviewed main may skip after the runtime commit itself is the last successful deployment', () => {
   const dir = setupRepo();
   fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'verified runtime');
@@ -158,7 +179,7 @@ test('test-only follow-up on main may skip after the runtime commit itself is th
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
-test('runtime API changes on main continue Vercel deployment', () => {
+test('runtime API changes on reviewed main continue Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
@@ -167,7 +188,7 @@ test('runtime API changes on main continue Vercel deployment', () => {
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('unknown root paths fail safe and build', () => {
+test('unknown root paths on reviewed main fail safe and build', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'new-runtime-entry.js'), 'export default 1;\n');
@@ -176,7 +197,7 @@ test('unknown root paths fail safe and build', () => {
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('unavailable previous successful deployment fails safe and builds', () => {
+test('unavailable previous successful deployment on reviewed main fails safe and builds', () => {
   const dir = setupRepo();
   fs.writeFileSync(path.join(dir, 'test', 'new.test.mjs'), 'export {};\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'test only');
@@ -184,7 +205,7 @@ test('unavailable previous successful deployment fails safe and builds', () => {
   assert.equal(runGuard(dir, head, '0000000000000000000000000000000000000001').status, 1);
 });
 
-test('commit without an available parent fails safe and builds', () => {
+test('root commit without an available parent fails safe and builds', () => {
   const dir = setupRepo();
   const rootCommit = git(dir, 'rev-parse', 'HEAD');
   assert.equal(runGuard(dir, rootCommit).status, 1);
