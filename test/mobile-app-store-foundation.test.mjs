@@ -55,9 +55,10 @@ test('Apple IAP requires Apple JWS verification, account binding, server persist
   assert.doesNotMatch(entitlement, /grant\s+(insert|update|delete)/i);
 });
 
-test('DABBIR account deletion is product-scoped, legal-hold aware, access revoking, and public invoker only', async () => {
+test('DABBIR account deletion is product-scoped, de-identifying, access revoking, and public invoker only', async () => {
   const migration = await read('supabase/migrations/20260828092000_dabbir_product_scoped_account_deletion_v1.sql');
   const appleCleanup = await read('supabase/migrations/20260828092100_dabbir_account_deletion_apple_cleanup_v1.sql');
+  const identityCleanup = await read('supabase/migrations/20260828095100_dabbir_account_deletion_identity_cleanup_v2.sql');
   const hardening = await read('supabase/migrations/20260828095200_dabbir_account_delete_private_executor_v2.sql');
   const endpoint = await read('api/mobile/account-delete.js');
   const mobileLogin = await read('api/mobile/auth/login.js');
@@ -75,6 +76,10 @@ test('DABBIR account deletion is product-scoped, legal-hold aware, access revoki
   assert.doesNotMatch(migration, /delete\s+from\s+auth\.users/i);
   assert.match(appleCleanup, /delete from public\.dabbir_apple_entitlements/i);
   assert.match(appleCleanup, /after insert or update of status/i);
+  assert.match(identityCleanup, /alter column owner_user_id drop not null/i);
+  assert.match(identityCleanup, /on delete set null/i);
+  assert.match(identityCleanup, /set owner_user_id = null/i);
+  assert.match(identityCleanup, /dabbir_account_delete_identity_cleanup/);
   assert.match(hardening, /dabbir_private\.dabbir_delete_current_user_account_impl/);
   assert.match(hardening, /create or replace function public\.dabbir_delete_current_user_account/);
   assert.match(hardening, /security invoker/i);
