@@ -11,21 +11,19 @@ test('no-Facebook onboarding stays inside the existing WhatsApp guard module',()
   assert.doesNotMatch(recovery,/dabbir-optional-whatsapp-ui/);
 });
 
-test('DABBIR offers one-action Facebook creation and automatic WhatsApp resume',()=>{
-  assert.match(guardUi,/لا تملك حساب Facebook؟/);
-  assert.match(guardUi,/إنشاء الحساب والمتابعة/);
-  assert.match(guardUi,/Create account and continue/);
-  assert.match(guardUi,/https:\/\/www\.facebook\.com\/r\.php/);
-  assert.match(guardUi,/META_SIGNUP_RESUME_KEY/);
-  assert.match(guardUi,/sessionStorage\.setItem/);
-  assert.match(guardUi,/resumeOfficialWhatsAppSignup/);
-  assert.match(guardUi,/window\.addEventListener\('focus'/);
-  assert.match(guardUi,/visibilitychange/);
-  assert.match(guardUi,/primary\.click\(\)/);
-  assert.match(guardUi,/meta-resume-v2/);
+test('DABBIR offers an instant WhatsApp owner sandbox before Meta onboarding',()=>{
+  assert.match(guardUi,/جرّب دبّر على واتساب الآن/);
+  assert.match(guardUi,/بدون Facebook/);
+  assert.match(guardUi,/للاختبار فقط/);
+  assert.match(guardUi,/استخدم رقمي التجاري/);
+  assert.match(guardUi,/\/api\/dabbir-whatsapp-sandbox/);
+  assert.match(guardUi,/instant-sandbox-v1/);
+  assert.doesNotMatch(guardUi,/https:\/\/www\.facebook\.com\/r\.php/);
+  assert.doesNotMatch(guardUi,/META_SIGNUP_RESUME_KEY/);
+  assert.doesNotMatch(guardUi,/resumeOfficialWhatsAppSignup/);
 });
 
-test('the rejected skip-WhatsApp workaround is gone',()=>{
+test('the rejected skip-WhatsApp workaround stays gone',()=>{
   assert.doesNotMatch(guardUi,/متابعة بدون واتساب/);
   assert.doesNotMatch(guardUi,/Continue without WhatsApp/);
   assert.doesNotMatch(guardUi,/واتساب \(اختياري\)/);
