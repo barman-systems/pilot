@@ -13,6 +13,7 @@ const translation = await read('api/translate.js');
 const whatsapp = await read('api/dabbir-whatsapp-webhook.js');
 const appSecretEnv = ['DABBIR', 'WHATSAPP', 'APP', 'SECRET'].join('_');
 const projectEnv = ['DABBIR', 'PROJECT'].join('_');
+const serviceRoleEnv = 'SUPABASE_SERVICE_ROLE_KEY';
 
 test('failure taxonomy includes authorization and classifies provider 403 as external provider', () => {
   assert.equal(FAILURE_CLASSES.has('AUTHORIZATION'), true);
@@ -44,11 +45,13 @@ test('translation failure is truthful and degraded rather than silently switchin
   assert.doesNotMatch(translation, /fallbackModels|models:\s*\[/i);
 });
 
-test('signed WhatsApp webhook response never echoes customer content or identifiers', async () => {
+test('signed WhatsApp webhook never acknowledges an unpersisted real message as success', async () => {
   const oldSecret = process.env[appSecretEnv];
   const oldProject = process.env[projectEnv];
+  const oldServiceRole = process.env[serviceRoleEnv];
   process.env[appSecretEnv] = 'synthetic-test-app-key';
   process.env[projectEnv] = 'dabbir_clinics';
+  delete process.env[serviceRoleEnv];
 
   try {
     const sensitive = {
@@ -88,12 +91,11 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     };
 
     await whatsappHandler(req, res);
-    assert.equal(res.statusCode, 200);
+    assert.equal(res.statusCode, 503);
     assert.equal(res.body.signature_verified, true);
-    assert.equal(res.body.state, 'CONFIGURED_NOT_OPERATIONAL');
+    assert.equal(res.body.state, 'SERVER_PERSISTENCE_NOT_CONFIGURED');
     assert.equal(res.body.persisted, false);
     assert.equal(res.body.outbound_messages_sent, false);
-    assert.equal(res.body.classifications.includes('APPOINTMENT_REQUEST'), true);
     assert.ok(res.headers['x-dabbir-correlation-id']);
 
     const responseText = JSON.stringify(res.body);
@@ -103,12 +105,16 @@ test('signed WhatsApp webhook response never echoes customer content or identifi
     else process.env[appSecretEnv] = oldSecret;
     if (oldProject === undefined) delete process.env[projectEnv];
     else process.env[projectEnv] = oldProject;
+    if (oldServiceRole === undefined) delete process.env[serviceRoleEnv];
+    else process.env[serviceRoleEnv] = oldServiceRole;
   }
 });
 
-test('WhatsApp source does not claim persistence, outbound delivery, or operational connection', () => {
-  assert.match(whatsapp, /state: 'CONFIGURED_NOT_OPERATIONAL'/);
-  assert.match(whatsapp, /persisted: false/);
+test('WhatsApp source requires persistence and never claims operational state from signature alone', () => {
+  assert.match(whatsapp, /persistSignedInbound/);
+  assert.match(whatsapp, /SIGNED_EVENT_PERSISTENCE_FAILED/);
+  assert.match(whatsapp, /SERVER_PERSISTENCE_NOT_CONFIGURED/);
   assert.match(whatsapp, /outbound_messages_sent: false/);
   assert.doesNotMatch(whatsapp, /state: 'CONNECTED'/);
+  assert.doesNotMatch(whatsapp, /state: 'OPERATIONAL'/);
 });
