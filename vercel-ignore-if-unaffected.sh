@@ -17,7 +17,10 @@ set -u
 #    when their source files live under .github/ or test/. If one of those files
 #    changes, Production must advance to the same commit before the verification
 #    workflow can truthfully claim exact-artifact evidence.
-# 4) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
+# 4) Native iOS/App Store-only files are explicitly outside the Vercel web runtime.
+#    They may reuse the last web-runtime journey only when no web/database/runtime
+#    path changed in the same comparison range.
+# 5) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
 previous_success="${VERCEL_GIT_PREVIOUS_SHA:-}"
@@ -74,6 +77,9 @@ while IFS= read -r path; do
     test/dabbir-activity-regression.test.mjs)
       echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
       exit 1
+      ;;
+    mobile/*|scripts/dabbir-app-store-preflight.mjs)
+      echo "Native/App Store-only path does not change the Vercel web runtime: $path"
       ;;
     .github/*|docs/*|test/*|README.md|.gitignore)
       ;;
