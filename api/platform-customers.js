@@ -69,6 +69,10 @@ function rpcError(error){
 
 export default async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
+  if(req.method==='GET'){
+    const action=String(singleQueryValue(req,'action')||'capability').trim();
+    if(action==='capability'&&!serviceKey())return json(res,200,{ok:true,allowed:false,reason:'SERVER_ADMIN_NOT_CONFIGURED'});
+  }
   const context=await adminContext(req,res);
   if(!context)return;
 
