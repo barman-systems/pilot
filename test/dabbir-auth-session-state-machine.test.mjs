@@ -51,24 +51,33 @@ test('suspended and failed verification are explicit non-ready states', () => {
   assert.equal(degraded.authenticated, false);
 });
 
-test('auth UI publishes one machine stage and cannot open app from an unverified state', () => {
+test('auth UI verifies the session before boot but only observes gate visibility', () => {
   assert.match(authUi, /dataset\.dabbirAuthStage/);
   assert.match(authUi, /INVALID_AUTH_TRANSITION/);
-  assert.match(authUi, /WORKSPACE_WITHOUT_VERIFIED_SESSION/);
   assert.match(authUi, /state_machine:true/);
   assert.match(authUi, /SESSION_COOKIE_VERIFIED/);
+  assert.match(authUi, /gate_observer_only:true/);
+  assert.doesNotMatch(authUi, /reconcileVerifiedGate/);
 
-  const verifiedIndex = authUi.indexOf("setAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED')");
+  const verifiedIndex = authUi.indexOf("publishAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED')");
   const bootIndex = authUi.indexOf('await boot()');
   assert.ok(verifiedIndex >= 0 && bootIndex > verifiedIndex);
+
+  const wrapperIndex = authUi.indexOf('showGate=function(name)');
+  const baseGateIndex = authUi.indexOf('baseShowGate(name)', wrapperIndex);
+  const observerIndex = authUi.indexOf('syncStageFromGate(name)', wrapperIndex);
+  assert.ok(wrapperIndex >= 0 && baseGateIndex > wrapperIndex && observerIndex > baseGateIndex);
 });
 
-test('architecture contract names the auth machine and forbids workspace promotion without verified session', () => {
+test('architecture contract separates auth truth from presentation visibility ownership', () => {
   assert.equal(
     architecture.authorities.auth_session_state_machine,
     'api/_dabbir-auth-session-state-machine.js',
   );
+  assert.equal(architecture.authorities.auth_gate_visibility, 'index.html#showGate');
+  assert.equal(architecture.authorities.auth_session_observer, 'api/auth-session-stability-ui.js');
   assert.equal(architecture.truth_rules.workspace_ready_requires_verified_session, true);
   assert.equal(architecture.truth_rules.invalid_auth_transition_may_open_workspace, false);
-  assert.equal(architecture.shell.final_ui_authority, '/api/auth-session-stability-ui');
+  assert.equal(architecture.truth_rules.presentation_observer_may_veto_verified_gate, false);
+  assert.equal(architecture.shell.last_loaded_ui_observer, '/api/auth-session-stability-ui');
 });
