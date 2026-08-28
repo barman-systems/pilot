@@ -27,9 +27,10 @@ test('fast runtime exposes verified tenant read provenance and exact read timest
   assert.match(runtime, /runtime_version: DABBIR_FAST_RUNTIME_VERSION/);
 });
 
-test('fast runtime failures are explicit unverified states', () => {
+test('fast runtime failures are explicit unverified states with runtime evidence', () => {
   assert.match(runtime, /state:\s*'FAILED_OR_UNVERIFIED'/);
-  assert.match(runtime, /truth:\s*\{ state: 'UNVERIFIED' \}/);
+  assert.match(runtime, /truth:\s*\{ state: 'UNVERIFIED', runtime_version: DABBIR_FAST_RUNTIME_VERSION \}/);
+  assert.match(runtime, /runtime_version:\s*DABBIR_FAST_RUNTIME_VERSION/);
 });
 
 test('owner interface renders a compact verified-data badge', () => {
