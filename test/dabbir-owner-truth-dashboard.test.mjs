@@ -52,7 +52,8 @@ test('owner dashboard endpoint returns secure no-store HTML',()=>{
   assert.match(body,/\/api\/platform-customers\?action=overview/);
 });
 
-test('permanent owner route maps to owner dashboard endpoint',()=>{
+test('permanent owner route requires OTP gate before authenticated dashboard',()=>{
   const config=JSON.parse(read('vercel.json'));
-  assert.ok(config.routes.some(route=>route.src==='^/owner/?$'&&route.dest==='/api/platform-owner-dashboard'));
+  assert.ok(config.routes.some(route=>route.src==='^/owner/?$'&&route.dest==='/api/owner-login'));
+  assert.ok(config.routes.some(route=>route.src==='^/owner-dashboard/?$'&&route.dest==='/api/owner-dashboard-gateway'));
 });

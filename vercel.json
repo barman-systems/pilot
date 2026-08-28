@@ -12,7 +12,11 @@
   "routes": [
     {
       "src": "^/owner/?$",
-      "dest": "/api/platform-owner-dashboard"
+      "dest": "/api/owner-login"
+    },
+    {
+      "src": "^/owner-dashboard/?$",
+      "dest": "/api/owner-dashboard-gateway"
     },
     {
       "src": "^/$",
@@ -22,7 +26,11 @@
   "rewrites": [
     {
       "source": "/owner",
-      "destination": "/api/platform-owner-dashboard"
+      "destination": "/api/owner-login"
+    },
+    {
+      "source": "/owner-dashboard",
+      "destination": "/api/owner-dashboard-gateway"
     },
     {
       "source": "/",
