@@ -141,3 +141,5 @@ jobs:
         shell: bash
         run: |
           echo 'Supabase Management API credential is not configured in this repository; no remote Auth configuration was changed.'
+
+# Remediation trigger: re-enforce Supabase leaked-password protection (2026-08-28).
