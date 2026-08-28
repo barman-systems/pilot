@@ -96,6 +96,7 @@ const conversationPerformanceUi = String.raw`
 <script>
 (()=>{
   let dabbirSending=false;
+  const WA_KEY_RE=/^[A-Za-z0-9:_-]{16,160}$/;
 
   function renderFastMessages(){
     renderMessages();
@@ -110,21 +111,114 @@ const conversationPerformanceUi = String.raw`
     });
   }
 
+  function selectedConversation(){
+    return (workspace?.conversations||[]).find(c=>c.id===selectedConversationId)||null;
+  }
+
   function localConversationState(state){
-    const conversation=(workspace?.conversations||[]).find(c=>c.id===selectedConversationId);
+    const conversation=selectedConversation();
     if(conversation) conversation.state=state;
   }
 
-  async function fastSendMessage(){
-    const input=document.querySelector('#composer');
-    const btn=document.querySelector('#sendBtn');
-    const text=(input?.value||'').trim();
-    if(!input||!btn||!text||!selectedConversationId||dabbirSending) return;
+  function whatsappStorageKey(conversation){
+    return 'dabbir-wa-pending:'+String(workspace?.business?.id||'')+':'+String(conversation?.id||'');
+  }
 
-    dabbirSending=true;
-    btn.disabled=true;
-    input.value='';
+  async function whatsappPayloadHash(conversation,text){
+    const source=String(workspace.business.id)+'\u0000'+String(conversation.id)+'\u0000'+String(text);
+    if(!globalThis.crypto?.subtle) throw new Error('CRYPTO_UNAVAILABLE');
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
+    return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  }
 
+  function newWhatsAppIdempotencyKey(){
+    if(globalThis.crypto?.randomUUID) return 'wa_'+crypto.randomUUID();
+    const bytes=new Uint8Array(24);
+    if(!globalThis.crypto?.getRandomValues) throw new Error('CRYPTO_UNAVAILABLE');
+    crypto.getRandomValues(bytes);
+    return 'wa_'+[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  }
+
+  function readPendingWhatsApp(conversation){
+    try{return JSON.parse(localStorage.getItem(whatsappStorageKey(conversation))||'null')}catch{return null}
+  }
+
+  function writePendingWhatsApp(conversation,pending){
+    try{localStorage.setItem(whatsappStorageKey(conversation),JSON.stringify(pending))}catch{}
+  }
+
+  function clearPendingWhatsApp(conversation){
+    try{localStorage.removeItem(whatsappStorageKey(conversation))}catch{}
+  }
+
+  async function whatsappOperation(conversation,text){
+    const payloadHash=await whatsappPayloadHash(conversation,text);
+    const pending=readPendingWhatsApp(conversation);
+    if(pending&&pending.payload_hash===payloadHash&&WA_KEY_RE.test(String(pending.idempotency_key||''))){
+      return {idempotency_key:pending.idempotency_key,payload_hash:payloadHash,reused:true};
+    }
+    const operation={idempotency_key:newWhatsAppIdempotencyKey(),payload_hash:payloadHash,reused:false};
+    writePendingWhatsApp(conversation,operation);
+    return operation;
+  }
+
+  async function sendApprovedWhatsAppReply({text,conversation}){
+    let operation;
+    try{operation=await whatsappOperation(conversation,text)}catch{
+      toast(lang==='ar'?'تعذر إنشاء معرف إرسال آمن؛ لم يتم الإرسال':'Could not create a safe send identifier; nothing was sent');
+      return;
+    }
+
+    try{
+      const {r,j={}}=await api('/api/dabbir-whatsapp-reply',{
+        method:'POST',
+        body:JSON.stringify({
+          business_id:workspace.business.id,
+          conversation_id:conversation.id,
+          message:text,
+          idempotency_key:operation.idempotency_key
+        })
+      });
+      workspace.last_action_truth=j.truth||{state:'UNVERIFIED'};
+
+      if(!r.ok||!j.ok){
+        localConversationState('action_required');
+        const needsReconciliation=j.automatic_resend_blocked===true&&(j.state==='AMBIGUOUS'||j.state==='SENDING'||j.state==='AMBIGUOUS_NO_AUTOMATIC_RESEND'||j.external_side_effects_possible===true);
+        if(j.retry_requires_new_operation===true||(!needsReconciliation&&j.state==='FAILED')) clearPendingWhatsApp(conversation);
+        if(needsReconciliation){
+          toast(lang==='ar'?'حالة الإرسال تحتاج تحقق؛ دبّر لن يعيد الإرسال تلقائيًا':'Send status needs verification; DABBIR will not resend automatically');
+        }else{
+          toast(lang==='ar'?'لم يتم تأكيد إرسال رد واتساب':'WhatsApp reply was not confirmed');
+        }
+        if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
+        return;
+      }
+
+      clearPendingWhatsApp(conversation);
+      if(j.message){
+        workspace.messages=(workspace.messages||[]).filter(m=>m.id!==j.message.id);
+        workspace.messages.push(j.message);
+      }
+      localConversationState('waiting_customer');
+      workspace.messages_loaded=true;
+      translations.clear();
+      translationMode=false;
+      renderMessages();
+      if(current==='dashboard') renderDashboard();
+      if(current==='analytics') renderAnalytics();
+      if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
+      toast(j.provider_status_verified===true
+        ? (lang==='ar'?'تم التحقق من تسليم رد واتساب':'WhatsApp reply delivery verified')
+        : (lang==='ar'?'قبلت Meta الرد؛ بانتظار تأكيد التسليم':'Meta accepted the reply; awaiting delivery confirmation'));
+    }catch{
+      workspace.last_action_truth={state:'UNVERIFIED'};
+      localConversationState('action_required');
+      if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
+      toast(lang==='ar'?'الاتصال انقطع؛ لن يعيد دبّر الإرسال تلقائيًا حتى نتحقق':'Connection dropped; DABBIR will not resend until the attempt is verified');
+    }
+  }
+
+  async function sendWebConversation({text}){
     const stamp=Date.now();
     const tempId='dabbir-local-'+stamp;
     const typingId='dabbir-typing-'+stamp;
@@ -172,6 +266,26 @@ const conversationPerformanceUi = String.raw`
       renderMessages();
       if(typeof window.__dabbirRenderTruth==='function') window.__dabbirRenderTruth();
       toast(lang==='ar'?'تعذر الاتصال؛ حاول مرة أخرى':'Connection failed; try again');
+    }
+  }
+
+  async function fastSendMessage(){
+    const input=document.querySelector('#composer');
+    const btn=document.querySelector('#sendBtn');
+    const text=(input?.value||'').trim();
+    const conversation=selectedConversation();
+    if(!input||!btn||!text||!selectedConversationId||!conversation||dabbirSending) return;
+
+    dabbirSending=true;
+    btn.disabled=true;
+    input.value='';
+
+    try{
+      if(String(conversation.channel_type||'').toLowerCase()==='whatsapp'){
+        await sendApprovedWhatsAppReply({text,conversation});
+      }else{
+        await sendWebConversation({text});
+      }
     }finally{
       dabbirSending=false;
       btn.disabled=false;
@@ -253,7 +367,7 @@ export default function handler(req, res) {
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
   res.setHeader('x-dabbir-interface', 'operational-runtime-v2-truth');
-  res.setHeader('x-dabbir-chat-path', 'chat-send-truth-v4');
+  res.setHeader('x-dabbir-chat-path', 'chat-send-truth-v4-whatsapp-reserve-v2');
   res.setHeader('x-dabbir-performance', 'interface-fast-v4-truth');
   return res.status(200).send(html);
 }

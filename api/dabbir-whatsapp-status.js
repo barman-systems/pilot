@@ -1,6 +1,7 @@
 import { singleQueryValue } from './_request-query.js';
-import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRest } from './_auth-core.js';
+import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
 import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
+import { serviceRpc, whatsappLiveServerCapability } from './_whatsapp-live-core.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -44,23 +45,6 @@ export function getWhatsAppConfig() {
   return { verifyToken, appSecret, accessToken, phoneNumberId, wabaId, graphVersion, webhookConfigured, outboundConfigured, configured };
 }
 
-function publicConfig(config) {
-  let state = 'NOT_CONFIGURED';
-  if (config.webhookConfigured && config.outboundConfigured) state = 'CONFIGURED_READY_FOR_VERIFICATION';
-  else if (config.webhookConfigured) state = 'WEBHOOK_LINKED';
-  else if (config.outboundConfigured) state = 'OUTBOUND_CONFIGURED';
-  else if (config.configured) state = 'PARTIALLY_CONFIGURED';
-  return {
-    configured: config.configured,
-    connected: config.webhookConfigured || config.outboundConfigured,
-    webhook_configured: config.webhookConfigured,
-    outbound_configured: config.outboundConfigured,
-    phone_number_configured: Boolean(config.phoneNumberId),
-    waba_configured: Boolean(config.wabaId),
-    state,
-  };
-}
-
 function emptyOperationalEvidence(available = true) {
   return {
     available,
@@ -71,48 +55,17 @@ function emptyOperationalEvidence(available = true) {
   };
 }
 
-async function rowsOrNull(response) {
-  if (!response?.ok) return null;
-  const rows = await response.json().catch(() => null);
-  return Array.isArray(rows) ? rows : null;
-}
-
-export async function loadOperationalEvidence(accessToken, businessId) {
+export async function loadOperationalEvidence(businessId) {
   try {
-    const encodedBusinessId = encodeURIComponent(String(businessId));
-    const conversationResponse = await supabaseRest(
-      `dabbir_conversations?select=id&business_id=eq.${encodedBusinessId}&channel_type=eq.whatsapp&demo_mode=eq.false&order=created_at.desc&limit=100`,
-      accessToken,
-    );
-    const conversations = await rowsOrNull(conversationResponse);
-    if (conversations === null) return emptyOperationalEvidence(false);
-    const conversationIds = conversations.map(row => String(row?.id || '')).filter(Boolean);
-    if (!conversationIds.length) return emptyOperationalEvidence(true);
-
-    const conversationFilter = `in.(${conversationIds.join(',')})`;
-    const [messageResponse, outcomeResponse] = await Promise.all([
-      supabaseRest(
-        `dabbir_messages?select=sender_type,simulated&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&simulated=eq.false&limit=200`,
-        accessToken,
-      ),
-      supabaseRest(
-        `dabbir_conversation_outcomes?select=verified_external_result&business_id=eq.${encodedBusinessId}&conversation_id=${conversationFilter}&verified_external_result=eq.true&limit=1`,
-        accessToken,
-      ),
-    ]);
-    const messages = await rowsOrNull(messageResponse);
-    const outcomes = await rowsOrNull(outcomeResponse);
-    if (messages === null || outcomes === null) return emptyOperationalEvidence(false);
-
-    const inbound = messages.some(row => row?.simulated === false && String(row?.sender_type || '') === 'customer');
-    const outbound = messages.some(row => row?.simulated === false && ['ai', 'human'].includes(String(row?.sender_type || '')));
-    const verifiedExternal = outcomes.some(row => row?.verified_external_result === true);
+    const rows = await serviceRpc('dabbir_whatsapp_operational_evidence', { p_business_id: businessId });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row) return emptyOperationalEvidence(false);
     return {
-      available: true,
-      real_whatsapp_conversation: true,
-      real_inbound_message: inbound,
-      real_outbound_reply: outbound,
-      verified_external_result: verifiedExternal,
+      available: row.available === true,
+      real_whatsapp_conversation: row.real_whatsapp_conversation === true,
+      real_inbound_message: row.real_inbound_message === true,
+      real_outbound_reply: row.real_outbound_reply === true,
+      verified_external_result: row.verified_external_result === true,
     };
   } catch {
     return emptyOperationalEvidence(false);
@@ -131,6 +84,7 @@ export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') 
     outbound_configured: false,
     phone_number_configured: false,
     waba_configured: false,
+    server_runtime_configured: whatsappLiveServerCapability().service_data_access,
     state: machine.state,
     operational_stage: machine.stage,
     meta_authorized: false,
@@ -180,7 +134,7 @@ async function embeddedStatus(req, accessToken, businessId) {
   try {
     const [verified, evidence] = await Promise.all([
       verifyStoredConnection(platform, row),
-      loadOperationalEvidence(accessToken, businessId),
+      loadOperationalEvidence(businessId),
     ]);
     const machine = deriveWhatsAppOperationalState({
       hasConnection: true,
@@ -197,6 +151,7 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: Boolean(verified.authorized),
       phone_number_configured: true,
       waba_configured: true,
+      server_runtime_configured: whatsappLiveServerCapability().service_data_access,
       state: machine.state,
       operational_stage: machine.stage,
       meta_authorized: Boolean(verified.authorized),
@@ -233,6 +188,7 @@ async function embeddedStatus(req, accessToken, businessId) {
       outbound_configured: false,
       phone_number_configured: true,
       waba_configured: true,
+      server_runtime_configured: whatsappLiveServerCapability().service_data_access,
       state: machine.state,
       operational_stage: machine.stage,
       meta_authorized: false,
@@ -272,11 +228,8 @@ export default async function handler(req, res) {
   }
 
   // The authenticated DABBIR UI must never inherit a global/server WhatsApp
-  // identity. When the caller omitted business_id, resolve the tenant only if
-  // there is exactly one active membership; otherwise fail closed with a
-  // tenant-unconfigured payload. This keeps old platform credentials usable for
-  // webhook infrastructure without ever presenting that legacy number as the
-  // current customer's WhatsApp number.
+  // identity. Platform-level credentials remain webhook/runtime infrastructure
+  // only; tenant display state always resolves from the tenant connection row.
   try {
     const memberships = await getBusinessMemberships(accessToken);
     const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])

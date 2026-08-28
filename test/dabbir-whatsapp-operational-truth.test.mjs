@@ -6,19 +6,38 @@ import { spawnSync } from 'node:child_process';
 const statusPath='api/dabbir-whatsapp-status.js';
 const machinePath='api/_dabbir-whatsapp-state-machine.js';
 const activationPath='api/customer-activation-ui.js';
+const migrationPath='supabase/migrations/20260828044500_dabbir_whatsapp_live_message_path_v2.sql';
+const raceMigrationPath='supabase/migrations/20260828045000_dabbir_whatsapp_inbound_sender_race_hardening_v1.sql';
+const hardeningPath='supabase/migrations/20260828045200_dabbir_whatsapp_rpc_security_invoker_v1.sql';
 const status=fs.readFileSync(statusPath,'utf8');
 const machine=fs.readFileSync(machinePath,'utf8');
 const activation=fs.readFileSync(activationPath,'utf8');
+const migration=fs.readFileSync(migrationPath,'utf8');
+const raceMigration=fs.readFileSync(raceMigrationPath,'utf8');
+const hardening=fs.readFileSync(hardeningPath,'utf8');
 
-test('WhatsApp operational evidence is tenant-scoped and excludes simulation',()=>{
-  assert.match(status,/dabbir_conversations\?select=id/);
-  assert.match(status,/channel_type=eq\.whatsapp/);
-  assert.match(status,/demo_mode=eq\.false/);
-  assert.match(status,/dabbir_messages\?select=sender_type,simulated/);
-  assert.match(status,/simulated=eq\.false/);
-  assert.match(status,/dabbir_conversation_outcomes\?select=verified_external_result/);
-  assert.match(status,/verified_external_result=eq\.true/);
-  assert.match(status,/business_id=eq\.\$\{encodedBusinessId\}/);
+test('WhatsApp operational evidence is tenant-scoped, non-demo, provider-backed, and server-only',()=>{
+  assert.match(status,/serviceRpc/);
+  assert.doesNotMatch(status,/supabaseRpc/);
+  assert.match(status,/dabbir_whatsapp_operational_evidence/);
+  assert.match(status,/\{ p_business_id: businessId \}/);
+  assert.match(migration,/function public\.dabbir_whatsapp_operational_evidence\(p_business_id uuid\)/);
+  assert.match(migration,/c\.business_id=p_business_id and c\.channel_type='whatsapp' and c\.demo_mode=false/);
+  assert.match(migration,/e\.business_id=p_business_id and e\.direction='inbound' and e\.event_type='message' and e\.message_id is not null/);
+  assert.match(migration,/r\.business_id=p_business_id and r\.message_id is not null and r\.provider_message_id is not null/);
+  assert.match(migration,/r\.business_id=p_business_id and r\.provider_verified=true and r\.state in \('DELIVERED','READ'\)/);
+  assert.match(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) from public,anon,authenticated/i);
+  assert.match(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) to service_role/i);
+  assert.doesNotMatch(hardening,/dabbir_whatsapp_operational_evidence\(uuid\) to authenticated/i);
+});
+
+test('distinct inbound messages from one new sender serialize conversation ownership',()=>{
+  assert.match(raceMigration,/hashtextextended\(v_connection\.business_id::text \|\| ':wa-sender:' \|\| v_sender, 0\)/);
+  const senderLock=raceMigration.indexOf("':wa-sender:'");
+  const customerUpsert=raceMigration.indexOf('insert into public.dabbir_customers');
+  const conversationLookup=raceMigration.indexOf('select c.id into v_conversation_id');
+  assert.ok(senderLock>0&&senderLock<customerUpsert&&customerUpsert<conversationLookup);
+  assert.match(raceMigration,/on conflict \(business_id,channel_handle\) where channel_handle is not null/);
 });
 
 test('WhatsApp becomes operational only through the explicit evidence state machine',()=>{
@@ -37,6 +56,19 @@ test('WhatsApp becomes operational only through the explicit evidence state mach
   assert.match(machine,/operational: true/);
 });
 
+test('Meta verification failure remains fail closed',()=>{
+  const embeddedStart=status.indexOf('async function embeddedStatus');
+  const tenantStart=status.indexOf('async function tenantStatus',embeddedStart);
+  const embeddedBody=status.slice(embeddedStart,tenantStart);
+  const catchStart=embeddedBody.lastIndexOf('} catch (error) {');
+  const catchBody=embeddedBody.slice(catchStart);
+  assert.ok(catchStart>0,'embedded status catch path missing');
+  assert.match(catchBody,/connected: false/);
+  assert.match(catchBody,/outbound_configured: false/);
+  assert.match(catchBody,/meta_authorized: false/);
+  assert.doesNotMatch(catchBody,/connected: true/);
+});
+
 test('activation distinguishes Meta-linked from operational WhatsApp',()=>{
   assert.match(activation,/function whatsappLinked\(\)/);
   assert.match(activation,/function whatsappReady\(\)/);
@@ -52,7 +84,7 @@ test('activation distinguishes Meta-linked from operational WhatsApp',()=>{
 });
 
 test('operational truth files parse as Node modules',()=>{
-  for(const path of [statusPath,machinePath,activationPath]){
+  for(const path of [statusPath,machinePath,activationPath,'api/_whatsapp-live-core.js','api/dabbir-whatsapp-reply.js','api/dabbir-whatsapp-webhook.js']){
     const result=spawnSync(process.execPath,['--check',path],{encoding:'utf8'});
     assert.equal(result.status,0,`${path}: ${result.stderr||result.stdout}`);
   }
