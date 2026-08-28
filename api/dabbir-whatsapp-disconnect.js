@@ -9,12 +9,14 @@ import {
 } from './_whatsapp-embedded-core.js';
 
 export function verifiedDeletion(rows, businessId) {
-  return Array.isArray(rows)
+  return Boolean(
+    Array.isArray(rows)
     && rows.length === 1
     && rows[0]
     && typeof rows[0] === 'object'
     && !Array.isArray(rows[0])
-    && String(rows[0].business_id || '') === String(businessId);
+    && String(rows[0].business_id || '') === String(businessId)
+  );
 }
 
 export default async function handler(req, res) {
