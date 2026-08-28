@@ -110,10 +110,14 @@ test('subscription UI discloses StoreKit-derived period/offer and legal links wi
   assert.doesNotMatch(source, /7\s*(day|days|يوم|أيام)/i);
 });
 
-test('mobile CI permanently runs the static App Store preflight and watches its contract paths', async () => {
+test('mobile CI permanently runs the preflight and watches every App Store source contract path', async () => {
   const workflow = await read('.github/workflows/dabbir-mobile-ci.yml');
   assert.match(workflow, /scripts\/dabbir-app-store-preflight\.mjs/);
   assert.match(workflow, /test\/dabbir-app-store-preflight\.test\.mjs/);
   assert.match(workflow, /Run App Store static preflight/);
   assert.match(workflow, /node scripts\/dabbir-app-store-preflight\.mjs/);
+  for (const watched of ['privacy.html', 'terms.html', 'support.html', 'vercel.json']) {
+    const count = workflow.split(`- '${watched}'`).length - 1;
+    assert.equal(count, 2, `${watched} must trigger Mobile CI on PR and main push`);
+  }
 });
