@@ -106,6 +106,16 @@ test('Embedded completion exchanges authorization code server-side and never ret
   assert.doesNotMatch(endpoint, /access_token:\s*exchanged\.accessToken/);
 });
 
+test('Embedded completion binds Meta code exchange to the exact same-origin page redirect URI', async () => {
+  const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+  assert.match(endpoint, /function oauthRedirectUriFromRequest\(req\)/);
+  assert.match(endpoint, /header\('referer'\)/);
+  assert.match(endpoint, /url\.origin !== requestOrigin/);
+  assert.match(endpoint, /url\.searchParams\.set\('redirect_uri', redirectUri\)/);
+  assert.match(endpoint, /META_OAUTH_REDIRECT_URI_REQUIRED/);
+  assert.match(endpoint, /providerSubcode/);
+});
+
 test('WhatsApp connection storage is tenant-scoped and RLS protected', async () => {
   const migration = await read('supabase/migrations/20260826195230_dabbir_whatsapp_embedded_signup_v17.sql');
   assert.match(migration, /dabbir_whatsapp_connections/);
