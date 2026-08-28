@@ -1,5 +1,6 @@
 import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
+import { withServerReadTimeout } from './_bounded-server-read.js';
 import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
 import { serviceRpc, whatsappLiveServerCapability } from './_whatsapp-live-core.js';
 import {
@@ -215,8 +216,7 @@ async function tenantStatus(req, accessToken, businessId) {
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
   const accessToken = accessTokenFromRequest(req);
-  const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
-  if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
+  if (!accessToken) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
   const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
   if (businessId) {
@@ -227,11 +227,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // The authenticated DABBIR UI must never inherit a global/server WhatsApp
-  // identity. Platform-level credentials remain webhook/runtime infrastructure
-  // only; tenant display state always resolves from the tenant connection row.
+  // Without an explicit business context, resolve authenticated identity and
+  // memberships as one bounded prerequisite. A Supabase/Auth timeout must never
+  // be presented as AUTH_REQUIRED or as an empty tenant list.
   try {
-    const memberships = await getBusinessMemberships(accessToken);
+    const [user, memberships] = await withServerReadTimeout(signal => Promise.all([
+      getVerifiedUser(accessToken, { signal }),
+      getBusinessMemberships(accessToken, { signal }),
+    ]), { errorCode: 'WHATSAPP_AUTH_DATA_TIMEOUT' });
+    if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
     const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])
       .map(item => String(item?.business_id || '').trim())
       .filter(Boolean))];
