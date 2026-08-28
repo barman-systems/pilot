@@ -18,6 +18,6 @@ export default async function handler(req,res){
     if(!result?.url)throw Object.assign(new Error('CHECKOUT_URL_MISSING'),{code:502});
     return json(res,200,{ok:true,url:result.url,livemode:false});
   }catch(error){
-    const status=Number(error?.code||500);const safe=[400,401,403,409,413,429,503].includes(status)?status:502;console.error('dabbir_billing_checkout_failed',{status:safe,error:String(error?.message||'CHECKOUT_FAILED').slice(0,120)});return json(res,safe,{ok:false,error:String(error?.message||'CHECKOUT_FAILED').slice(0,120),livemode:false});
+    const status=Number(error?.code||error?.status||500);const safe=[400,401,403,409,413,429,503,504].includes(status)?status:502;console.error('dabbir_billing_checkout_failed',{status:safe,error:String(error?.safeCode||error?.message||'CHECKOUT_FAILED').slice(0,120)});return json(res,safe,{ok:false,error:String(error?.safeCode||error?.message||'CHECKOUT_FAILED').slice(0,120),livemode:false});
   }
 }
