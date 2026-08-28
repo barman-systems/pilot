@@ -55,8 +55,10 @@ export async function requireBillingOwner(req,businessIdValue,options={}){
 }
 
 async function parseResponse(response,fallback){
-  const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
-  if(!response.ok){const error=billingError(fallback,response.status===401?401:response.status===403?403:response.status===404?404:response.status===409?409:response.status===429?429:503);error.detail=data?.error||data?.code||data?.message||null;throw error}
+  const text=await response.text();let data=null;let parseFailed=false;
+  if(text){try{data=JSON.parse(text)}catch{parseFailed=true}}
+  if(!response.ok){const error=billingError(fallback,response.status===401?401:response.status===403?403:response.status===404?404:response.status===409?409:response.status===429?429:503);error.detail=parseFailed?null:data?.error||data?.code||data?.message||null;throw error}
+  if(parseFailed||data===null)throw billingError(`${fallback}_INVALID_RESPONSE`,502);
   return data;
 }
 
@@ -64,7 +66,8 @@ export async function getBillingAccount(accessToken,businessId,options={}){
   return withServerReadTimeout(async signal=>{
     const response=await supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal});
     const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');
-    return Array.isArray(rows)?rows[0]||null:null;
+    if(!Array.isArray(rows))throw billingError('BILLING_STATUS_INVALID_RESPONSE',502);
+    return rows[0]||null;
   },{label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS});
 }
 
