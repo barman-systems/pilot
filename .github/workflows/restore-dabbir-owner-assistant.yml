@@ -1,0 +1,157 @@
+name: Restore DABBIR owner assistant UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-dabbir-owner-assistant.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  restore-owner-assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout authoritative main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Patch visible owner assistant into DABBIR
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          def rep(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one anchor, found {count}')
+              text = text.replace(old, new, 1)
+
+          rep(
+              'grid-template-columns:repeat(5,1fr);bottom:0',
+              'grid-template-columns:repeat(6,1fr);bottom:0',
+              'mobile bottom nav columns',
+          )
+
+          rep(
+              '''    <button class="navBtn active" data-screen="dashboard"><span class="navIcon">⌂</span><span data-label="dashboard"></span></button>\n    <button class="navBtn" data-screen="conversations"><span class="navIcon">◉</span><span data-label="conversations"></span></button>''',
+              '''    <button class="navBtn active" data-screen="dashboard"><span class="navIcon">⌂</span><span data-label="dashboard"></span></button>\n    <button class="navBtn" data-screen="assistant"><span class="navIcon">✦</span><span data-label="assistant"></span></button>\n    <button class="navBtn" data-screen="conversations"><span class="navIcon">◉</span><span data-label="conversations"></span></button>''',
+              'desktop assistant nav',
+          )
+
+          rep(
+              '''  <div class="hero"><div><div class="eyebrow" id="todayEyebrow"></div><h1 id="dashTitle"></h1><p id="dashDesc"></p></div></div>''',
+              '''  <div class="hero"><div><div class="eyebrow" id="todayEyebrow"></div><h1 id="dashTitle"></h1><p id="dashDesc"></p></div><button class="primary" id="openAssistantBtn"></button></div>''',
+              'dashboard assistant entry',
+          )
+
+          rep(
+              '''\n<section class="screen" id="screen-conversations">''',
+              '''\n<section class="screen" id="screen-assistant">\n  <div class="hero"><div><div class="eyebrow" id="assistantEyebrow"></div><h1 id="assistantTitle"></h1><p id="assistantDesc"></p></div></div>\n  <section class="chatPanel" style="min-height:590px;max-width:900px;margin:auto">\n    <div class="chatHead"><div class="grow"><b id="assistantName"></b><div class="muted" id="assistantState"></div></div></div>\n    <div class="messages" id="assistantMessages"></div>\n    <div class="compose"><input id="assistantComposer" maxlength="2000" autocomplete="off"><button class="send" id="assistantSendBtn" type="button">↑</button></div>\n  </section>\n</section>\n\n<section class="screen" id="screen-conversations">''',
+              'assistant screen',
+          )
+
+          rep(
+              '''  <button data-screen="dashboard" class="active">⌂<br><span data-label="dashboard"></span></button>\n  <button data-screen="conversations">◉<br><span data-label="conversations"></span></button>''',
+              '''  <button data-screen="dashboard" class="active">⌂<br><span data-label="dashboard"></span></button>\n  <button data-screen="assistant">✦<br><span data-label="assistant"></span></button>\n  <button data-screen="conversations">◉<br><span data-label="conversations"></span></button>''',
+              'mobile assistant nav',
+          )
+
+          rep(
+              "dashboard:'اليوم',conversations:'المحادثات'",
+              "dashboard:'اليوم',assistant:'المساعد الذكي',conversations:'المحادثات'",
+              'arabic assistant nav label',
+          )
+
+          rep(
+              "setupProgressTitle:'جاهزية دبّر',setupProgressDesc:'استخدم ما يعمل الآن، وأكمل القنوات عندما تصبح جاهزة. لن يمنعك الإعداد غير المكتمل من الدخول إلى نشاطك.',setupAccount:'الحساب والنشاط جاهزان'",
+              "setupProgressTitle:'جاهزية دبّر',setupProgressDesc:'استخدم ما يعمل الآن، وأكمل القنوات عندما تصبح جاهزة. لن يمنعك الإعداد غير المكتمل من الدخول إلى نشاطك.',assistantEyebrow:'مساعد المالك',assistantTitle:'المساعد الذكي',assistantDesc:'اسأل دبّر عن نشاطك، ما يحتاج تدخلك، العملاء، المواعيد والمتابعات.',assistantName:'DABBIR AI',assistantReady:'جاهز لمساعدتك',assistantWelcome:'أنا مساعد دبّر الذكي. اسألني عن نشاطك أو ما يحتاج انتباهك الآن.',askAssistant:'اسأل دبّر',assistantPlaceholder:'اسأل عن نشاطك...',assistantError:'تعذر الحصول على رد من المساعد الآن.',setupAccount:'الحساب والنشاط جاهزان'",
+              'arabic assistant copy',
+          )
+
+          rep(
+              "dashboard:'Today',conversations:'Conversations'",
+              "dashboard:'Today',assistant:'AI assistant',conversations:'Conversations'",
+              'english assistant nav label',
+          )
+
+          rep(
+              "setupProgressTitle:'DABBIR readiness',setupProgressDesc:'Use what works now and connect channels when ready. Incomplete setup should not block your business workspace.',setupAccount:'Account and business ready'",
+              "setupProgressTitle:'DABBIR readiness',setupProgressDesc:'Use what works now and connect channels when ready. Incomplete setup should not block your business workspace.',assistantEyebrow:'Owner assistant',assistantTitle:'AI assistant',assistantDesc:'Ask DABBIR about your business, what needs you, customers, appointments and follow-ups.',assistantName:'DABBIR AI',assistantReady:'Ready to help',assistantWelcome:'I am your DABBIR AI assistant. Ask me about your business or what needs your attention now.',askAssistant:'Ask DABBIR',assistantPlaceholder:'Ask about your business...',assistantError:'The assistant could not return a response right now.',setupAccount:'Account and business ready'",
+              'english assistant copy',
+          )
+
+          rep(
+              "let lang=localStorage.getItem('dabbir_lang')||'ar',authMode='login',workspace=null,current='dashboard',selectedConversationId=null,translations=new Map(),translationMode=false;",
+              "let lang=localStorage.getItem('dabbir_lang')||'ar',authMode='login',workspace=null,current='dashboard',selectedConversationId=null,translations=new Map(),translationMode=false,ownerAssistantHistory=[];",
+              'assistant history state',
+          )
+
+          rep(
+              "setupProgressTitle:'setupProgressTitle',setupProgressDesc:'setupProgressDesc',convTitle:'convTitle'",
+              "setupProgressTitle:'setupProgressTitle',setupProgressDesc:'setupProgressDesc',assistantEyebrow:'assistantEyebrow',assistantTitle:'assistantTitle',assistantDesc:'assistantDesc',assistantName:'assistantName',openAssistantBtn:'askAssistant',convTitle:'convTitle'",
+              'assistant localization map',
+          )
+
+          rep(
+              "if($('#composer'))$('#composer').placeholder=t.typeMessage;if($('#webTruth'))$('#webTruth').textContent=t.webTruth;",
+              "if($('#composer'))$('#composer').placeholder=t.typeMessage;if($('#assistantComposer'))$('#assistantComposer').placeholder=t.assistantPlaceholder;if($('#webTruth'))$('#webTruth').textContent=t.webTruth;",
+              'assistant placeholder',
+          )
+
+          rep(
+              '''function customerName(customerId){return (workspace?.customers||[]).find(c=>c.id===customerId)?.display_name||T().customer}\nfunction renderDashboard(){''',
+              '''function customerName(customerId){return (workspace?.customers||[]).find(c=>c.id===customerId)?.display_name||T().customer}\nfunction renderOwnerAssistant(){const t=T(),box=$('#assistantMessages');if(!box)return;$('#assistantState').textContent=workspace?.ai?.configured?t.assistantReady:t.notOperational;const rows=ownerAssistantHistory.length?ownerAssistantHistory:[{role:'assistant',content:t.assistantWelcome}];box.innerHTML=rows.map(m=>`<div class="msgrow ${m.role==='assistant'?'ai':'customer'}"><div class="bubble"><div class="body">${esc(m.content)}</div></div></div>`).join('');box.scrollTop=box.scrollHeight}\nasync function sendOwnerAssistant(){const input=$('#assistantComposer'),btn=$('#assistantSendBtn'),text=input.value.trim();if(!text||!workspace?.business?.id||btn.disabled)return;const history=ownerAssistantHistory.slice(-8);ownerAssistantHistory.push({role:'user',content:text});input.value='';btn.disabled=true;renderOwnerAssistant();const {r,j}=await api('/api/owner-assistant',{method:'POST',body:JSON.stringify({business_id:workspace.business.id,message:text,history})});btn.disabled=false;ownerAssistantHistory.push({role:'assistant',content:r.ok&&j.ok&&j.reply?j.reply:T().assistantError});renderOwnerAssistant()}\n$('#assistantSendBtn').onclick=sendOwnerAssistant;$('#assistantComposer').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendOwnerAssistant()}});$('#openAssistantBtn').onclick=()=>showScreen('assistant');\nfunction renderDashboard(){''',
+              'assistant client runtime',
+          )
+
+          rep(
+              "renderDashboard();renderChats();renderAppointments();renderCustomers();renderTasks();renderAnalytics();renderIntegrations();renderNotices();renderSettings()",
+              "renderDashboard();renderOwnerAssistant();renderChats();renderAppointments();renderCustomers();renderTasks();renderAnalytics();renderIntegrations();renderNotices();renderSettings()",
+              'assistant rendering',
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify source and tests
+        shell: bash
+        run: |
+          node --check api/owner-assistant.js
+          npm run check:syntax
+          npm test
+          grep -q 'id="screen-assistant"' index.html
+          grep -q '/api/owner-assistant' index.html
+          grep -q 'data-screen="assistant"' index.html
+
+      - name: Publish verified patch branch
+        shell: bash
+        run: |
+          git config user.name 'DABBIR Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git checkout -B automation/restore-owner-assistant
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No patch produced.'
+            exit 1
+          fi
+          git commit -m 'feat(dabbir): restore visible owner AI assistant'
+          git push --force origin HEAD:automation/restore-owner-assistant
