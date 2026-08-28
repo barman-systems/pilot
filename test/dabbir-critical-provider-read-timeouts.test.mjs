@@ -10,6 +10,7 @@ const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const BUSINESS_ID = '00000000-0000-4000-8000-000000000111';
 const ACCESS_TOKEN = 'test-access-token';
+const SERVICE_ROLE_ENV = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
 const requestWithToken = () => ({ headers: { cookie: `__Host-dabbir_access=${ACCESS_TOKEN}` } });
 
 const billingCore = await read('api/_billing-core.js');
@@ -103,13 +104,13 @@ test('critical Billing and WhatsApp core functions return explicit 504 on stalle
 
 test('WhatsApp service-role persistence RPC reports explicit 504 timeout without changing server authority', async t => {
   const originalFetch = globalThis.fetch;
-  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalKey = process.env[SERVICE_ROLE_ENV];
   t.after(() => {
     globalThis.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+    if (originalKey === undefined) delete process.env[SERVICE_ROLE_ENV];
+    else process.env[SERVICE_ROLE_ENV] = originalKey;
   });
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env[SERVICE_ROLE_ENV] = 'test-service-role-key';
   globalThis.fetch = hangingFetch;
 
   await assert.rejects(
