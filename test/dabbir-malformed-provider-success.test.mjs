@@ -68,9 +68,15 @@ test('WhatsApp [] remains the only valid unlinked storage shape', async t => {
   });
 });
 
-test('WhatsApp connection read rejects multiple or wrong-tenant rows', async t => {
+test('WhatsApp connection read rejects null, multiple or wrong-tenant rows', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
+
+  globalThis.fetch = () => jsonResponse('[null]');
+  await assert.rejects(
+    loadBusinessConnection(ACCESS_TOKEN, BUSINESS_ID, { timeoutMs: 100 }),
+    error => error?.message === 'WHATSAPP_CONNECTION_RESPONSE_MALFORMED',
+  );
 
   globalThis.fetch = () => jsonResponse(JSON.stringify([
     { business_id: BUSINESS_ID, status: 'connected' },
@@ -90,11 +96,19 @@ test('WhatsApp connection read rejects multiple or wrong-tenant rows', async t =
   );
 });
 
-test('WhatsApp store requires one returned row proving the tenant write', async t => {
-  await withFetch(t, () => jsonResponse('[]'), async () => {
+test('WhatsApp store requires one valid matching returned row proving the tenant write', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  for (const payload of [
+    '[]',
+    '[null]',
+    JSON.stringify([{ business_id: OTHER_BUSINESS_ID, status: 'connected' }]),
+  ]) {
+    globalThis.fetch = () => jsonResponse(payload);
     await assert.rejects(
       upsertBusinessConnection(ACCESS_TOKEN, { business_id: BUSINESS_ID, status: 'connected' }, { timeoutMs: 100 }),
       error => error?.status === 502 && error?.message === 'WHATSAPP_CONNECTION_STORE_RESPONSE_MALFORMED',
     );
-  });
+  }
 });
