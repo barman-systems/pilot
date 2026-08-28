@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const shell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
+const baseApp = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ownerOperations = fs.readFileSync(new URL('../api/owner-operations-ui.js', import.meta.url), 'utf8');
 const services = fs.readFileSync(new URL('../api/service-operations-ui.js', import.meta.url), 'utf8');
 const router = fs.readFileSync(new URL('../api/dabbir-contextual-navigation-ui.js', import.meta.url), 'utf8');
@@ -21,6 +22,14 @@ test('store resolves the shared activity slot to Operations in the router', () =
   assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
   assert.match(router, /setActivitySlot\(node,'appointments'/);
   assert.match(router, /authority:'primary-context-router'/);
+});
+
+test('context router reads the base app lexical workspace instead of a nonexistent window property', () => {
+  assert.match(baseApp, /let lang=.*workspace=null/);
+  assert.match(router, /typeof workspace!=='undefined'\?workspace:null/);
+  assert.match(router, /workspaceState\(\)\?\.business\?\.business_type/);
+  assert.doesNotMatch(router, /window\.workspace\?\.business/);
+  assert.match(router, /workspace_authority:'lexical'/);
 });
 
 test('opening the mobile menu re-enforces the same activity-slot authority', () => {
