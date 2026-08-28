@@ -5,10 +5,12 @@ import { withServerReadTimeout } from '../api/_server-read-timeout.js';
 import { getBillingAccount, requireBillingOwner } from '../api/_billing-core.js';
 import { loadBusinessConnection, ownerContext } from '../api/_whatsapp-embedded-core.js';
 import { serviceRpc } from '../api/_whatsapp-live-core.js';
+import { readPersistedMessage } from '../api/dabbir-whatsapp-reply.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const BUSINESS_ID = '00000000-0000-4000-8000-000000000111';
+const MESSAGE_ID = '00000000-0000-4000-8000-000000000222';
 const ACCESS_TOKEN = 'test-access-token';
 const SERVICE_ROLE_ENV = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
 const requestWithToken = () => ({ headers: { cookie: `__Host-dabbir_access=${ACCESS_TOKEN}` } });
@@ -31,6 +33,15 @@ function hangingFetch(_url, options = {}) {
     };
     if (options.signal?.aborted) return rejectAbort();
     options.signal?.addEventListener('abort', rejectAbort, { once: true });
+  });
+}
+
+function headersThenStalledBody() {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    text: () => new Promise(() => {}),
+    json: () => new Promise(() => {}),
   });
 }
 
@@ -99,6 +110,31 @@ test('critical Billing and WhatsApp core functions return explicit 504 on stalle
   await assert.rejects(
     loadBusinessConnection(ACCESS_TOKEN, BUSINESS_ID, { timeoutMs: 5 }),
     error => assertTimeout(error, 'WHATSAPP_CONNECTION_READ_TIMEOUT'),
+  );
+});
+
+test('deadlines remain active after headers while Billing and WhatsApp bodies are still pending', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env[SERVICE_ROLE_ENV];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env[SERVICE_ROLE_ENV];
+    else process.env[SERVICE_ROLE_ENV] = originalKey;
+  });
+  process.env[SERVICE_ROLE_ENV] = 'test-service-role-key';
+  globalThis.fetch = headersThenStalledBody;
+
+  await assert.rejects(
+    getBillingAccount(ACCESS_TOKEN, BUSINESS_ID, { timeoutMs: 5 }),
+    error => assertTimeout(error, 'BILLING_STATUS_TIMEOUT'),
+  );
+  await assert.rejects(
+    serviceRpc('dabbir_whatsapp_operational_evidence', { p_business_id: BUSINESS_ID }, { timeoutMs: 5 }),
+    error => assertTimeout(error, 'WHATSAPP_SERVER_DATA_TIMEOUT'),
+  );
+  await assert.rejects(
+    readPersistedMessage(ACCESS_TOKEN, BUSINESS_ID, MESSAGE_ID, { timeoutMs: 5 }),
+    error => assertTimeout(error, 'WHATSAPP_REPLY_READBACK_TIMEOUT'),
   );
 });
 
@@ -173,21 +209,24 @@ test('WhatsApp owner, connection and service-role persistence reads are bounded'
   ]) assert.match(whatsappEmbedded, new RegExp(label));
   assert.match(whatsappLive, /WHATSAPP_SERVER_DATA_TIMEOUT/);
   assert.match(whatsappLive, /authorization: `Bearer \$\{key\}`/);
-  assert.match(whatsappLive, /signal => fetch/);
+  assert.match(whatsappLive, /async signal =>/);
+  assert.match(whatsappLive, /return readResponse\(response, 'WHATSAPP_SERVER_RPC_FAILED'\)/);
   assert.doesNotMatch(whatsappEmbedded, /getVerifiedUser\(accessToken\)\.catch\(\(\) => null\)/);
   assert.doesNotMatch(whatsappEmbedded, /getBusinessMemberships\(accessToken\)\.catch\(\(\) => \[\]\)/);
   assert.doesNotMatch(whatsappEmbedded, /if \(!response\.ok\) return null/);
 });
 
-test('WhatsApp status and provider-accepted readback preserve timeout truth and no-resend semantics', () => {
+test('WhatsApp status and provider-accepted replay preserve timeout truth and no-resend semantics', () => {
   assert.match(whatsappStatus, /WHATSAPP_STATUS_AUTH_READ/);
   assert.match(whatsappStatus, /WHATSAPP_STATUS_MEMBERSHIP_READ/);
   assert.match(whatsappStatus, /getVerifiedUser\(accessToken, \{ signal \}\)/);
   assert.match(whatsappStatus, /getBusinessMemberships\(accessToken, \{ signal \}\)/);
   assert.doesNotMatch(whatsappStatus, /getVerifiedUser\(accessToken\)\.catch\(\(\) => null\)/);
   assert.match(whatsappReply, /WHATSAPP_REPLY_READBACK_TIMEOUT/);
-  assert.match(whatsappReply, /supabaseRest\([\s\S]*\{ signal \}/);
-  assert.match(whatsappReply, /502, 503, 504/);
+  assert.match(whatsappReply, /async signal =>/);
+  assert.match(whatsappReply, /providerAccepted = true;[\s\S]*readPersistedMessage/);
+  assert.match(whatsappReply, /error\.providerAccepted = true;[\s\S]*error\.ambiguous = true/);
+  assert.match(whatsappReply, /retry_safe_with_same_key: true/);
   assert.match(whatsappReply, /AMBIGUOUS_NO_AUTOMATIC_RESEND/);
   assert.match(whatsappReply, /reserveOutboundReply/);
   assert.match(whatsappReply, /sendMetaText/);
