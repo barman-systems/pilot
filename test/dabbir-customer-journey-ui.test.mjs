@@ -29,7 +29,7 @@ test('owner gets direct actions and one-step onboarding', () => {
   assert.match(ui, /لن نطلب منك إعدادات طويلة الآن/);
 });
 
-test('advanced functions remain discoverable from More', () => {
+test('advanced functions remain discoverable from More without DOM polling', () => {
   assert.match(ui, /ensureSettingsHub/);
   assert.match(ui, /add\(t\.customers,'customers'\)/);
   assert.match(ui, /add\(t\.analytics,'analytics'\)/);
@@ -38,4 +38,5 @@ test('advanced functions remain discoverable from More', () => {
   assert.match(ui, /add\(t\.notifications,'notifications'\)/);
   assert.match(ui, /add\(t\.help,'help'\)/);
   assert.doesNotMatch(ui, /setInterval\(/);
+  assert.doesNotMatch(ui, /MutationObserver/);
 });
