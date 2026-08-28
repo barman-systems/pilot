@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
@@ -28,6 +28,18 @@
       "/api/dabbir-mobile-shell-v3",
       "/api/dabbir-logo-placement-ui"
     ]
+  },
+  "legacy_api": {
+    "retired_aliases_forbidden": [
+      "/api/pilot-runtime",
+      "/api/pilot-ai",
+      "/api/pilot-whatsapp-webhook"
+    ],
+    "canonical_replacements": {
+      "/api/pilot-runtime": "/api/dabbir-runtime",
+      "/api/pilot-ai": "/api/dabbir-ai",
+      "/api/pilot-whatsapp-webhook": "/api/dabbir-whatsapp-webhook"
+    }
   },
   "primary_navigation": {
     "desktop_and_mobile_destinations": [
