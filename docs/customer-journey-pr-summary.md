@@ -1,1 +1,0 @@
-Change set is isolated to UI presentation. No backend schema, API authorization, billing, WhatsApp authorization, or RLS behavior is modified. Existing screens stay intact; daily navigation is simplified through progressive disclosure.
