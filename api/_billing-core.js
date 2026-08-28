@@ -5,6 +5,7 @@ import {
   getVerifiedUser,
   supabaseRest,
 } from './_auth-core.js';
+import { withServerReadTimeout } from './_bounded-server-read.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_HOST_RE=/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::\d{1,5})?$/i;
@@ -35,10 +36,13 @@ export function checkoutIdempotencyKey(businessId,userId,now=Date.now()){
   return `dabbir_checkout_${crypto.createHash('sha256').update(`${businessId}:${userId}:${bucket}`).digest('hex').slice(0,32)}`;
 }
 
-export async function requireBillingOwner(req,businessIdValue){
+export async function requireBillingOwner(req,businessIdValue,options={}){
   const businessId=safeBusinessId(businessIdValue);if(!businessId)throw billingError('BUSINESS_ID_REQUIRED',400);
   const accessToken=accessTokenFromRequest(req);if(!accessToken)throw billingError('AUTH_REQUIRED',401);
-  const [user,memberships]=await Promise.all([getVerifiedUser(accessToken),getBusinessMemberships(accessToken).catch(()=>[])]);
+  const [user,memberships]=await withServerReadTimeout(signal=>Promise.all([
+    getVerifiedUser(accessToken,{signal}),
+    getBusinessMemberships(accessToken,{signal}),
+  ]),{timeoutMs:options.timeoutMs,errorCode:'BILLING_AUTH_DATA_TIMEOUT'});
   if(!user)throw billingError('AUTH_REQUIRED',401);
   const membership=memberships.find(row=>row.business_id===businessId)||null;
   if(!membership)throw billingError('BUSINESS_ACCESS_DENIED',403);
@@ -52,9 +56,11 @@ async function parseResponse(response,fallback){
   return data;
 }
 
-export async function getBillingAccount(accessToken,businessId){
-  const response=await supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken);
-  const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');return Array.isArray(rows)?rows[0]||null:null;
+export async function getBillingAccount(accessToken,businessId,options={}){
+  return withServerReadTimeout(async signal=>{
+    const response=await supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal});
+    const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');return Array.isArray(rows)?rows[0]||null:null;
+  },{timeoutMs:options.timeoutMs,errorCode:'BILLING_STATUS_TIMEOUT'});
 }
 
 export function publicBillingState(account){
