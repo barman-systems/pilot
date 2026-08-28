@@ -97,7 +97,7 @@ const script = String.raw`(()=>{
         if(msg) msg.textContent=localized('تعذر تحديد عامل المصادقة الآمن. أعد تسجيل الدخول.','A supported secure authentication factor is unavailable. Sign in again.');
         return;
       }
-      if(!/^\\d{6,8}$/.test(code)){
+      if(!/^\d{6,8}$/.test(code)){
         if(msg) msg.textContent=localized('أدخل رمز التحقق الصحيح.','Enter a valid verification code.');
         return;
       }
