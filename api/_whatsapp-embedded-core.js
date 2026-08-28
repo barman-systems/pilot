@@ -198,16 +198,34 @@ function connectionStorageError(message, response) {
   return Object.assign(new Error(message), { status, code: message, providerStatus });
 }
 
-async function readConnectionRows(response, failureCode, malformedCode) {
+async function readConnectionRows(
+  response,
+  failureCode,
+  malformedCode,
+  { expectedBusinessId = null, allowEmpty = false } = {},
+) {
   const text = await response.text();
   let payload = null;
-  try {
-    payload = text ? JSON.parse(text) : [];
-  } catch {
-    if (response.ok) throw connectionStorageError(malformedCode, response);
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      if (response.ok) throw connectionStorageError(malformedCode, response);
+    }
   }
   if (!response.ok) throw connectionStorageError(failureCode, response);
-  if (!Array.isArray(payload)) throw connectionStorageError(malformedCode, response);
+  if (!text || !Array.isArray(payload)) throw connectionStorageError(malformedCode, response);
+  if ((!allowEmpty && payload.length !== 1) || (allowEmpty && payload.length > 1)) {
+    throw connectionStorageError(malformedCode, response);
+  }
+  for (const item of payload) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw connectionStorageError(malformedCode, response);
+    }
+    if (expectedBusinessId != null && String(item.business_id || '') !== String(expectedBusinessId)) {
+      throw connectionStorageError(malformedCode, response);
+    }
+  }
   return payload;
 }
 
@@ -230,9 +248,9 @@ export async function rotateStoredConnectionEncryption(accessToken, row, config,
       response,
       'INTEGRATION_KEY_ROTATION_STORE_FAILED',
       'INTEGRATION_KEY_ROTATION_RESPONSE_MALFORMED',
+      { expectedBusinessId: row.business_id },
     );
-    const updated = payload[0] || { ...row, ...sealed };
-    return { rotated: true, row: updated };
+    return { rotated: true, row: payload[0] };
   }, {
     label: 'WHATSAPP_CONNECTION_ROTATION_WRITE',
     errorCode: 'WHATSAPP_CONNECTION_STORE_TIMEOUT',
@@ -340,6 +358,7 @@ export async function loadBusinessConnection(accessToken, businessId, options = 
       response,
       'WHATSAPP_CONNECTION_READ_FAILED',
       'WHATSAPP_CONNECTION_RESPONSE_MALFORMED',
+      { expectedBusinessId: businessId, allowEmpty: true },
     );
     return rows[0] || null;
   }, {
@@ -368,8 +387,9 @@ export async function upsertBusinessConnection(accessToken, row, options = {}) {
       response,
       'WHATSAPP_CONNECTION_STORE_FAILED',
       'WHATSAPP_CONNECTION_STORE_RESPONSE_MALFORMED',
+      { expectedBusinessId: row.business_id },
     );
-    return payload[0] || null;
+    return payload[0];
   }, {
     label: 'WHATSAPP_CONNECTION_STORE',
     errorCode: 'WHATSAPP_CONNECTION_STORE_TIMEOUT',
@@ -388,6 +408,7 @@ export async function removeBusinessConnection(accessToken, businessId, options 
       response,
       'WHATSAPP_CONNECTION_DELETE_FAILED',
       'WHATSAPP_CONNECTION_DELETE_RESPONSE_MALFORMED',
+      { expectedBusinessId: businessId, allowEmpty: true },
     );
   }, {
     label: 'WHATSAPP_CONNECTION_DELETE',
