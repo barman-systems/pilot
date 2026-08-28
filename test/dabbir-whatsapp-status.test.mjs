@@ -74,6 +74,17 @@ test('authenticated WhatsApp status fails closed instead of exposing legacy glob
   assert.doesNotMatch(statusApi, /source:\s*['"]legacy_server_config['"]/);
 });
 
+test('stored connection verification failure is never reported as connected or outbound-ready', async () => {
+  const statusApi = await read('api/dabbir-whatsapp-status.js');
+  const failedVerificationBranch = statusApi.match(/catch \(error\) \{[\s\S]*?verificationFailed:\s*true[\s\S]*?return \{[\s\S]*?checked_at:[\s\S]*?\n\s*\};\n\s*\}/)?.[0] || '';
+  assert.ok(failedVerificationBranch, 'verification-failure response branch must be present');
+  assert.match(failedVerificationBranch, /connected:\s*false/);
+  assert.match(failedVerificationBranch, /outbound_configured:\s*false/);
+  assert.match(failedVerificationBranch, /meta_authorized:\s*false/);
+  assert.doesNotMatch(failedVerificationBranch, /connected:\s*true/);
+  assert.doesNotMatch(failedVerificationBranch, /outbound_configured:\s*true/);
+});
+
 test('WhatsApp UI reads live status instead of trusting the stale static red card', async () => {
   const brandUi = await read('api/brand-ui.js');
   assert.match(brandUi, /\/api\/dabbir-whatsapp-status/);
