@@ -41,6 +41,7 @@ test('owner copilot value proof counts only verified autonomous successful outco
   assert.match(apiSource,/estimated_manual_seconds/);
   assert.match(apiSource,/estimated_manual_minutes_saved/);
   assert.match(apiSource,/available:false,verified_autonomous_actions:null/);
+  assert.match(apiSource,/estimates\.length\?Math\.round\(seconds\/60\):null/);
 });
 
 test('owner copilot grounds AI on exact tenant counts and provides deterministic fallback',()=>{
@@ -49,9 +50,21 @@ test('owner copilot grounds AI on exact tenant counts and provides deterministic
   assert.match(apiSource,/DETERMINISTIC_VERIFIED_FALLBACK/);
   assert.match(apiSource,/OWNER OPERATIONS SNAPSHOT — VERIFIED TENANT DATA ONLY/);
   assert.match(apiSource,/Never claim you executed, sent, changed, booked, paid, cancelled, or contacted anyone/);
+  assert.match(apiSource,/simulated=eq\.false/);
 });
 
-test('owner copilot UI gives natural-language owner options and verified value proof',()=>{
+test('owner copilot recommends only safe in-app next screens',()=>{
+  assert.match(apiSource,/function recommendScreen/);
+  assert.match(apiSource,/return 'tasks'/);
+  assert.match(apiSource,/return 'appointments'/);
+  assert.match(apiSource,/return 'operations'/);
+  assert.match(apiSource,/return 'integrations'/);
+  assert.match(apiSource,/return 'settings'/);
+  assert.match(apiSource,/return 'conversations'/);
+  assert.match(apiSource,/recommended_screen:recommendedScreen/);
+});
+
+test('owner copilot UI gives natural-language options, value proof and accessible action navigation',()=>{
   assert.match(uiSource,/اسأل دَبِّر عن عملك/);
   assert.match(uiSource,/ما الذي يحتاجني اليوم؟/);
   assert.match(uiSource,/من يحتاج متابعة؟/);
@@ -59,6 +72,9 @@ test('owner copilot UI gives natural-language owner options and verified value p
   assert.match(uiSource,/estimated_manual_minutes_saved/);
   assert.match(uiSource,/VERIFIED_EXACT_COUNTS/);
   assert.match(uiSource,/\/api\/dabbir-approved-icon/);
+  assert.match(uiSource,/role=\\"status\\" aria-live=\\"polite\\"/);
+  assert.match(uiSource,/recommended_screen/);
+  assert.match(uiSource,/prefers-reduced-motion/);
   assert.doesNotMatch(uiSource,/setInterval\s*\(/);
 });
 
