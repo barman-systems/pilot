@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
@@ -7,7 +7,8 @@
     "primary_navigation_context_router": "api/dabbir-contextual-navigation-ui.js",
     "service_discovery_under_more": "api/dabbir-contextual-navigation-ui.js",
     "store_navigation_adaptation": "api/dabbir-contextual-navigation-ui.js",
-    "auth_session_gate": "api/auth-session-stability-ui.js",
+    "auth_gate_visibility": "index.html#showGate",
+    "auth_session_observer": "api/auth-session-stability-ui.js",
     "auth_session_state_machine": "api/_dabbir-auth-session-state-machine.js",
     "release_state_machine": "scripts/dabbir-release-state-machine.mjs",
     "release_readiness_gate": "scripts/dabbir-readiness-gate.mjs",
@@ -20,7 +21,7 @@
   "shell": {
     "maximum_injected_api_modules": 25,
     "require_unique_modules": true,
-    "final_ui_authority": "/api/auth-session-stability-ui",
+    "last_loaded_ui_observer": "/api/auth-session-stability-ui",
     "retired_modules_forbidden": [
       "/api/activity-mobile-polish-ui",
       "/api/dabbir-ui-refinement",
@@ -51,6 +52,7 @@
     "unverified_metrics_may_fall_back_to_bounded_lists": false,
     "workspace_ready_requires_verified_session": true,
     "invalid_auth_transition_may_open_workspace": false,
+    "presentation_observer_may_veto_verified_gate": false,
     "release_ready_requires_exact_tested_sha": true,
     "release_ready_requires_exact_ready_deployment": true,
     "release_ready_requires_real_production_journey": true
