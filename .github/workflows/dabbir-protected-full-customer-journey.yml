@@ -1,0 +1,176 @@
+name: DABBIR Protected Full Customer Journey
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-protected-full-journey-preload.mjs'
+      - 'test/dabbir-protected-journey-access.test.mjs'
+      - 'test/support/dabbir-protected-journey-access.mjs'
+      - '.github/workflows/dabbir-protected-full-customer-journey.yml'
+      - 'supabase/migrations/*dabbir*'
+      - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'db/dabbir*.sql'
+      - 'api/**'
+      - 'index.html'
+      - 'team.html'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/dabbir-protected-full-journey-preload.mjs'
+      - 'test/dabbir-protected-journey-access.test.mjs'
+      - 'test/support/dabbir-protected-journey-access.mjs'
+      - '.github/workflows/dabbir-protected-full-customer-journey.yml'
+      - 'supabase/migrations/*dabbir*'
+      - 'supabase/functions/barman-qa-suite-runner/**'
+      - 'db/dabbir*.sql'
+      - 'api/**'
+      - 'index.html'
+      - 'team.html'
+  schedule:
+    - cron: '41 2 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dabbir-protected-full-customer-journey
+  cancel-in-progress: false
+
+jobs:
+  protected-full-customer-journey:
+    name: Protected production owner + employee + customer + AI journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      PRODUCTION_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      JOURNEY_REPORT_PATH: dabbir-protected-full-customer-journey-report.json
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      EXPECTED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Require protected Production automation access
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'VERCEL_AUTOMATION_BYPASS_SECRET_REQUIRED'
+            exit 2
+          fi
+          echo 'PROTECTED_AUTOMATION_ACCESS_READY'
+
+      - name: Lock exact Production release before journey
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=''
+          sha=''
+          deployment=''
+          for attempt in $(seq 1 36); do
+            body="$(curl --silent --show-error \
+              -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+              -H 'x-vercel-set-bypass-cookie: true' \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
+            deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
+            environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
+            ok="$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || true)"
+            if [ "$ok" = 'true' ] && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] && { [ -z "$environment" ] || [ "$environment" = 'production' ]; }; then
+              break
+            fi
+            sha=''
+            sleep 5
+          done
+          if [ -z "$sha" ]; then
+            echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED: ${body:0:500}"
+            exit 3
+          fi
+          if [ -n "${EXPECTED_BASE_SHA:-}" ] && [ "$sha" != "$EXPECTED_BASE_SHA" ]; then
+            echo "PRODUCTION_SHA_DOES_NOT_MATCH_PR_BASE expected=${EXPECTED_BASE_SHA} observed=${sha}"
+            exit 4
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "LOCKED_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
+      - name: Install WebKit full-journey runner
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps webkit
+
+      - name: Run full customer journey through protected Production
+        run: node --import ./test/dabbir-protected-full-journey-preload.mjs test/ai-full-customer-journey-v2.mjs
+
+      - name: Require a real full-journey PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$JOURNEY_REPORT_PATH"
+          jq -e '.verdict == "PASS" and .required_failures == 0 and (.steps | length) > 10' "$JOURNEY_REPORT_PATH" >/dev/null
+          echo "FULL_JOURNEY_PASS steps=$(jq -r '.steps | length' "$JOURNEY_REPORT_PATH")"
+
+      - name: Prove Production release did not move during journey
+        id: after
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl --fail-with-body --silent --show-error \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            -H 'x-vercel-set-bypass-cookie: true' \
+            -H 'accept: application/json' \
+            "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
+          sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
+          deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty')"
+          test "$sha" = "${{ steps.before.outputs.sha }}"
+          if [ -n "${{ steps.before.outputs.deployment }}" ] && [ -n "$deployment" ]; then
+            test "$deployment" = "${{ steps.before.outputs.deployment }}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+          echo "STABLE_PRODUCTION_SHA=$sha deployment=${deployment:-UNAVAILABLE}"
+
+      - name: Publish protected full-journey summary
+        if: always()
+        shell: bash
+        run: |
+          echo '## DABBIR Protected Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA before:** ${{ steps.before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA after:** ${{ steps.after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Deployment:** ${{ steps.before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$JOURNEY_REPORT_PATH" ]; then
+            echo "**Verdict:** $(jq -r '.verdict' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' "$JOURNEY_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Verdict:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload protected full-journey evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-protected-full-customer-journey-evidence
+          path: |
+            dabbir-protected-full-customer-journey-report.json
+            dabbir-ai-customer-journey-screenshot.png
+          if-no-files-found: warn
+          retention-days: 14
