@@ -1,0 +1,42 @@
+name: DABBIR Lock Sync
+
+on:
+  push:
+    branches:
+      - feat/dabbir-ios-app-store-foundation-20260828
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/dabbir-lock-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync-root-lock:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/dabbir-ios-app-store-foundation-20260828
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Regenerate exact root lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile only when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock.json already synchronized'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'DABBIR build: synchronize Apple server library lockfile'
+          git push origin HEAD:feat/dabbir-ios-app-store-foundation-20260828
