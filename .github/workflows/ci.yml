@@ -20,6 +20,10 @@ jobs:
           package-manager-cache: false
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: npm run check:syntax
+      - name: Audit production dependencies
+        run: npm run audit:prod
       - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
