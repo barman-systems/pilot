@@ -33,6 +33,8 @@ let productId = null;
 let orderId = null;
 let browser = null;
 let browserContext = null;
+let mfaFactorId = null;
+let mfaSecret = null;
 
 function redact(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
@@ -260,6 +262,7 @@ async function verifyTotp(session, factorId, secret) {
 }
 
 async function browserJourney() {
+  assert(mfaSecret, 'BROWSER_MFA_SECRET_REQUIRED');
   const { webkit } = await import('playwright');
   browser = await webkit.launch({ headless: true });
   browserContext = await browser.newContext({
@@ -280,14 +283,23 @@ async function browserJourney() {
   await page.locator('#authEmail').fill(owner.email);
   await page.locator('#authPassword').fill(owner.password);
   await page.locator('#authSubmit').click();
+
+  await page.locator('#mfaContinuation:not(.hidden)').waitFor({ state: 'visible', timeout: 20_000 });
+  assert(await page.locator('body').getAttribute('data-dabbir-auth-stage') === 'mfa_required', 'BROWSER_MFA_STAGE_NOT_REQUIRED');
+  const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+  if (secondsRemaining <= 4) await sleep((secondsRemaining + 1) * 1000);
+  await page.locator('#mfaCode').fill(totp(mfaSecret));
+  await page.locator('#mfaSubmit').click();
+
   await page.locator('#appShell:not(.hidden)').waitFor({ state: 'visible', timeout: 25_000 });
+  await page.waitForFunction(() => document.body.dataset.dabbirAuthStage === 'workspace_ready', null, { timeout: 10_000 });
   // The unauthenticated bootstrap intentionally receives one 401 to reveal the login gate.
   // From this point onward, every page/console error is unexpected and remains fatal.
   pageErrors.length = 0;
   consoleErrors.length = 0;
   assert((await page.locator('#workspaceName').textContent())?.includes(RUN_LABEL), 'BROWSER_WORKSPACE_MISMATCH');
 
-  const logo = page.locator('.brand .logo').first();
+  const logo = page.locator('#appShell:not(.hidden) .brand .logo').first();
   await logo.waitFor({ state: 'visible', timeout: 10_000 });
   assert(String(await logo.evaluate(el => getComputedStyle(el).backgroundImage)).includes('dabbir-approved-icon'), 'BROWSER_APPROVED_LOGO_MISSING');
 
@@ -309,7 +321,7 @@ async function browserJourney() {
   report.artifacts.screenshot = 'dabbir-ai-customer-journey-screenshot.png';
   assert(pageErrors.length === 0, `BROWSER_PAGE_ERRORS:${pageErrors.join(' | ')}`);
   assert(consoleErrors.length === 0, `BROWSER_CONSOLE_ERRORS:${consoleErrors.slice(0, 5).join(' | ')}`);
-  return { detail: 'WebKit iPhone-size journey rendered owner workspace, conversation, product, and approved DABBIR identity.' };
+  return { detail: 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.' };
 }
 
 async function runJourney() {
@@ -368,8 +380,6 @@ async function runJourney() {
   });
   if (!business) throw new Error('FATAL_BUSINESS_CREATE_FAILED');
 
-  let mfaFactorId = null;
-  let mfaSecret = null;
   const enrolled = await step('07_owner_enrolls_totp_mfa', async () => {
     const result = await waitForMfaEnrollment(ownerSession);
     assert(result?.ok && result.json?.ok, `MFA_ENROLL_FAILED_${result?.status}:${small(result?.text)}`);
