@@ -116,7 +116,7 @@ jobs:
           bridge_status="$(curl --silent --show-error \
             --output "$PROTECTED_QA_BRIDGE_REPORT_PATH" \
             --write-out '%{http_code}' \
-            -X POST 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-protected-browser-qa' \
+            -X POST 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-browser-runner' \
             -H "Authorization: Bearer ${oidc_token}" \
             -H 'Content-Type: application/json' \
             --data '{"action":"dabbir_protected_browser_smoke"}')"
