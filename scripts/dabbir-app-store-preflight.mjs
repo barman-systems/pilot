@@ -37,7 +37,21 @@ function isProtectedPrelaunchHost(url) {
   return /-3619s-projects\.vercel\.app$/i.test(url.hostname) || /-nd56cm4j5v-/i.test(url.hostname);
 }
 
+function routeDestination(vercelConfig, source) {
+  const route = (vercelConfig.routes || []).find(item => item?.src === source);
+  return route?.dest || null;
+}
+
+function legalPageContract(html, key) {
+  return /<html\s+lang=["']ar["']\s+dir=["']rtl["']/i.test(html)
+    && /lang=["']en["']/i.test(html)
+    && /DABBIR \| دبّر/.test(html)
+    && !/buy on web|subscribe on web|Stripe checkout|payment link/i.test(html)
+    && (key !== 'privacy' || /NSPrivacyTracking\s*=\s*false/i.test(html));
+}
+
 const appConfig = read('mobile/app.config.ts');
+const easConfig = JSON.parse(read('mobile/eas.json'));
 const app = read('mobile/App.tsx');
 const subscription = read('mobile/src/SubscriptionCard.tsx');
 const mobileApi = read('mobile/src/api.ts');
@@ -47,6 +61,12 @@ const appleVerify = read('api/mobile/iap/verify.js');
 const appleNotifications = read('api/apple/app-store-notifications.js');
 const accountDelete = read('api/mobile/account-delete.js');
 const entitlementMigration = read('supabase/migrations/20260828091500_dabbir_apple_entitlements_v1.sql');
+const vercelConfig = JSON.parse(read('vercel.json'));
+const publicPages = {
+  privacy: read('privacy.html'),
+  terms: read('terms.html'),
+  support: read('support.html'),
+};
 
 requireStatic(/name:\s*['"]DABBIR \| دبّر['"]/.test(appConfig), 'APP_NAME_LOCKED', 'Native app name is DABBIR | دبّر.');
 requireStatic(/supportsTablet:\s*false/.test(appConfig), 'IPHONE_ONLY', 'iPad distribution is disabled for v1.');
@@ -70,6 +90,26 @@ requireStatic(/introductoryOffer|introOffer/.test(subscription) && /free-trial/.
 requireStatic(/EXPO_PUBLIC_DABBIR_PRIVACY_URL/.test(subscription) && /EXPO_PUBLIC_DABBIR_TERMS_URL/.test(subscription), 'SUBSCRIPTION_LEGAL_LINKS', 'Subscription screen requires privacy and Terms links.');
 requireStatic(!/stripe|checkout|payment[_ -]?link|buy on web|subscribe on web/i.test(subscription), 'NO_EXTERNAL_PAYMENT_CTA', 'The iOS subscription component contains no Stripe/external purchase CTA.');
 requireStatic(mobileApi.includes('DABBIR_API_BASE_URL_NOT_CONFIGURED') && mobileApi.includes('configuredBase') && mobileApi.includes('https:'), 'HTTPS_API_FAIL_CLOSED', 'Native API requires an explicit HTTPS base URL.');
+requireStatic(
+  easConfig?.cli?.appVersionSource === 'remote'
+    && easConfig?.build?.production?.autoIncrement === true
+    && easConfig?.build?.production?.environment === 'production'
+    && Boolean(easConfig?.build?.production?.ios),
+  'EAS_PRODUCTION_PROFILE',
+  'EAS production profile uses remote app versions, auto-increments builds, and targets the production environment.',
+);
+requireStatic(
+  Object.entries(publicPages).every(([key, html]) => legalPageContract(html, key)),
+  'APP_STORE_PUBLIC_PAGE_SOURCE',
+  'Privacy, Terms and Support source pages are bilingual DABBIR pages without an external purchase CTA.',
+);
+requireStatic(
+  routeDestination(vercelConfig, '^/privacy/?$') === '/privacy.html'
+    && routeDestination(vercelConfig, '^/terms/?$') === '/terms.html'
+    && routeDestination(vercelConfig, '^/support/?$') === '/support.html',
+  'APP_STORE_PUBLIC_PAGE_ROUTES',
+  'Vercel routes expose stable /privacy, /terms and /support paths.',
+);
 
 const bundleId = String(process.env.DABBIR_IOS_BUNDLE_ID || '').trim();
 const appAppleId = String(process.env.DABBIR_IOS_APP_APPLE_ID || '').trim();
@@ -88,9 +128,9 @@ requireRelease(/^\d{5,20}$/.test(appAppleId), 'APP_STORE_APPLE_ID', 'App Store n
 requireRelease(serverProductId.length > 2 && clientProductId === serverProductId, 'IAP_PRODUCT_MATCH', 'Client and server must use the exact same App Store subscription product ID.');
 requireRelease(iapEnabled === 'true', 'IAP_ENABLED_RELEASE', 'Production candidate must enable Apple IAP.');
 requireRelease(Boolean(apiUrl) && !isProtectedPrelaunchHost(apiUrl), 'PUBLIC_PRODUCTION_API', 'Production iOS API base must be public HTTPS and not a protected/prelaunch Vercel host.');
-requireRelease(Boolean(privacyUrl) && !isProtectedPrelaunchHost(privacyUrl), 'PUBLIC_PRIVACY_URL', 'Privacy Policy URL must be public HTTPS.');
-requireRelease(Boolean(termsUrl) && !isProtectedPrelaunchHost(termsUrl), 'PUBLIC_TERMS_URL', 'Terms of Use URL must be public HTTPS.');
-requireRelease(Boolean(supportUrl) && !isProtectedPrelaunchHost(supportUrl), 'PUBLIC_SUPPORT_URL', 'Support URL must be public HTTPS.');
+requireRelease(Boolean(privacyUrl) && !isProtectedPrelaunchHost(privacyUrl) && /^\/privacy\/?$/i.test(privacyUrl.pathname), 'PUBLIC_PRIVACY_URL', 'Privacy Policy URL must be the public HTTPS /privacy route.');
+requireRelease(Boolean(termsUrl) && !isProtectedPrelaunchHost(termsUrl) && /^\/terms\/?$/i.test(termsUrl.pathname), 'PUBLIC_TERMS_URL', 'Terms of Use URL must be the public HTTPS /terms route.');
+requireRelease(Boolean(supportUrl) && !isProtectedPrelaunchHost(supportUrl) && /^\/support\/?$/i.test(supportUrl.pathname), 'PUBLIC_SUPPORT_URL', 'Support URL must be the public HTTPS /support route.');
 requireRelease(rootCerts.split(',').map(v => v.trim()).filter(Boolean).length >= 2, 'APPLE_ROOT_CERTIFICATES', 'Apple root certificates must be configured server-side.');
 requireRelease(Boolean(serviceRole) && !serviceRole.startsWith('sb_publishable_'), 'IAP_SERVER_STORAGE_CREDENTIAL', 'Server-side entitlement persistence credential must exist.');
 
