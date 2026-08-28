@@ -2,6 +2,7 @@ import { singleQueryValue } from './_request-query.js';
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
+import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
 
 export const config = {
   api: {
@@ -88,12 +89,32 @@ export function extractWhatsAppEvents(payload = {}) {
       const value = change.value || {};
       const phoneNumberId = value.metadata?.phone_number_id || null;
       const displayPhoneNumber = value.metadata?.display_phone_number || null;
+      const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
+        .map(contact => [String(contact?.wa_id || ''), String(contact?.profile?.name || '').slice(0, 120)]));
       for (const message of value.messages || []) {
         const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
-        events.push({ type: 'message', messageId: message.id || null, from: message.from || null, timestamp: message.timestamp || null, messageType: message.type || null, text: String(text || '').slice(0, 4000), phoneNumberId, displayPhoneNumber });
+        events.push({
+          type: 'message',
+          messageId: message.id || null,
+          from: message.from || null,
+          contactName: contactNames.get(String(message.from || '')) || null,
+          timestamp: message.timestamp || null,
+          messageType: message.type || null,
+          text: String(text || '').slice(0, 4000),
+          phoneNumberId,
+          displayPhoneNumber,
+        });
       }
       for (const status of value.statuses || []) {
-        events.push({ type: 'status', messageId: status.id || null, recipientId: status.recipient_id || null, status: status.status || null, timestamp: status.timestamp || null, phoneNumberId, displayPhoneNumber });
+        events.push({
+          type: 'status',
+          messageId: status.id || null,
+          recipientId: status.recipient_id || null,
+          status: status.status || null,
+          timestamp: status.timestamp || null,
+          phoneNumberId,
+          displayPhoneNumber,
+        });
       }
     }
   }
@@ -111,6 +132,10 @@ export function classifyDABBIREvent(event, project = 'generic') {
     return { classification, workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
   }
   return { classification: 'GENERAL_INQUIRY', workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK'] };
+}
+
+function unlinkedTenant(error) {
+  return String(error?.code || error?.message || '').includes('WHATSAPP_TENANT_CONNECTION_NOT_FOUND');
 }
 
 export default async function handler(req, res) {
@@ -155,19 +180,78 @@ export default async function handler(req, res) {
   const messageCount = routed.filter(e => e.type === 'message').length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
+  let persistedMessages = 0;
+  let duplicateMessages = 0;
+  let matchedStatuses = 0;
+  let providerVerifiedStatuses = 0;
+  let unlinkedMessages = 0;
+
+  try {
+    for (const event of routed) {
+      if (event.type === 'message') {
+        try {
+          const result = await persistSignedInbound(event);
+          if (result.persisted) persistedMessages += 1;
+          if (result.duplicate) duplicateMessages += 1;
+        } catch (error) {
+          if (unlinkedTenant(error)) {
+            unlinkedMessages += 1;
+            continue;
+          }
+          throw error;
+        }
+      } else if (event.type === 'status') {
+        const result = await applySignedStatus(event);
+        if (result.matched) matchedStatuses += 1;
+        if (result.providerVerified) providerVerifiedStatuses += 1;
+      }
+    }
+  } catch (error) {
+    const missingService = String(error?.code || error?.message || '').includes('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
+    const status = missingService ? 503 : Number(error?.status || 502);
+    logEvent('error', {
+      correlation_id: cid,
+      component: 'whatsapp_webhook',
+      operation: 'signed_event_persistence',
+      outcome: 'FAILED',
+      failure_class: missingService ? 'CONFIGURATION' : 'DATABASE',
+      event_count: routed.length,
+      message_count: messageCount,
+      status_count: statusCount,
+    });
+    return json(res, status, {
+      ok: false,
+      service: 'dabbir-whatsapp-webhook',
+      state: missingService ? 'SERVER_PERSISTENCE_NOT_CONFIGURED' : 'SIGNED_EVENT_PERSISTENCE_FAILED',
+      signature_verified: true,
+      persisted: false,
+      outbound_messages_sent: false,
+      retryable: true,
+      correlation_id: cid,
+    }, cid);
+  }
+
+  const persistenceVerified = messageCount === 0 || persistedMessages === messageCount - unlinkedMessages;
+  const state = unlinkedMessages > 0 && persistedMessages === 0
+    ? 'TENANT_NOT_LINKED'
+    : (persistedMessages > 0 || matchedStatuses > 0 ? 'LIVE_EVENT_PERSISTED' : 'SIGNED_EVENT_NO_ACTION');
 
   // Never log or echo message text, sender/recipient IDs, phone numbers, message IDs, or raw payloads.
   logEvent('info', {
     correlation_id: cid,
     component: 'whatsapp_webhook',
-    operation: 'signed_inbound_normalization',
-    outcome: 'PARTIAL',
+    operation: 'signed_event_persistence',
+    outcome: persistenceVerified ? 'VERIFIED_SUCCESS' : 'PARTIAL',
     project,
     event_count: routed.length,
     message_count: messageCount,
     status_count: statusCount,
     classifications,
-    persisted: false,
+    persisted_messages: persistedMessages,
+    duplicate_messages: duplicateMessages,
+    matched_statuses: matchedStatuses,
+    provider_verified_statuses: providerVerifiedStatuses,
+    unlinked_messages: unlinkedMessages,
     outbound_messages_sent: false,
   });
 
@@ -175,13 +259,18 @@ export default async function handler(req, res) {
     ok: true,
     service: 'dabbir-whatsapp-webhook',
     project,
-    state: 'CONFIGURED_NOT_OPERATIONAL',
+    state,
     signature_verified: true,
     event_count: routed.length,
     message_count: messageCount,
     status_count: statusCount,
     classifications,
-    persisted: false,
+    persisted: persistedMessages > 0,
+    persistence_verified: persistenceVerified,
+    duplicate_messages: duplicateMessages,
+    matched_statuses: matchedStatuses,
+    provider_verified_statuses: providerVerifiedStatuses,
+    tenant_unlinked_events: unlinkedMessages,
     outbound_messages_sent: false,
     external_side_effects: false,
     correlation_id: cid,
