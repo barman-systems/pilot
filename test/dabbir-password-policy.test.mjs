@@ -7,10 +7,12 @@ const root = new URL('../', import.meta.url);
 const read = async path => readFile(new URL(path, root), 'utf8');
 
 const signup = await read('api/auth/signup.js');
-const reset = await read('api/auth/reset-password.js');
+const resetRoute = await read('api/auth/reset-password.js');
+const reset = await read('api/auth/reset-password-secure.js');
 
 test('DABBIR uses one password policy for signup and password recovery', () => {
   assert.match(signup, /_password-policy\.js/);
+  assert.match(resetRoute, /reset-password-secure\.js/);
   assert.match(reset, /_password-policy\.js/);
   assert.match(signup, /isStrongPassword\(password, \{ email \}\)/);
   assert.match(reset, /isStrongPassword\(password\)/);
