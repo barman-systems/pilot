@@ -1,0 +1,109 @@
+name: DABBIR Protected QA Customer Journey
+
+on:
+  workflow_dispatch:
+    inputs:
+      qa_origin:
+        description: 'Protected Vercel QA/Preview origin, e.g. https://deployment.vercel.app'
+        required: true
+        type: string
+      qa_scope_ack:
+        description: 'Enter exactly RUN_ONLY_ON_ISOLATED_QA_PREVIEW'
+        required: true
+        type: string
+  deployment_status:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: dabbir-protected-qa-customer-journey
+  cancel-in-progress: true
+
+jobs:
+  protected-qa-journey:
+    name: Protected QA WebKit iPhone journey
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Preview') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      JOURNEY_REPORT_PATH: dabbir-protected-qa-customer-journey-report.json
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Resolve isolated protected QA origin
+        shell: bash
+        env:
+          MANUAL_ORIGIN: ${{ inputs.qa_origin }}
+          MANUAL_ACK: ${{ inputs.qa_scope_ack }}
+          DEPLOYMENT_ORIGIN: ${{ github.event.deployment_status.target_url }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "$MANUAL_ACK" != 'RUN_ONLY_ON_ISOLATED_QA_PREVIEW' ]; then
+              echo 'BLOCKED_CONFIG: manual protected QA requires the isolated-preview acknowledgement.'
+              exit 2
+            fi
+            origin="$MANUAL_ORIGIN"
+          else
+            origin="$DEPLOYMENT_ORIGIN"
+          fi
+          origin="${origin%/}"
+          if ! printf '%s' "$origin" | grep -Eq '^https://[^/]+$'; then
+            echo 'BLOCKED_CONFIG: protected QA origin must be a bare HTTPS origin.'
+            exit 2
+          fi
+          echo "PRODUCTION_ORIGIN=$origin" >> "$GITHUB_ENV"
+          echo "Protected QA target: $origin" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify Vercel automation bypass is configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'BLOCKED_CONFIG: GitHub secret VERCEL_AUTOMATION_BYPASS_SECRET is missing.'
+            echo 'Generate Protection Bypass for Automation in Vercel and save the value as the repository Actions secret VERCEL_AUTOMATION_BYPASS_SECRET.' >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+          echo 'Vercel automation bypass secret is present.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install WebKit journey runner
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps webkit
+
+      - name: Run protected full customer journey
+        env:
+          NODE_OPTIONS: --import=./scripts/dabbir-vercel-protection-bypass-preload.mjs
+        run: node test/ai-full-customer-journey-v2.mjs
+
+      - name: Publish journey summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$JOURNEY_REPORT_PATH" ]; then
+            echo '## DABBIR Protected QA Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' "$JOURNEY_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload protected QA evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-protected-qa-customer-journey-evidence
+          path: |
+            dabbir-protected-qa-customer-journey-report.json
+            dabbir-ai-customer-journey-screenshot.png
+          if-no-files-found: warn
+          retention-days: 14
