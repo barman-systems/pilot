@@ -1,3 +1,4 @@
+// BAR-30 Phase 3: one fail-closed authority interprets WhatsApp operational evidence.
 export const WHATSAPP_OPERATIONAL_STAGES = Object.freeze({
   NOT_CONFIGURED: 'NOT_CONFIGURED',
   AUTHORIZATION_INVALID: 'AUTHORIZATION_INVALID',
