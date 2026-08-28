@@ -11,11 +11,19 @@
   },
   "routes": [
     {
+      "src": "^/owner/?$",
+      "dest": "/api/platform-owner-dashboard"
+    },
+    {
       "src": "^/$",
       "dest": "/api/app-recovery"
     }
   ],
   "rewrites": [
+    {
+      "source": "/owner",
+      "destination": "/api/platform-owner-dashboard"
+    },
     {
       "source": "/",
       "destination": "/api/app-recovery"

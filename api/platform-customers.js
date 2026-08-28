@@ -76,6 +76,10 @@ export default async function handler(req,res){
     if(req.method==='GET'){
       const action=String(singleQueryValue(req,'action')||'capability').trim();
       if(action==='capability')return json(res,200,{ok:true,allowed:true,role:context.role});
+      if(action==='overview'){
+        const payload=await serviceRpc(context.key,'dabbir_platform_owner_overview',{p_actor_user_id:context.user.id});
+        return json(res,200,{ok:true,overview:payload});
+      }
       if(action==='search'){
         const q=String(singleQueryValue(req,'q')||'').trim().slice(0,160);
         const payload=await serviceRpc(context.key,'dabbir_platform_customer_search',{p_actor_user_id:context.user.id,p_query:q||null,p_limit:100});
