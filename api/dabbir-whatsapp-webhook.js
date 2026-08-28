@@ -264,6 +264,8 @@ export default async function handler(req, res) {
       status_count: statusCount,
       sandbox_messages: sandboxMessages,
       sandbox_replies: sandboxReplies,
+      outbound_messages_sent: false,
+      sandbox_outbound_messages_sent: sandboxReplies > 0,
     });
     return json(res, status, {
       ok: false,
@@ -272,7 +274,8 @@ export default async function handler(req, res) {
       signature_verified: true,
       persisted: false,
       sandbox_mode: 'OWNER_SANDBOX',
-      outbound_messages_sent: sandboxReplies > 0,
+      outbound_messages_sent: false,
+      sandbox_outbound_messages_sent: sandboxReplies > 0,
       retryable: true,
       correlation_id: cid,
     }, cid);
@@ -307,7 +310,8 @@ export default async function handler(req, res) {
     sandbox_unrouted_messages: sandboxUnroutedMessages,
     sandbox_matched_statuses: sandboxMatchedStatuses,
     sandbox_ambiguous_replies: sandboxAmbiguousReplies,
-    outbound_messages_sent: sandboxReplies > 0,
+    outbound_messages_sent: false,
+    sandbox_outbound_messages_sent: sandboxReplies > 0,
   });
 
   return json(res, 200, {
@@ -334,9 +338,11 @@ export default async function handler(req, res) {
       unrouted_messages: sandboxUnroutedMessages,
       matched_statuses: sandboxMatchedStatuses,
       ambiguous_replies: sandboxAmbiguousReplies,
+      outbound_messages_sent: sandboxReplies > 0,
       production_operational_evidence: false,
     },
-    outbound_messages_sent: sandboxReplies > 0,
+    outbound_messages_sent: false,
+    sandbox_outbound_messages_sent: sandboxReplies > 0,
     external_side_effects: sandboxReplies > 0,
     correlation_id: cid,
     timestamp: new Date().toISOString(),
