@@ -50,6 +50,12 @@ function normalizedEnvironment(value) {
   return null;
 }
 
+function validateJws(value, code = 'APPLE_IAP_JWS_INVALID') {
+  const jws = String(value || '').trim();
+  if (jws.length < 100 || jws.length > 65536 || !JWS_RE.test(jws)) throw appleError(code, 400);
+  return jws;
+}
+
 function assertTransaction(decoded, userId, expectedProductId, expectedBundleId, now = new Date()) {
   const appAccountToken = String(decoded?.appAccountToken || '').trim();
   const productId = String(decoded?.productId || '').trim();
@@ -90,43 +96,63 @@ function assertTransaction(decoded, userId, expectedProductId, expectedBundleId,
   };
 }
 
-async function verifyInEnvironment(jws, environment, roots, bundleId) {
+function verifierFor(environment, roots, bundleId) {
   const enableOnlineChecks = String(process.env.APPLE_IAP_ONLINE_CERT_CHECKS || 'true').toLowerCase() !== 'false';
   const appAppleId = environment === Environment.PRODUCTION ? productionAppAppleId() : undefined;
   if (environment === Environment.PRODUCTION && !appAppleId) throw appleError('DABBIR_IOS_APP_APPLE_ID_NOT_CONFIGURED', 503);
-  const verifier = new SignedDataVerifier(roots, enableOnlineChecks, environment, bundleId, appAppleId);
-  return verifier.verifyAndDecodeTransaction(jws);
+  return new SignedDataVerifier(roots, enableOnlineChecks, environment, bundleId, appAppleId);
 }
 
-export async function verifyAppleTransaction(jwsValue, userId) {
-  const jws = String(jwsValue || '').trim();
-  if (jws.length < 100 || jws.length > 32768 || !JWS_RE.test(jws)) throw appleError('APPLE_IAP_JWS_INVALID', 400);
-  if (!UUID_RE.test(String(userId || ''))) throw appleError('APPLE_IAP_USER_INVALID', 400);
-
+async function verifyAcrossEnvironments(jws, method) {
   const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
-  const productId = requiredText('DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID', 255);
   const roots = rootCertificates();
-
-  let decoded = null;
   let sandboxError = null;
+
   try {
-    decoded = await verifyInEnvironment(jws, Environment.SANDBOX, roots, bundleId);
+    const verifier = verifierFor(Environment.SANDBOX, roots, bundleId);
+    return await verifier[method](jws);
   } catch (error) {
     sandboxError = error;
   }
 
-  if (!decoded) {
-    try {
-      decoded = await verifyInEnvironment(jws, Environment.PRODUCTION, roots, bundleId);
-    } catch (error) {
-      if (error?.message === 'DABBIR_IOS_APP_APPLE_ID_NOT_CONFIGURED') throw error;
-      const result = appleError('APPLE_IAP_SIGNATURE_VERIFICATION_FAILED', 409);
-      result.cause = error || sandboxError;
-      throw result;
-    }
+  try {
+    const verifier = verifierFor(Environment.PRODUCTION, roots, bundleId);
+    return await verifier[method](jws);
+  } catch (error) {
+    if (error?.message === 'DABBIR_IOS_APP_APPLE_ID_NOT_CONFIGURED') throw error;
+    const result = appleError('APPLE_IAP_SIGNATURE_VERIFICATION_FAILED', 409);
+    result.cause = error || sandboxError;
+    throw result;
   }
+}
 
+async function verifiedTransactionPayload(jwsValue) {
+  const jws = validateJws(jwsValue);
+  return verifyAcrossEnvironments(jws, 'verifyAndDecodeTransaction');
+}
+
+export async function verifyAppleTransaction(jwsValue, userId) {
+  if (!UUID_RE.test(String(userId || ''))) throw appleError('APPLE_IAP_USER_INVALID', 400);
+  const decoded = await verifiedTransactionPayload(jwsValue);
+  const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
+  const productId = requiredText('DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID', 255);
   return assertTransaction(decoded, String(userId), productId, bundleId);
+}
+
+export async function verifyAppleNotification(signedPayloadValue) {
+  const signedPayload = validateJws(signedPayloadValue, 'APPLE_NOTIFICATION_JWS_INVALID');
+  return verifyAcrossEnvironments(signedPayload, 'verifyAndDecodeNotification');
+}
+
+export async function entitlementFromVerifiedNotification(notification) {
+  const transactionJws = notification?.data?.signedTransactionInfo;
+  if (!transactionJws) return null;
+  const decoded = await verifiedTransactionPayload(transactionJws);
+  const userId = String(decoded?.appAccountToken || '').trim();
+  if (!UUID_RE.test(userId)) throw appleError('APPLE_NOTIFICATION_ACCOUNT_TOKEN_INVALID', 409);
+  const bundleId = requiredText('DABBIR_IOS_BUNDLE_ID', 255);
+  const productId = requiredText('DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID', 255);
+  return assertTransaction(decoded, userId, productId, bundleId);
 }
 
 export async function persistAppleEntitlement(entitlement) {
