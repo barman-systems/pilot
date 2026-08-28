@@ -198,6 +198,19 @@ function connectionStorageError(message, response) {
   return Object.assign(new Error(message), { status, code: message, providerStatus });
 }
 
+async function readConnectionRows(response, failureCode, malformedCode) {
+  const text = await response.text();
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : [];
+  } catch {
+    if (response.ok) throw connectionStorageError(malformedCode, response);
+  }
+  if (!response.ok) throw connectionStorageError(failureCode, response);
+  if (!Array.isArray(payload)) throw connectionStorageError(malformedCode, response);
+  return payload;
+}
+
 export async function rotateStoredConnectionEncryption(accessToken, row, config, token = null, options = {}) {
   if (!row || !tokenNeedsRotation(row, config)) return { rotated: false, row };
   const plaintext = token == null ? openAccessToken(row, config, row.business_id) : String(token);
@@ -213,9 +226,12 @@ export async function rotateStoredConnectionEncryption(accessToken, row, config,
         signal,
       },
     );
-    const payload = await response.json().catch(() => []);
-    if (!response.ok) throw connectionStorageError('INTEGRATION_KEY_ROTATION_STORE_FAILED', response);
-    const updated = Array.isArray(payload) ? payload[0] || { ...row, ...sealed } : { ...row, ...sealed };
+    const payload = await readConnectionRows(
+      response,
+      'INTEGRATION_KEY_ROTATION_STORE_FAILED',
+      'INTEGRATION_KEY_ROTATION_RESPONSE_MALFORMED',
+    );
+    const updated = payload[0] || { ...row, ...sealed };
     return { rotated: true, row: updated };
   }, {
     label: 'WHATSAPP_CONNECTION_ROTATION_WRITE',
@@ -320,9 +336,12 @@ export async function loadBusinessConnection(accessToken, businessId, options = 
   const path = `dabbir_whatsapp_connections?select=id,business_id,status,meta_app_id,waba_id,phone_number_id,display_phone_number,verified_name,access_token_ciphertext,access_token_iv,access_token_tag,token_key_version,token_expires_at,connected_at,last_verified_at,last_provider_status,last_error&business_id=eq.${encodeURIComponent(String(businessId))}&limit=1`;
   let row = await withServerReadTimeout(async signal => {
     const response = await supabaseRest(path, accessToken, { signal });
-    const rows = await response.json().catch(() => []);
-    if (!response.ok) throw connectionStorageError('WHATSAPP_CONNECTION_READ_FAILED', response);
-    return Array.isArray(rows) ? rows[0] || null : null;
+    const rows = await readConnectionRows(
+      response,
+      'WHATSAPP_CONNECTION_READ_FAILED',
+      'WHATSAPP_CONNECTION_RESPONSE_MALFORMED',
+    );
+    return rows[0] || null;
   }, {
     label: 'WHATSAPP_CONNECTION_READ',
     errorCode: 'WHATSAPP_CONNECTION_READ_TIMEOUT',
@@ -345,13 +364,12 @@ export async function upsertBusinessConnection(accessToken, row, options = {}) {
       body: JSON.stringify(row),
       signal,
     });
-    const payload = await response.json().catch(() => []);
-    if (!response.ok) {
-      const error = connectionStorageError('WHATSAPP_CONNECTION_STORE_FAILED', response);
-      error.details = payload;
-      throw error;
-    }
-    return Array.isArray(payload) ? payload[0] || null : payload;
+    const payload = await readConnectionRows(
+      response,
+      'WHATSAPP_CONNECTION_STORE_FAILED',
+      'WHATSAPP_CONNECTION_STORE_RESPONSE_MALFORMED',
+    );
+    return payload[0] || null;
   }, {
     label: 'WHATSAPP_CONNECTION_STORE',
     errorCode: 'WHATSAPP_CONNECTION_STORE_TIMEOUT',
@@ -366,8 +384,11 @@ export async function removeBusinessConnection(accessToken, businessId, options 
       headers: { prefer: 'return=representation' },
       signal,
     });
-    if (!response.ok) throw connectionStorageError('WHATSAPP_CONNECTION_DELETE_FAILED', response);
-    return response.json().catch(() => []);
+    return readConnectionRows(
+      response,
+      'WHATSAPP_CONNECTION_DELETE_FAILED',
+      'WHATSAPP_CONNECTION_DELETE_RESPONSE_MALFORMED',
+    );
   }, {
     label: 'WHATSAPP_CONNECTION_DELETE',
     errorCode: 'WHATSAPP_CONNECTION_DELETE_TIMEOUT',
