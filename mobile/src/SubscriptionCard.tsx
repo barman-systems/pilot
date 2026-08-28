@@ -16,14 +16,14 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
     setBusy(true);
     try {
       const result = await verifyApplePurchase(accessToken, purchase);
-      if (result?.verified !== true) throw new Error('PURCHASE_NOT_VERIFIED');
+      if (result?.verified !== true || result?.entitled !== true) throw new Error('PURCHASE_NOT_ENTITLED');
       const finish = finishRef.current;
       if (!finish) throw new Error('STOREKIT_FINISH_UNAVAILABLE');
       await finish({ purchase, isConsumable: false });
       setVerified(true);
       Alert.alert('تم', 'تم التحقق من اشتراك Apple وتفعيله.');
     } catch {
-      Alert.alert('تعذر التحقق', 'لم يتم تفعيل الاشتراك لأن التحقق الخادمي لم ينجح. لن تُمنح صلاحية مدفوعة دون تحقق.');
+      Alert.alert('تعذر التحقق', 'لم يتم تفعيل الاشتراك لأن التحقق الخادمي لم يثبت وجود صلاحية Apple نشطة. لن تُمنح صلاحية مدفوعة دون تحقق.');
     } finally {
       setBusy(false);
     }
@@ -62,7 +62,7 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
     setBusy(true);
     try {
       await restorePurchases();
-      Alert.alert('استعادة المشتريات', 'تمت مطالبة App Store باستعادة المشتريات.');
+      Alert.alert('استعادة المشتريات', 'تمت مطالبة App Store باستعادة المشتريات، وسيتم تفعيل الصلاحية فقط بعد التحقق الخادمي من المعاملة المستعادة.');
     } finally {
       setBusy(false);
     }
@@ -71,7 +71,7 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
   return (
     <View style={styles.card}>
       <Text style={styles.title}>اشتراك دبّر عبر Apple</Text>
-      <Text style={styles.body}>{verified ? 'الاشتراك موثّق.' : (product ? `${product.displayName || 'DABBIR Owner'} — ${product.displayPrice || ''}` : 'جارٍ قراءة منتج الاشتراك من App Store.')}</Text>
+      <Text style={styles.body}>{verified ? 'الاشتراك موثّق ونشط.' : (product ? `${product.displayName || 'DABBIR Owner'} — ${product.displayPrice || ''}` : 'جارٍ قراءة منتج الاشتراك من App Store.')}</Text>
       <Pressable style={[styles.button, busy && styles.disabled]} disabled={busy} onPress={buy}><Text style={styles.buttonText}>اشترك عبر Apple</Text></Pressable>
       <Pressable disabled={busy} onPress={restore}><Text style={styles.link}>استعادة المشتريات</Text></Pressable>
     </View>
