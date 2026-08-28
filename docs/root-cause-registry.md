@@ -10,7 +10,7 @@
 | QA false green | Protected browser journey could be skipped while workflow ended green | Blocked execution was not a failing evidence state | QA_FALSE_GREEN | Blocked/skipped journey exits non-zero and cannot count as PASS | CONTROLLED |
 | Deployment comparison drift | A failed runtime commit could be followed by a test/docs commit that Vercel ignored, leaving the combined candidate unverified | Ignored Build Step treated incremental Git history as sufficient release evidence; ignored commits could advance the comparison baseline | ARTIFACT_DRIFT + QA_FALSE_GREEN | Every non-main branch runs the full Vercel build gate; main compares from the last successful baseline and any uncertainty/runtime drift builds fail-safe | CONTROLLED |
 | Runtime engine drift | Vercel/Control Plane required Node 24.x while package.json forced Node 22.x and its test encoded the stale value | Runtime version had multiple unsynchronized sources of truth | CONFIG_SOURCE_DRIFT | package.json and package-lock.json must both equal the authoritative Node 24.x line; regression test locks equality | CONTROLLED |
-| UI patch growth | Fixes repeatedly added guards/overlays that depended on load order | Shell had no hard complexity ceiling or ownership contract | PATCH_ON_PATCH | Explicit shell allowlist, unique modules, max module ceiling, retired-module denylist | ACTIVE |
+| UI patch growth | Fixes repeatedly added guards/overlays that depended on load order | Shell had no hard complexity ceiling or ownership contract | PATCH_ON_PATCH | Explicit shell allowlist, unique modules, maximum 25-module ceiling, last-loaded auth observer, and retired-module denylist enforced by `test/dabbir-architecture-invariants-v1.test.mjs` | CONTROLLED |
 
 ## Closure rule
 
