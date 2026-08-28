@@ -13,32 +13,47 @@ const read = path => readFile(new URL(path, root), 'utf8');
 const authUi = await read('api/auth-session-stability-ui.js');
 const architecture = JSON.parse(await read('config/dabbir-architecture-ownership.json'));
 
-test('auth session state machine exposes the explicit BAR-30 lifecycle', () => {
+test('auth session state machine exposes explicit MFA continuation before verified workspace', () => {
   assert.deepEqual(AUTH_SESSION_STAGES, {
     SIGNED_OUT: 'signed_out',
     AUTHENTICATING: 'authenticating',
+    MFA_REQUIRED: 'mfa_required',
     SESSION_VERIFIED: 'session_verified',
     WORKSPACE_READY: 'workspace_ready',
     SUSPENDED: 'suspended',
     DEGRADED: 'degraded',
   });
   assert.equal(isAllowedAuthSessionTransition('signed_out', 'authenticating'), true);
+  assert.equal(isAllowedAuthSessionTransition('authenticating', 'mfa_required'), true);
+  assert.equal(isAllowedAuthSessionTransition('mfa_required', 'session_verified'), true);
+  assert.equal(isAllowedAuthSessionTransition('mfa_required', 'workspace_ready'), false);
   assert.equal(isAllowedAuthSessionTransition('authenticating', 'session_verified'), true);
   assert.equal(isAllowedAuthSessionTransition('session_verified', 'workspace_ready'), true);
   assert.equal(isAllowedAuthSessionTransition('signed_out', 'workspace_ready'), false);
 });
 
-test('workspace readiness fails closed unless the session is verified', () => {
+test('workspace readiness fails closed unless session and enrolled MFA are verified', () => {
   assert.equal(deriveAuthSessionState({}).stage, AUTH_SESSION_STAGES.SIGNED_OUT);
   assert.equal(deriveAuthSessionState({ attempting: true }).stage, AUTH_SESSION_STAGES.AUTHENTICATING);
+
+  const mfa = deriveAuthSessionState({ mfaRequired: true });
+  assert.equal(mfa.stage, AUTH_SESSION_STAGES.MFA_REQUIRED);
+  assert.equal(mfa.authenticated, true);
+  assert.equal(mfa.workspace_ready, false);
+
   assert.equal(deriveAuthSessionState({ sessionVerified: true }).stage, AUTH_SESSION_STAGES.SESSION_VERIFIED);
   assert.equal(
     deriveAuthSessionState({ sessionVerified: true, workspaceReady: true }).stage,
     AUTH_SESSION_STAGES.WORKSPACE_READY,
   );
+
   const invalid = deriveAuthSessionState({ workspaceReady: true });
   assert.equal(invalid.stage, AUTH_SESSION_STAGES.DEGRADED);
   assert.equal(invalid.reason, 'WORKSPACE_WITHOUT_VERIFIED_SESSION');
+
+  const beforeMfa = deriveAuthSessionState({ sessionVerified: true, workspaceReady: true, mfaRequired: true });
+  assert.equal(beforeMfa.stage, AUTH_SESSION_STAGES.DEGRADED);
+  assert.equal(beforeMfa.reason, 'WORKSPACE_BEFORE_MFA_VERIFICATION');
 });
 
 test('suspended and failed verification are explicit non-ready states', () => {
@@ -51,17 +66,31 @@ test('suspended and failed verification are explicit non-ready states', () => {
   assert.equal(degraded.authenticated, false);
 });
 
-test('auth UI verifies the session before boot but only observes gate visibility', () => {
+test('auth UI verifies MFA before boot while preserving the base showGate visibility authority', () => {
   assert.match(authUi, /dataset\.dabbirAuthStage/);
   assert.match(authUi, /INVALID_AUTH_TRANSITION/);
-  assert.match(authUi, /state_machine:true/);
-  assert.match(authUi, /SESSION_COOKIE_VERIFIED/);
+  assert.match(authUi, /MFA_REQUIRED_AFTER_PRIMARY_AUTH/);
+  assert.match(authUi, /MFA_AAL2_VERIFIED/);
+  assert.match(authUi, /\/api\/auth\/mfa-status/);
+  assert.match(authUi, /\/api\/auth\/mfa-verify/);
+  assert.match(authUi, /status\.current_level!=='aal2'/);
   assert.match(authUi, /gate_observer_only:true/);
+  assert.match(authUi, /mfa_continuation:true/);
+  assert.match(authUi, /#mfaContinuation/);
+  assert.doesNotMatch(authUi, /#mfaGate/);
   assert.doesNotMatch(authUi, /reconcileVerifiedGate/);
 
-  const verifiedIndex = authUi.indexOf("publishAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED')");
-  const bootIndex = authUi.indexOf('await boot()');
-  assert.ok(verifiedIndex >= 0 && bootIndex > verifiedIndex);
+  const statusIndex = authUi.indexOf('const status=await mfaStatus()');
+  const mfaRequiredIndex = authUi.indexOf("authMachine.stages.MFA_REQUIRED,'MFA_REQUIRED_AFTER_PRIMARY_AUTH'");
+  const ordinaryVerifiedIndex = authUi.indexOf("publishAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED')");
+  const ordinaryBootIndex = authUi.indexOf('await boot()', ordinaryVerifiedIndex);
+  assert.ok(statusIndex >= 0 && mfaRequiredIndex > statusIndex);
+  assert.ok(ordinaryVerifiedIndex > statusIndex && ordinaryBootIndex > ordinaryVerifiedIndex);
+
+  const aal2Index = authUi.indexOf("status.current_level!=='aal2'");
+  const mfaVerifiedIndex = authUi.indexOf("authMachine.stages.SESSION_VERIFIED,'MFA_AAL2_VERIFIED'");
+  const mfaBootIndex = authUi.indexOf('await boot()', mfaVerifiedIndex);
+  assert.ok(aal2Index >= 0 && mfaVerifiedIndex > aal2Index && mfaBootIndex > mfaVerifiedIndex);
 
   const wrapperIndex = authUi.indexOf('showGate=function(name)');
   const baseGateIndex = authUi.indexOf('baseShowGate(name)', wrapperIndex);
@@ -69,7 +98,7 @@ test('auth UI verifies the session before boot but only observes gate visibility
   assert.ok(wrapperIndex >= 0 && baseGateIndex > wrapperIndex && observerIndex > baseGateIndex);
 });
 
-test('architecture contract separates auth truth from presentation visibility ownership', () => {
+test('architecture contract keeps one visibility authority while requiring enrolled MFA', () => {
   assert.equal(
     architecture.authorities.auth_session_state_machine,
     'api/_dabbir-auth-session-state-machine.js',
@@ -77,6 +106,7 @@ test('architecture contract separates auth truth from presentation visibility ow
   assert.equal(architecture.authorities.auth_gate_visibility, 'index.html#showGate');
   assert.equal(architecture.authorities.auth_session_observer, 'api/auth-session-stability-ui.js');
   assert.equal(architecture.truth_rules.workspace_ready_requires_verified_session, true);
+  assert.equal(architecture.truth_rules.workspace_ready_requires_mfa_when_enrolled, true);
   assert.equal(architecture.truth_rules.invalid_auth_transition_may_open_workspace, false);
   assert.equal(architecture.truth_rules.presentation_observer_may_veto_verified_gate, false);
   assert.equal(architecture.shell.last_loaded_ui_observer, '/api/auth-session-stability-ui');
