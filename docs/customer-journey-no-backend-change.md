@@ -1,0 +1,1 @@
+Backend invariants preserved: authenticated DABBIR runtime, tenant membership, RLS boundaries, AI reply persistence, appointments, follow-ups, billing, WhatsApp authorization, and external-channel truth gates are unchanged.
