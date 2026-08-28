@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { withServerReadTimeout } from '../api/_server-read-timeout.js';
 import { getBillingAccount, requireBillingOwner } from '../api/_billing-core.js';
 import { loadBusinessConnection, ownerContext } from '../api/_whatsapp-embedded-core.js';
+import { serviceRpc } from '../api/_whatsapp-live-core.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
@@ -32,17 +33,22 @@ function hangingFetch(_url, options = {}) {
   });
 }
 
-test('shared server-read timeout fails closed even when an operation never settles', async () => {
+function assertTimeout(error, code) {
+  assert.equal(error?.message, code);
+  assert.equal(error?.status, 504);
+  assert.equal(error?.code, 504);
+  assert.equal(error?.safeCode, code);
+  assert.equal(error?.errorCode, code);
+  assert.equal(error?.failureClass, 'TIMEOUT');
+  assert.equal(error?.timeout, true);
+  return true;
+}
+
+test('shared server-read timeout is a hard wall-clock guard even when operation never settles', async () => {
   const started = Date.now();
   await assert.rejects(
-    withServerReadTimeout(() => new Promise(() => {}), { label: 'TEST_READ', timeoutMs: 5 }),
-    error => {
-      assert.equal(error.status, 504);
-      assert.equal(error.code, 504);
-      assert.equal(error.safeCode, 'TEST_READ_TIMEOUT');
-      assert.equal(error.failureClass, 'TIMEOUT');
-      return true;
-    },
+    withServerReadTimeout(() => new Promise(() => {}), { errorCode: 'HARD_WALL_TIMEOUT', timeoutMs: 5 }),
+    error => assertTimeout(error, 'HARD_WALL_TIMEOUT'),
   );
   assert.ok(Date.now() - started < 500, 'timeout helper must not wait for the underlying hung operation');
 });
@@ -50,13 +56,26 @@ test('shared server-read timeout fails closed even when an operation never settl
 test('shared server-read timeout propagates an AbortSignal to cooperative fetches', async () => {
   let receivedSignal = null;
   await assert.rejects(
-    withServerReadTimeout(signal => new Promise((resolve, reject) => {
+    withServerReadTimeout(signal => new Promise((_resolve, reject) => {
       receivedSignal = signal;
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
-    }), { label: 'COOPERATIVE_READ', timeoutMs: 5 }),
-    error => error?.status === 504 && error?.safeCode === 'COOPERATIVE_READ_TIMEOUT',
+    }), { errorCode: 'COOPERATIVE_READ_TIMEOUT', timeoutMs: 5 }),
+    error => assertTimeout(error, 'COOPERATIVE_READ_TIMEOUT'),
   );
   assert.equal(receivedSignal?.aborted, true);
+});
+
+test('an unrelated AbortError is not falsely relabeled as DABBIR timeout', async () => {
+  await assert.rejects(
+    withServerReadTimeout(() => Promise.reject(Object.assign(new Error('UPSTREAM_ABORT'), { name: 'AbortError' })), {
+      errorCode: 'SHOULD_NOT_APPEAR', timeoutMs: 100,
+    }),
+    error => {
+      assert.equal(error?.message, 'UPSTREAM_ABORT');
+      assert.notEqual(error?.status, 504);
+      return true;
+    },
+  );
 });
 
 test('critical Billing and WhatsApp core functions return explicit 504 on stalled prerequisite reads', async t => {
@@ -66,19 +85,36 @@ test('critical Billing and WhatsApp core functions return explicit 504 on stalle
 
   await assert.rejects(
     requireBillingOwner(requestWithToken(), BUSINESS_ID, { timeoutMs: 5 }),
-    error => error?.status === 504 && error?.safeCode === 'BILLING_AUTH_DATA_TIMEOUT' && error?.timeout === true,
+    error => assertTimeout(error, 'BILLING_AUTH_DATA_TIMEOUT'),
   );
   await assert.rejects(
     getBillingAccount(ACCESS_TOKEN, BUSINESS_ID, { timeoutMs: 5 }),
-    error => error?.status === 504 && error?.safeCode === 'BILLING_STATUS_TIMEOUT' && error?.timeout === true,
+    error => assertTimeout(error, 'BILLING_STATUS_TIMEOUT'),
   );
   await assert.rejects(
     ownerContext(requestWithToken(), BUSINESS_ID, { timeoutMs: 5 }),
-    error => error?.status === 504 && error?.safeCode === 'WHATSAPP_AUTH_DATA_TIMEOUT' && error?.timeout === true,
+    error => assertTimeout(error, 'WHATSAPP_AUTH_DATA_TIMEOUT'),
   );
   await assert.rejects(
     loadBusinessConnection(ACCESS_TOKEN, BUSINESS_ID, { timeoutMs: 5 }),
-    error => error?.status === 504 && error?.safeCode === 'WHATSAPP_CONNECTION_READ_TIMEOUT' && error?.timeout === true,
+    error => assertTimeout(error, 'WHATSAPP_CONNECTION_READ_TIMEOUT'),
+  );
+});
+
+test('WhatsApp service-role persistence RPC reports explicit 504 timeout without changing server authority', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  });
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  globalThis.fetch = hangingFetch;
+
+  await assert.rejects(
+    serviceRpc('dabbir_whatsapp_operational_evidence', { p_business_id: BUSINESS_ID }, { timeoutMs: 5 }),
+    error => assertTimeout(error, 'WHATSAPP_SERVER_DATA_TIMEOUT'),
   );
 });
 
@@ -134,21 +170,26 @@ test('WhatsApp owner, connection and service-role persistence reads are bounded'
     'WHATSAPP_CONNECTION_STORE',
     'WHATSAPP_CONNECTION_DELETE',
   ]) assert.match(whatsappEmbedded, new RegExp(label));
-  assert.match(whatsappLive, /WHATSAPP_SERVER_RPC/);
+  assert.match(whatsappLive, /WHATSAPP_SERVER_DATA_TIMEOUT/);
+  assert.match(whatsappLive, /authorization: `Bearer \$\{key\}`/);
   assert.match(whatsappLive, /signal => fetch/);
   assert.doesNotMatch(whatsappEmbedded, /getVerifiedUser\(accessToken\)\.catch\(\(\) => null\)/);
   assert.doesNotMatch(whatsappEmbedded, /getBusinessMemberships\(accessToken\)\.catch\(\(\) => \[\]\)/);
   assert.doesNotMatch(whatsappEmbedded, /if \(!response\.ok\) return null/);
 });
 
-test('WhatsApp status and provider-accepted readback preserve timeout truth', () => {
+test('WhatsApp status and provider-accepted readback preserve timeout truth and no-resend semantics', () => {
   assert.match(whatsappStatus, /WHATSAPP_STATUS_AUTH_READ/);
   assert.match(whatsappStatus, /WHATSAPP_STATUS_MEMBERSHIP_READ/);
   assert.match(whatsappStatus, /getVerifiedUser\(accessToken, \{ signal \}\)/);
   assert.match(whatsappStatus, /getBusinessMemberships\(accessToken, \{ signal \}\)/);
   assert.doesNotMatch(whatsappStatus, /getVerifiedUser\(accessToken\)\.catch\(\(\) => null\)/);
-  assert.match(whatsappReply, /WHATSAPP_REPLY_READBACK/);
+  assert.match(whatsappReply, /WHATSAPP_REPLY_READBACK_TIMEOUT/);
   assert.match(whatsappReply, /supabaseRest\([\s\S]*\{ signal \}/);
   assert.match(whatsappReply, /502, 503, 504/);
   assert.match(whatsappReply, /AMBIGUOUS_NO_AUTOMATIC_RESEND/);
+  assert.match(whatsappReply, /reserveOutboundReply/);
+  assert.match(whatsappReply, /sendMetaText/);
+  assert.match(whatsappReply, /finalizeOutboundReply/);
+  assert.match(whatsappReply, /automatic_resend_blocked/);
 });
