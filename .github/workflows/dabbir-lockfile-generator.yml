@@ -1,4 +1,4 @@
-name: DABBIR Lockfile Generator
+name: DABBIR Lockfile Integrity
 
 on:
   pull_request:
@@ -8,42 +8,27 @@ on:
       - '.github/workflows/dabbir-lockfile-generator.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
           package-manager-cache: false
-      - name: Generate deterministic lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Verify clean install from generated lockfile
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Commit generated lockfile when changed
+      - name: Verify package lock matches package manifest
         shell: bash
         run: |
-          if git diff --quiet -- package-lock.json; then
-            echo 'package-lock.json already synchronized'
-            exit 0
-          fi
-          git config user.name 'barmanai-lockbot'
-          git config user.email 'barmanai-lockbot@users.noreply.github.com'
-          git add package-lock.json
-          git commit -m 'build: synchronize package lock'
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-      - name: Upload generated lockfile evidence
-        uses: actions/upload-artifact@v6
-        with:
-          name: dabbir-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+          cp package-lock.json /tmp/package-lock.before.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          cmp -s /tmp/package-lock.before.json package-lock.json || {
+            echo 'package-lock.json drift detected; regenerate and commit the lockfile.'
+            git diff -- package-lock.json
+            exit 1
+          }
+      - name: Verify clean install from committed lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund
