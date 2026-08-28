@@ -13,10 +13,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const DABBIR_TIME_ZONE = 'Asia/Dubai';
 const DABBIR_UTC_OFFSET = '+04:00';
+const DABBIR_FAST_RUNTIME_VERSION = 'fast-v7-timeout-guarded';
 
-// === إصلاح: مهلة زمنية لكل استعلام على حدة ===
-// كل استعلام Supabase له مهلة قصوى مستقلة. إذا تعلّق أي استعلام واحد،
-// يفشل هو فقط بعد DB_TIMEOUT_MS بدل ما يعلّق الطلب كامل حتى حد Vercel (300 ثانية).
+// Every Supabase request is bounded independently so a hung upstream call cannot
+// consume the full Vercel function lifetime. Required workspace reads remain
+// fail-fast as a group: one required timeout makes the request fail explicitly.
 const DB_TIMEOUT_MS = 10_000;
 
 function withTimeout(promiseFactory, label, ms = DB_TIMEOUT_MS) {
@@ -108,7 +109,6 @@ async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
   return payload;
 }
 
-// === إصلاح: rest() و restCount() الآن تلتزم بمهلة زمنية عبر withTimeout ===
 const rest = (token, path, fallback) =>
   withTimeout(
     signal => supabaseRest(path, token, { signal }).then(response => readData(response, fallback)),
@@ -199,6 +199,7 @@ function buildDataTruth({ business, conversations, customers, appointments, hand
   return {
     state: 'VERIFIED_TENANT_READ',
     source: 'SUPABASE_RLS_TENANT_DATA',
+    runtime_version: DABBIR_FAST_RUNTIME_VERSION,
     read_at: new Date().toISOString(),
     business_updated_at: business?.updated_at || null,
     runtime_ms: duration,
@@ -307,7 +308,8 @@ async function handleFastGet(req, res) {
     ? loadMessages(accessToken, businessId, requestedConversationId)
     : Promise.resolve(null);
 
-  // === إصلاح: كل استعلام يفشل بمفرده عند التعليق بدل تعليق الطلب كامل ===
+  // These reads are all required to claim a verified workspace response. Promise.all
+  // intentionally fails the whole request if any required read times out or fails.
   const [businessRows, rawConversations, customers, appointments, handoffs, followups, metrics, requestedMessages] =
     await Promise.all([
       businessPromise,
@@ -352,7 +354,7 @@ async function handleFastGet(req, res) {
   const duration = Date.now() - started;
   const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v6-exact-metrics');
+  res.setHeader('x-dabbir-runtime', DABBIR_FAST_RUNTIME_VERSION);
   return json(res, 200, {
     ok: true,
     authenticated: true,
@@ -381,7 +383,7 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
+    performance: { runtime_ms: duration, runtime_version: DABBIR_FAST_RUNTIME_VERSION, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
   });
 }
 
