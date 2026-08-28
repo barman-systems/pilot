@@ -61,11 +61,11 @@ async function parseResponse(response,fallback){
 }
 
 export async function getBillingAccount(accessToken,businessId,options={}){
-  const response=await withServerReadTimeout(
-    signal=>supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal}),
-    {label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS},
-  );
-  const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');return Array.isArray(rows)?rows[0]||null:null;
+  return withServerReadTimeout(async signal=>{
+    const response=await supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal});
+    const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');
+    return Array.isArray(rows)?rows[0]||null:null;
+  },{label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS});
 }
 
 export function publicBillingState(account){
