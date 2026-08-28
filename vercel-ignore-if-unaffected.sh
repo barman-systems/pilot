@@ -9,15 +9,20 @@ set -u
 # 1) Every non-main Git branch must run the real Vercel Build Gate. A preview
 #    commit is evidence, not an optimization target; test/docs follow-ups may
 #    contain the repair for a previously failing runtime commit.
-# 2) On main, compare against Vercel's last successful deployment baseline and
-#    build whenever any application, database migration, or unknown path changed
-#    in that range. Database schema is part of the Production artifact contract;
-#    a migration must not leave main SHA ahead of the deployed SHA.
-# 3) Exact-SHA Production verification contracts are deployment-affecting even
+# 2) A one-parent direct commit on main is never an authorized Production
+#    release candidate. Until GitHub branch protection is enabled, this is a
+#    fail-closed compensating control: keep the last reviewed Production
+#    artifact instead of deploying an unreviewed direct push.
+# 3) On reviewed main merge commits, compare against Vercel's last successful
+#    deployment baseline and build whenever any application, database migration,
+#    or unknown path changed in that range. Database schema is part of the
+#    Production artifact contract; a migration must not leave a reviewed main
+#    release ahead of the deployed SHA.
+# 4) Exact-SHA Production verification contracts are deployment-affecting even
 #    when their source files live under .github/ or test/. If one of those files
-#    changes, Production must advance to the same commit before the verification
-#    workflow can truthfully claim exact-artifact evidence.
-# 4) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
+#    changes, Production must advance to the same reviewed merge commit before
+#    the verification workflow can truthfully claim exact-artifact evidence.
+# 5) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
 previous_success="${VERCEL_GIT_PREVIOUS_SHA:-}"
@@ -30,6 +35,14 @@ fi
 if ! git cat-file -e "${current}^{commit}" 2>/dev/null; then
   echo "Current commit unavailable; build for safety."
   exit 1
+fi
+
+if [[ "$ref" == "main" ]]; then
+  parent_count="$(git cat-file -p "$current" 2>/dev/null | grep -c '^parent ' || true)"
+  if [[ "$parent_count" == "1" ]]; then
+    echo "DIRECT_MAIN_RELEASE_BLOCKED: one-parent direct main commit is not an authorized Production release candidate; keep the last reviewed Production artifact."
+    exit 0
+  fi
 fi
 
 baseline=""
