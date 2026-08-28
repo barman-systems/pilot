@@ -26,7 +26,6 @@ export async function withServerReadTimeout(operation, options = {}) {
     timedOut = true;
     controller.abort();
   }, timeoutMs);
-  timer.unref?.();
 
   try {
     return await operation(controller.signal);
