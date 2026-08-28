@@ -29,23 +29,25 @@ async function readRows(response, fallback) {
   return Array.isArray(payload) ? payload : [];
 }
 
-async function readPersistedMessage(token, businessId, messageId) {
+export async function readPersistedMessage(token, businessId, messageId, options = {}) {
   if (!messageId) return null;
-  const response = await withServerReadTimeout(
-    signal => supabaseRest(
-      `dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at,sender_user_id&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(messageId)}&limit=1`,
-      token,
-      { signal },
-    ),
+  return withServerReadTimeout(
+    async signal => {
+      const response = await supabaseRest(
+        `dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at,sender_user_id&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(messageId)}&limit=1`,
+        token,
+        { signal },
+      );
+      const rows = await readRows(response, 'WHATSAPP_REPLY_READBACK_FAILED');
+      const message = rows[0] || null;
+      return message?.id && message.sender_type === 'human' && message.simulated === false ? message : null;
+    },
     {
       label: 'WHATSAPP_REPLY_READBACK',
       errorCode: 'WHATSAPP_REPLY_READBACK_TIMEOUT',
-      timeoutMs: WHATSAPP_READBACK_TIMEOUT_MS,
+      timeoutMs: options.timeoutMs ?? WHATSAPP_READBACK_TIMEOUT_MS,
     },
   );
-  const rows = await readRows(response, 'WHATSAPP_REPLY_READBACK_FAILED');
-  const message = rows[0] || null;
-  return message?.id && message.sender_type === 'human' && message.simulated === false ? message : null;
 }
 
 function replayResponse(res, reservation, message) {
