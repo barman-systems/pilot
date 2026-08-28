@@ -7,7 +7,10 @@ on:
     paths:
       - 'test/dabbir-protected-live-smoke.mjs'
       - 'test/dabbir-protected-live-smoke-oidc.test.mjs'
+      - 'test/dabbir-protected-browser-bridge.test.mjs'
       - '.github/workflows/dabbir-protected-live-smoke.yml'
+      - 'supabase/functions/barman-browser-runner/**'
+      - 'supabase/migrations/20260828013400_dabbir_protected_qa_share_vault.sql'
 
 permissions:
   contents: read
@@ -25,6 +28,7 @@ jobs:
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
       PROTECTED_QA_REPORT_PATH: dabbir-protected-live-smoke-report.json
+      PROTECTED_QA_BRIDGE_REPORT_PATH: dabbir-protected-browser-bridge-report.json
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -39,6 +43,7 @@ jobs:
             echo 'ready=true' >> "$GITHUB_OUTPUT"
             echo 'generated=false' >> "$GITHUB_OUTPUT"
             echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+            echo 'bridge_required=false' >> "$GITHUB_OUTPUT"
             echo 'AUTOMATION_BYPASS_READY_FROM_EXISTING_SECRET'
             exit 0
           fi
@@ -55,6 +60,7 @@ jobs:
               echo 'ready=false' >> "$GITHUB_OUTPUT"
               echo 'generated=false' >> "$GITHUB_OUTPUT"
               echo 'method=none' >> "$GITHUB_OUTPUT"
+              echo 'bridge_required=false' >> "$GITHUB_OUTPUT"
               echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
               exit 2
             fi
@@ -63,6 +69,7 @@ jobs:
             echo 'ready=true' >> "$GITHUB_OUTPUT"
             echo 'generated=true' >> "$GITHUB_OUTPUT"
             echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+            echo 'bridge_required=false' >> "$GITHUB_OUTPUT"
             echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
             exit 0
           fi
@@ -83,6 +90,7 @@ jobs:
               echo 'ready=true' >> "$GITHUB_OUTPUT"
               echo 'generated=false' >> "$GITHUB_OUTPUT"
               echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
+              echo 'bridge_required=false' >> "$GITHUB_OUTPUT"
               echo 'TRUSTED_GITHUB_OIDC_READY'
               exit 0
             fi
@@ -91,13 +99,43 @@ jobs:
 
           echo 'ready=false' >> "$GITHUB_OUTPUT"
           echo 'generated=false' >> "$GITHUB_OUTPUT"
-          echo 'method=none' >> "$GITHUB_OUTPUT"
-          echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'
+          echo 'method=one_time_vault_browser_bridge' >> "$GITHUB_OUTPUT"
+          echo 'bridge_required=true' >> "$GITHUB_OUTPUT"
+          echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED_FALLING_BACK_TO_ONE_TIME_BROWSER_BRIDGE'
+      - name: Run one-time protected browser bridge
+        if: steps.bypass.outputs.bridge_required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=dabbir-protected-browser-qa"
+          oidc_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$oidc_url")"
+          oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+          if [ -z "$oidc_token" ]; then
+            echo 'BLOCKED_GITHUB_OIDC_TOKEN_UNAVAILABLE'
+            exit 2
+          fi
+          echo "::add-mask::$oidc_token"
+          bridge_status="$(curl --silent --show-error \
+            --output "$PROTECTED_QA_BRIDGE_REPORT_PATH" \
+            --write-out '%{http_code}' \
+            -X POST 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-browser-runner' \
+            -H "Authorization: Bearer ${oidc_token}" \
+            -H 'Content-Type: application/json' \
+            --data '{"action":"dabbir_protected_browser_smoke"}')"
           echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
-          echo '' >> "$GITHUB_STEP_SUMMARY"
-          echo '**State:** BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
-          echo 'No existing bypass, Vercel API token, or accepted GitHub Trusted OIDC source is available. Production remains protected and the browser journey did not run.' >> "$GITHUB_STEP_SUMMARY"
-          exit 2
+          echo '**Access method:** one_time_vault_browser_bridge' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Bridge HTTP:** ${bridge_status}" >> "$GITHUB_STEP_SUMMARY"
+          if [ ! -f "$PROTECTED_QA_BRIDGE_REPORT_PATH" ]; then
+            echo '**Verdict:** FAIL — bridge report missing' >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+          verdict="$(jq -r 'if .ok == true and .pass == true then "PASS" else "FAIL" end' "$PROTECTED_QA_BRIDGE_REPORT_PATH")"
+          echo "**Verdict:** ${verdict}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Final host:** $(jq -r '.final_host // "—"' "$PROTECTED_QA_BRIDGE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Browser HTTP:** $(jq -r '.browser_http_status // 0' "$PROTECTED_QA_BRIDGE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.ok == true and .pass == true' "$PROTECTED_QA_BRIDGE_REPORT_PATH" >/dev/null || exit 2
       - name: Install WebKit journey runner
         if: steps.bypass.outputs.ready == 'true'
         run: |
@@ -119,13 +157,14 @@ jobs:
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-protected-live-smoke-report.json >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload protected smoke evidence
-        if: ${{ always() && steps.bypass.outputs.ready == 'true' }}
+        if: ${{ always() && (steps.bypass.outputs.ready == 'true' || steps.bypass.outputs.bridge_required == 'true') }}
         uses: actions/upload-artifact@v6
         with:
           name: dabbir-protected-live-smoke-evidence
           path: |
             dabbir-protected-live-smoke-report.json
             dabbir-protected-live-smoke.png
+            dabbir-protected-browser-bridge-report.json
           if-no-files-found: warn
           retention-days: 7
       - name: Revoke temporary automation bypass
