@@ -6,6 +6,7 @@ import { getLocales } from 'expo-localization';
 import { clearSession, loadSession, saveSession, sessionNeedsRefresh, type DabbirSession } from './src/session';
 import * as api from './src/api';
 import { SubscriptionCard } from './src/SubscriptionCard';
+import { WhatsAppConnectCard } from './src/WhatsAppConnectCard';
 
 const isArabic = (getLocales()[0]?.languageCode || 'ar').toLowerCase() === 'ar';
 const t = (ar: string, en: string) => isArabic ? ar : en;
@@ -113,7 +114,7 @@ function Workspace({ session, onLogout, onDeleted }: { session: DabbirSession; o
       <Metric label={t('تحتاج انتباه', 'Needs attention')} value={metrics.needs_attention ?? (handoffs.length + followups.length)} />
       <Metric label={t('مواعيد اليوم', 'Today appointments')} value={metrics.today_appointments ?? 0} />
     </View>
-    <View style={styles.card}><Text style={styles.cardTitle}>{t('واتساب', 'WhatsApp')}</Text><Text style={styles.body}>{String(whatsapp.state || t('غير مربوط', 'Not connected'))}</Text>{whatsapp.blocker ? <Text style={styles.muted}>{String(whatsapp.blocker)}</Text> : null}</View>
+    <WhatsAppConnectCard accessToken={session.access_token} businessId={business?.id || null} whatsapp={whatsapp} onConnected={reload} />
     <View style={styles.card}><Text style={styles.cardTitle}>{t('آخر العملاء', 'Recent customers')}</Text>{customers.slice(0, 8).map((item: any) => <View key={item.id} style={styles.row}><Text style={styles.rowTitle}>{item.display_name || t('عميل', 'Customer')}</Text><Text style={styles.muted}>{item.lead_status || ''}</Text></View>)}{!customers.length && <Text style={styles.muted}>{t('لا توجد بيانات بعد.', 'No data yet.')}</Text>}</View>
     <View style={styles.card}><Text style={styles.cardTitle}>{t('المتابعات والتنبيهات', 'Follow-ups and attention')}</Text>{[...handoffs, ...followups].slice(0, 8).map((item: any) => <View key={item.id} style={styles.row}><Text style={styles.rowTitle}>{item.reason || item.summary || t('متابعة', 'Follow-up')}</Text><Text style={styles.muted}>{item.state || item.status || ''}</Text></View>)}{!handoffs.length && !followups.length && <Text style={styles.muted}>{t('لا توجد عناصر معلقة.', 'Nothing pending.')}</Text>}</View>
     <SubscriptionCard accessToken={session.access_token} accountToken={runtime?.user?.id || null} />
