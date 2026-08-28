@@ -3,14 +3,20 @@ import fs from 'node:fs';
 const ORIGIN = String(process.env.PROTECTED_QA_ORIGIN || '').trim().replace(/\/$/, '');
 const BYPASS = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
 const TRUSTED_OIDC = String(process.env.VERCEL_TRUSTED_OIDC_TOKEN || '').trim();
+const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const REPORT_PATH = process.env.PROTECTED_QA_REPORT_PATH || 'dabbir-protected-live-smoke-report.json';
+const RELEASE_WAIT_MS = Math.min(Math.max(Number(process.env.PROTECTED_QA_RELEASE_WAIT_MS || 180_000), 15_000), 300_000);
 
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PROTECTED_QA_ORIGIN_REQUIRED');
 if (!BYPASS && !TRUSTED_OIDC) throw new Error('VERCEL_PROTECTED_ACCESS_REQUIRED');
+if (!/^[a-f0-9]{40}$/i.test(EXPECTED_SHA)) throw new Error('EXPECTED_PRODUCTION_SHA_REQUIRED');
 
 const report = {
   journey: 'DABBIR_PROTECTED_LIVE_IPHONE_SMOKE',
   origin: ORIGIN,
+  expected_production_sha: EXPECTED_SHA,
+  verified_production_sha: null,
+  verified_deployment_id: null,
   protection_access: BYPASS ? 'automation_bypass' : 'trusted_oidc',
   started_at: new Date().toISOString(),
   completed_at: null,
@@ -21,6 +27,10 @@ const report = {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message || 'ASSERTION_FAILED');
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function step(name, fn) {
@@ -52,17 +62,48 @@ function protectionHeaders(extra = {}) {
 async function fetchProtected(path, init = {}) {
   const headers = new Headers(init.headers || {});
   for (const [key, value] of Object.entries(protectionHeaders())) headers.set(key, value);
-  return fetch(`${ORIGIN}${path}`, { redirect: 'follow', ...init, headers });
+  return fetch(`${ORIGIN}${path}`, { redirect: 'follow', cache: 'no-store', ...init, headers });
+}
+
+async function waitForExactProductionSha() {
+  const deadline = Date.now() + RELEASE_WAIT_MS;
+  let last = 'NO_RESPONSE';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetchProtected(`/api/release-evidence?t=${Date.now()}`, { headers: { accept: 'application/json' } });
+      const text = await response.text();
+      let body = {};
+      try { body = JSON.parse(text); } catch {}
+      const observed = String(body?.commit_sha || '').trim().toLowerCase();
+      const environment = String(body?.environment || '').trim().toLowerCase();
+      last = `HTTP_${response.status}:${observed || body?.error || text.slice(0, 120)}`;
+      if (response.status === 200 && body?.ok === true && observed === EXPECTED_SHA) {
+        assert(!environment || environment === 'production', `EXACT_SHA_NOT_PRODUCTION_${environment}`);
+        report.verified_production_sha = observed;
+        report.verified_deployment_id = body?.deployment_id || null;
+        return body;
+      }
+    } catch (error) {
+      last = String(error?.message || error).slice(0, 180);
+    }
+    await sleep(5_000);
+  }
+  throw new Error(`EXACT_PRODUCTION_SHA_NOT_READY_EXPECTED_${EXPECTED_SHA}_LAST_${last}`);
 }
 
 let browser;
 try {
+  await step('00_exact_production_sha', async () => {
+    const evidence = await waitForExactProductionSha();
+    return `Production release evidence matches ${EXPECTED_SHA}${evidence?.deployment_id ? ` on ${evidence.deployment_id}` : ''}.`;
+  });
+
   await step('01_protected_home_reachable', async () => {
     const response = await fetchProtected('/', { headers: { accept: 'text/html' } });
     const text = await response.text();
     assert(response.status === 200, `HOME_STATUS_${response.status}`);
     assert(/DABBIR/i.test(text), 'HOME_DABBIR_IDENTITY_MISSING');
-    return `Protected production home returned 200 with DABBIR identity via ${BYPASS ? 'automation bypass' : 'trusted GitHub OIDC'}.`;
+    return `Exact protected production home returned 200 with DABBIR identity via ${BYPASS ? 'automation bypass' : 'trusted GitHub OIDC'}.`;
   });
 
   await step('02_runtime_auth_still_fails_closed', async () => {
@@ -114,7 +155,7 @@ try {
     assert(pageErrors.length === 0, `PAGE_ERRORS:${pageErrors.join(' | ')}`);
     assert(consoleErrors.length === 0, `CONSOLE_ERRORS:${consoleErrors.slice(0, 8).join(' | ')}`);
     await context.close();
-    return 'WebKit rendered the iPhone-size Arabic login gate, approved logo, and authoritative owner-first-v4 shell without page errors.';
+    return `WebKit rendered the iPhone-size Arabic login gate on exact production SHA ${EXPECTED_SHA}, approved logo, and authoritative owner-first-v4 shell without page errors.`;
   });
 
   report.verdict = 'PASS';

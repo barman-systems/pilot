@@ -5,6 +5,16 @@ on:
   push:
     branches: [main]
     paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - 'vercel-ignore-if-unaffected.sh'
+      - 'scripts/vercel-build-gate.mjs'
+      - 'api/**'
+      - 'index.html'
+      - 'team.html'
+      - 'supabase/migrations/*dabbir*'
+      - 'db/dabbir*.sql'
       - 'test/dabbir-protected-live-smoke.mjs'
       - 'test/dabbir-protected-live-smoke-oidc.test.mjs'
       - '.github/workflows/dabbir-protected-live-smoke.yml'
@@ -20,6 +30,8 @@ jobs:
     timeout-minutes: 12
     env:
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      EXPECTED_PRODUCTION_SHA: ${{ github.sha }}
+      PROTECTED_QA_RELEASE_WAIT_MS: '240000'
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
@@ -112,8 +124,11 @@ jobs:
         run: |
           if [ -f dabbir-protected-live-smoke-report.json ]; then
             echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Expected SHA:** $EXPECTED_PRODUCTION_SHA" >> "$GITHUB_STEP_SUMMARY"
             echo "**Access method:** ${{ steps.bypass.outputs.method }}" >> "$GITHUB_STEP_SUMMARY"
             echo "**Verdict:** $(jq -r '.verdict' dabbir-protected-live-smoke-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verified production SHA:** $(jq -r '.verified_production_sha // "UNVERIFIED"' dabbir-protected-live-smoke-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verified deployment ID:** $(jq -r '.verified_deployment_id // "UNAVAILABLE"' dabbir-protected-live-smoke-report.json)" >> "$GITHUB_STEP_SUMMARY"
             echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
             jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' dabbir-protected-live-smoke-report.json >> "$GITHUB_STEP_SUMMARY"

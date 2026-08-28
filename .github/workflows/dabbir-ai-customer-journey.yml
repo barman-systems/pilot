@@ -27,6 +27,7 @@ on:
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
       - 'db/dabbir*.sql'
+      - 'api/**'
       - 'api/auth/**'
       - 'api/team/**'
       - 'api/chat*.js'
