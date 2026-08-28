@@ -18,8 +18,11 @@ test('service operations initializes after workspace render',()=>{
   assert.match(source,/renderAll=function\(\)\{const result=baseRenderAll\.apply\(this,arguments\);initialize\(\);return result\};/);
 });
 
-test('service screen ownership remains activity-gated',()=>{
+test('service screen ownership remains activity-gated without owning primary navigation',()=>{
   const ensureScreen=source.match(/function ensureScreen\(\)\{([\s\S]*?)\n  \}/)?.[1]||'';
   assert.match(ensureScreen,/if\(!isServiceBusiness\(\)\)return null;/);
-  assert.match(source,/x-dabbir-service-operations-ui','v2'/);
+  assert.doesNotMatch(source,/function\s+ensureNav\s*\(/);
+  assert.doesNotMatch(source,/dabbirServicesNav/);
+  assert.doesNotMatch(source,/\.dataset\.screen\s*=/);
+  assert.match(source,/x-dabbir-service-operations-ui','v3'/);
 });
