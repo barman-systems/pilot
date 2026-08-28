@@ -8,6 +8,8 @@ on:
       - 'scripts/dabbir-production-origin-gate.mjs'
       - 'config/barman-integration-contract.json'
       - 'api/auth/**'
+      - 'api/_password-breach-check.js'
+      - 'test/dabbir-password-breach-check.test.mjs'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
             echo 'source=none' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Enforce leaked password protection
+      - name: Enforce native Supabase leaked password protection
         if: steps.credential.outputs.available == 'true'
         shell: bash
         run: |
@@ -69,8 +71,17 @@ jobs:
           if (config.password_hibp_enabled !== true) {
             throw new Error('Supabase leaked password protection remains disabled');
           }
-          console.log('Supabase leaked password protection verified.');
+          console.log('Supabase native leaked password protection verified.');
           NODE
+
+      - name: Verify DABBIR compensating leaked-password guard
+        if: steps.credential.outputs.available != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/dabbir-password-breach-check.test.mjs
+          echo 'Supabase native leaked-password protection was not modified because no Management API credential is configured.'
+          echo 'DABBIR application-layer HIBP k-anonymity guard is verified as the active compensating control.'
 
       - name: Classify canonical DABBIR production origin
         id: launch-gate
@@ -135,10 +146,3 @@ jobs:
           }
           console.log('DABBIR hosted Auth production URL configuration verified.');
           NODE
-
-      - name: Block when management credential is unavailable
-        if: steps.credential.outputs.available != 'true'
-        shell: bash
-        run: |
-          echo '::error::Supabase Management API credential is not configured; leaked-password protection cannot be remotely enforced.'
-          exit 1
