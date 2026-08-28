@@ -38,6 +38,23 @@ test('same idempotency key can never trigger a second external send',()=>{
   assert.doesNotMatch(replayBranch,/sendMetaText/);
 });
 
+test('accepted replay readback failure retains provider truth and blocks duplicate resend',()=>{
+  const replayStart=reply.indexOf('if (!reservation.shouldSend)');
+  const replayEnd=reply.indexOf('if (String(connection.id)',replayStart);
+  const replayBranch=reply.slice(replayStart,replayEnd);
+  const acceptedStateAt=replayBranch.indexOf("['PROVIDER_ACCEPTED', 'SENT', 'DELIVERED', 'READ']");
+  const providerAcceptedAt=replayBranch.indexOf('providerAccepted = true',acceptedStateAt);
+  const readbackAt=replayBranch.indexOf('readPersistedMessage',acceptedStateAt);
+  assert.ok(acceptedStateAt>=0,'accepted replay state gate missing');
+  assert.ok(providerAcceptedAt>acceptedStateAt && providerAcceptedAt<readbackAt,'provider acceptance must be recorded before replay readback');
+  assert.match(replayBranch,/error\.providerAccepted = true/);
+  assert.match(replayBranch,/error\.ambiguous = true/);
+  assert.match(replayBranch,/replayReadbackUnverified\(res, reservation\)/);
+  assert.match(reply,/retry_safe_with_same_key: ambiguous/);
+  assert.match(reply,/state: 'PROVIDER_ACCEPTED_LOCAL_READBACK_UNVERIFIED'/);
+  assert.match(reply,/automatic_resend_blocked: true/);
+});
+
 test('service-role reservation independently enforces active account and membership state',()=>{
   assert.match(migration,/account_access_state[\s\S]*status='suspended'/);
   assert.match(migration,/auth\.users[\s\S]*deleted_at is null[\s\S]*banned_until/);
