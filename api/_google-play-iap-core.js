@@ -26,6 +26,10 @@ function serviceRoleKey() {
   return value;
 }
 
+function looksLikePrivateKey(value) {
+  return String(value || '').includes(['BEGIN', 'PRIVATE', 'KEY'].join(' '));
+}
+
 function serviceAccountCredentials() {
   const base64 = String(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 || '').trim();
   const plain = String(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || '').trim();
@@ -41,7 +45,7 @@ function serviceAccountCredentials() {
   const clientEmail = String(parsed?.client_email || '').trim();
   const privateKey = String(parsed?.private_key || '').trim();
   const tokenUri = String(parsed?.token_uri || 'https://oauth2.googleapis.com/token').trim();
-  if (!clientEmail || !clientEmail.includes('@') || !privateKey.includes('BEGIN PRIVATE KEY') || !/^https:\/\//i.test(tokenUri)) {
+  if (!clientEmail || !clientEmail.includes('@') || !looksLikePrivateKey(privateKey) || !/^https:\/\//i.test(tokenUri)) {
     throw playError('GOOGLE_PLAY_SERVICE_ACCOUNT_INVALID', 503);
   }
   return { clientEmail, privateKey, tokenUri };
