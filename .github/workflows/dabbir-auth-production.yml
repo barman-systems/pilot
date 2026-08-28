@@ -136,10 +136,9 @@ jobs:
           console.log('DABBIR hosted Auth production URL configuration verified.');
           NODE
 
-      - name: Credential unavailable
+      - name: Block when management credential is unavailable
         if: steps.credential.outputs.available != 'true'
         shell: bash
         run: |
-          echo 'Supabase Management API credential is not configured in this repository; no remote Auth configuration was changed.'
-
-# Remediation trigger: re-enforce Supabase leaked-password protection (2026-08-28).
+          echo '::error::Supabase Management API credential is not configured; leaked-password protection cannot be remotely enforced.'
+          exit 1
