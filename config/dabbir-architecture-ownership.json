@@ -1,24 +1,19 @@
 {
-  "version": 1,
+  "version": 2,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
-    "primary_navigation": "index.html",
+    "primary_navigation_structure": "index.html",
+    "primary_navigation_context_router": "api/dabbir-contextual-navigation-ui.js",
     "service_discovery_under_more": "api/dabbir-contextual-navigation-ui.js",
-    "store_navigation_adaptation": "api/owner-operations-ui.js",
+    "store_navigation_adaptation": "api/dabbir-contextual-navigation-ui.js",
     "auth_session_gate": "api/auth-session-stability-ui.js",
     "business_activity_profile": "api/activity-profile-ui.js",
     "tenant_whatsapp_state": "api/dabbir-whatsapp-status.js",
     "verified_owner_metrics": "api/verified-metrics-ui.js",
     "owner_visual_system": "api/dabbir-owner-first-ui.js"
   },
-  "temporary_exceptions": {
-    "store_navigation_adaptation": {
-      "owner": "api/owner-operations-ui.js",
-      "reason": "Store operations currently replace the appointments destination in-place.",
-      "target": "Move this adaptation into the single navigation/router authority during stabilization phase 2."
-    }
-  },
+  "temporary_exceptions": {},
   "shell": {
     "maximum_injected_api_modules": 25,
     "require_unique_modules": true,
@@ -38,7 +33,12 @@
       "customers",
       "more"
     ],
+    "activity_slot_can_resolve_to": [
+      "appointments",
+      "operations"
+    ],
     "feature_modules_may_add_primary_destinations": false,
+    "feature_modules_may_mutate_primary_destinations": false,
     "service_catalog_must_live_under_more": true
   },
   "truth_rules": {
