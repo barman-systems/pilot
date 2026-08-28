@@ -9,7 +9,6 @@ import {
 } from './_auth-core.js';
 
 const SUPABASE_URL='https://spohjzrsymsmzsseygtw.supabase.co';
-const PLATFORM_ADMIN_CAPABILITY_VERSION='fail-closed-v3';
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const uuid=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 
@@ -85,7 +84,6 @@ export default async function handler(req,res){
           allowed:serviceConfigured,
           role:context.role,
           service_configured:serviceConfigured,
-          capability_version:PLATFORM_ADMIN_CAPABILITY_VERSION,
           reason:serviceConfigured?null:'SERVER_ADMIN_NOT_CONFIGURED',
         });
       }
