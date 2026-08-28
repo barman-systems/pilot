@@ -115,7 +115,7 @@ export async function resolveEmbeddedPlatformConfig() {
   };
 }
 
-export async function ownerContext(req, businessId) {
+export async function ownerContext(req, businessId, options = {}) {
   const accessToken = accessTokenFromRequest(req);
   if (!accessToken) throw Object.assign(new Error('AUTH_REQUIRED'), { status: 401 });
   const [user, memberships] = await withServerReadTimeout(
@@ -123,7 +123,11 @@ export async function ownerContext(req, businessId) {
       getVerifiedUser(accessToken, { signal }),
       getBusinessMemberships(accessToken, { signal }),
     ]),
-    { label: 'WHATSAPP_OWNER_CONTEXT_READ', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
+    {
+      label: 'WHATSAPP_OWNER_CONTEXT_READ',
+      errorCode: 'WHATSAPP_AUTH_DATA_TIMEOUT',
+      timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+    },
   );
   if (!user) throw Object.assign(new Error('AUTH_REQUIRED'), { status: 401 });
   const membership = memberships.find(item => String(item.business_id) === String(businessId));
@@ -188,12 +192,18 @@ export function tokenNeedsRotation(row, config) {
   return String(row?.token_key_version || 'whatsapp_v1') !== String(config?.encryptionKeyVersion || 'whatsapp_v1');
 }
 
-export async function rotateStoredConnectionEncryption(accessToken, row, config, token = null) {
+function connectionStorageError(message, response) {
+  const providerStatus = Number(response?.status || 500);
+  const status = providerStatus === 401 ? 401 : providerStatus === 403 ? 403 : 502;
+  return Object.assign(new Error(message), { status, code: message, providerStatus });
+}
+
+export async function rotateStoredConnectionEncryption(accessToken, row, config, token = null, options = {}) {
   if (!row || !tokenNeedsRotation(row, config)) return { rotated: false, row };
   const plaintext = token == null ? openAccessToken(row, config, row.business_id) : String(token);
   const sealed = sealAccessToken(plaintext, config, row.business_id);
-  const response = await withServerReadTimeout(
-    signal => supabaseRest(
+  return withServerReadTimeout(async signal => {
+    const response = await supabaseRest(
       `dabbir_whatsapp_connections?business_id=eq.${encodeURIComponent(String(row.business_id))}`,
       accessToken,
       {
@@ -202,13 +212,16 @@ export async function rotateStoredConnectionEncryption(accessToken, row, config,
         body: JSON.stringify(sealed),
         signal,
       },
-    ),
-    { label: 'WHATSAPP_CONNECTION_ROTATION_WRITE', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
-  );
-  const payload = await response.json().catch(() => []);
-  if (!response.ok) throw Object.assign(new Error('INTEGRATION_KEY_ROTATION_STORE_FAILED'), { status: 502 });
-  const updated = Array.isArray(payload) ? payload[0] || { ...row, ...sealed } : { ...row, ...sealed };
-  return { rotated: true, row: updated };
+    );
+    const payload = await response.json().catch(() => []);
+    if (!response.ok) throw connectionStorageError('INTEGRATION_KEY_ROTATION_STORE_FAILED', response);
+    const updated = Array.isArray(payload) ? payload[0] || { ...row, ...sealed } : { ...row, ...sealed };
+    return { rotated: true, row: updated };
+  }, {
+    label: 'WHATSAPP_CONNECTION_ROTATION_WRITE',
+    errorCode: 'WHATSAPP_CONNECTION_STORE_TIMEOUT',
+    timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+  });
 }
 
 async function graphFetch(config, path, { method = 'GET', token, query, body } = {}) {
@@ -303,55 +316,63 @@ export async function verifyEmbeddedAssets(config, token, wabaId, phoneNumberId)
   };
 }
 
-export async function loadBusinessConnection(accessToken, businessId) {
+export async function loadBusinessConnection(accessToken, businessId, options = {}) {
   const path = `dabbir_whatsapp_connections?select=id,business_id,status,meta_app_id,waba_id,phone_number_id,display_phone_number,verified_name,access_token_ciphertext,access_token_iv,access_token_tag,token_key_version,token_expires_at,connected_at,last_verified_at,last_provider_status,last_error&business_id=eq.${encodeURIComponent(String(businessId))}&limit=1`;
-  const response = await withServerReadTimeout(
-    signal => supabaseRest(path, accessToken, { signal }),
-    { label: 'WHATSAPP_CONNECTION_READ', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
-  );
-  if (!response.ok) return null;
-  const rows = await response.json().catch(() => []);
-  let row = Array.isArray(rows) ? rows[0] || null : null;
+  let row = await withServerReadTimeout(async signal => {
+    const response = await supabaseRest(path, accessToken, { signal });
+    const rows = await response.json().catch(() => []);
+    if (!response.ok) throw connectionStorageError('WHATSAPP_CONNECTION_READ_FAILED', response);
+    return Array.isArray(rows) ? rows[0] || null : null;
+  }, {
+    label: 'WHATSAPP_CONNECTION_READ',
+    errorCode: 'WHATSAPP_CONNECTION_READ_TIMEOUT',
+    timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+  });
   if (!row) return null;
   const config = embeddedPlatformConfig();
   if (tokenNeedsRotation(row, config) && config.rotationReady) {
-    const rotation = await rotateStoredConnectionEncryption(accessToken, row, config);
+    const rotation = await rotateStoredConnectionEncryption(accessToken, row, config, null, options);
     row = rotation.row || row;
   }
   return row;
 }
 
-export async function upsertBusinessConnection(accessToken, row) {
-  const response = await withServerReadTimeout(
-    signal => supabaseRest('dabbir_whatsapp_connections?on_conflict=business_id', accessToken, {
+export async function upsertBusinessConnection(accessToken, row, options = {}) {
+  return withServerReadTimeout(async signal => {
+    const response = await supabaseRest('dabbir_whatsapp_connections?on_conflict=business_id', accessToken, {
       method: 'POST',
       headers: { prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(row),
       signal,
-    }),
-    { label: 'WHATSAPP_CONNECTION_STORE', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
-  );
-  const payload = await response.json().catch(() => []);
-  if (!response.ok) {
-    const error = new Error('WHATSAPP_CONNECTION_STORE_FAILED');
-    error.status = 502;
-    error.details = payload;
-    throw error;
-  }
-  return Array.isArray(payload) ? payload[0] || null : payload;
+    });
+    const payload = await response.json().catch(() => []);
+    if (!response.ok) {
+      const error = connectionStorageError('WHATSAPP_CONNECTION_STORE_FAILED', response);
+      error.details = payload;
+      throw error;
+    }
+    return Array.isArray(payload) ? payload[0] || null : payload;
+  }, {
+    label: 'WHATSAPP_CONNECTION_STORE',
+    errorCode: 'WHATSAPP_CONNECTION_STORE_TIMEOUT',
+    timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+  });
 }
 
-export async function removeBusinessConnection(accessToken, businessId) {
-  const response = await withServerReadTimeout(
-    signal => supabaseRest(`dabbir_whatsapp_connections?business_id=eq.${encodeURIComponent(String(businessId))}`, accessToken, {
+export async function removeBusinessConnection(accessToken, businessId, options = {}) {
+  return withServerReadTimeout(async signal => {
+    const response = await supabaseRest(`dabbir_whatsapp_connections?business_id=eq.${encodeURIComponent(String(businessId))}`, accessToken, {
       method: 'DELETE',
       headers: { prefer: 'return=representation' },
       signal,
-    }),
-    { label: 'WHATSAPP_CONNECTION_DELETE', timeoutMs: WHATSAPP_DATA_TIMEOUT_MS },
-  );
-  if (!response.ok) throw Object.assign(new Error('WHATSAPP_CONNECTION_DELETE_FAILED'), { status: 502 });
-  return response.json().catch(() => []);
+    });
+    if (!response.ok) throw connectionStorageError('WHATSAPP_CONNECTION_DELETE_FAILED', response);
+    return response.json().catch(() => []);
+  }, {
+    label: 'WHATSAPP_CONNECTION_DELETE',
+    errorCode: 'WHATSAPP_CONNECTION_DELETE_TIMEOUT',
+    timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+  });
 }
 
 export async function unsubscribeWaba(config, token, wabaId) {
