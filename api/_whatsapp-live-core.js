@@ -1,8 +1,9 @@
+import crypto from 'node:crypto';
 import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 
 const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
-const META_STATUS_VERIFIED = new Set(['sent', 'delivered', 'read']);
+const META_STATUS_VERIFIED = new Set(['delivered', 'read']);
 
 function clean(value, max = 4000) {
   return String(value || '').trim().slice(0, max);
@@ -10,6 +11,13 @@ function clean(value, max = 4000) {
 
 function serviceKey() {
   return clean(process.env.SUPABASE_SERVICE_ROLE_KEY, 4096);
+}
+
+function externalError(message, status, externalSideEffects = false) {
+  const error = new Error(message);
+  error.status = status;
+  error.externalSideEffects = externalSideEffects;
+  return error;
 }
 
 export function whatsappLiveServerCapability() {
@@ -62,13 +70,28 @@ function occurredAt(timestamp) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
 }
 
+function firstRow(rows) {
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+export function whatsappReplyFingerprint({ businessId, conversationId, senderUserId, body }) {
+  const normalized = clean(body, 4000);
+  if (!businessId || !conversationId || !senderUserId || !normalized) return '';
+  return crypto.createHash('sha256')
+    .update(String(businessId)).update('\0')
+    .update(String(conversationId)).update('\0')
+    .update(String(senderUserId)).update('\0')
+    .update(normalized)
+    .digest('hex');
+}
+
 export async function persistSignedInbound(event) {
   if (!event?.messageId || !event?.phoneNumberId || !event?.from || !clean(event?.text)) {
     const error = new Error('WHATSAPP_INBOUND_EVENT_INCOMPLETE');
     error.status = 400;
     throw error;
   }
-  const rows = await serviceRpc('dabbir_whatsapp_persist_inbound', {
+  const row = firstRow(await serviceRpc('dabbir_whatsapp_persist_inbound', {
     p_phone_number_id: clean(event.phoneNumberId, 160),
     p_provider_message_id: clean(event.messageId, 320),
     p_sender_handle: clean(event.from, 160),
@@ -76,8 +99,7 @@ export async function persistSignedInbound(event) {
     p_body: clean(event.text, 4000),
     p_intent: clean(event.classification, 120) || null,
     p_occurred_at: occurredAt(event.timestamp),
-  });
-  const row = Array.isArray(rows) ? rows[0] : rows;
+  }));
   if (!row?.conversation_id || !row?.message_id) {
     const error = new Error('WHATSAPP_INBOUND_PERSISTENCE_UNVERIFIED');
     error.status = 502;
@@ -98,31 +120,64 @@ export async function applySignedStatus(event) {
     throw error;
   }
   const status = clean(event.status, 40).toLowerCase();
-  const rows = await serviceRpc('dabbir_whatsapp_apply_status', {
+  const row = firstRow(await serviceRpc('dabbir_whatsapp_apply_status', {
     p_phone_number_id: clean(event.phoneNumberId, 160),
     p_provider_message_id: clean(event.messageId, 320),
     p_status: status,
     p_occurred_at: occurredAt(event.timestamp),
-  });
-  const row = Array.isArray(rows) ? rows[0] : rows;
+  }));
   return {
     matched: row?.matched === true,
-    providerVerified: row?.provider_verified === true || META_STATUS_VERIFIED.has(status) && row?.matched === true,
+    providerVerified: row?.provider_verified === true && META_STATUS_VERIFIED.has(status),
   };
 }
 
-export async function recordProviderAcceptedReply({ businessId, conversationId, providerMessageId, body, senderUserId }) {
-  const rows = await serviceRpc('dabbir_whatsapp_record_outbound', {
+export async function beginOutboundAttempt({ businessId, conversationId, senderUserId, body }) {
+  const fingerprint = whatsappReplyFingerprint({ businessId, conversationId, senderUserId, body });
+  if (!fingerprint) throw Object.assign(new Error('WHATSAPP_IDEMPOTENCY_CONTEXT_REQUIRED'), { status: 400 });
+  const row = firstRow(await serviceRpc('dabbir_whatsapp_begin_outbound', {
     p_business_id: String(businessId),
     p_conversation_id: String(conversationId),
+    p_sender_user_id: String(senderUserId),
+    p_request_fingerprint: fingerprint,
+  }));
+  if (!row?.attempt_id || !row?.provider_status) {
+    const error = new Error('WHATSAPP_OUTBOUND_RESERVATION_UNVERIFIED');
+    error.status = 502;
+    throw error;
+  }
+  return {
+    attemptId: row.attempt_id,
+    providerStatus: clean(row.provider_status, 40),
+    duplicate: row.duplicate === true,
+    fingerprint,
+  };
+}
+
+export async function markOutboundUnknown({ businessId, attemptId, reason }) {
+  try {
+    await serviceRpc('dabbir_whatsapp_mark_outbound_unknown', {
+      p_business_id: String(businessId),
+      p_attempt_id: String(attemptId),
+      p_reason: clean(reason, 120) || 'PROVIDER_OUTCOME_UNKNOWN',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function finalizeProviderAcceptedReply({ businessId, attemptId, providerMessageId, body, senderUserId }) {
+  const row = firstRow(await serviceRpc('dabbir_whatsapp_finalize_outbound', {
+    p_business_id: String(businessId),
+    p_attempt_id: String(attemptId),
     p_provider_message_id: clean(providerMessageId, 320),
     p_body: clean(body, 4000),
     p_sender_user_id: String(senderUserId),
     p_occurred_at: new Date().toISOString(),
-  });
-  const row = Array.isArray(rows) ? rows[0] : rows;
+  }));
   if (!row?.message_id || !row?.event_id) {
-    const error = new Error('WHATSAPP_OUTBOUND_PERSISTENCE_UNVERIFIED');
+    const error = new Error('WHATSAPP_OUTBOUND_FINALIZE_UNVERIFIED');
     error.status = 502;
     throw error;
   }
@@ -131,24 +186,20 @@ export async function recordProviderAcceptedReply({ businessId, conversationId, 
 
 export async function sendMetaText({ connection, businessId, recipient, body }) {
   const capability = whatsappLiveServerCapability();
-  if (!capability.service_data_access) {
-    const error = new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
-    error.status = 503;
-    throw error;
-  }
+  if (!capability.service_data_access) throw externalError('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED', 503, false);
   const platform = applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
-  if (!platform.appSecret || !platform.encryptionSecret) {
-    const error = new Error('WHATSAPP_PLATFORM_SECRET_NOT_CONFIGURED');
-    error.status = 503;
-    throw error;
+  if (!platform.appSecret || !platform.encryptionSecret) throw externalError('WHATSAPP_PLATFORM_SECRET_NOT_CONFIGURED', 503, false);
+
+  let token;
+  try {
+    token = openAccessToken(connection, platform, businessId);
+  } catch {
+    throw externalError('WHATSAPP_ACCESS_TOKEN_UNAVAILABLE', 503, false);
   }
-  const token = openAccessToken(connection, platform, businessId);
   const phoneNumberId = clean(connection?.phone_number_id, 160);
-  if (!token || !phoneNumberId || !clean(recipient, 160) || !clean(body, 4000)) {
-    const error = new Error('WHATSAPP_OUTBOUND_CONTEXT_INCOMPLETE');
-    error.status = 409;
-    throw error;
-  }
+  const target = clean(recipient, 160);
+  const message = clean(body, 4000);
+  if (!token || !phoneNumberId || !target || !message) throw externalError('WHATSAPP_OUTBOUND_CONTEXT_INCOMPLETE', 409, false);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -165,33 +216,26 @@ export async function sendMetaText({ connection, businessId, recipient, body }) 
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
-        to: clean(recipient, 160),
+        to: target,
         type: 'text',
-        text: { preview_url: false, body: clean(body, 4000) },
+        text: { preview_url: false, body: message },
       }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error('META_WHATSAPP_SEND_FAILED');
-      error.status = response.status >= 500 ? 502 : 409;
+      const error = externalError('META_WHATSAPP_SEND_FAILED', response.status >= 500 ? 502 : 409, false);
       error.providerStatus = response.status;
       error.providerCode = payload?.error?.code || null;
       throw error;
     }
     const providerMessageId = clean(payload?.messages?.[0]?.id, 320);
-    if (!providerMessageId) {
-      const error = new Error('META_WHATSAPP_SEND_UNVERIFIED');
-      error.status = 502;
-      throw error;
-    }
-    return { providerMessageId, providerStatus: response.status };
+    if (!providerMessageId) throw externalError('META_WHATSAPP_SEND_ACCEPTED_ID_UNVERIFIED', 502, true);
+    return { providerMessageId, providerStatus: response.status, externalSideEffects: true };
   } catch (error) {
-    if (error?.name === 'AbortError') {
-      const timeoutError = new Error('META_WHATSAPP_SEND_TIMEOUT');
-      timeoutError.status = 502;
-      throw timeoutError;
-    }
-    throw error;
+    if (error?.name === 'AbortError') throw externalError('META_WHATSAPP_SEND_TIMEOUT', 502, 'unknown');
+    if (error?.externalSideEffects !== undefined) throw error;
+    const networkError = externalError('META_WHATSAPP_SEND_NETWORK_OUTCOME_UNKNOWN', 502, 'unknown');
+    throw networkError;
   } finally {
     clearTimeout(timeout);
   }
