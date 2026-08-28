@@ -1,7 +1,7 @@
 import { singleQueryValue } from './_request-query.js';
-import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
+import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, supabaseRpc } from './_auth-core.js';
 import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
-import { serviceRpc, whatsappLiveServerCapability } from './_whatsapp-live-core.js';
+import { whatsappLiveServerCapability } from './_whatsapp-live-core.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
@@ -55,10 +55,17 @@ function emptyOperationalEvidence(available = true) {
   };
 }
 
-export async function loadOperationalEvidence(businessId) {
+async function rowsOrNull(response) {
+  if (!response?.ok) return null;
+  const rows = await response.json().catch(() => null);
+  return Array.isArray(rows) ? rows : null;
+}
+
+export async function loadOperationalEvidence(accessToken, businessId) {
   try {
-    const rows = await serviceRpc('dabbir_whatsapp_operational_evidence', { p_business_id: businessId });
-    const row = Array.isArray(rows) ? rows[0] : rows;
+    const response = await supabaseRpc('dabbir_whatsapp_operational_evidence', accessToken, { p_business_id: businessId });
+    const rows = await rowsOrNull(response);
+    const row = rows?.[0];
     if (!row) return emptyOperationalEvidence(false);
     return {
       available: row.available === true,
@@ -134,7 +141,7 @@ async function embeddedStatus(req, accessToken, businessId) {
   try {
     const [verified, evidence] = await Promise.all([
       verifyStoredConnection(platform, row),
-      loadOperationalEvidence(businessId),
+      loadOperationalEvidence(accessToken, businessId),
     ]);
     const machine = deriveWhatsAppOperationalState({
       hasConnection: true,
