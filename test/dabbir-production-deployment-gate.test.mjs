@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const ignore = fs.readFileSync(new URL('../vercel-ignore-if-unaffected.sh', import.meta.url), 'utf8');
+const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const gatePath = 'scripts/vercel-build-gate.mjs';
 const gate = fs.readFileSync(new URL(`../${gatePath}`, import.meta.url), 'utf8');
 
@@ -44,4 +45,14 @@ test('runtime and package changes cannot be skipped by the Vercel ignore gate', 
   assert.match(ignore, /Runtime or unknown path changed/);
   assert.doesNotMatch(ignore, /package\.json\|/);
   assert.doesNotMatch(ignore, /package-lock\.json\|/);
+});
+
+test('direct main pushes are blocked from both CI readiness and Vercel Production', () => {
+  assert.match(ignore, /DIRECT_MAIN_RELEASE_BLOCKED/);
+  assert.match(ignore, /git cat-file -p \"\$current\"/);
+  assert.match(ignore, /parent_count/);
+  assert.match(ci, /Reject direct pushes to main before release work/);
+  assert.match(ci, /DIRECT_MAIN_PUSH_FORBIDDEN/);
+  assert.match(ci, /git cat-file -p \"\$GITHUB_SHA\"/);
+  assert.match(ci, /parent_count/);
 });
