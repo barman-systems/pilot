@@ -37,7 +37,7 @@ export function checkoutIdempotencyKey(businessId,userId,now=Date.now()){
   return `dabbir_checkout_${crypto.createHash('sha256').update(`${businessId}:${userId}:${bucket}`).digest('hex').slice(0,32)}`;
 }
 
-export async function requireBillingOwner(req,businessIdValue){
+export async function requireBillingOwner(req,businessIdValue,options={}){
   const businessId=safeBusinessId(businessIdValue);if(!businessId)throw billingError('BUSINESS_ID_REQUIRED',400);
   const accessToken=accessTokenFromRequest(req);if(!accessToken)throw billingError('AUTH_REQUIRED',401);
   const [user,memberships]=await withServerReadTimeout(
@@ -45,7 +45,7 @@ export async function requireBillingOwner(req,businessIdValue){
       getVerifiedUser(accessToken,{signal}),
       getBusinessMemberships(accessToken,{signal}),
     ]),
-    {label:'BILLING_AUTH_READ',timeoutMs:BILLING_READ_TIMEOUT_MS},
+    {label:'BILLING_AUTH_READ',errorCode:'BILLING_AUTH_DATA_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS},
   );
   if(!user)throw billingError('AUTH_REQUIRED',401);
   const membership=memberships.find(row=>row.business_id===businessId)||null;
@@ -60,10 +60,10 @@ async function parseResponse(response,fallback){
   return data;
 }
 
-export async function getBillingAccount(accessToken,businessId){
+export async function getBillingAccount(accessToken,businessId,options={}){
   const response=await withServerReadTimeout(
     signal=>supabaseRest(`dabbir_billing_accounts?select=business_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,trial_started_at,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,accessToken,{signal}),
-    {label:'BILLING_ACCOUNT_READ',timeoutMs:BILLING_READ_TIMEOUT_MS},
+    {label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS},
   );
   const rows=await parseResponse(response,'BILLING_STATUS_UNAVAILABLE');return Array.isArray(rows)?rows[0]||null:null;
 }
