@@ -10,8 +10,10 @@ set -u
 #    commit is evidence, not an optimization target; test/docs follow-ups may
 #    contain the repair for a previously failing runtime commit.
 # 2) On main, compare against Vercel's last successful deployment baseline and
-#    build whenever any runtime/unknown path changed in that range.
-# 3) Any uncertainty fails safe to a build.
+#    build whenever any application, database migration, or unknown path changed
+#    in that range. Database schema is part of the Production artifact contract;
+#    a migration must not leave main SHA ahead of the deployed SHA.
+# 3) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
 previous_success="${VERCEL_GIT_PREVIOUS_SHA:-}"
@@ -56,14 +58,14 @@ fi
 
 while IFS= read -r path; do
   case "$path" in
-    .github/*|docs/*|test/*|db/*|supabase/*|README.md|.gitignore)
+    .github/*|docs/*|test/*|README.md|.gitignore)
       ;;
     *)
-      echo "Runtime or unknown path changed since verification baseline: $path; continue deployment."
+      echo "Runtime or unknown path changed since verification baseline (database paths are runtime-affecting): $path; continue deployment."
       exit 1
       ;;
   esac
 done <<< "$changed"
 
-echo "Only non-runtime DABBIR paths changed since verification baseline; skip Vercel deployment."
+echo "Only explicitly non-runtime DABBIR paths changed since verification baseline; skip Vercel deployment."
 exit 0
