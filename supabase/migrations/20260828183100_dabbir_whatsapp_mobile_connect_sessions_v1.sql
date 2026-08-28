@@ -1,7 +1,8 @@
 -- DABBIR WhatsApp mobile connect sessions v1
 -- Short-lived one-time state for iPhone system-browser Embedded Signup.
 -- No user access token or Meta access token is stored here. The short-lived Meta
--- authorization code is encrypted by the application before storage.
+-- authorization code is encrypted by the application before storage and erased
+-- once the session reaches a terminal state.
 
 create table if not exists public.dabbir_whatsapp_mobile_connect_sessions (
   state_hash text primary key check (state_hash ~ '^[0-9a-f]{64}$'),
@@ -26,7 +27,7 @@ create table if not exists public.dabbir_whatsapp_mobile_connect_sessions (
   last_error text,
   constraint dabbir_whatsapp_mobile_connect_capture_shape check (
     (
-      status = 'pending'
+      status in ('pending','consumed','failed')
       and code_ciphertext is null
       and code_iv is null
       and code_tag is null
@@ -34,30 +35,11 @@ create table if not exists public.dabbir_whatsapp_mobile_connect_sessions (
     )
     or
     (
-      status in ('captured','completing','consumed')
+      status in ('captured','completing')
       and code_ciphertext is not null
       and code_iv is not null
       and code_tag is not null
       and code_key_version is not null
-    )
-    or
-    (
-      status = 'failed'
-      and (
-        (
-          code_ciphertext is null
-          and code_iv is null
-          and code_tag is null
-          and code_key_version is null
-        )
-        or
-        (
-          code_ciphertext is not null
-          and code_iv is not null
-          and code_tag is not null
-          and code_key_version is not null
-        )
-      )
     )
   )
 );
@@ -78,4 +60,4 @@ revoke all on table public.dabbir_whatsapp_mobile_connect_sessions from authenti
 grant select, insert, update, delete on table public.dabbir_whatsapp_mobile_connect_sessions to service_role;
 
 comment on table public.dabbir_whatsapp_mobile_connect_sessions is
-  'Service-only, short-lived one-time state for DABBIR iPhone WhatsApp Embedded Signup. No end-user RLS policies by design.';
+  'Service-only, short-lived one-time state for DABBIR iPhone WhatsApp Embedded Signup. Authorization codes are encrypted in transient states and erased on consumed/failed terminal states. No end-user RLS policies by design.';
