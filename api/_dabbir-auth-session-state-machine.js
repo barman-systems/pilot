@@ -2,6 +2,7 @@
 export const AUTH_SESSION_STAGES = Object.freeze({
   SIGNED_OUT: 'signed_out',
   AUTHENTICATING: 'authenticating',
+  MFA_REQUIRED: 'mfa_required',
   SESSION_VERIFIED: 'session_verified',
   WORKSPACE_READY: 'workspace_ready',
   SUSPENDED: 'suspended',
@@ -14,7 +15,14 @@ export const AUTH_SESSION_TRANSITIONS = Object.freeze({
   ]),
   [AUTH_SESSION_STAGES.AUTHENTICATING]: Object.freeze([
     AUTH_SESSION_STAGES.SIGNED_OUT,
+    AUTH_SESSION_STAGES.MFA_REQUIRED,
     AUTH_SESSION_STAGES.SESSION_VERIFIED,
+    AUTH_SESSION_STAGES.SUSPENDED,
+    AUTH_SESSION_STAGES.DEGRADED,
+  ]),
+  [AUTH_SESSION_STAGES.MFA_REQUIRED]: Object.freeze([
+    AUTH_SESSION_STAGES.SESSION_VERIFIED,
+    AUTH_SESSION_STAGES.SIGNED_OUT,
     AUTH_SESSION_STAGES.SUSPENDED,
     AUTH_SESSION_STAGES.DEGRADED,
   ]),
@@ -45,6 +53,7 @@ export function isAllowedAuthSessionTransition(from, to) {
 
 export function deriveAuthSessionState({
   attempting = false,
+  mfaRequired = false,
   sessionVerified = false,
   workspaceReady = false,
   suspended = false,
@@ -68,12 +77,21 @@ export function deriveAuthSessionState({
     };
   }
 
-  if (workspaceReady && !sessionVerified) {
+  if (workspaceReady && (!sessionVerified || mfaRequired)) {
     return {
       stage: AUTH_SESSION_STAGES.DEGRADED,
       authenticated: false,
       workspace_ready: false,
-      reason: 'WORKSPACE_WITHOUT_VERIFIED_SESSION',
+      reason: mfaRequired ? 'WORKSPACE_BEFORE_MFA_VERIFICATION' : 'WORKSPACE_WITHOUT_VERIFIED_SESSION',
+    };
+  }
+
+  if (mfaRequired) {
+    return {
+      stage: AUTH_SESSION_STAGES.MFA_REQUIRED,
+      authenticated: true,
+      workspace_ready: false,
+      reason: 'MFA_REQUIRED',
     };
   }
 
