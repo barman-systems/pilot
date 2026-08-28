@@ -55,7 +55,11 @@ const client=String.raw`
     const host=actionHead||autoHero;if(!host)return;
     let button=document.querySelector('#dabbirMemoryButton');
     if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',openDialog);const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
-    const x=copy();button.classList.toggle('has-candidate',state.candidates.length>0);button.textContent=state.candidates.length?x.candidate+' · '+state.candidates.length:x.button;
+    const x=copy();
+    const hasCandidate=state.candidates.length>0;
+    button.classList.toggle('has-candidate',hasCandidate);
+    const nextLabel=hasCandidate?x.candidate+' · '+state.candidates.length:x.button;
+    if(button.textContent!==nextLabel)button.textContent=nextLabel;
   }
   function closeDialog(){document.querySelector('#dabbirMemoryOverlay')?.remove()}
   function policyActions(card,policy,isCandidate){
@@ -94,7 +98,16 @@ const client=String.raw`
       state.loading=false;await load(true);closeDialog();openDialog();notify(x.saved);
     }catch{state.loading=false;notify(x.failed)}
   }
-  const observer=new MutationObserver(()=>{if(document.querySelector('#dabbirActionCenter')||document.querySelector('#screen-automations')){renderButton();load(false)}});observer.observe(document.documentElement,{subtree:true,childList:true});
+  let observerFrame=0;
+  function scheduleObservedSync(){
+    if(observerFrame)return;
+    const run=()=>{
+      observerFrame=0;
+      if(document.querySelector('#dabbirActionCenter')||document.querySelector('#screen-automations')){renderButton();load(false)}
+    };
+    observerFrame=typeof requestAnimationFrame==='function'?requestAnimationFrame(run):setTimeout(run,0);
+  }
+  const observer=new MutationObserver(scheduleObservedSync);observer.observe(document.documentElement,{subtree:true,childList:true});
   setTimeout(()=>load(true),700);window.__dabbirOwnerDecisionMemory={refresh:()=>load(true),version:'owner-decision-memory-ui-v1'};
 })();
 `;
