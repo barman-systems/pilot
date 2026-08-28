@@ -116,6 +116,21 @@ test('Embedded completion binds Meta code exchange to the exact same-origin page
   assert.match(endpoint, /providerSubcode/);
 });
 
+test('Embedded completion self-heals only the authoritative production Meta App Domain after provider error 191', async () => {
+  const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+  assert.match(endpoint, /function productionMetaRepairHost\(redirectUri\)/);
+  assert.match(endpoint, /VERCEL_PROJECT_PRODUCTION_URL/);
+  assert.match(endpoint, /VERCEL_ENV/);
+  assert.match(endpoint, /redirectHost !== configuredHost/);
+  assert.match(endpoint, /Number\(error\?\.providerCode \|\| 0\) === 191/);
+  assert.match(endpoint, /fields', 'app_domains'/);
+  assert.match(endpoint, /body\.set\('app_domains', JSON\.stringify\(domains\)\)/);
+  assert.match(endpoint, /META_APP_DOMAIN_UPDATE_UNVERIFIED/);
+  assert.match(endpoint, /exchangeEmbeddedCodeWithDomainRepair/);
+  assert.match(endpoint, /meta_app_domain_repaired/);
+  assert.doesNotMatch(endpoint, /app_secret:/i);
+});
+
 test('WhatsApp connection storage is tenant-scoped and RLS protected', async () => {
   const migration = await read('supabase/migrations/20260826195230_dabbir_whatsapp_embedded_signup_v17.sql');
   assert.match(migration, /dabbir_whatsapp_connections/);
