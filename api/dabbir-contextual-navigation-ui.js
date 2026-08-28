@@ -1,4 +1,5 @@
 // BAR-30 invariant: contextual features are discovered under More; they do not create primary navigation destinations.
+// Exact-head build marker: this runtime file intentionally changes only documentation so Vercel executes the full gate on the final Phase-1 branch head.
 const script=String.raw`(()=>{
   if(window.__dabbirContextualNavigationUi)return;
   window.__dabbirContextualNavigationUi=true;
