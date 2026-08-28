@@ -10,6 +10,16 @@ const script = String.raw`(()=>{
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
+  function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
+
+  const style=document.createElement('style');
+  style.dataset.dabbirWhatsAppNoFacebook='v1';
+  style.textContent=[
+    '.dabbirWhatsAppNoFacebook{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.65}',
+    '.dabbirWhatsAppNoFacebook strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
+    '.dabbirWhatsAppNoFacebook button{margin-top:8px;min-height:36px;border:1px solid #34415f;background:#151d2f;color:#eef3fb;border-radius:9px;padding:7px 10px;font-size:9px;font-weight:850;cursor:pointer}'
+  ].join('');
+  document.head.appendChild(style);
 
   async function config(){
     const bid=businessId();
@@ -43,12 +53,37 @@ const script = String.raw`(()=>{
       : 'The connect control works, but Meta cannot open because platform setup is incomplete: '+items+'. No incomplete connection was saved.';
   }
 
+  function ensureNoFacebookNotice(box){
+    if(!box||box.querySelector('[data-dabbir-no-facebook]')) return;
+    const notice=document.createElement('div');
+    notice.className='dabbirWhatsAppNoFacebook';
+    notice.setAttribute('data-dabbir-no-facebook','true');
+    const title=document.createElement('strong');
+    title.textContent=ar()?'لا تملك حساب Facebook؟':'No Facebook account?';
+    const text=document.createElement('span');
+    text.textContent=ar()
+      ? 'يمكنك متابعة استخدام دبّر الآن وربط واتساب لاحقًا. ربط رقم WhatsApp Business الخاص بك رسميًا يمر عبر تسجيل Meta/Facebook بحسب متطلبات منصة WhatsApp الحالية، لذلك عدم وجود حساب Facebook لا يمنع إنشاء حساب دبّر أو استخدام بقية النظام.'
+      : 'You can keep using DABBIR now and connect WhatsApp later. Officially connecting your own WhatsApp Business number goes through Meta/Facebook login under the current WhatsApp Business Platform requirements, so not having Facebook does not block your DABBIR account or the rest of the product.';
+    const button=document.createElement('button');
+    button.type='button';
+    button.textContent=ar()?'متابعة بدون واتساب':'Continue without WhatsApp';
+    button.onclick=()=>{
+      try{if(typeof showScreen==='function')showScreen('dashboard')}catch{}
+      tell(ar()?'يمكنك ربط واتساب لاحقًا من التكاملات':'You can connect WhatsApp later from Integrations');
+    };
+    notice.append(title,text,button);
+    box.appendChild(notice);
+  }
+
   async function patch(){
     patchScheduled=false;
     const cfg=await config();
     const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
+    document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureNoFacebookNotice);
     document.querySelectorAll('.dabbirWhatsAppConnect,.dabbirWhatsAppChange').forEach(button=>{
       if(!(button instanceof HTMLButtonElement)) return;
+      const box=button.closest('[data-dabbir-whatsapp-actions]');
+      if(box) ensureNoFacebookNotice(box);
       if(platformReady||button.dataset.platformReady!=='false') return;
       if(button.closest('.dabbirWhatsAppBusy')) return;
       const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
