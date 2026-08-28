@@ -67,7 +67,7 @@ jobs:
 
   ios-native-compile:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: mobile
@@ -114,16 +114,35 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            build | tee /tmp/dabbir-xcodebuild.log
+            build | tee /tmp/dabbir-xcodebuild-simulator.log
+      - name: Compile Release for generic iOS device without signing
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace "${DABBIR_XCODE_WORKSPACE}" \
+            -scheme "${DABBIR_XCODE_SCHEME}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build | tee /tmp/dabbir-xcodebuild-device.log
       - name: Record native compile evidence
         if: success()
         shell: bash
         run: |
           {
             echo "xcode=$(xcodebuild -version | tr '\n' ' ')"
+            echo "iphoneos_sdk=$(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "iphonesimulator_sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)"
             echo "workspace=${DABBIR_XCODE_WORKSPACE}"
             echo "scheme=${DABBIR_XCODE_SCHEME}"
             echo "sha=${GITHUB_SHA}"
+            echo "simulator_release_compile=PASS"
+            echo "generic_device_release_compile=PASS"
+            echo "code_signing=DISABLED_FOR_COMPILE_GATE"
           } > /tmp/dabbir-ios-native-compile-evidence.txt
       - name: Upload native compile evidence
         if: always()
@@ -132,6 +151,7 @@ jobs:
           name: dabbir-ios-native-compile-evidence
           path: |
             /tmp/dabbir-ios-native-compile-evidence.txt
-            /tmp/dabbir-xcodebuild.log
+            /tmp/dabbir-xcodebuild-simulator.log
+            /tmp/dabbir-xcodebuild-device.log
           if-no-files-found: warn
           retention-days: 7
