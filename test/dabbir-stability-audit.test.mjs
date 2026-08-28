@@ -41,7 +41,9 @@ test('tenant WhatsApp status cannot inherit a global server phone identity', () 
 });
 
 test('root routing remains pinned to the recovery-authoritative shell', async () => {
-  const vercel = await readFile(new URL('vercel.json', root), 'utf8');
-  assert.match(vercel, /\"src\": \"\^\/\$\"[\s\S]*\"dest\": \"\/api\/app-recovery\"/);
-  assert.match(vercel, /\"source\": \"\/\"[\s\S]*\"destination\": \"\/api\/app-recovery\"/);
+  const vercel = JSON.parse(await readFile(new URL('vercel.json', root), 'utf8'));
+  assert.ok(Array.isArray(vercel.routes));
+  assert.ok(Array.isArray(vercel.rewrites));
+  assert.ok(vercel.routes.some(route => route?.src === '^/$' && route?.dest === '/api/app-recovery'));
+  assert.ok(vercel.rewrites.some(rewrite => rewrite?.source === '/' && rewrite?.destination === '/api/app-recovery'));
 });
