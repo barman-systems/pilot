@@ -1,0 +1,53 @@
+name: DABBIR Public Owner Link
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-public-owner-link.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expose-app-auth-gate:
+    name: Remove Vercel SSO wrapper
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+    steps:
+      - name: Require Vercel API credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo 'VERCEL_TOKEN_NOT_CONFIGURED'; exit 2; }
+
+      - name: Disable only Vercel Authentication wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}"
+          response="$(curl --fail-with-body --silent --show-error \
+            -X PATCH "$endpoint" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"ssoProtection":null}')"
+          printf '%s' "$response" | jq -e --arg id "$VERCEL_PROJECT_ID" '.id == $id and .ssoProtection == null' >/dev/null
+          echo 'VERCEL_SSO_PROTECTION_DISABLED'
+
+      - name: Verify DABBIR remains application-authenticated
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://dabbir-nd56cm4j5v-3619s-projects.vercel.app'
+          status="$(curl --silent --show-error --output /tmp/session.json --write-out '%{http_code}' "$origin/api/auth/session")"
+          test "$status" = '200'
+          jq -e '.authenticated == false' /tmp/session.json >/dev/null
+          admin_status="$(curl --silent --show-error --output /tmp/admin.json --write-out '%{http_code}' "$origin/api/platform-customers?action=overview")"
+          test "$admin_status" = '401'
+          jq -e '.error == "AUTH_REQUIRED"' /tmp/admin.json >/dev/null
+          echo 'DABBIR_APPLICATION_AUTH_REMAINS_FAIL_CLOSED'
