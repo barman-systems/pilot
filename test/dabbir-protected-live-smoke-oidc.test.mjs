@@ -48,6 +48,20 @@ test('release evidence exposes only safe deployment identity and fails closed wi
   assert.doesNotMatch(releaseEvidence,/SERVICE_ROLE|SUPABASE_KEY|TOKEN|SECRET|PASSWORD/);
 });
 
+test('iPhone brand assertion is scoped to the visible auth gate, never the hidden mobile shell brand',()=>{
+  assert.match(runner,/const authGate = page\.locator\('#authGate:not\(\.hidden\)'\)/);
+  assert.match(runner,/authGate\.locator\('\.authCard \.brand \.logo'\)/);
+  assert.match(runner,/AUTH_APPROVED_LOGO_COUNT_/);
+  assert.match(runner,/AUTH_APPROVED_LOGO_NOT_RENDERED/);
+  assert.doesNotMatch(runner,/page\.locator\('\.brand \.logo'\)\.first\(\)/);
+});
+
+test('failure evidence captures the iPhone screen before brand-specific assertions',()=>{
+  const screenshotAt=runner.indexOf("page.screenshot({ path: 'dabbir-protected-live-smoke.png'");
+  const logoAt=runner.indexOf("authGate.locator('.authCard .brand .logo')");
+  assert.ok(screenshotAt>0&&logoAt>0&&screenshotAt<logoAt,'screenshot must be captured before brand assertion failures');
+});
+
 test('smoke runner supports either documented protection access method',()=>{
   assert.match(runner,/VERCEL_AUTOMATION_BYPASS_SECRET/);
   assert.match(runner,/VERCEL_TRUSTED_OIDC_TOKEN/);
