@@ -1,6 +1,14 @@
-import { authCookieHeaders, json, readJsonBody, requireSameOrigin, supabaseAuth } from '../_auth-core.js';
+import { authCookieHeaders, getVerifiedUser, json, readJsonBody, requireSameOrigin, supabaseAuth } from '../_auth-core.js';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function revoke(accessToken) {
+  await supabaseAuth('/auth/v1/logout', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: '{}',
+  }).catch(() => null);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
@@ -22,6 +30,13 @@ export default async function handler(req, res) {
 
     const session = await response.json();
     if (!session.access_token || !session.refresh_token) return json(res, 502, { ok: false, error: 'AUTH_SESSION_MISSING' });
+
+    const dabbirUser = await getVerifiedUser(session.access_token).catch(() => null);
+    if (!dabbirUser) {
+      await revoke(session.access_token);
+      return json(res, 403, { ok: false, error: 'DABBIR_ACCOUNT_UNAVAILABLE' });
+    }
+
     res.setHeader('set-cookie', authCookieHeaders(session));
     return json(res, 200, { ok: true, authenticated: true, expires_in: session.expires_in ?? null });
   } catch (error) {
