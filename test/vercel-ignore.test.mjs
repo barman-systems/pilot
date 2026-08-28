@@ -57,6 +57,26 @@ test('test-only changes on main skip Vercel deployment when no runtime drift exi
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
+test('Supabase migrations on main force Vercel deployment so production SHA cannot drift', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  fs.mkdirSync(path.join(dir, 'supabase', 'migrations'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'supabase', 'migrations', '20260828000000_test.sql'), 'select 1;\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'database migration');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
+});
+
+test('db paths on main are production-affecting and force Vercel deployment', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  fs.mkdirSync(path.join(dir, 'db'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'db', 'schema.sql'), 'select 1;\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'database schema');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
+});
+
 test('failed or unverified runtime change on main cannot be hidden by a later test-only commit', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
