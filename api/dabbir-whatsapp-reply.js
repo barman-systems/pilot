@@ -37,7 +37,11 @@ async function readPersistedMessage(token, businessId, messageId) {
       token,
       { signal },
     ),
-    { label: 'WHATSAPP_REPLY_READBACK', timeoutMs: WHATSAPP_READBACK_TIMEOUT_MS },
+    {
+      label: 'WHATSAPP_REPLY_READBACK',
+      errorCode: 'WHATSAPP_REPLY_READBACK_TIMEOUT',
+      timeoutMs: WHATSAPP_READBACK_TIMEOUT_MS,
+    },
   );
   const rows = await readRows(response, 'WHATSAPP_REPLY_READBACK_FAILED');
   const message = rows[0] || null;
