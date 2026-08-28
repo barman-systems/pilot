@@ -8,10 +8,8 @@ const script=String.raw`(()=>{
   const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
 
-  // index.html intentionally owns workspace as a top-level `let`, which creates a
-  // global lexical binding rather than window.workspace. Read that canonical
-  // binding first; window.workspace is retained only as a compatibility fallback
-  // for alternate shells that explicitly publish their state on window.
+  // index.html owns workspace as a top-level lexical binding, not a window property.
+  // Read that canonical binding first; keep window.workspace only as a compatibility fallback.
   function currentWorkspace(){
     try{
       if(typeof workspace!=='undefined'&&workspace)return workspace;
