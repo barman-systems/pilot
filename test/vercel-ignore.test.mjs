@@ -26,19 +26,29 @@ function setupRepo() {
   return dir;
 }
 
-function runGuard(cwd, current, previousDeployment = '') {
+function runGuard(cwd, current, previousDeployment = '', ref = 'main') {
   return spawnSync('bash', ['vercel-ignore-if-unaffected.sh'], {
     cwd,
     env: {
       ...process.env,
       VERCEL_GIT_COMMIT_SHA: current,
       VERCEL_GIT_PREVIOUS_SHA: previousDeployment,
+      VERCEL_GIT_COMMIT_REF: ref,
     },
     encoding: 'utf8',
   });
 }
 
-test('test-only changes skip Vercel deployment when no runtime drift exists since last success', () => {
+test('all non-main branches run the full Vercel verification gate even for test-only commits', () => {
+  const dir = setupRepo();
+  const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(dir, 'test', 'new.test.mjs'), 'export {};\n');
+  git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'test only');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(runGuard(dir, head, lastSuccessfulDeployment, 'fix/runtime-proof').status, 1);
+});
+
+test('test-only changes on main skip Vercel deployment when no runtime drift exists since last success', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'test', 'new.test.mjs'), 'export {};\n');
@@ -47,7 +57,7 @@ test('test-only changes skip Vercel deployment when no runtime drift exists sinc
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
-test('failed or unverified runtime change cannot be hidden by a later test-only commit', () => {
+test('failed or unverified runtime change on main cannot be hidden by a later test-only commit', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
 
@@ -61,7 +71,7 @@ test('failed or unverified runtime change cannot be hidden by a later test-only 
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 1);
 });
 
-test('test-only follow-up may skip after the runtime commit itself is the last successful deployment', () => {
+test('test-only follow-up on main may skip after the runtime commit itself is the last successful deployment', () => {
   const dir = setupRepo();
   fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'verified runtime');
@@ -74,7 +84,7 @@ test('test-only follow-up may skip after the runtime commit itself is the last s
   assert.equal(runGuard(dir, head, lastSuccessfulDeployment).status, 0);
 });
 
-test('runtime API changes continue Vercel deployment', () => {
+test('runtime API changes on main continue Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'api', 'app.js'), 'export default 2;\n');
