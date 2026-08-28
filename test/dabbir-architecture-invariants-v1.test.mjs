@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const root = new URL('../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 const ownership = JSON.parse(read('config/dabbir-architecture-ownership.json'));
+const runtimeRegistry = JSON.parse(read('config/runtime-registry.json'));
 const shell = read('api/app-recovery.js');
 const index = read('index.html');
 const ownerOperations = read('api/owner-operations-ui.js');
@@ -117,4 +118,22 @@ test('tenant WhatsApp truth remains fail-closed and cannot inherit global identi
   assert.match(whatsappStatus, /TENANT_WHATSAPP_NOT_LINKED/);
   assert.match(whatsappStatus, /BUSINESS_CONTEXT_REQUIRED/);
   assert.match(whatsappStatus, /must never inherit a global\/server WhatsApp/i);
+});
+
+test('retired PILOT API aliases cannot return as competing runtime surfaces', () => {
+  assert.equal(runtimeRegistry.authority, 'DABBIR');
+  assert.equal(runtimeRegistry.runtime, 'api/dabbir-runtime.js');
+
+  const retired = ownership.legacy_api.retired_aliases_forbidden;
+  assert.deepEqual(retired, [
+    '/api/pilot-runtime',
+    '/api/pilot-ai',
+    '/api/pilot-whatsapp-webhook'
+  ]);
+
+  for (const route of retired) {
+    const legacyFile = `${route.slice(1)}.js`;
+    assert.equal(fs.existsSync(new URL(legacyFile, root)), false, `retired legacy API returned: ${legacyFile}`);
+    assert.match(ownership.legacy_api.canonical_replacements[route], /^\/api\/dabbir-/);
+  }
 });
