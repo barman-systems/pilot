@@ -18,6 +18,7 @@ on:
     paths:
       - 'package.json'
       - 'package-lock.json'
+      - 'vercel-ignore-if-unaffected.sh'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
       - 'test/dabbir-protected-full-journey-preload.mjs'
