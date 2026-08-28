@@ -55,6 +55,9 @@ jobs:
       SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-protected-full-customer-journey-report.json
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
       EXPECTED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
     steps:
       - uses: actions/checkout@v7
@@ -63,28 +66,92 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Require protected Production automation access
+      - name: Prepare protected Production automation access
+        id: access
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
-            echo 'VERCEL_AUTOMATION_BYPASS_SECRET_REQUIRED'
-            exit 2
+
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+            echo 'PROTECTED_ACCESS_FROM_EXISTING_BYPASS'
+            exit 0
           fi
-          echo 'PROTECTED_AUTOMATION_ACCESS_READY'
+
+          if [ -n "${VERCEL_TOKEN:-}" ]; then
+            endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+            response="$(curl --fail-with-body --silent --show-error \
+              -X PATCH "$endpoint" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data '{"generate":{"note":"DABBIR protected full journey temporary"}}')"
+            secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
+            if [ -n "$secret" ]; then
+              echo "::add-mask::$secret"
+              echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
+              echo 'ready=true' >> "$GITHUB_OUTPUT"
+              echo 'generated=true' >> "$GITHUB_OUTPUT"
+              echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+              echo 'PROTECTED_ACCESS_TEMP_BYPASS_GENERATED'
+              exit 0
+            fi
+          fi
+
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          request_token="${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          if [ -n "$request_url" ] && [ -n "$request_token" ]; then
+            oidc_response="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${request_token}" \
+              "$request_url")"
+            oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+            if [ -n "$oidc_token" ]; then
+              echo "::add-mask::$oidc_token"
+              probe_body="$(mktemp)"
+              probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+                -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+                -H 'accept: text/html' \
+                "$PRODUCTION_ORIGIN/")"
+              if [ "$probe_status" = '200' ] && grep -qi 'DABBIR' "$probe_body"; then
+                echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+                echo 'ready=true' >> "$GITHUB_OUTPUT"
+                echo 'generated=false' >> "$GITHUB_OUTPUT"
+                echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
+                echo 'PROTECTED_ACCESS_TRUSTED_OIDC_READY'
+                exit 0
+              fi
+              echo "TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"
+            fi
+          fi
+
+          echo 'ready=false' >> "$GITHUB_OUTPUT"
+          echo 'generated=false' >> "$GITHUB_OUTPUT"
+          echo 'method=none' >> "$GITHUB_OUTPUT"
+          echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'
+          exit 2
 
       - name: Lock exact Production release before journey
         id: before
         shell: bash
         run: |
           set -euo pipefail
+          auth_args=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth_args+=( -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" -H 'x-vercel-set-bypass-cookie: true' )
+          elif [ -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}" ]; then
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          else
+            echo 'PROTECTED_ACCESS_MISSING_AFTER_PREPARE'
+            exit 2
+          fi
+
           body=''
           sha=''
           deployment=''
           for attempt in $(seq 1 36); do
             body="$(curl --silent --show-error \
-              -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-              -H 'x-vercel-set-bypass-cookie: true' \
+              "${auth_args[@]}" \
               -H 'accept: application/json' \
               "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
             sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
@@ -130,9 +197,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          auth_args=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth_args+=( -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" -H 'x-vercel-set-bypass-cookie: true' )
+          elif [ -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}" ]; then
+            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+          else
+            echo 'PROTECTED_ACCESS_MISSING_AFTER_JOURNEY'
+            exit 2
+          fi
           body="$(curl --fail-with-body --silent --show-error \
-            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-            -H 'x-vercel-set-bypass-cookie: true' \
+            "${auth_args[@]}" \
             -H 'accept: application/json' \
             "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
           sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
@@ -151,6 +226,7 @@ jobs:
         run: |
           echo '## DABBIR Protected Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Access method:** ${{ steps.access.outputs.method || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Production SHA before:** ${{ steps.before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Production SHA after:** ${{ steps.after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Deployment:** ${{ steps.before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
@@ -174,3 +250,18 @@ jobs:
             dabbir-ai-customer-journey-screenshot.png
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Revoke temporary automation bypass
+        if: ${{ always() && steps.access.outputs.generated == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+          payload="$(jq -nc --arg secret "$VERCEL_AUTOMATION_BYPASS_SECRET" '{revoke:{secret:$secret,regenerate:false}}')"
+          curl --fail-with-body --silent --show-error \
+            -X PATCH "$endpoint" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            >/dev/null
+          echo 'TEMPORARY_AUTOMATION_BYPASS_REVOKED'
