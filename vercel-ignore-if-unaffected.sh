@@ -6,13 +6,20 @@ set -u
 #   exit 1 => continue building
 #
 # Release-integrity rule:
-# Compare against the last successful deployment when Vercel provides it, so a
-# failed runtime commit cannot be hidden by a later docs/test-only follow-up.
-# If that baseline is unavailable or unrelated, fail safe and build. When there
-# is no successful-deployment baseline (for example a first branch build), fall
-# back to the triggering commit's direct parent.
+# 1) Every non-main Git branch must run the real Vercel Build Gate. A preview
+#    commit is evidence, not an optimization target; test/docs follow-ups may
+#    contain the repair for a previously failing runtime commit.
+# 2) On main, compare against Vercel's last successful deployment baseline and
+#    build whenever any runtime/unknown path changed in that range.
+# 3) Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
+ref="${VERCEL_GIT_COMMIT_REF:-}"
 previous_success="${VERCEL_GIT_PREVIOUS_SHA:-}"
+
+if [[ -n "$ref" && "$ref" != "main" ]]; then
+  echo "Non-main branch $ref requires full verification; continue deployment."
+  exit 1
+fi
 
 if ! git cat-file -e "${current}^{commit}" 2>/dev/null; then
   echo "Current commit unavailable; build for safety."
