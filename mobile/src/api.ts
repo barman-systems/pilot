@@ -67,3 +67,10 @@ export async function deleteDabbirAccount(accessToken: string): Promise<any> {
 export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
   return post('/api/mobile/iap/verify', { purchase }, accessToken);
 }
+
+export async function loadAppleEntitlement(accessToken: string): Promise<any> {
+  const response = await fetch(`${apiBase()}/api/mobile/iap/status`, {
+    headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+  });
+  return parseJson(response);
+}
