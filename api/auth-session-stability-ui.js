@@ -1,5 +1,6 @@
 import { AUTH_SESSION_STAGES, AUTH_SESSION_TRANSITIONS } from './_dabbir-auth-session-state-machine.js';
 
+// BAR-30 exact-head preview marker: auth/session state machine v1.
 const authSessionMachine = JSON.stringify({
   stages: AUTH_SESSION_STAGES,
   transitions: AUTH_SESSION_TRANSITIONS,
