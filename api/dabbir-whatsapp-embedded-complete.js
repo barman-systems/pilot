@@ -1,7 +1,6 @@
 import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import {
-  exchangeEmbeddedCode,
   ownerContext,
   resolveEmbeddedPlatformConfig,
   sealAccessToken,
@@ -36,7 +35,73 @@ function metaProviderError(payload, response, fallback) {
   error.status = 502;
   error.providerStatus = response?.status || null;
   error.providerCode = payload?.error?.code || null;
+  error.providerSubcode = payload?.error?.error_subcode || null;
   return error;
+}
+
+function oauthRedirectUriFromRequest(req) {
+  const header = name => {
+    const value = req?.headers?.[name] ?? req?.headers?.[name.toLowerCase()];
+    return Array.isArray(value) ? String(value[0] || '').trim() : String(value || '').trim();
+  };
+
+  const originHeader = header('origin');
+  let requestOrigin = '';
+  if (originHeader) {
+    try {
+      requestOrigin = new URL(originHeader).origin;
+    } catch {
+      requestOrigin = '';
+    }
+  }
+
+  const candidates = [header('referer'), requestOrigin ? `${requestOrigin}/` : ''];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      const localDevelopment = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+      if (url.protocol !== 'https:' && !(localDevelopment && url.protocol === 'http:')) continue;
+      if (requestOrigin && url.origin !== requestOrigin) continue;
+      url.hash = '';
+      return url.toString();
+    } catch {
+      // Try the next trusted request-derived candidate.
+    }
+  }
+
+  throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
+}
+
+async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
+  if (!platform?.ready) {
+    throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
+  }
+  if (!redirectUri) {
+    throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
+  }
+
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/oauth/access_token`);
+  url.searchParams.set('client_id', platform.appId);
+  url.searchParams.set('client_secret', platform.appSecret);
+  url.searchParams.set('code', String(code));
+  url.searchParams.set('redirect_uri', redirectUri);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.access_token) {
+      throw metaProviderError(payload, response, 'META_CODE_EXCHANGE_FAILED');
+    }
+    return {
+      accessToken: String(payload.access_token),
+      expiresIn: Number(payload.expires_in || 0) || null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function discoverWabaIdFromAccessToken(platform, token, options = {}) {
@@ -130,7 +195,8 @@ export default async function handler(req, res) {
     const platform = applyDabbirMetaPublicIdentifiers(await resolveEmbeddedPlatformConfig());
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
-    const exchanged = await exchangeEmbeddedCode(platform, code);
+    const oauthRedirectUri = oauthRedirectUriFromRequest(req);
+    const exchanged = await exchangeEmbeddedCodeWithRedirect(platform, code, oauthRedirectUri);
     if (!wabaId) {
       wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
     }
@@ -193,6 +259,7 @@ export default async function handler(req, res) {
       error: String(error?.message || 'WHATSAPP_EMBEDDED_SIGNUP_FAILED').slice(0, 300),
       provider_status: error?.providerStatus || null,
       provider_code: error?.providerCode || null,
+      provider_subcode: error?.providerSubcode || null,
     });
   }
 }
