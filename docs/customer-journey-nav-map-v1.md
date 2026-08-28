@@ -1,0 +1,1 @@
+Primary: Today, Conversations, Appointments, Customers, Needs you, Settings. Mobile: Today, Conversations, Appointments, Needs you, More. Advanced under More: Reports, Automations, Channels & connections, Notifications, Help, Team.
