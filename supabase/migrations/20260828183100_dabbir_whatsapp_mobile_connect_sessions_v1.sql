@@ -18,16 +18,47 @@ create table if not exists public.dabbir_whatsapp_mobile_connect_sessions (
   phone_number_id text,
   onboarding_mode text not null default 'whatsapp_business_app_onboarding',
   created_at timestamptz not null default now(),
-  expires_at timestamptz not null,
+  expires_at timestamptz not null check (expires_at > created_at),
   captured_at timestamptz,
   completing_at timestamptz,
   consumed_at timestamptz,
   failed_at timestamptz,
   last_error text,
   constraint dabbir_whatsapp_mobile_connect_capture_shape check (
-    (status = 'pending' and code_ciphertext is null and code_iv is null and code_tag is null)
+    (
+      status = 'pending'
+      and code_ciphertext is null
+      and code_iv is null
+      and code_tag is null
+      and code_key_version is null
+    )
     or
-    (status <> 'pending' and code_ciphertext is not null and code_iv is not null and code_tag is not null and code_key_version is not null)
+    (
+      status in ('captured','completing','consumed')
+      and code_ciphertext is not null
+      and code_iv is not null
+      and code_tag is not null
+      and code_key_version is not null
+    )
+    or
+    (
+      status = 'failed'
+      and (
+        (
+          code_ciphertext is null
+          and code_iv is null
+          and code_tag is null
+          and code_key_version is null
+        )
+        or
+        (
+          code_ciphertext is not null
+          and code_iv is not null
+          and code_tag is not null
+          and code_key_version is not null
+        )
+      )
+    )
   )
 );
 
