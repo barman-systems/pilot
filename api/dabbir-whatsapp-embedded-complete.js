@@ -73,6 +73,107 @@ function oauthRedirectUriFromRequest(req) {
   throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
 }
 
+function normalizedHost(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    return String(url.hostname || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function productionMetaRepairHost(redirectUri) {
+  const redirectHost = normalizedHost(redirectUri);
+  const configuredHost = normalizedHost(firstEnv(
+    'DABBIR_META_APP_DOMAIN',
+    'DABBIR_PUBLIC_HOST',
+    'VERCEL_PROJECT_PRODUCTION_URL',
+  ));
+  const vercelProduction = String(process.env.VERCEL_ENV || '').trim().toLowerCase() === 'production';
+  if (!redirectHost || !configuredHost || redirectHost !== configuredHost || !vercelProduction) {
+    throw Object.assign(new Error('META_APP_DOMAIN_REPAIR_NOT_ALLOWED'), { status: 409 });
+  }
+  return redirectHost;
+}
+
+function isMetaAppDomainError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return Number(error?.providerCode || 0) === 191
+    || message.includes("domain of this url isn't included")
+    || message.includes('app domains field');
+}
+
+async function readMetaAppDomains(platform) {
+  const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
+  if (!platform?.appId || !platform?.appSecret) {
+    throw Object.assign(new Error('META_APP_DOMAIN_REPAIR_CONFIGURATION_MISSING'), { status: 503 });
+  }
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(platform.appId)}`);
+  url.searchParams.set('fields', 'app_domains');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${appAccessToken}`, accept: 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw metaProviderError(payload, response, 'META_APP_DOMAIN_READ_FAILED');
+    const domains = Array.isArray(payload?.app_domains)
+      ? payload.app_domains.map(normalizedHost).filter(Boolean)
+      : [];
+    return [...new Set(domains)];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function writeMetaAppDomains(platform, domains) {
+  const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(platform.appId)}`);
+  const body = new URLSearchParams();
+  body.set('app_domains', JSON.stringify(domains));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${appAccessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.success === false) {
+      throw metaProviderError(payload, response, 'META_APP_DOMAIN_UPDATE_FAILED');
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function ensureMetaAppDomain(platform, redirectUri) {
+  const host = productionMetaRepairHost(redirectUri);
+  const existing = await readMetaAppDomains(platform);
+  if (existing.includes(host)) return { changed: false, host };
+  const next = [...new Set([...existing, host])];
+  await writeMetaAppDomains(platform, next);
+  const verified = await readMetaAppDomains(platform);
+  if (!verified.includes(host)) {
+    throw Object.assign(new Error('META_APP_DOMAIN_UPDATE_UNVERIFIED'), { status: 502 });
+  }
+  return { changed: true, host };
+}
+
 async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
   if (!platform?.ready) {
     throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
@@ -101,6 +202,24 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
     };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri) {
+  try {
+    return {
+      exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
+      domainRepairAttempted: false,
+      domainRepairChanged: false,
+    };
+  } catch (error) {
+    if (!isMetaAppDomainError(error)) throw error;
+    const repair = await ensureMetaAppDomain(platform, redirectUri);
+    return {
+      exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
+      domainRepairAttempted: true,
+      domainRepairChanged: Boolean(repair.changed),
+    };
   }
 }
 
@@ -196,7 +315,8 @@ export default async function handler(req, res) {
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
     const oauthRedirectUri = oauthRedirectUriFromRequest(req);
-    const exchanged = await exchangeEmbeddedCodeWithRedirect(platform, code, oauthRedirectUri);
+    const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, oauthRedirectUri);
+    const exchanged = exchangeResult.exchange;
     if (!wabaId) {
       wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
     }
@@ -250,6 +370,8 @@ export default async function handler(req, res) {
       phone_number_id: stored?.phone_number_id || phoneNumberId,
       connected_at: stored?.connected_at || now.toISOString(),
       waba_source: cleanId(body?.waba_id) ? 'embedded_session' : 'debug_token',
+      meta_app_domain_repair_attempted: Boolean(exchangeResult.domainRepairAttempted),
+      meta_app_domain_repaired: Boolean(exchangeResult.domainRepairChanged),
       secrets_exposed: false,
     });
   } catch (error) {
