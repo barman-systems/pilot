@@ -11,12 +11,12 @@ const script=String.raw`(()=>{
   };
 
   const style=document.createElement('style');
-  style.textContent='.activityIdentity{display:flex;align-items:center;gap:8px;margin:8px 0 0}.activityPill{display:inline-flex;align-items:center;border:1px solid #3a4330;background:#172016;color:var(--accent);padding:5px 9px;border-radius:999px;font-size:9px;font-weight:900}.activityTaskCard{margin-bottom:12px}.activityTaskGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.activityTask{border:1px solid #292f34;background:#15181b;border-radius:14px;padding:11px;display:flex;gap:10px;align-items:flex-start}.activityTask .grow{flex:1;min-width:0}.activityTask b{display:block;font-size:11px;line-height:1.5}.activityTask small{display:block;color:var(--muted);font-size:8px;margin-top:4px}.activityTask button{min-height:34px;padding:6px 9px}.activityDone{opacity:.58}.activityPriority{font-size:8px;color:var(--yellow);font-weight:900}@media(max-width:700px){.activityTaskGrid{grid-template-columns:1fr}}';
+  style.textContent='.activityIdentity{display:flex;align-items:center;gap:8px;margin:8px 0 0}.activityPill{display:inline-flex;align-items:center;border:1px solid #3a4330;background:#172016;color:var(--accent);padding:5px 9px;border-radius:999px;font-size:9px;font-weight:900}.activityTaskCard{margin-bottom:12px}.activityTaskGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.activityTask{border:1px solid #292f34;background:#15181b;border-radius:14px;padding:11px;display:flex;gap:10px;align-items:flex-start}.activityTask .grow{flex:1;min-width:0}.activityTask b{display:block;font-size:11px;line-height:1.5}.activityTask small{display:block;color:var(--muted);font-size:8px;margin-top:4px}.activityTask button{min-height:34px;padding:6px 9px}.activityDone{opacity:.58}.activityPriority{font-size:8px;color:var(--yellow);font-weight:900}.navBtn>.navIcon{display:none!important}@media(max-width:700px){.activityTaskGrid{grid-template-columns:1fr}}';
   document.head.append(style);
 
   function businessId(){return workspace?.business?.id||null}
   function setText(selector,value){const el=q(selector);if(el&&value!==undefined&&value!==null)el.textContent=value}
-  function setLabel(screen,value){qa('[data-screen="'+screen+'"] [data-label], [data-screen="'+screen+'"] span').forEach(el=>{if(value)el.textContent=value})}
+  function setLabel(screen,value){qa('[data-screen="'+screen+'"] [data-label]').forEach(el=>{if(value)el.textContent=value})}
 
   function ensureTaskCard(){
     const screen=q('#screen-tasks');if(!screen)return null;
