@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   protected-live-smoke:
@@ -36,40 +37,65 @@ jobs:
           if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
             echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
             echo 'AUTOMATION_BYPASS_READY_FROM_EXISTING_SECRET'
             exit 0
           fi
 
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'generated=false' >> "$GITHUB_OUTPUT"
-            echo 'BLOCKED_VERCEL_CREDENTIAL_NOT_CONFIGURED'
-            echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '**State:** BLOCKED_VERCEL_CREDENTIAL_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
-            echo 'Neither an automation bypass nor a Vercel API token is available to the workflow. Production remains protected.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${VERCEL_TOKEN:-}" ]; then
+            endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+            response="$(curl --fail-with-body --silent --show-error \
+              -X PATCH "$endpoint" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}')"
+            secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
+            if [ -z "$secret" ]; then
+              echo 'ready=false' >> "$GITHUB_OUTPUT"
+              echo 'generated=false' >> "$GITHUB_OUTPUT"
+              echo 'method=none' >> "$GITHUB_OUTPUT"
+              echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
+              exit 1
+            fi
+            echo "::add-mask::$secret"
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'generated=true' >> "$GITHUB_OUTPUT"
+            echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+            echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
             exit 0
           fi
 
-          endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
-          response="$(curl --fail-with-body --silent --show-error \
-            -X PATCH "$endpoint" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}')"
-          secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
-          if [ -z "$secret" ]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'generated=false' >> "$GITHUB_OUTPUT"
-            echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
-            exit 1
+          oidc_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
+          oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
+          if [ -n "$oidc_token" ]; then
+            echo "::add-mask::$oidc_token"
+            probe_body="$(mktemp)"
+            probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+              -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+              -H 'accept: text/html' \
+              "$PROTECTED_QA_ORIGIN/")"
+            if [ "$probe_status" = '200' ] && grep -qi 'DABBIR' "$probe_body"; then
+              echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+              echo 'ready=true' >> "$GITHUB_OUTPUT"
+              echo 'generated=false' >> "$GITHUB_OUTPUT"
+              echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
+              echo 'TRUSTED_GITHUB_OIDC_READY'
+              exit 0
+            fi
+            echo "TRUSTED_GITHUB_OIDC_REJECTED_HTTP_${probe_status}"
           fi
 
-          echo "::add-mask::$secret"
-          echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
-          echo 'ready=true' >> "$GITHUB_OUTPUT"
-          echo 'generated=true' >> "$GITHUB_OUTPUT"
-          echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
+          echo 'ready=false' >> "$GITHUB_OUTPUT"
+          echo 'generated=false' >> "$GITHUB_OUTPUT"
+          echo 'method=none' >> "$GITHUB_OUTPUT"
+          echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'
+          echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '**State:** BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No existing bypass, Vercel API token, or accepted GitHub Trusted OIDC source is available. Production remains protected.' >> "$GITHUB_STEP_SUMMARY"
       - name: Install WebKit journey runner
         if: steps.bypass.outputs.ready == 'true'
         run: |
@@ -84,6 +110,7 @@ jobs:
         run: |
           if [ -f dabbir-protected-live-smoke-report.json ]; then
             echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Access method:** ${{ steps.bypass.outputs.method }}" >> "$GITHUB_STEP_SUMMARY"
             echo "**Verdict:** $(jq -r '.verdict' dabbir-protected-live-smoke-report.json)" >> "$GITHUB_STEP_SUMMARY"
             echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
             echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"

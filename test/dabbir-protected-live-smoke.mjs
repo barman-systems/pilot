@@ -2,14 +2,16 @@ import fs from 'node:fs';
 
 const ORIGIN = String(process.env.PROTECTED_QA_ORIGIN || '').trim().replace(/\/$/, '');
 const BYPASS = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+const TRUSTED_OIDC = String(process.env.VERCEL_TRUSTED_OIDC_TOKEN || '').trim();
 const REPORT_PATH = process.env.PROTECTED_QA_REPORT_PATH || 'dabbir-protected-live-smoke-report.json';
 
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PROTECTED_QA_ORIGIN_REQUIRED');
-if (!BYPASS) throw new Error('VERCEL_AUTOMATION_BYPASS_SECRET_REQUIRED');
+if (!BYPASS && !TRUSTED_OIDC) throw new Error('VERCEL_PROTECTED_ACCESS_REQUIRED');
 
 const report = {
   journey: 'DABBIR_PROTECTED_LIVE_IPHONE_SMOKE',
   origin: ORIGIN,
+  protection_access: BYPASS ? 'automation_bypass' : 'trusted_oidc',
   started_at: new Date().toISOString(),
   completed_at: null,
   verdict: 'RUNNING',
@@ -40,17 +42,16 @@ async function step(name, fn) {
   }
 }
 
-function bypassHeaders(extra = {}) {
-  return {
-    'x-vercel-protection-bypass': BYPASS,
-    'x-vercel-set-bypass-cookie': 'true',
-    ...extra,
-  };
+function protectionHeaders(extra = {}) {
+  const auth = BYPASS
+    ? { 'x-vercel-protection-bypass': BYPASS, 'x-vercel-set-bypass-cookie': 'true' }
+    : { 'x-vercel-trusted-oidc-idp-token': TRUSTED_OIDC };
+  return { ...auth, ...extra };
 }
 
 async function fetchProtected(path, init = {}) {
   const headers = new Headers(init.headers || {});
-  for (const [key, value] of Object.entries(bypassHeaders())) headers.set(key, value);
+  for (const [key, value] of Object.entries(protectionHeaders())) headers.set(key, value);
   return fetch(`${ORIGIN}${path}`, { redirect: 'follow', ...init, headers });
 }
 
@@ -61,14 +62,14 @@ try {
     const text = await response.text();
     assert(response.status === 200, `HOME_STATUS_${response.status}`);
     assert(/DABBIR/i.test(text), 'HOME_DABBIR_IDENTITY_MISSING');
-    return 'Protected production home returned 200 with DABBIR identity.';
+    return `Protected production home returned 200 with DABBIR identity via ${BYPASS ? 'automation bypass' : 'trusted GitHub OIDC'}.`;
   });
 
   await step('02_runtime_auth_still_fails_closed', async () => {
     const response = await fetchProtected('/api/dabbir-runtime-fast?summary=1', { headers: { accept: 'application/json' } });
     const text = await response.text();
     assert(response.status === 401, `UNAUTH_RUNTIME_EXPECTED_401_GOT_${response.status}:${text.slice(0, 200)}`);
-    return 'Vercel bypass does not bypass DABBIR authentication; unauthenticated runtime remains 401.';
+    return 'Vercel protection access does not bypass DABBIR authentication; unauthenticated runtime remains 401.';
   });
 
   await step('03_webkit_iphone_login_gate', async () => {
@@ -80,7 +81,7 @@ try {
       hasTouch: true,
       locale: 'ar-AE',
       timezoneId: 'Asia/Dubai',
-      extraHTTPHeaders: bypassHeaders(),
+      extraHTTPHeaders: protectionHeaders(),
     });
     const page = await context.newPage();
     const pageErrors = [];
