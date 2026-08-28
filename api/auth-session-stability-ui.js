@@ -13,6 +13,7 @@ const script = String.raw`(()=>{
   const authMachine=${authSessionMachine};
   let authStage=authMachine.stages.SIGNED_OUT;
   let gateRecoveryPromise=null;
+  const verifiedRuntimeReadEndpoint='/api/dabbir-runtime-fast';
 
   function publishAuthStage(stage,reason=null){
     authStage=stage;
@@ -69,6 +70,58 @@ const script = String.raw`(()=>{
     const msg=document.querySelector('#authMsg');
     if(msg) msg.textContent=localized(textAr,textEn);
   }
+
+  // This module is the final auth/session UI authority. Keep authenticated workspace
+  // reads on the bounded fast runtime so a successful login cannot be stranded behind
+  // the older unbounded/heavier bootstrap path. Mutations remain delegated by the fast
+  // endpoint to the canonical runtime handler, so business-write semantics are unchanged.
+  boot=async function(){
+    applyLang();
+    const {r,j}=await api(verifiedRuntimeReadEndpoint,{credentials:'same-origin'});
+    if(r.status===401){
+      workspace=null;
+      showGate('auth');
+      return;
+    }
+    if(!r.ok||!j?.ok){
+      workspace=null;
+      showGate('auth');
+      const msg=document.querySelector('#authMsg');
+      if(msg) msg.textContent=j?.error||T().invalid;
+      return;
+    }
+    if(j.needs_onboarding){
+      workspace=j;
+      showGate('onboarding');
+      return;
+    }
+    workspace=j;
+    selectedConversationId=j.selected_conversation_id||null;
+    showGate('app');
+    renderAll();
+  };
+
+  loadRuntime=async function(businessId,conversationId){
+    const q=new URLSearchParams();
+    if(businessId) q.set('business_id',businessId);
+    if(conversationId) q.set('conversation_id',conversationId);
+    const url=q.toString()?verifiedRuntimeReadEndpoint+'?'+q.toString():verifiedRuntimeReadEndpoint;
+    const {r,j}=await api(url,{credentials:'same-origin'});
+    if(r.status===401){
+      workspace=null;
+      showGate('auth');
+      toast(T().authRequired);
+      return;
+    }
+    if(!r.ok||!j?.ok){
+      toast(j?.error||T().invalid);
+      return;
+    }
+    workspace=j;
+    selectedConversationId=j.selected_conversation_id||conversationId||null;
+    showGate('app');
+    renderAll();
+  };
 
   const baseShowGate=showGate;
 
@@ -216,7 +269,7 @@ const script = String.raw`(()=>{
   }
   document.body.dataset.dabbirGate=authVisible?'auth':onboardingVisible?'onboarding':appVisible?'app':'';
 
-  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v3',session_retry:true,gate_isolation:true,state_machine:true,gate_reconciliation:true};
+  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v4-fast-workspace',session_retry:true,gate_isolation:true,state_machine:true,gate_reconciliation:true,fast_workspace_bootstrap:true};
 })();`;
 
 export default function handler(req,res){
