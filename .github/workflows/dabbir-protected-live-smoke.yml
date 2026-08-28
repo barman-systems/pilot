@@ -19,28 +19,57 @@ jobs:
     env:
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
       PROTECTED_QA_REPORT_PATH: dabbir-protected-live-smoke-report.json
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Classify automation bypass readiness
+      - name: Prepare protected automation access
         id: bypass
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'AUTOMATION_BYPASS_READY_FROM_EXISTING_SECRET'
+            exit 0
+          fi
+
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
             echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'BLOCKED_AUTOMATION_BYPASS_NOT_CONFIGURED'
+            echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'BLOCKED_VERCEL_CREDENTIAL_NOT_CONFIGURED'
             echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
             echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '**State:** BLOCKED_AUTOMATION_BYPASS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
-            echo 'Production remains protected; no credential value was exposed.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-            echo 'AUTOMATION_BYPASS_READY'
+            echo '**State:** BLOCKED_VERCEL_CREDENTIAL_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Neither an automation bypass nor a Vercel API token is available to the workflow. Production remains protected.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+
+          endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+          response="$(curl --fail-with-body --silent --show-error \
+            -X PATCH "$endpoint" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}')"
+          secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
+          if [ -z "$secret" ]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'generated=false' >> "$GITHUB_OUTPUT"
+            echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
+            exit 1
+          fi
+
+          echo "::add-mask::$secret"
+          echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+          echo 'generated=true' >> "$GITHUB_OUTPUT"
+          echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
       - name: Install WebKit journey runner
         if: steps.bypass.outputs.ready == 'true'
         run: |
@@ -70,3 +99,17 @@ jobs:
             dabbir-protected-live-smoke.png
           if-no-files-found: warn
           retention-days: 7
+      - name: Revoke temporary automation bypass
+        if: ${{ always() && steps.bypass.outputs.generated == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+          payload="$(jq -nc --arg secret "$VERCEL_AUTOMATION_BYPASS_SECRET" '{revoke:{secret:$secret,regenerate:false}}')"
+          curl --fail-with-body --silent --show-error \
+            -X PATCH "$endpoint" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            >/dev/null
+          echo 'AUTOMATION_BYPASS_REVOKED'
