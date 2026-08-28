@@ -1,0 +1,30 @@
+name: DABBIR QA Vercel Access Check
+
+on:
+  push:
+    branches: [ops/dabbir-qa-vercel-access-check]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Vercel automation credential without exposing it
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo 'VERCEL_TOKEN_AVAILABLE=false' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+          echo 'VERCEL_TOKEN_AVAILABLE=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          response="$(curl -fsS \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            'https://api.vercel.com/v9/projects/prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq?teamId=team_pwfKq8jHuyW1XFVSZirAJiId')"
+          node -e "const d=JSON.parse(process.argv[1]); if(d.id!=='prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq') process.exit(3); console.log('VERCEL_PROJECT_ACCESS=true')" "$response" | tee -a "$GITHUB_STEP_SUMMARY"
