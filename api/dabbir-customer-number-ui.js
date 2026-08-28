@@ -32,20 +32,32 @@ const script=String.raw`(()=>{
     return customerNo;
   }
 
+  function setText(node,value){if(node&&node.textContent!==value)node.textContent=value}
+
   function render(){
     const list=document.querySelector('#settingsList');
     if(!list||!customerNo)return;
-    const existing=list.querySelector('[data-dabbir-customer-number]');
     const c=copy();
-    const html='<div class="item" data-dabbir-customer-number="v1"><div class="grow"><b>'+c.label+'</b><small dir="ltr" style="font-size:12px;font-weight:900;letter-spacing:.04em;color:var(--text)">'+customerNo+'</small><small style="display:block;margin-top:3px">'+c.help+'</small></div><button type="button" class="secondary" data-copy-dabbir-number style="min-height:38px;padding:7px 10px">'+c.copy+'</button></div>';
-    if(existing)existing.outerHTML=html;
-    else list.insertAdjacentHTML('afterbegin',html);
-    list.querySelector('[data-copy-dabbir-number]')?.addEventListener('click',async()=>{
-      try{
-        await navigator.clipboard.writeText(customerNo);
-        if(typeof toast==='function')toast(copy().copied);
-      }catch{}
-    });
+    let row=list.querySelector('[data-dabbir-customer-number]');
+    if(!row){
+      list.insertAdjacentHTML('afterbegin','<div class="item" data-dabbir-customer-number="v1"><div class="grow"><b data-dabbir-customer-number-label></b><small data-dabbir-customer-number-value dir="ltr" style="font-size:12px;font-weight:900;letter-spacing:.04em;color:var(--text)"></small><small data-dabbir-customer-number-help style="display:block;margin-top:3px"></small></div><button type="button" class="secondary" data-copy-dabbir-number style="min-height:38px;padding:7px 10px"></button></div>');
+      row=list.querySelector('[data-dabbir-customer-number]');
+    }
+    if(!row)return;
+    setText(row.querySelector('[data-dabbir-customer-number-label]'),c.label);
+    setText(row.querySelector('[data-dabbir-customer-number-value]'),customerNo);
+    setText(row.querySelector('[data-dabbir-customer-number-help]'),c.help);
+    const button=row.querySelector('[data-copy-dabbir-number]');
+    setText(button,c.copy);
+    if(button&&button.dataset.dabbirCopyBound!=='true'){
+      button.dataset.dabbirCopyBound='true';
+      button.addEventListener('click',async()=>{
+        try{
+          await navigator.clipboard.writeText(customerNo);
+          if(typeof toast==='function')toast(copy().copied);
+        }catch{}
+      });
+    }
   }
 
   const originalRender=typeof window.renderSettings==='function'?window.renderSettings:null;
