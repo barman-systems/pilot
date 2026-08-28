@@ -259,7 +259,7 @@ async function verifyTotp(session, factorId, secret) {
   return last;
 }
 
-async function browserJourney() {
+async function browserJourney(mfaFactorId, mfaSecret) {
   const { webkit } = await import('playwright');
   browser = await webkit.launch({ headless: true });
   browserContext = await browser.newContext({
@@ -280,7 +280,18 @@ async function browserJourney() {
   await page.locator('#authEmail').fill(owner.email);
   await page.locator('#authPassword').fill(owner.password);
   await page.locator('#authSubmit').click();
-  await page.locator('#appShell:not(.hidden)').waitFor({ state: 'visible', timeout: 25_000 });
+  await page.locator('#mfaGate:not(.hidden)').waitFor({ state: 'visible', timeout: 20_000 });
+  assert(mfaFactorId && mfaSecret, 'BROWSER_MFA_FIXTURE_MISSING');
+  const remainderMs = 30_000 - (Date.now() % 30_000);
+  if (remainderMs < 3_500) await page.waitForTimeout(remainderMs + 600);
+  let entered = false;
+  for (let attempt = 1; attempt <= 2 && !entered; attempt += 1) {
+    await page.locator('#mfaCode').fill(totp(mfaSecret));
+    await page.locator('#mfaSubmit').click();
+    entered = await page.locator('#appShell:not(.hidden)').waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false);
+    if (!entered) await page.waitForTimeout(1_200);
+  }
+  assert(entered, 'BROWSER_MFA_LOGIN_DID_NOT_REACH_APP');
   // The unauthenticated bootstrap intentionally receives one 401 to reveal the login gate.
   // From this point onward, every page/console error is unexpected and remains fatal.
   pageErrors.length = 0;
@@ -606,7 +617,7 @@ async function runJourney() {
     };
   });
 
-  await step('25_mobile_webkit_owner_journey', browserJourney);
+  await step('25_mobile_webkit_owner_journey', () => browserJourney(mfaFactorId, mfaSecret));
 
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
