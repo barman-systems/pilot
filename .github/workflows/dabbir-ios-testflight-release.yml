@@ -1,6 +1,10 @@
 name: DABBIR iOS TestFlight Release
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-ios-testflight-release.yml'
   workflow_dispatch:
     inputs:
       what_to_test:
@@ -37,6 +41,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       DABBIR_APP_STORE_RELEASE_PREFLIGHT: '1'
       DABBIR_APP_STORE_PREFLIGHT_REPORT_PATH: dabbir-testflight-release-preflight.json
+      DABBIR_WHAT_TO_TEST: ${{ inputs.what_to_test || 'DABBIR iOS release-candidate validation.' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +130,7 @@ jobs:
             --non-interactive \
             --wait \
             --auto-testflight-setup \
-            --what-to-test "${{ inputs.what_to_test }}"
+            --what-to-test "${DABBIR_WHAT_TO_TEST}"
 
       - name: Record TestFlight status evidence
         if: always()
