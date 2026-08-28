@@ -14,6 +14,26 @@ const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value)
 const DABBIR_TIME_ZONE = 'Asia/Dubai';
 const DABBIR_UTC_OFFSET = '+04:00';
 
+// === إصلاح: مهلة زمنية لكل استعلام على حدة ===
+// كل استعلام Supabase له مهلة قصوى مستقلة. إذا تعلّق أي استعلام واحد،
+// يفشل هو فقط بعد DB_TIMEOUT_MS بدل ما يعلّق الطلب كامل حتى حد Vercel (300 ثانية).
+const DB_TIMEOUT_MS = 10_000;
+
+function withTimeout(promiseFactory, label, ms = DB_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return Promise.race([
+    promiseFactory(controller.signal).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        const error = new Error(`${label}_TIMEOUT`);
+        error.status = 504;
+        reject(error);
+      });
+    }),
+  ]);
+}
+
 function singleQueryValue(req, name) {
   try {
     const url = new URL(String(req?.url || '/'), 'https://dabbir.invalid');
@@ -31,7 +51,7 @@ function normalizeDisplayName(value = '') {
     .replace(/[إأآ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه')
-    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/[ًٌٍَُِّْـ]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -88,24 +108,31 @@ async function readData(response, fallback = 'DATA_REQUEST_FAILED') {
   return payload;
 }
 
-const rest = (token, path, fallback) => supabaseRest(path, token).then(response => readData(response, fallback));
+// === إصلاح: rest() و restCount() الآن تلتزم بمهلة زمنية عبر withTimeout ===
+const rest = (token, path, fallback) =>
+  withTimeout(
+    signal => supabaseRest(path, token, { signal }).then(response => readData(response, fallback)),
+    fallback,
+  );
 
 async function restCount(accessToken, path, fallback) {
-  const response = await supabaseRest(path, accessToken, { headers: { prefer: 'count=exact' } });
-  if (!response.ok) {
-    const payload = await readData(response, fallback);
-    return payload;
-  }
-  const range = String(response.headers.get('content-range') || '');
-  const rawTotal = range.includes('/') ? range.slice(range.lastIndexOf('/') + 1) : '';
-  const total = Number(rawTotal);
-  await response.text().catch(() => '');
-  if (!Number.isSafeInteger(total) || total < 0) {
-    const error = new Error(`${fallback}_COUNT_UNVERIFIED`);
-    error.status = 502;
-    throw error;
-  }
-  return total;
+  return withTimeout(async signal => {
+    const response = await supabaseRest(path, accessToken, { headers: { prefer: 'count=exact' }, signal });
+    if (!response.ok) {
+      const payload = await readData(response, fallback);
+      return payload;
+    }
+    const range = String(response.headers.get('content-range') || '');
+    const rawTotal = range.includes('/') ? range.slice(range.lastIndexOf('/') + 1) : '';
+    const total = Number(rawTotal);
+    await response.text().catch(() => '');
+    if (!Number.isSafeInteger(total) || total < 0) {
+      const error = new Error(`${fallback}_COUNT_UNVERIFIED`);
+      error.status = 502;
+      throw error;
+    }
+    return total;
+  }, fallback);
 }
 
 export function dubaiDayRange(now = new Date()) {
@@ -280,16 +307,18 @@ async function handleFastGet(req, res) {
     ? loadMessages(accessToken, businessId, requestedConversationId)
     : Promise.resolve(null);
 
-  const [businessRows, rawConversations, customers, appointments, handoffs, followups, metrics, requestedMessages] = await Promise.all([
-    businessPromise,
-    conversationsPromise,
-    customersPromise,
-    appointmentsPromise,
-    handoffsPromise,
-    followupsPromise,
-    metricsPromise,
-    requestedMessagesPromise,
-  ]);
+  // === إصلاح: كل استعلام يفشل بمفرده عند التعليق بدل تعليق الطلب كامل ===
+  const [businessRows, rawConversations, customers, appointments, handoffs, followups, metrics, requestedMessages] =
+    await Promise.all([
+      businessPromise,
+      conversationsPromise,
+      customersPromise,
+      appointmentsPromise,
+      handoffsPromise,
+      followupsPromise,
+      metricsPromise,
+      requestedMessagesPromise,
+    ]);
 
   const business = businessRows?.[0] || null;
   if (!business) return json(res, 404, { ok: false, error: 'BUSINESS_NOT_FOUND' });
@@ -323,7 +352,7 @@ async function handleFastGet(req, res) {
   const duration = Date.now() - started;
   const dataTruth = buildDataTruth({ business, conversations, customers, appointments, handoffs, followups, messages, metrics, duration, summaryOnly });
   res.setHeader('server-timing', `dabbir;dur=${duration}`);
-  res.setHeader('x-dabbir-runtime', 'fast-v6-exact-metrics');
+  res.setHeader('x-dabbir-runtime', 'fast-v7-timeout-guarded');
   return json(res, 200, {
     ok: true,
     authenticated: true,
@@ -362,7 +391,7 @@ export default async function handler(req, res) {
       return await handleFastGet(req, res);
     } catch (error) {
       const status = Number(error?.status || 500);
-      const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(status) ? status : 500;
+      const safeStatus = [400, 401, 403, 404, 409, 413, 429, 502, 503, 504].includes(status) ? status : 500;
       return json(res, safeStatus, {
         ok: false,
         state: 'FAILED_OR_UNVERIFIED',
