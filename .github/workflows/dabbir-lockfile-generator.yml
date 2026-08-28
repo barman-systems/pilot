@@ -8,14 +8,18 @@ on:
       - '.github/workflows/dabbir-lockfile-generator.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
@@ -24,7 +28,19 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Verify clean install from generated lockfile
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Upload generated lockfile
+      - name: Commit generated lockfile when changed
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock.json already synchronized'
+            exit 0
+          fi
+          git config user.name 'barmanai-lockbot'
+          git config user.email 'barmanai-lockbot@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'build: synchronize package lock'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Upload generated lockfile evidence
         uses: actions/upload-artifact@v6
         with:
           name: dabbir-package-lock
