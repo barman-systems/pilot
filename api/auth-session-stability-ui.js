@@ -1,18 +1,19 @@
 import { AUTH_SESSION_STAGES, AUTH_SESSION_TRANSITIONS } from './_dabbir-auth-session-state-machine.js';
 
-// BAR-30 exact-head preview marker: auth/session state machine v1.
+// The auth state machine is observability/validation only. The base application
+// owns gate visibility so a valid session can never be hidden by a second UI
+// authority after login.
 const authSessionMachine = JSON.stringify({
   stages: AUTH_SESSION_STAGES,
   transitions: AUTH_SESSION_TRANSITIONS,
 });
 
 const script = String.raw`(()=>{
-  if(window.__dabbirAuthSessionStabilityV2) return;
-  window.__dabbirAuthSessionStabilityV2=true;
+  if(window.__dabbirAuthSessionStabilityV4) return;
+  window.__dabbirAuthSessionStabilityV4=true;
 
   const authMachine=${authSessionMachine};
   let authStage=authMachine.stages.SIGNED_OUT;
-  let gateRecoveryPromise=null;
 
   function publishAuthStage(stage,reason=null){
     authStage=stage;
@@ -35,7 +36,7 @@ const script = String.raw`(()=>{
   }
 
   const style=document.createElement('style');
-  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v2';
+  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v4';
   style.textContent=[
     '.bottomNav.hidden{display:none!important}',
     '#appShell.hidden{display:none!important}',
@@ -65,79 +66,26 @@ const script = String.raw`(()=>{
     return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
   }
 
-  function showSessionError(textAr,textEn){
-    const msg=document.querySelector('#authMsg');
-    if(msg) msg.textContent=localized(textAr,textEn);
-  }
-
-  const baseShowGate=showGate;
-
-  async function reconcileVerifiedGate(name){
-    if(gateRecoveryPromise) return gateRecoveryPromise;
-    gateRecoveryPromise=(async()=>{
-      const state=await sessionReady();
-      if(state.suspended){
-        setAuthStage(authMachine.stages.SUSPENDED,'ACCOUNT_SUSPENDED',{bootstrap:true});
-        baseShowGate('auth');
-        document.body.dataset.dabbirGate='auth';
-        showSessionError('الحساب موقوف. تواصل مع دعم دبّر.','This account is suspended. Contact DABBIR support.');
-        return;
-      }
-      if(!state.ready){
-        publishAuthStage(authMachine.stages.DEGRADED,'GATE_SESSION_RECONCILIATION_FAILED');
-        baseShowGate('auth');
-        document.body.dataset.dabbirGate='auth';
-        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
-        return;
-      }
-
-      setAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_RECONCILED_FOR_GATE',{bootstrap:true});
-      if(name==='app'){
-        setAuthStage(authMachine.stages.WORKSPACE_READY,'WORKSPACE_RENDERED');
-      }
-      baseShowGate(name);
-      document.body.dataset.dabbirGate=String(name||'');
-      const bottom=document.querySelector('#bottomNav');
-      if(bottom&&name!=='app') bottom.classList.add('hidden');
-    })().finally(()=>{gateRecoveryPromise=null});
-    return gateRecoveryPromise;
-  }
-
-  showGate=function(name){
-    if(name==='auth'){
-      if(authStage!==authMachine.stages.SUSPENDED){
-        setAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_GATE_VISIBLE');
-      }
+  function syncStageFromGate(name,reason='GATE_RENDERED'){
+    if(name==='app'){
+      publishAuthStage(authMachine.stages.WORKSPACE_READY,reason);
     }else if(name==='onboarding'){
-      if(authStage!==authMachine.stages.SESSION_VERIFIED){
-        if(authStage===authMachine.stages.SIGNED_OUT||authStage===authMachine.stages.DEGRADED){
-          void reconcileVerifiedGate('onboarding');
-          return;
-        }
-        publishAuthStage(authMachine.stages.DEGRADED,'ONBOARDING_WITHOUT_VERIFIED_SESSION');
-        baseShowGate('auth');
-        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
-        return;
-      }
-    }else if(name==='app'){
-      if(authStage===authMachine.stages.SESSION_VERIFIED){
-        setAuthStage(authMachine.stages.WORKSPACE_READY,'WORKSPACE_RENDERED');
-      }else if(authStage!==authMachine.stages.WORKSPACE_READY){
-        if(authStage===authMachine.stages.SIGNED_OUT||authStage===authMachine.stages.DEGRADED){
-          void reconcileVerifiedGate('app');
-          return;
-        }
-        publishAuthStage(authMachine.stages.DEGRADED,'WORKSPACE_WITHOUT_VERIFIED_SESSION');
-        baseShowGate('auth');
-        showSessionError('تعذر التحقق من الجلسة. سجّل الدخول مرة أخرى.','The session could not be verified. Please log in again.');
-        return;
-      }
+      publishAuthStage(authMachine.stages.SESSION_VERIFIED,reason);
+    }else if(name==='auth'&&authStage!==authMachine.stages.SUSPENDED){
+      publishAuthStage(authMachine.stages.SIGNED_OUT,reason);
     }
-
-    baseShowGate(name);
     document.body.dataset.dabbirGate=String(name||'');
     const bottom=document.querySelector('#bottomNav');
     if(bottom&&name!=='app') bottom.classList.add('hidden');
+  }
+
+  // IMPORTANT: visibility is owned by the base application. This wrapper must
+  // never delay, veto, reconcile, or redirect a requested gate. It only records
+  // the state after the base gate has been rendered.
+  const baseShowGate=showGate;
+  showGate=function(name){
+    baseShowGate(name);
+    syncStageFromGate(name);
   };
 
   const form=document.querySelector('#authForm');
@@ -151,7 +99,7 @@ const script = String.raw`(()=>{
       if(msg) msg.textContent='';
 
       if(authStage===authMachine.stages.SUSPENDED){
-        setAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_RETRY');
+        publishAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_RETRY');
       }
       if(!setAuthStage(authMachine.stages.AUTHENTICATING,authMode==='login'?'LOGIN_SUBMIT':'SIGNUP_SUBMIT')){
         if(msg) msg.textContent=localized('تعذر بدء جلسة آمنة. أعد المحاولة.','A secure session could not be started. Please try again.');
@@ -171,32 +119,32 @@ const script = String.raw`(()=>{
         });
 
         if(authMode==='signup'&&j?.verification_required){
-          setAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
+          publishAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
           if(msg) msg.textContent=T().verification;
           return;
         }
         if(!r.ok||!j?.ok){
-          setAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_REJECTED');
+          publishAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_REJECTED');
           if(msg) msg.textContent=T().invalid;
           return;
         }
 
         const state=await sessionReady();
         if(state.suspended){
-          setAuthStage(authMachine.stages.SUSPENDED,'ACCOUNT_SUSPENDED');
+          publishAuthStage(authMachine.stages.SUSPENDED,'ACCOUNT_SUSPENDED');
           if(msg) msg.textContent=localized('الحساب موقوف. تواصل مع دعم دبّر.','This account is suspended. Contact DABBIR support.');
           return;
         }
         if(!state.ready){
-          setAuthStage(authMachine.stages.DEGRADED,'SESSION_VERIFICATION_FAILED');
+          publishAuthStage(authMachine.stages.DEGRADED,'SESSION_VERIFICATION_FAILED');
           if(msg) msg.textContent=localized('تم قبول البيانات لكن تعذر تثبيت الجلسة. حاول مرة أخرى.','The credentials were accepted but the session could not be established. Please try again.');
           return;
         }
 
-        setAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED');
+        publishAuthStage(authMachine.stages.SESSION_VERIFIED,'SESSION_COOKIE_VERIFIED');
         await boot();
       }catch{
-        setAuthStage(authMachine.stages.DEGRADED,'AUTH_REQUEST_FAILED');
+        publishAuthStage(authMachine.stages.DEGRADED,'AUTH_REQUEST_FAILED');
         if(msg) msg.textContent=localized('تعذر الاتصال. حاول مرة أخرى.','Connection failed. Please try again.');
       }finally{
         btn.disabled=false;
@@ -208,15 +156,17 @@ const script = String.raw`(()=>{
   const onboardingVisible=document.querySelector('#onboardingGate:not(.hidden)');
   const appVisible=document.querySelector('#appShell:not(.hidden)');
   if(appVisible){
-    setAuthStage(authMachine.stages.WORKSPACE_READY,'BASE_RUNTIME_BOOTSTRAP',{bootstrap:true});
+    publishAuthStage(authMachine.stages.WORKSPACE_READY,'BASE_RUNTIME_BOOTSTRAP');
+    document.body.dataset.dabbirGate='app';
   }else if(onboardingVisible){
-    setAuthStage(authMachine.stages.SESSION_VERIFIED,'BASE_RUNTIME_BOOTSTRAP',{bootstrap:true});
+    publishAuthStage(authMachine.stages.SESSION_VERIFIED,'BASE_RUNTIME_BOOTSTRAP');
+    document.body.dataset.dabbirGate='onboarding';
   }else{
-    setAuthStage(authMachine.stages.SIGNED_OUT,'BASE_RUNTIME_BOOTSTRAP',{bootstrap:true});
+    publishAuthStage(authMachine.stages.SIGNED_OUT,'BASE_RUNTIME_BOOTSTRAP');
+    document.body.dataset.dabbirGate=authVisible?'auth':'';
   }
-  document.body.dataset.dabbirGate=authVisible?'auth':onboardingVisible?'onboarding':appVisible?'app':'';
 
-  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v3',session_retry:true,gate_isolation:true,state_machine:true,gate_reconciliation:true};
+  window.__dabbirAuthSessionStability={version:'ios-auth-stability-v4',session_retry:true,gate_isolation:true,state_machine:true,gate_observer_only:true};
 })();`;
 
 export default function handler(req,res){
