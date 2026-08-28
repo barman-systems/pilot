@@ -68,6 +68,20 @@ function replayResponse(res, reservation, message) {
   });
 }
 
+function replayReadbackUnverified(res, reservation) {
+  return json(res, 502, {
+    ok: false,
+    state: 'PROVIDER_ACCEPTED_LOCAL_READBACK_UNVERIFIED',
+    error: 'WHATSAPP_REPLY_READBACK_UNVERIFIED',
+    provider_accepted: true,
+    provider_status_verified: ['DELIVERED', 'READ'].includes(reservation.state),
+    automatic_resend_blocked: true,
+    retry_safe_with_same_key: true,
+    external_side_effects_possible: true,
+    truth: { state: 'UNVERIFIED_LOCAL_READBACK', source: 'DABBIR_OUTBOUND_RESERVATION' },
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'SAME_ORIGIN_REQUIRED' });
@@ -99,8 +113,16 @@ export default async function handler(req, res) {
 
     if (!reservation.shouldSend) {
       if (['PROVIDER_ACCEPTED', 'SENT', 'DELIVERED', 'READ'].includes(reservation.state) && reservation.messageId) {
-        const persisted = await readPersistedMessage(owner.accessToken, businessId, reservation.messageId);
-        if (!persisted) return json(res, 502, { ok: false, state: 'LOCAL_READBACK_UNVERIFIED', error: 'WHATSAPP_REPLY_READBACK_UNVERIFIED' });
+        providerAccepted = true;
+        let persisted;
+        try {
+          persisted = await readPersistedMessage(owner.accessToken, businessId, reservation.messageId);
+        } catch (error) {
+          error.providerAccepted = true;
+          error.ambiguous = true;
+          throw error;
+        }
+        if (!persisted) return replayReadbackUnverified(res, reservation);
         return replayResponse(res, reservation, persisted);
       }
       if (['SENDING', 'AMBIGUOUS'].includes(reservation.state)) {
@@ -194,6 +216,7 @@ export default async function handler(req, res) {
       provider_status: error?.providerStatus || null,
       provider_code: error?.providerCode || null,
       automatic_resend_blocked: Boolean(reservation?.reservationId),
+      retry_safe_with_same_key: ambiguous,
       external_side_effects_possible: ambiguous,
       truth: { state: 'UNVERIFIED' },
     });
