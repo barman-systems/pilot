@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   installProtectedFetchAccess,
   installProtectedPlaywrightAccess,
@@ -213,4 +214,22 @@ webkit.launch = async (...launchArgs) => {
   return browser;
 };
 
+const architecture = JSON.parse(fs.readFileSync(new URL('../config/dabbir-architecture-ownership.json', import.meta.url), 'utf8'));
+const retiredPilotAliases = architecture?.legacy_api?.retired_aliases_forbidden;
+if (!Array.isArray(retiredPilotAliases) || retiredPilotAliases.length === 0) {
+  throw new Error('DABBIR_RETIRED_PILOT_ALIAS_CONTRACT_MISSING');
+}
+
+for (const route of retiredPilotAliases) {
+  const response = await fetch(`${origin}${route}`, {
+    method: 'GET',
+    redirect: 'manual',
+    headers: { accept: 'application/json,text/plain,*/*' },
+  });
+  if (response.status !== 404) {
+    throw new Error(`DABBIR_RETIRED_PILOT_ALIAS_LIVE_${response.status}:${route}`);
+  }
+}
+
+console.log(`DABBIR_RETIRED_PILOT_ALIASES=PASS count=${retiredPilotAliases.length}`);
 console.log(`DABBIR_PROTECTED_FULL_JOURNEY_ACCESS=${bypass ? 'automation_bypass' : 'trusted_oidc'}`);
