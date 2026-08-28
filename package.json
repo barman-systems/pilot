@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "check:syntax": "git ls-files '*.js' '*.mjs' | xargs -r -n1 node --check",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "vercel-build": "node scripts/vercel-build-gate.mjs"
   },
   "dependencies": {
