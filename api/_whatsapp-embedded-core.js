@@ -88,8 +88,15 @@ async function discoverAppIdFromExistingToken(config) {
   try {
     const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/app`);
     url.searchParams.set('fields', 'id');
-    url.searchParams.set('access_token', token);
-    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+    });
     const payload = await response.json().catch(() => ({}));
     const id = String(payload?.id || '').trim();
     if (!response.ok || !/^[0-9]{5,40}$/.test(id)) return '';
