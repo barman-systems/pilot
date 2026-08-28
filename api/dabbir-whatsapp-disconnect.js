@@ -8,6 +8,17 @@ import {
   unsubscribeWaba,
 } from './_whatsapp-embedded-core.js';
 
+export function verifiedDeletion(rows, businessId) {
+  return Boolean(
+    Array.isArray(rows)
+    && rows.length === 1
+    && rows[0]
+    && typeof rows[0] === 'object'
+    && !Array.isArray(rows[0])
+    && String(rows[0].business_id || '') === String(businessId)
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'SAME_ORIGIN_REQUIRED' });
@@ -32,7 +43,10 @@ export default async function handler(req, res) {
       }
     }
 
-    await removeBusinessConnection(owner.accessToken, businessId);
+    const deleted = await removeBusinessConnection(owner.accessToken, businessId);
+    if (!verifiedDeletion(deleted, businessId)) {
+      throw Object.assign(new Error('WHATSAPP_CONNECTION_DELETE_UNVERIFIED'), { status: 502 });
+    }
     return json(res, 200, {
       ok: true,
       connected: false,
@@ -40,6 +54,10 @@ export default async function handler(req, res) {
       secrets_exposed: false,
     });
   } catch (error) {
-    return json(res, Number(error?.status || 500), { ok: false, error: error?.message || 'WHATSAPP_DISCONNECT_FAILED' });
+    const status = Number(error?.status || 500);
+    return json(res, [400, 401, 403, 409, 413, 429, 502, 503, 504].includes(status) ? status : 500, {
+      ok: false,
+      error: error?.message || 'WHATSAPP_DISCONNECT_FAILED',
+    });
   }
 }

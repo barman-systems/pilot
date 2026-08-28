@@ -2,12 +2,15 @@ import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json } from './_auth-core.js';
 import { deriveWhatsAppOperationalState } from './_dabbir-whatsapp-state-machine.js';
 import { serviceRpc, whatsappLiveServerCapability } from './_whatsapp-live-core.js';
+import { withServerReadTimeout } from './_server-read-timeout.js';
 import {
   embeddedPlatformConfig,
   loadBusinessConnection,
   ownerContext,
   verifyStoredConnection,
 } from './_whatsapp-embedded-core.js';
+
+const WHATSAPP_STATUS_TIMEOUT_MS = 10_000;
 
 function firstEnv(...names) {
   for (const name of names) {
@@ -215,7 +218,17 @@ async function tenantStatus(req, accessToken, businessId) {
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
   const accessToken = accessTokenFromRequest(req);
-  const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
+  let user = null;
+  try {
+    user = accessToken
+      ? await withServerReadTimeout(
+        signal => getVerifiedUser(accessToken, { signal }),
+        { label: 'WHATSAPP_STATUS_AUTH_READ', timeoutMs: WHATSAPP_STATUS_TIMEOUT_MS },
+      )
+      : null;
+  } catch (error) {
+    return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.safeCode || error?.message || 'REQUEST_FAILED' });
+  }
   if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
   const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
@@ -223,7 +236,7 @@ export default async function handler(req, res) {
     try {
       return json(res, 200, await tenantStatus(req, accessToken, businessId));
     } catch (error) {
-      return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
+      return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.safeCode || error?.message || 'REQUEST_FAILED' });
     }
   }
 
@@ -231,7 +244,10 @@ export default async function handler(req, res) {
   // identity. Platform-level credentials remain webhook/runtime infrastructure
   // only; tenant display state always resolves from the tenant connection row.
   try {
-    const memberships = await getBusinessMemberships(accessToken);
+    const memberships = await withServerReadTimeout(
+      signal => getBusinessMemberships(accessToken, { signal }),
+      { label: 'WHATSAPP_STATUS_MEMBERSHIP_READ', timeoutMs: WHATSAPP_STATUS_TIMEOUT_MS },
+    );
     const businessIds = [...new Set((Array.isArray(memberships) ? memberships : [])
       .map(item => String(item?.business_id || '').trim())
       .filter(Boolean))];
@@ -240,6 +256,6 @@ export default async function handler(req, res) {
     }
     return json(res, 200, tenantUnconfiguredStatus(businessIds.length > 1 ? 'BUSINESS_CONTEXT_REQUIRED' : 'TENANT_WHATSAPP_NOT_LINKED'));
   } catch (error) {
-    return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.message || 'REQUEST_FAILED' });
+    return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.safeCode || error?.message || 'REQUEST_FAILED' });
   }
 }

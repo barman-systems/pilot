@@ -1,7 +1,9 @@
 import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
+import { withServerReadTimeout } from './_server-read-timeout.js';
 
 const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+const WHATSAPP_DATA_TIMEOUT_MS = 10_000;
 
 function clean(value, max = 4000) {
   return String(value || '').trim().slice(0, max);
@@ -32,7 +34,7 @@ async function readResponse(response, fallback) {
   return payload;
 }
 
-export async function serviceRpc(name, params = {}) {
+export async function serviceRpc(name, params = {}, options = {}) {
   const key = serviceKey();
   if (!key) {
     const error = new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
@@ -40,18 +42,28 @@ export async function serviceRpc(name, params = {}) {
     error.code = 'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED';
     throw error;
   }
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      'content-type': 'application/json',
-      accept: 'application/json',
+  return withServerReadTimeout(
+    async signal => {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        cache: 'no-store',
+        signal,
+        headers: {
+          apikey: key,
+          authorization: `Bearer ${key}`,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+      return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
     },
-    body: JSON.stringify(params),
-  });
-  return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
+    {
+      label: 'WHATSAPP_SERVER_RPC',
+      errorCode: 'WHATSAPP_SERVER_DATA_TIMEOUT',
+      timeoutMs: options.timeoutMs ?? WHATSAPP_DATA_TIMEOUT_MS,
+    },
+  );
 }
 
 function oneRow(payload) {
