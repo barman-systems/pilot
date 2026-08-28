@@ -1,42 +1,17 @@
-name: DABBIR Lock Sync
+name: DABBIR Lock Sync Retired
+
+# This workflow is intentionally inert. The one-time deterministic lockfile
+# synchronization completed on 2026-08-28. Keeping it non-triggering avoids
+# a self-modifying release pipeline while preserving the audit trail in Git.
 
 on:
-  push:
-    branches:
-      - feat/dabbir-ios-app-store-foundation-20260828
-    paths:
-      - package.json
-      - package-lock.json
-      - .github/workflows/dabbir-lock-sync.yml
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  sync-root-lock:
-    if: ${{ github.actor != 'github-actions[bot]' }}
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feat/dabbir-ios-app-store-foundation-20260828
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          package-manager-cache: false
-      - name: Regenerate exact root lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Commit lockfile only when changed
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- package-lock.json; then
-            echo 'package-lock.json already synchronized'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json
-          git commit -m 'DABBIR build: synchronize Apple server library lockfile'
-          git push origin HEAD:feat/dabbir-ios-app-store-foundation-20260828
+      - run: echo 'DABBIR root lockfile synchronization is complete; no mutation performed.'
