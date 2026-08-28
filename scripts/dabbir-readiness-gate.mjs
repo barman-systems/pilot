@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { classifyProductionOrigin } from './dabbir-production-origin-gate.mjs';
 import { deriveReleaseState } from './dabbir-release-state-machine.mjs';
 
+// BAR-30 exact-head preview marker: release state machine v1.
 const CONTRACT_PATH='config/barman-integration-contract.json';
 const EVIDENCE_PATH=process.env.DABBIR_READINESS_EVIDENCE_PATH||'dabbir-bar12-live-evidence.json';
 const REPORT_PATH=process.env.DABBIR_READINESS_REPORT_PATH||'dabbir-bar12-readiness-report.json';
