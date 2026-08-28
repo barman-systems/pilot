@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useIAP, type Purchase } from 'expo-iap';
-import { verifyApplePurchase } from './api';
+import { loadAppleEntitlement, verifyApplePurchase } from './api';
 
 type FinishTransaction = (args: { purchase: Purchase; isConsumable?: boolean }) => Promise<void>;
 
@@ -40,6 +40,15 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
   }, [finishTransaction]);
 
   useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    void loadAppleEntitlement(accessToken)
+      .then(result => { if (active) setVerified(result?.entitled === true); })
+      .catch(() => { if (active) setVerified(false); });
+    return () => { active = false; };
+  }, [accessToken, enabled]);
+
+  useEffect(() => {
     if (!enabled || !connected || !productId) return;
     void fetchProducts({ skus: [productId], type: 'subs' });
   }, [connected, enabled, fetchProducts, productId]);
@@ -72,7 +81,7 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
     <View style={styles.card}>
       <Text style={styles.title}>اشتراك دبّر عبر Apple</Text>
       <Text style={styles.body}>{verified ? 'الاشتراك موثّق ونشط.' : (product ? `${product.displayName || 'DABBIR Owner'} — ${product.displayPrice || ''}` : 'جارٍ قراءة منتج الاشتراك من App Store.')}</Text>
-      <Pressable style={[styles.button, busy && styles.disabled]} disabled={busy} onPress={buy}><Text style={styles.buttonText}>اشترك عبر Apple</Text></Pressable>
+      <Pressable style={[styles.button, busy && styles.disabled]} disabled={busy || verified} onPress={buy}><Text style={styles.buttonText}>{verified ? 'الاشتراك نشط' : 'اشترك عبر Apple'}</Text></Pressable>
       <Pressable disabled={busy} onPress={restore}><Text style={styles.link}>استعادة المشتريات</Text></Pressable>
     </View>
   );
