@@ -39,10 +39,14 @@ test('static App Store preflight passes internal invariants while reporting exte
   assert.equal(report.ok, true);
   assert.equal(report.mode, 'STATIC');
   assert.equal(report.verdict, 'INTERNAL_PASS_EXTERNAL_BLOCKED');
+  assert.equal(report.app_store_ready, false);
   assert.ok(report.passes.includes('NATIVE_NOT_WEBVIEW'));
   assert.ok(report.passes.includes('NO_UNVERIFIED_ENTITLEMENT'));
   assert.ok(report.passes.includes('SUBSCRIPTION_LEGAL_LINKS'));
   assert.ok(report.passes.includes('STOREKIT_INTRO_OFFER_DISCLOSURE'));
+  assert.ok(report.passes.includes('EAS_PRODUCTION_PROFILE'));
+  assert.ok(report.passes.includes('APP_STORE_PUBLIC_PAGE_SOURCE'));
+  assert.ok(report.passes.includes('APP_STORE_PUBLIC_PAGE_ROUTES'));
   assert.ok(report.external_blockers.some(item => item.code === 'APP_STORE_APPLE_ID'));
   assert.ok(report.external_blockers.some(item => item.code === 'PUBLIC_PRODUCTION_API'));
   assert.equal(report.signed_distribution_testflight, 'EXTERNAL_APPLE_GATE');
@@ -55,9 +59,56 @@ test('release App Store preflight fails closed when Apple/public release configu
   assert.equal(report.ok, false);
   assert.equal(report.mode, 'RELEASE');
   assert.equal(report.verdict, 'FAIL');
+  assert.equal(report.app_store_ready, false);
   const codes = new Set(report.failures.map(item => item.code));
-  for (const required of ['APPLE_BUNDLE_REGISTERED_VALUE', 'APP_STORE_APPLE_ID', 'IAP_PRODUCT_MATCH', 'IAP_ENABLED_RELEASE', 'PUBLIC_PRODUCTION_API', 'PUBLIC_PRIVACY_URL', 'PUBLIC_TERMS_URL', 'PUBLIC_SUPPORT_URL', 'APPLE_ROOT_CERTIFICATES', 'IAP_SERVER_STORAGE_CREDENTIAL']) {
+  for (const required of ['APPLE_BUNDLE_REGISTERED_VALUE', 'APP_STORE_APPLE_ID', 'IAP_PRODUCT_MATCH', 'IAP_ENABLED_RELEASE', 'PUBLIC_PRODUCTION_API', 'PUBLIC_PRIVACY_URL', 'PUBLIC_TERMS_URL', 'PUBLIC_SUPPORT_URL', 'APPLE_ROOT_CERTIFICATES_CONFIG', 'IAP_SERVER_STORAGE_CREDENTIAL_CONFIG']) {
     assert.ok(codes.has(required), `missing fail-closed release blocker ${required}`);
+  }
+});
+
+test('release config cannot manufacture final PASS from placeholder-shaped values', () => {
+  const common = {
+    DABBIR_APP_STORE_RELEASE_PREFLIGHT: '1',
+    DABBIR_IOS_BUNDLE_ID: 'com.barmansystems.dabbir',
+    DABBIR_IOS_APP_APPLE_ID: '1234567890',
+    DABBIR_IOS_SUBSCRIPTION_PRODUCT_ID: 'com.barmansystems.dabbir.owner.monthly',
+    EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID: 'com.barmansystems.dabbir.owner.monthly',
+    EXPO_PUBLIC_IOS_IAP_ENABLED: 'true',
+    EXPO_PUBLIC_DABBIR_API_BASE_URL: 'https://app.example.com',
+    APPLE_ROOT_CERTIFICATES_BASE64: `${Buffer.alloc(400).toString('base64')},${Buffer.alloc(400, 1).toString('base64')}`,
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-value',
+  };
+
+  const wrong = runPreflight({
+    ...common,
+    EXPO_PUBLIC_DABBIR_PRIVACY_URL: 'https://app.example.com/privacy-policy',
+    EXPO_PUBLIC_DABBIR_TERMS_URL: 'https://app.example.com/terms',
+    EXPO_PUBLIC_DABBIR_SUPPORT_URL: 'https://app.example.com/support',
+  });
+  assert.equal(wrong.status, 2, wrong.stderr || wrong.stdout);
+  assert.ok(JSON.parse(wrong.stdout).failures.some(item => item.code === 'PUBLIC_PRIVACY_URL'));
+
+  const shapedOnly = runPreflight({
+    ...common,
+    EXPO_PUBLIC_DABBIR_PRIVACY_URL: 'https://app.example.com/privacy',
+    EXPO_PUBLIC_DABBIR_TERMS_URL: 'https://app.example.com/terms',
+    EXPO_PUBLIC_DABBIR_SUPPORT_URL: 'https://app.example.com/support',
+  });
+  assert.equal(shapedOnly.status, 3, shapedOnly.stderr || shapedOnly.stdout);
+  const report = JSON.parse(shapedOnly.stdout);
+  assert.equal(report.ok, false);
+  assert.equal(report.app_store_ready, false);
+  assert.equal(report.release_config_only, true);
+  assert.equal(report.verdict, 'RELEASE_CONFIG_PASS_EXTERNAL_VERIFICATION_REQUIRED');
+  for (const required of [
+    'APP_STORE_CONNECT_RECORD_VERIFICATION',
+    'APP_STORE_SUBSCRIPTION_PRODUCT_VERIFICATION',
+    'PUBLIC_RELEASE_URL_LIVE_VERIFICATION',
+    'APPLE_ROOT_TRUST_VERIFICATION',
+    'ENTITLEMENT_STORAGE_LIVE_VERIFICATION',
+    'SIGNED_DISTRIBUTION_TESTFLIGHT_VERIFICATION',
+  ]) {
+    assert.ok(report.external_blockers.some(item => item.code === required), `missing external verification blocker ${required}`);
   }
 });
 
@@ -75,10 +126,14 @@ test('subscription UI discloses StoreKit-derived period/offer and legal links wi
   assert.doesNotMatch(source, /7\s*(day|days|يوم|أيام)/i);
 });
 
-test('mobile CI permanently runs the static App Store preflight and watches its contract paths', async () => {
+test('mobile CI permanently runs the preflight and watches every App Store source contract path', async () => {
   const workflow = await read('.github/workflows/dabbir-mobile-ci.yml');
   assert.match(workflow, /scripts\/dabbir-app-store-preflight\.mjs/);
   assert.match(workflow, /test\/dabbir-app-store-preflight\.test\.mjs/);
   assert.match(workflow, /Run App Store static preflight/);
   assert.match(workflow, /node scripts\/dabbir-app-store-preflight\.mjs/);
+  for (const watched of ['privacy.html', 'terms.html', 'support.html', 'vercel.json']) {
+    const count = workflow.split(`- '${watched}'`).length - 1;
+    assert.equal(count, 2, `${watched} must trigger Mobile CI on PR and main push`);
+  }
 });
