@@ -39,6 +39,15 @@ function runGuard(cwd, current, previousDeployment = '', ref = 'main') {
   });
 }
 
+function commitPath(dir, relativePath, content = 'export {};\n') {
+  const target = path.join(dir, relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content);
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-qm', `change ${relativePath}`);
+  return git(dir, 'rev-parse', 'HEAD');
+}
+
 test('all non-main branches run the full Vercel verification gate even for test-only commits', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
@@ -65,7 +74,7 @@ test('protected Production smoke runner changes on main force exact-SHA Vercel d
   const head = git(dir, 'rev-parse', 'HEAD');
   const result = runGuard(dir, head, lastSuccessfulDeployment);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Protected Production smoke contract changed; deploy exact SHA for browser evidence/);
+  assert.match(result.stdout, /Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence/);
 });
 
 test('protected Production smoke workflow changes on main force exact-SHA Vercel deployment', () => {
@@ -77,7 +86,29 @@ test('protected Production smoke workflow changes on main force exact-SHA Vercel
   const head = git(dir, 'rev-parse', 'HEAD');
   const result = runGuard(dir, head, lastSuccessfulDeployment);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /Protected Production smoke contract changed; deploy exact SHA for browser evidence/);
+  assert.match(result.stdout, /Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence/);
+});
+
+test('every ignored-path trigger of the canonical exact-SHA customer journey forces a Production deployment', () => {
+  const contractPaths = [
+    '.github/workflows/dabbir-ai-customer-journey.yml',
+    'test/ai-full-customer-journey-v2.mjs',
+    'test/dabbir-protected-full-journey-preload.mjs',
+    'test/dabbir-protected-journey-access.test.mjs',
+    'test/dabbir-authorized-journey-workflow.test.mjs',
+    'test/support/dabbir-protected-journey-access.mjs',
+    'test/dabbir-capacity-load.mjs',
+    'test/dabbir-activity-regression.test.mjs',
+  ];
+
+  for (const relativePath of contractPaths) {
+    const dir = setupRepo();
+    const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
+    const head = commitPath(dir, relativePath, relativePath.endsWith('.yml') ? 'name: journey\n' : 'export {};\n');
+    const result = runGuard(dir, head, lastSuccessfulDeployment);
+    assert.equal(result.status, 1, `${relativePath}: ${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence/);
+  }
 });
 
 test('Supabase migrations on main force Vercel deployment so production SHA cannot drift', () => {
