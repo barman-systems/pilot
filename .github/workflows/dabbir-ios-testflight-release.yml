@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: dabbir-ios-testflight-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   signed-testflight-release:
