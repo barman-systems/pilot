@@ -1,5 +1,6 @@
 import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
+import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { loadBusinessConnection, ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 
 function readiness(platform) {
@@ -10,13 +11,14 @@ function readiness(platform) {
     encryption_configured: Boolean(platform.encryptionSecret),
     existing_whatsapp_token_available: Boolean(platform.legacyAccessTokenAvailable),
     app_id_source: platform.appIdSource || null,
+    config_id_source: platform.configIdSource || null,
   };
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
 
-  const platform = await resolveEmbeddedPlatformConfig();
+  const platform = applyDabbirMetaPublicIdentifiers(await resolveEmbeddedPlatformConfig());
   const accessToken = accessTokenFromRequest(req);
   const user = accessToken ? await getVerifiedUser(accessToken).catch(() => null) : null;
   const platformReadiness = readiness(platform);
