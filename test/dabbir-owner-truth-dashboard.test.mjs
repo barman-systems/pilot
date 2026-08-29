@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import ownerDashboard from '../api/platform-owner-dashboard.js';
+import ownerDashboardV2 from '../api/owner-dashboard-v2.js';
 
 const root=process.cwd();
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
@@ -50,6 +51,21 @@ test('owner dashboard endpoint returns secure no-store HTML',()=>{
   assert.equal(headers['x-dabbir-owner-dashboard'],'truth-v1');
   assert.match(body,/Owner Control Center/);
   assert.match(body,/\/api\/platform-customers\?action=overview/);
+});
+
+test('OTP-native owner dashboard uses the owner session data contract without a second login',()=>{
+  const headers={};
+  let body='';
+  const res={statusCode:0,setHeader(k,v){headers[String(k).toLowerCase()]=v},end(v=''){body=String(v)}};
+  ownerDashboardV2({method:'GET'},res);
+  assert.equal(res.statusCode,200);
+  assert.equal(headers['cache-control'],'no-store, max-age=0');
+  assert.equal(headers['x-dabbir-owner-dashboard'],'otp-native-v2');
+  assert.match(body,/owner-dashboard-data\?action=overview/);
+  assert.match(body,/owner-dashboard-data\?action=search/);
+  assert.match(body,/تم التحقق من دخول المالك عبر OTP/);
+  assert.doesNotMatch(body,/api\/auth\/login/);
+  assert.doesNotMatch(body,/type="password"/);
 });
 
 test('permanent owner route requires OTP gate before authenticated dashboard',()=>{
