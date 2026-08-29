@@ -56,14 +56,22 @@ function membershipFor(memberships,businessId){
   return businessId?memberships.find(m=>m.business_id===businessId)||null:memberships[0]||null;
 }
 
+function membershipHasPermission(membership,permission){
+  if(!membership)return false;
+  const role=String(membership.role||'').toLowerCase();
+  const explicit=Array.isArray(membership.permissions)?membership.permissions:[];
+  if(explicit.length>0)return explicit.includes(permission);
+  if(permission==='manage_store_operations')return ['owner','admin','manager','employee','staff'].includes(role);
+  return ['owner','admin'].includes(role) && permission==='manage_business';
+}
+
 async function handleGet(req,res,context){
   const requested=safeId(singleQueryValue(req,'business_id'));
   const membership=membershipFor(context.memberships,requested);
   if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
   const businessId=membership.business_id;
   const role=String(membership.role||'').toLowerCase();
-  const explicitPermissions=Array.isArray(membership.permissions)?membership.permissions:[];
-  const canOperate=explicitPermissions.length>0 ? explicitPermissions.includes('manage_store_operations') : ['owner','admin','manager','employee','staff'].includes(role);
+  const canOperate=membershipHasPermission(membership,'manage_store_operations');
 
   const [products,inventory,orders,orderItems,movements,customers,services,expenses,returns]=await Promise.all([
     rest(context.token,`dabbir_products?select=id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
@@ -125,7 +133,7 @@ async function handleGet(req,res,context){
     ok:true,
     business_id:businessId,
     role:membership.role,
-    can_manage:['owner','admin'].includes(role),
+    can_manage:membershipHasPermission(membership,'manage_business'),
     can_operate:canOperate,
     metrics:{
       active_products:productRows.filter(product=>product.active).length,
@@ -162,9 +170,12 @@ async function handlePost(req,res,context){
   const businessId=safeId(body.business_id);
   const membership=membershipFor(context.memberships,businessId);
   if(!businessId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
-  if(!['owner','admin'].includes(String(membership.role||'').toLowerCase()))return json(res,403,{ok:false,error:'BUSINESS_MANAGEMENT_REQUIRED'});
 
   const action=clean(body.action,40);
+  const operationalActions=['complete_sale','update_order_status'];
+  const canManage=membershipHasPermission(membership,'manage_business');
+  const canOperate=membershipHasPermission(membership,'manage_store_operations');
+  if(operationalActions.includes(action) ? !canOperate : !canManage)return json(res,403,{ok:false,error:operationalActions.includes(action)?'STORE_OPERATIONS_REQUIRED':'BUSINESS_MANAGEMENT_REQUIRED'});
   let result=null;
   if(action==='create_product'){
     const sku=clean(body.sku,80);

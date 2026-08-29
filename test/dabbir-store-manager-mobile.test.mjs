@@ -217,3 +217,13 @@ test('cashier operation notice and accessible tab states remain explicit', () =>
   assert.match(appSource, /accessibilityState=\{\{ selected: tab === item, disabled: saving \}\}/);
   assert.match(appSource, /accessibilityState=\{\{ disabled \}\}/);
 });
+
+
+test('owner operations separates cashier actions from configuration actions', () => {
+  const apiSource = read('api/owner-operations.js');
+  const migration = read('db/dabbir_store_operations_permissions_v1.sql');
+  assert.match(apiSource, /operationalActions=\['complete_sale','update_order_status'\]/);
+  assert.match(apiSource, /STORE_OPERATIONS_REQUIRED/);
+  assert.match(migration, /manage_store_operations/);
+  assert.match(migration, /dabbir_owner_update_order_status/);
+});
