@@ -321,10 +321,10 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     void mutate({ action: 'create_expense', amount_aed: value, category: expenseForm.category, note: expenseForm.note, occurred_on: expenseForm.occurred_on }, t('تم تسجيل المصروف.', 'The expense was recorded.')).then(ok => { if (ok) setExpenseForm({ amount: '', category: 'supplies', note: '', occurred_on: dateToday() }); });
   };
 
-  const askAssistant = async () => {
-    const message = assistantInput.trim();
+  const askAssistant = async (preset?: string) => {
+    const message = String(preset || assistantInput).trim();
     if (!message || !businessId || assistantBusy) return;
-    setAssistantInput('');
+    if (!preset) setAssistantInput('');
     setAssistantMessages(current => [...current, { role: 'user', text: message }]);
     setAssistantBusy(true);
     try {
@@ -371,6 +371,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     <Card title={t('ما يحتاج انتباهك', 'Needs your attention')}>
       <View style={styles.attentionRow}><View style={[styles.attentionDot, attentionCount > 0 && styles.attentionDotHot]} /><View style={styles.flex}><Text style={styles.rowTitle}>{attentionCount > 0 ? t(`${attentionCount} عناصر تحتاج متابعة`, `${attentionCount} items need follow-up`) : t('لا توجد عناصر عاجلة', 'Nothing urgent')}</Text><Text style={styles.muted}>{t('المتابعات والتدخلات البشرية الموثقة', 'Verified follow-ups and human handoffs')}</Text></View><Text style={styles.attentionNumber}>{attentionCount}</Text></View>
       {lowStock.slice(0, 3).map((item: any, index: number) => <View key={item.id || index} style={styles.row}><Text style={styles.rowTitle}>{item.name || t('منتج', 'Product')}</Text><Text style={styles.warningText}>{t(`المتاح ${item.available}`, `${item.available} available`)}</Text></View>)}
+      {lowStock.length > 0 && <Pressable accessibilityRole="button" onPress={() => setTab('operations')}><Text style={styles.linkSmall}>{t('إدارة المخزون الآن', 'Manage inventory now')}</Text></Pressable>}
     </Card>
     <Card title={t('آخر الطلبات', 'Recent orders')}>
       {orders.slice(0, 5).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.customer_name || t('عميل غير مسمى', 'Unnamed customer')}</Text><Text style={styles.muted}>{amount(item.total_aed)}</Text></View><StatusPill status={String(item.status || '')} t={t} /></View>)}
@@ -427,6 +428,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 
   const renderAssistant = () => <Card title={t('المساعد الذكي', 'Smart assistant')}>
     <Text style={styles.assistantIntro}>{t('اسأل بلغة طبيعية. الإجابات مبنية على بيانات متجرك الموثقة، ولن يدّعي المساعد تنفيذ إجراء لم يتم تنفيذه.', 'Ask in natural language. Answers use your verified store data, and the assistant will not claim an action it did not perform.')}</Text>
+    <View style={styles.categoryWrap}><Pressable accessibilityRole="button" disabled={assistantBusy || !businessId} onPress={() => void askAssistant(t('ما ملخص اليوم؟', 'What is today’s summary?'))} style={styles.categoryChip}><Text style={styles.categoryText}>{t('ملخص اليوم', 'Today summary')}</Text></Pressable><Pressable accessibilityRole="button" disabled={assistantBusy || !businessId} onPress={() => void askAssistant(t('ما المنتجات منخفضة المخزون؟', 'Which products are low in stock?'))} style={styles.categoryChip}><Text style={styles.categoryText}>{t('مخزون منخفض', 'Low stock')}</Text></Pressable></View>
     <View style={styles.messageList}>{assistantMessages.map((item, index) => <View key={`${item.role}-${index}`} style={[styles.messageBubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}><Text style={item.role === 'user' ? styles.userMessage : styles.assistantMessage}>{item.text}</Text></View>)}</View>
     <TextInput value={assistantInput} onChangeText={setAssistantInput} onSubmitEditing={() => void askAssistant()} returnKeyType="send" placeholder={t('مثال: ما مبيعات اليوم وما المنتجات المنخفضة؟', 'Example: what are today’s sales and low-stock products?')} placeholderTextColor="#8A8D98" style={styles.input} />
     <ActionButton disabled={assistantBusy || !assistantInput.trim() || !businessId} title={assistantBusy ? t('يفكر…', 'Thinking…') : t('اسأل دبّر', 'Ask DABBIR')} onPress={() => void askAssistant()} />

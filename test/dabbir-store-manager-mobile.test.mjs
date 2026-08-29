@@ -169,3 +169,18 @@ test('native store manager memoizes product discovery and sale calculations for 
   assert.match(source, /const saleItems: SaleDraftItem\[\] = useMemo\(/);
   assert.match(source, /const saleTotal = useMemo\(/);
 });
+
+
+test('low-stock alerts offer an immediate route to inventory management', () => {
+  const source = read('mobile/App.tsx');
+  assert.match(source, /lowStock\.length > 0/);
+  assert.match(source, /إدارة المخزون الآن/);
+  assert.match(source, /onPress=\{\(\) => setTab\('operations'\)\}/);
+});
+
+
+test('native assistant offers guarded one-tap operational questions for today and low stock', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ['askAssistant = async (preset?: string)', 'ما ملخص اليوم؟', 'ما المنتجات منخفضة المخزون؟', 'Today summary', 'Low stock']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(source, /disabled=\{assistantBusy \|\| !businessId\}/);
+});
