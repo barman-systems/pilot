@@ -1,1 +1,1 @@
-// restore pending
+// emergency restore placeholder
