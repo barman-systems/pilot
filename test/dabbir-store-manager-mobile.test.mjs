@@ -202,3 +202,9 @@ test('daily metrics expose gross returns and net sales as separate facts', () =>
   for (const token of ['returned_today_aed', 'net_sales_today_aed', 'returns_reduce_net_sales']) assert.match(apiSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   for (const token of ['صافي مبيعات اليوم', 'مرتجعات اليوم', 'netSalesToday']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
+
+
+test('workspace translation callback is memoized to avoid reload loops', () => {
+  const appSource = read('mobile/App.tsx');
+  assert.equal((appSource.match(/const t = useMemo\(\(\) => copyFor\(language\), \[language\]\);/g) || []).length, 3);
+});

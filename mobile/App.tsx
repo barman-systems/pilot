@@ -49,7 +49,7 @@ function BrandLockup({ compact = false }: { compact?: boolean }) {
 }
 
 function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthenticated: (session: DabbirSession) => Promise<void>; language: Language; onLanguageChange: (language: Language) => void }) {
-  const t = copyFor(language);
+  const t = useMemo(() => copyFor(language), [language]);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -99,7 +99,7 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
 }
 
 function StoreOnboarding({ session, language, onLanguageChange, onReady }: { session: DabbirSession; language: Language; onLanguageChange: (language: Language) => void; onReady: () => Promise<void> }) {
-  const t = copyFor(language);
+  const t = useMemo(() => copyFor(language), [language]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -147,7 +147,7 @@ function StatusPill({ status, t }: { status: string; t: Copy }) {
 }
 
 function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }: { session: DabbirSession; onLogout: () => Promise<void>; onDeleted: () => Promise<void>; language: Language; onLanguageChange: (language: Language) => void }) {
-  const t = copyFor(language);
+  const t = useMemo(() => copyFor(language), [language]);
   const [tab, setTab] = useState<Tab>('dashboard');
   const [runtime, setRuntime] = useState<any>(null);
   const [operations, setOperations] = useState<any>(null);
