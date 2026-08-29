@@ -1,120 +1,74 @@
-import {
-  authCookieHeaders,
-  json,
-  readJsonBody,
-  requireSameOrigin,
-  supabaseAuth,
-} from '../_auth-core.js';
+const { accessTokenFromRequest } = require('../_auth-core.js');
 
-const OWNER_USERNAME = 'barmanadmin';
-const OWNER_EMAIL = process.env.DABBIR_OWNER_LOGIN_EMAIL || 'barman2013@icloud.com';
-const OWNER_USER_ID = process.env.DABBIR_OWNER_USER_ID || 'f1c5e98b-4060-43cb-a09b-a67a67028800';
-const OTP_RE = /^\d{6}$/;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const OWNER_USERNAME = process.env.DABBIR_OWNER_USERNAME || 'barmanadmin';
+const OWNER_EMAIL = process.env.DABBIR_OWNER_EMAIL;
+const PUBLIC_ORIGIN = process.env.DABBIR_PUBLIC_ORIGIN || 'https://dabbir.bmalman.com';
 
-function normalizeUsername(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function publicAuthError(status) {
-  if (status === 429) return { status: 429, error: 'OTP_RATE_LIMITED' };
-  return { status: 503, error: 'OTP_UNAVAILABLE' };
-}
-
-export default async function handler(req, res) {
+function json(res, status, body) {
+  res.statusCode = status;
+  res.setHeader('content-type', 'application/json; charset=utf-8');
   res.setHeader('cache-control', 'no-store, max-age=0');
-  res.setHeader('pragma', 'no-cache');
-  res.setHeader('x-dabbir-owner-auth', 'username-otp-v1');
-
-  if (req.method !== 'POST') {
-    return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
-  }
-  if (!requireSameOrigin(req)) {
-    return json(res, 403, { ok: false, error: 'ORIGIN_REQUIRED' });
-  }
-
-  try {
-    const body = await readJsonBody(req, 2048);
-    const action = String(body.action || '').trim().toLowerCase();
-    const username = normalizeUsername(body.username);
-
-    if (action === 'request') {
-      // Keep the response generic so this endpoint never becomes an account
-      // discovery oracle. Only the canonical owner username causes delivery.
-      if (username !== OWNER_USERNAME) {
-        return json(res, 200, { ok: true, otp_required: true });
-      }
-
-      const response = await supabaseAuth('/auth/v1/otp', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: OWNER_EMAIL,
-          create_user: false,
-        }),
-      });
-
-      if (!response.ok) {
-        const failure = publicAuthError(response.status);
-        return json(res, failure.status, { ok: false, error: failure.error });
-      }
-
-      return json(res, 200, { ok: true, otp_required: true });
-    }
-
-    if (action === 'verify') {
-      if (username !== OWNER_USERNAME) {
-        return json(res, 401, { ok: false, error: 'INVALID_OWNER_OTP' });
-      }
-
-      const otp = String(body.otp || '').trim();
-      if (!OTP_RE.test(otp)) {
-        return json(res, 400, { ok: false, error: 'INVALID_OTP_FORMAT' });
-      }
-
-      const response = await supabaseAuth('/auth/v1/verify', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: OWNER_EMAIL,
-          token: otp,
-          type: 'email',
-        }),
-      });
-
-      if (!response.ok) {
-        return json(res, response.status === 429 ? 429 : 401, {
-          ok: false,
-          error: response.status === 429 ? 'OTP_RATE_LIMITED' : 'INVALID_OWNER_OTP',
-        });
-      }
-
-      const session = await response.json().catch(() => null);
-      if (
-        !session?.access_token ||
-        !session?.refresh_token ||
-        String(session?.user?.id || '') !== OWNER_USER_ID
-      ) {
-        return json(res, 403, { ok: false, error: 'OWNER_IDENTITY_MISMATCH' });
-      }
-
-      res.setHeader('set-cookie', authCookieHeaders(session));
-      return json(res, 200, {
-        ok: true,
-        authenticated: true,
-        username: OWNER_USERNAME,
-        expires_in: session.expires_in ?? null,
-      });
-    }
-
-    return json(res, 400, { ok: false, error: 'INVALID_OTP_ACTION' });
-  } catch (error) {
-    const code = Number(error?.code || 500);
-    return json(res, code === 400 || code === 413 ? code : 500, {
-      ok: false,
-      error:
-        error?.message === 'PAYLOAD_TOO_LARGE'
-          ? 'PAYLOAD_TOO_LARGE'
-          : error?.message === 'INVALID_JSON'
-            ? 'INVALID_JSON'
-            : 'OWNER_AUTH_UNAVAILABLE',
-    });
-  }
+  res.end(JSON.stringify(body));
 }
+
+async function supabase(path, init = {}) {
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    'content-type': 'application/json',
+    ...(init.headers || {}),
+  };
+  return fetch(`${SUPABASE_URL}${path}`, { ...init, headers });
+}
+
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !OWNER_EMAIL) {
+    return json(res, 503, { ok: false, error: 'OWNER_AUTH_NOT_CONFIGURED' });
+  }
+
+  let body = {};
+  try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); } catch {}
+
+  const username = String(body.username || '').trim().toLowerCase();
+  if (username !== OWNER_USERNAME.toLowerCase()) {
+    return json(res, 401, { ok: false, error: 'INVALID_OWNER' });
+  }
+
+  if (body.action === 'request') {
+    const r = await supabase('/auth/v1/otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: OWNER_EMAIL,
+        create_user: false,
+        data: { dabbir_owner: true },
+        options: { emailRedirectTo: `${PUBLIC_ORIGIN}/owner-dashboard` },
+      }),
+    });
+    if (!r.ok) {
+      const p = await r.json().catch(() => ({}));
+      return json(res, r.status === 429 ? 429 : 503, { ok: false, error: r.status === 429 ? 'OTP_RATE_LIMITED' : 'OTP_REQUEST_FAILED', details: p?.msg || p?.message || null });
+    }
+    return json(res, 200, { ok: true });
+  }
+
+  if (body.action === 'verify') {
+    const otp = String(body.otp || '').replace(/\D/g, '');
+    if (!/^\d{6}$/.test(otp)) return json(res, 400, { ok: false, error: 'INVALID_OTP_FORMAT' });
+
+    const r = await supabase('/auth/v1/verify', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'email', email: OWNER_EMAIL, token: otp }),
+    });
+    const p = await r.json().catch(() => ({}));
+    if (!r.ok || !p?.access_token) return json(res, 401, { ok: false, error: 'INVALID_OWNER_OTP' });
+
+    const secure = PUBLIC_ORIGIN.startsWith('https://') ? '; Secure' : '';
+    res.setHeader('set-cookie', `dabbir_access_token=${encodeURIComponent(p.access_token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure}`);
+    return json(res, 200, { ok: true, authenticated: true });
+  }
+
+  return json(res, 400, { ok: false, error: 'INVALID_ACTION' });
+};
