@@ -64,6 +64,10 @@ export async function loadRuntime(accessToken: string): Promise<any> {
   return parseJson(response);
 }
 
+export async function createStore(accessToken: string, name: string, locale: 'ar-AE' | 'en-AE'): Promise<any> {
+  return post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale }, accessToken);
+}
+
 export async function deleteDabbirAccount(accessToken: string): Promise<any> {
   return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
 }

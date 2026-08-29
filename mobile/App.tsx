@@ -92,6 +92,38 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
   </KeyboardAvoidingView></SafeAreaView>;
 }
 
+function StoreOnboarding({ session, language, onLanguageChange, onReady }: { session: DabbirSession; language: Language; onLanguageChange: (language: Language) => void; onReady: () => Promise<void> }) {
+  const t = copyFor(language);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const createStore = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      Alert.alert(t('اكتب اسم المتجر', 'Enter store name'), t('اكتب اسم متجرك للبدء. يمكنك تعديل التفاصيل لاحقًا.', 'Enter your store name to start. You can edit details later.'));
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.createStore(session.access_token, trimmed, language === 'ar' ? 'ar-AE' : 'en-AE');
+      await onReady();
+      Alert.alert(t('متجرك جاهز', 'Your store is ready'), t('ابدأ بإضافة منتج أو تسجيل أول بيع. دبّر سيبني ملخص اليوم من بياناتك الفعلية.', 'Start by adding a product or recording your first sale. DABBIR will build Today from your real data.'));
+    } catch (error) {
+      Alert.alert(t('تعذر إنشاء المتجر', 'Unable to create store'), String((error as Error)?.message || 'STORE_CREATE_FAILED'));
+    } finally { setBusy(false); }
+  };
+
+  return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.authWrap}>
+    <View style={styles.authTop}><Text style={styles.brand}>DABBIR | دبّر</Text><LanguageToggle language={language} onChange={onLanguageChange} /></View>
+    <View style={styles.setupBadge}><Text style={styles.setupBadgeText}>{t('دبّر للمتاجر الصغيرة', 'DABBIR for small stores')}</Text></View>
+    <Text style={styles.hero}>{t('لنجهّز متجرك في دقيقة.', "Let's set up your store in a minute.")}</Text>
+    <Text style={styles.authSubtitle}>{t('ابدأ باسم المتجر فقط. ستضيف المنتجات أو تسجل أول بيع بعد الدخول، دون إعدادات طويلة.', 'Start with your store name only. Add products or record your first sale after entering, without lengthy setup.')}</Text>
+    <TextInput accessibilityLabel={t('اسم المتجر', 'Store name')} value={name} onChangeText={setName} placeholder={t('مثل: تموينات النخبة', 'Example: Elite Groceries')} placeholderTextColor="#8A8D98" style={styles.input} maxLength={120} />
+    <ActionButton disabled={busy || !name.trim()} title={busy ? t('جارٍ تجهيز المتجر…', 'Setting up store…') : t('ابدأ إدارة متجري', 'Start managing my store')} onPress={() => void createStore()} />
+    <Text style={styles.secureNote}>{t('سيدخل متجرك وضع البيع والمخزون والمصروفات. لا يلزم ربط واتساب أو إدخال بطاقة للبدء.', 'Your store starts with sales, inventory, and expenses. WhatsApp and payment-card setup are not required to start.')}</Text>
+  </KeyboardAvoidingView></SafeAreaView>;
+}
+
 function Metric({ label, value, accent = false }: { label: string; value: number | string; accent?: boolean }) {
   return <View style={[styles.metric, accent && styles.metricAccent]}><Text style={[styles.metricValue, accent && styles.metricValueAccent]}>{String(value)}</Text><Text style={[styles.metricLabel, accent && styles.metricLabelAccent]}>{label}</Text></View>;
 }
@@ -260,6 +292,9 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     );
   };
 
+  if (!loading && runtime?.needs_onboarding) return <StoreOnboarding session={session} language={language} onLanguageChange={onLanguageChange} onReady={reload} />;
+  if (!loading && !business) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.muted}>{t('تعذر العثور على متجر نشط. حدّث الصفحة أو سجّل الدخول مجددًا.', 'No active store was found. Refresh or sign in again.')}</Text></View></SafeAreaView>;
+
   const renderDashboard = () => <>
     <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Text style={styles.welcomeOrbText}>✦</Text></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
     <View style={styles.grid}>
@@ -392,6 +427,8 @@ const styles = StyleSheet.create({
   brandSmall: { fontSize: 13, fontWeight: '900', color: '#556070' },
   hero: { fontSize: 27, fontWeight: '900', color: '#111827', textAlign: 'right', marginTop: 20 },
   authSubtitle: { fontSize: 15, lineHeight: 22, color: '#697386', textAlign: 'right', marginBottom: 8 },
+  setupBadge: { alignSelf: 'flex-start', backgroundColor: '#E7F0FF', borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7, marginTop: 14 },
+  setupBadgeText: { color: '#1D4ED8', fontSize: 12, fontWeight: '900' },
   page: { padding: 18, gap: 14, paddingBottom: 48 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   headerIdentity: { flex: 1 },

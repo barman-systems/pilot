@@ -90,3 +90,16 @@ test('native store manager exposes a reviewable quick-sale flow and auditable in
   assert.match(source, /تأكيد استلام المخزون/);
   assert.match(source, /البيع الآجل يسجل كمبلغ مستحق/);
 });
+
+
+test('mobile runtime accepts authenticated setup writes and the native client creates a store in store-first mode', () => {
+  const runtimeSource = read('api/mobile/runtime.js');
+  const clientSource = read('mobile/src/api.ts');
+  const appSource = read('mobile/App.tsx');
+  assert.match(runtimeSource, /\['GET', 'POST'\]/);
+  assert.match(runtimeSource, /requireNativeBearer/);
+  assert.match(clientSource, /createStore/);
+  assert.match(clientSource, /action: 'create_business'/);
+  assert.match(clientSource, /business_type: 'store'/);
+  for (const token of ['StoreOnboarding', 'دبّر للمتاجر الصغيرة', 'ابدأ إدارة متجري']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});

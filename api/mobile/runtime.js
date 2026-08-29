@@ -3,7 +3,7 @@ import runtimeHandler from '../dabbir-runtime-fast.js';
 import { requireNativeBearer } from './_native-core.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET' });
+  if (!['GET', 'POST'].includes(req.method)) return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET, POST' });
   if (!requireNativeBearer(req, res)) return;
 
   const token = accessTokenFromRequest(req);
