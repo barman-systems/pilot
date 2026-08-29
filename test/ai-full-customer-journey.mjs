@@ -541,9 +541,41 @@ async function main() {
       return { status: result.status, detail: 'Order confirmed and recognized-sales metric includes AED 125.' };
     });
 
-    await step('23_mobile_webkit_ui_customer_owner_journey', browserJourney);
+    await step('23_owner_completes_itemized_sale_and_inventory_ledger', async () => {
+      const sale = await ownerSession.request('/api/owner-operations', {
+        method: 'POST',
+        body: { action: 'complete_sale', business_id: businessId, items: [{ product_id: productId, quantity: 2 }], payment_method: 'cash' },
+      });
+      assert(sale.ok && sale.json?.ok && sale.json?.status === 'completed', `QUICK_SALE_FAILED_${sale.status}:${small(sale.text)}`);
+      assert(Number(sale.json?.total_aed) === 99, 'QUICK_SALE_TOTAL_INVALID');
+      assert(Number(sale.json?.paid_aed) === 99, 'QUICK_SALE_COLLECTION_INVALID');
+      const listing = await ownerSession.request(`/api/owner-operations?business_id=${encodeURIComponent(businessId)}`);
+      assert(listing.ok && listing.json?.ok, `POST_SALE_LOOKUP_FAILED_${listing.status}`);
+      const product = (listing.json?.products || []).find(item => item.id === productId);
+      assert(Number(product?.quantity) === 1, 'SALE_DID_NOT_DEDUCT_INVENTORY');
+      const order = (listing.json?.orders || []).find(item => item.id === sale.json.order_id);
+      assert(order?.status === 'completed' && Array.isArray(order?.items) && order.items.length === 1, 'ITEMIZED_SALE_ORDER_NOT_VISIBLE');
+      const movement = (listing.json?.inventory_movements || []).find(item => item.order_id === sale.json.order_id && item.movement_type === 'SALE');
+      assert(Number(movement?.quantity_delta) === -2 && Number(movement?.quantity_after) === 1, 'SALE_LEDGER_MOVEMENT_INVALID');
+      assert(Number(listing.json?.metrics?.cash_collected_aed) >= 99, 'CASH_COLLECTION_METRIC_MISSING');
+      return { status: sale.status, detail: 'Itemized cash sale deducted inventory and created a SALE ledger movement.' };
+    });
 
-    await step('24_employee_logout_and_session_revocation', async () => {
+    await step('24_owner_receives_stock_and_records_ledger_movement', async () => {
+      const receipt = await ownerSession.request('/api/owner-operations', {
+        method: 'POST',
+        body: { action: 'receive_stock', business_id: businessId, product_id: productId, quantity: 5, note: 'QA shipment receipt' },
+      });
+      assert(receipt.ok && receipt.json?.ok && Number(receipt.json?.quantity) === 6, `STOCK_RECEIPT_FAILED_${receipt.status}:${small(receipt.text)}`);
+      const listing = await ownerSession.request(`/api/owner-operations?business_id=${encodeURIComponent(businessId)}`);
+      const movement = (listing.json?.inventory_movements || []).find(item => item.movement_type === 'RECEIPT' && item.product_id === productId);
+      assert(Number(movement?.quantity_delta) === 5 && Number(movement?.quantity_after) === 6, 'RECEIPT_LEDGER_MOVEMENT_INVALID');
+      return { status: receipt.status, detail: 'Stock receipt increased inventory and created a RECEIPT ledger movement.' };
+    });
+
+    await step('25_mobile_webkit_ui_customer_owner_journey', browserJourney);
+
+    await step('26_employee_logout_and_session_revocation', async () => {
       const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
       assert(logout.ok, `EMPLOYEE_LOGOUT_FAILED_${logout.status}`);
       const after = await runtime(employeeSession, businessId, null, true);
@@ -551,7 +583,7 @@ async function main() {
       return { status: logout.status, detail: 'Employee logout invalidated production session.' };
     });
 
-    await step('25_owner_logout_and_session_revocation', async () => {
+    await step('27_owner_logout_and_session_revocation', async () => {
       const logout = await ownerSession.request('/api/auth/logout', { method: 'POST', body: {} });
       assert(logout.ok, `OWNER_LOGOUT_FAILED_${logout.status}`);
       const after = await runtime(ownerSession, businessId, null, true);

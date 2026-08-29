@@ -51,3 +51,42 @@ test('native product manager is bilingual and includes the core store surfaces',
   assert.match(source, /LanguageToggle/);
   assert.match(source, /StatusBar style="light"/);
 });
+
+
+test('owner operations supports an itemized quick sale and stock receipt without trusting client totals', () => {
+  const source = read('api/owner-operations.js');
+  assert.match(source, /action==='complete_sale'/);
+  assert.match(source, /dabbir_owner_complete_sale/);
+  assert.match(source, /action==='receive_stock'/);
+  assert.match(source, /dabbir_owner_receive_stock/);
+  assert.match(source, /INVALID_SALE_INPUT/);
+  assert.match(source, /INVALID_RECEIPT_INPUT/);
+  assert.doesNotMatch(source, /p_total_aed/);
+});
+
+test('sales ledger migration itemizes sales, records movement reasons, and scopes access to the tenant', () => {
+  const source = read('db/dabbir_store_sales_and_inventory_ledger_v1.sql');
+  for (const token of ['dabbir_order_items', 'dabbir_inventory_movements', 'OPENING_BALANCE', 'SALE', 'RECEIPT', 'ADJUSTMENT', 'dabbir_owner_complete_sale', 'dabbir_owner_receive_stock']) assert.match(source, new RegExp(token));
+  assert.match(source, /quantity_delta integer not null check\(quantity_delta <> 0\)/);
+  assert.match(source, /line_total_aed numeric\(12,2\) not null/);
+  assert.match(source, /force row level security/);
+  assert.match(source, /revoke all on table public\.dabbir_order_items from public, anon/);
+  assert.match(source, /revoke all on table public\.dabbir_inventory_movements from public, anon/);
+  assert.match(source, /INSUFFICIENT_AVAILABLE_INVENTORY/);
+  assert.match(source, /paid_aed=case when v_payment_method='credit' then 0 else v_total end/);
+});
+
+test('owner copilot grounds store answers in Dubai-day sales, collections, expenses, and low-stock facts', () => {
+  const source = read('api/owner-copilot.js');
+  for (const token of ['dabbir_products', 'dabbir_inventory', 'dabbir_orders', 'dabbir_expenses', 'sales_today_aed', 'cash_collected_today_aed', 'receivables_today_aed', 'low_stock_products']) assert.match(source, new RegExp(token));
+  assert.match(source, /Never call sales minus expenses profit/);
+  assert.match(source, /store_metrics_are_dubai_day_facts:true/);
+});
+
+test('native store manager exposes a reviewable quick-sale flow and auditable inventory movements', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ['بيع سريع', 'تسجيل بيع سريع', 'إتمام البيع', 'استلام +5', 'آخر حركات المخزون', 'paymentMethods', 'complete_sale', 'receive_stock']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(source, /بيع كمية غير متاحة/);
+  assert.match(source, /تأكيد استلام المخزون/);
+  assert.match(source, /البيع الآجل يسجل كمبلغ مستحق/);
+});

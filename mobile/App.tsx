@@ -10,6 +10,7 @@ import { SubscriptionCard } from './src/SubscriptionCard';
 type Language = 'ar' | 'en';
 type Tab = 'dashboard' | 'operations' | 'assistant' | 'account';
 type Copy = (ar: string, en: string) => string;
+type SaleDraftItem = { product: any; quantity: number };
 
 const defaultLanguage: Language = (getLocales()[0]?.languageCode || 'ar').toLowerCase() === 'ar' ? 'ar' : 'en';
 const copyFor = (language: Language): Copy => (ar, en) => language === 'ar' ? ar : en;
@@ -24,6 +25,13 @@ const expenseCategories = [
   { value: 'marketing', ar: 'تسويق', en: 'Marketing' },
   { value: 'transport', ar: 'نقل وتوصيل', en: 'Transport' },
   { value: 'other', ar: 'أخرى', en: 'Other' },
+];
+
+const paymentMethods = [
+  { value: 'cash', ar: 'نقدي', en: 'Cash' },
+  { value: 'card', ar: 'بطاقة', en: 'Card' },
+  { value: 'transfer', ar: 'تحويل', en: 'Transfer' },
+  { value: 'credit', ar: 'آجل', en: 'Credit' },
 ];
 
 function ActionButton({ title, onPress, secondary = false, disabled = false }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
@@ -110,6 +118,8 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const [deleting, setDeleting] = useState(false);
   const [productForm, setProductForm] = useState({ sku: '', name: '', price: '', quantity: '0' });
   const [expenseForm, setExpenseForm] = useState({ amount: '', category: 'supplies', note: '', occurred_on: dateToday() });
+  const [saleDraft, setSaleDraft] = useState<Record<string, number>>({});
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([{ role: 'assistant', text: t('مرحبًا، أنا مديرك الذكي. اسألني عن المبيعات أو المخزون أو المصروفات.', 'Hello, I am your smart manager. Ask me about sales, inventory, or expenses.') }]);
@@ -140,10 +150,13 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const orders = Array.isArray(operations?.orders) ? operations.orders : [];
   const expenses = Array.isArray(operations?.expenses) ? operations.expenses : [];
   const lowStock = Array.isArray(operations?.low_stock) ? operations.low_stock : [];
+  const inventoryMovements = Array.isArray(operations?.inventory_movements) ? operations.inventory_movements : [];
+  const saleItems: SaleDraftItem[] = products.map((product: any): SaleDraftItem => ({ product, quantity: Number(saleDraft[product.id] || 0) })).filter((item: SaleDraftItem) => item.quantity > 0);
+  const saleTotal = saleItems.reduce((sum: number, item: SaleDraftItem) => sum + Number(item.product.price_aed || 0) * item.quantity, 0);
   const attentionCount = Number(runtimeMetrics.needs_attention ?? (handoffs.length + followups.length));
-  const recognizedSales = Number(metrics.recognized_sales_aed || 0);
-  const expenseTotal = Number(metrics.expenses_aed || 0);
-  const netTotal = recognizedSales - expenseTotal;
+  const salesToday = Number(metrics.sales_today_aed || 0);
+  const cashCollected = Number(metrics.cash_collected_aed || 0);
+  const receivables = Number(metrics.receivables_aed || 0);
 
   const mutate = async (payload: Record<string, unknown>, successMessage: string) => {
     if (!businessId) return;
@@ -152,8 +165,10 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       await api.mutateOwnerOperations(session.access_token, { ...payload, business_id: businessId });
       await reload();
       Alert.alert(t('تمت العملية', 'Done'), successMessage);
+      return true;
     } catch (error) {
       Alert.alert(t('تعذر تنفيذ العملية', 'Action failed'), String((error as Error)?.message || 'OPERATION_FAILED'));
+      return false;
     } finally { setSaving(false); }
   };
 
@@ -162,7 +177,45 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       Alert.alert(t('بيانات غير مكتملة', 'Incomplete details'), t('أدخل رمز المنتج والاسم والسعر والكمية بشكل صحيح.', 'Enter a valid SKU, name, price, and quantity.'));
       return;
     }
-    void mutate({ action: 'create_product', sku: productForm.sku, name: productForm.name, price_aed: Number(productForm.price), quantity: Number(productForm.quantity) }, t('تمت إضافة المنتج إلى المخزون.', 'The product was added to inventory.')).then(() => setProductForm({ sku: '', name: '', price: '', quantity: '0' }));
+    void mutate({ action: 'create_product', sku: productForm.sku, name: productForm.name, price_aed: Number(productForm.price), quantity: Number(productForm.quantity) }, t('تمت إضافة المنتج إلى المخزون.', 'The product was added to inventory.')).then(ok => { if (ok) setProductForm({ sku: '', name: '', price: '', quantity: '0' }); });
+  };
+
+  const addToSale = (product: any) => {
+    const available = Number(product.available || 0);
+    const inDraft = Number(saleDraft[product.id] || 0);
+    if (available < 1 || inDraft >= available) {
+      Alert.alert(t('لا تتوفر كمية كافية', 'Not enough stock'), t('لا يمكن إضافة كمية تتجاوز الرصيد المتاح.', 'You cannot add more than the available stock.'));
+      return;
+    }
+    setSaleDraft(current => ({ ...current, [product.id]: Number(current[product.id] || 0) + 1 }));
+  };
+
+  const removeFromSale = (productId: string) => setSaleDraft(current => {
+    const quantity = Number(current[productId] || 0) - 1;
+    if (quantity <= 0) { const { [productId]: _removed, ...next } = current; return next; }
+    return { ...current, [productId]: quantity };
+  });
+
+  const receiveStock = (product: any) => {
+    Alert.alert(
+      t('تأكيد استلام المخزون', 'Confirm stock receipt'),
+      t(`سيتم تسجيل استلام 5 وحدات من ${product.name}. استخدم الجرد لتصحيح الكمية الفعلية.`, `This will record receipt of 5 units of ${product.name}. Use stock count to correct the actual quantity.`),
+      [{ text: t('إلغاء', 'Cancel'), style: 'cancel' }, { text: t('تأكيد الاستلام', 'Confirm receipt'), onPress: () => void mutate({ action: 'receive_stock', product_id: product.id, quantity: 5, note: 'Quick stock receipt' }, t('تم تسجيل استلام خمس وحدات في المخزون.', 'Five received units were recorded in inventory.')) }],
+    );
+  };
+
+  const movementTitle = (movement: string) => {
+    const labels: Record<string, [string, string]> = { OPENING_BALANCE: ['رصيد افتتاحي', 'Opening balance'], SALE: ['بيع مكتمل', 'Completed sale'], RETURN: ['مرتجع', 'Return'], RECEIPT: ['استلام بضاعة', 'Stock receipt'], ADJUSTMENT: ['تسوية جرد', 'Stock adjustment'] };
+    const label = labels[movement] || [movement, movement];
+    return t(label[0], label[1]);
+  };
+
+  const completeSale = () => {
+    if (!saleItems.length) {
+      Alert.alert(t('أضف منتجًا للبيع', 'Add a product'), t('اختر منتجًا واحدًا على الأقل لإتمام البيع.', 'Choose at least one product to complete the sale.'));
+      return;
+    }
+    void mutate({ action: 'complete_sale', items: saleItems.map(item => ({ product_id: item.product.id, quantity: item.quantity })), payment_method: paymentMethod }, t(`تم تسجيل بيع بقيمة ${amount(saleTotal)} وتحديث المخزون.`, `A ${amount(saleTotal)} sale was recorded and inventory updated.`)).then(ok => { if (ok) setSaleDraft({}); });
   };
 
   const createExpense = () => {
@@ -171,7 +224,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       Alert.alert(t('بيانات المصروف غير صحيحة', 'Invalid expense'), t('أدخل مبلغًا موجبًا وتاريخًا بصيغة YYYY-MM-DD.', 'Enter a positive amount and a YYYY-MM-DD date.'));
       return;
     }
-    void mutate({ action: 'create_expense', amount_aed: value, category: expenseForm.category, note: expenseForm.note, occurred_on: expenseForm.occurred_on }, t('تم تسجيل المصروف.', 'The expense was recorded.')).then(() => setExpenseForm({ amount: '', category: 'supplies', note: '', occurred_on: dateToday() }));
+    void mutate({ action: 'create_expense', amount_aed: value, category: expenseForm.category, note: expenseForm.note, occurred_on: expenseForm.occurred_on }, t('تم تسجيل المصروف.', 'The expense was recorded.')).then(ok => { if (ok) setExpenseForm({ amount: '', category: 'supplies', note: '', occurred_on: dateToday() }); });
   };
 
   const askAssistant = async () => {
@@ -210,11 +263,12 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const renderDashboard = () => <>
     <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Text style={styles.welcomeOrbText}>✦</Text></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
     <View style={styles.grid}>
-      <Metric label={t('مبيعات مؤكدة', 'Recognized sales')} value={amount(recognizedSales)} accent />
-      <Metric label={t('المصروفات', 'Expenses')} value={amount(expenseTotal)} />
-      <Metric label={t('صافي الحركة', 'Net movement')} value={amount(netTotal)} />
-      <Metric label={t('منتجات منخفضة', 'Low-stock products')} value={metrics.low_stock_products ?? lowStock.length} />
+      <Metric label={t('مبيعات اليوم', "Today's sales")} value={amount(salesToday)} accent />
+      <Metric label={t('تحصيل مسجل', 'Recorded collections')} value={amount(cashCollected)} />
+      <Metric label={t('مصروفات اليوم', "Today's expenses")} value={amount(Number(metrics.today_expenses_aed || 0))} />
+      <Metric label={t('مبالغ آجلة', 'Receivables')} value={amount(receivables)} />
     </View>
+    <Card title={t('ابدأ الآن', 'Start now')}><Text style={styles.body}>{t('سجّل البيع أولًا، ودبّر يحدّث الكمية والتحصيل تلقائيًا.', 'Record the sale first; DABBIR updates stock and collections automatically.')}</Text><ActionButton disabled={!operations?.can_manage || saving} title={t('تسجيل بيع سريع', 'Record quick sale')} onPress={() => setTab('operations')} /></Card>
     <Card title={t('ما يحتاج انتباهك', 'Needs your attention')}>
       <View style={styles.attentionRow}><View style={[styles.attentionDot, attentionCount > 0 && styles.attentionDotHot]} /><View style={styles.flex}><Text style={styles.rowTitle}>{attentionCount > 0 ? t(`${attentionCount} عناصر تحتاج متابعة`, `${attentionCount} items need follow-up`) : t('لا توجد عناصر عاجلة', 'Nothing urgent')}</Text><Text style={styles.muted}>{t('المتابعات والتدخلات البشرية الموثقة', 'Verified follow-ups and human handoffs')}</Text></View><Text style={styles.attentionNumber}>{attentionCount}</Text></View>
       {lowStock.slice(0, 3).map((item: any, index: number) => <View key={item.id || index} style={styles.row}><Text style={styles.rowTitle}>{item.name || t('منتج', 'Product')}</Text><Text style={styles.warningText}>{t(`المتاح ${item.available}`, `${item.available} available`)}</Text></View>)}
@@ -227,6 +281,15 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   </>;
 
   const renderOperations = () => <>
+    <Card title={t('بيع سريع', 'Quick sale')}>
+      <Text style={styles.body}>{t('أضف المنتجات من القائمة أدناه، ثم ثبّت الدفع. لا يتم بيع كمية غير متاحة.', 'Add products from the list below, then confirm payment. Unavailable stock cannot be sold.')}</Text>
+      {saleItems.map(item => <View key={item.product.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.product.name}</Text><Text style={styles.muted}>{item.quantity} × {amount(item.product.price_aed)}</Text></View><View style={styles.inlineActions}><Pressable accessibilityRole="button" onPress={() => removeFromSale(item.product.id)}><Text style={styles.linkSmall}>−</Text></Pressable><Text style={styles.quantityText}>{item.quantity}</Text><Pressable accessibilityRole="button" disabled={saving} onPress={() => addToSale(item.product)}><Text style={styles.linkSmall}>+</Text></Pressable></View></View>)}
+      {!saleItems.length && <Text style={styles.muted}>{t('اختر منتجات من المخزون لتبدأ البيع.', 'Choose products from inventory to begin the sale.')}</Text>}
+      <View style={styles.saleTotalRow}><Text style={styles.rowTitle}>{t('إجمالي البيع', 'Sale total')}</Text><Text style={styles.saleTotal}>{amount(saleTotal)}</Text></View>
+      <View style={styles.categoryWrap}>{paymentMethods.map(item => <Pressable key={item.value} onPress={() => setPaymentMethod(item.value)} style={[styles.categoryChip, paymentMethod === item.value && styles.categoryChipActive]}><Text style={paymentMethod === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
+      {paymentMethod === 'credit' && <Text style={styles.warningText}>{t('البيع الآجل يسجل كمبلغ مستحق، وليس تحصيلًا نقديًا.', 'Credit sales are recorded as receivables, not cash collection.')}</Text>}
+      <ActionButton disabled={saving || !operations?.can_manage || !saleItems.length} title={saving ? t('جارٍ تسجيل البيع…', 'Recording sale…') : t(`إتمام البيع · ${amount(saleTotal)}`, `Complete sale · ${amount(saleTotal)}`)} onPress={completeSale} />
+    </Card>
     <Card title={t('إضافة منتج', 'Add product')}>
       <TextInput value={productForm.name} onChangeText={value => setProductForm(current => ({ ...current, name: value }))} placeholder={t('اسم المنتج', 'Product name')} placeholderTextColor="#8A8D98" style={styles.input} />
       <TextInput value={productForm.sku} onChangeText={value => setProductForm(current => ({ ...current, sku: value }))} placeholder={t('رمز المنتج SKU', 'SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="characters" />
@@ -235,7 +298,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       {!operations?.can_manage && <Text style={styles.muted}>{t('تحتاج صلاحية المالك أو المدير لإدارة المنتجات.', 'Owner or admin permission is required to manage products.')}</Text>}
     </Card>
     <Card title={t(`المنتجات والمخزون (${products.length})`, `Products & inventory (${products.length})`)}>
-      {products.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text></View><View style={styles.stockAction}><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text>{item.low_stock && <Pressable disabled={saving} onPress={() => void mutate({ action: 'set_inventory', product_id: item.id, quantity: Number(item.quantity || 0) + 5 }, t('تمت زيادة المخزون بخمس وحدات.', 'Inventory increased by five units.'))}><Text style={styles.linkSmall}>+5</Text></Pressable>}</View></View>)}
+      {products.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
       {!products.length && <Text style={styles.muted}>{t('أضف أول منتج لتبدأ إدارة مخزونك.', 'Add your first product to start managing inventory.')}</Text>}
     </Card>
     <Card title={t('تسجيل مصروف', 'Record expense')}>
@@ -245,20 +308,24 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       <TextInput value={expenseForm.occurred_on} onChangeText={value => setExpenseForm(current => ({ ...current, occurred_on: value }))} placeholder="YYYY-MM-DD" placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
       <ActionButton disabled={saving || !operations?.can_manage} title={saving ? t('جارٍ الحفظ…', 'Saving…') : t('حفظ المصروف', 'Save expense')} onPress={createExpense} />
     </Card>
+    <Card title={t('آخر حركات المخزون', 'Latest inventory movements')}>
+      {inventoryMovements.slice(0, 8).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{movementTitle(String(item.movement_type || ''))}</Text><Text style={styles.muted}>{item.reference_note || '—'}</Text></View><Text style={Number(item.quantity_delta) < 0 ? styles.expenseAmount : styles.stockText}>{Number(item.quantity_delta) > 0 ? '+' : ''}{item.quantity_delta}</Text></View>)}
+      {!inventoryMovements.length && <Text style={styles.muted}>{t('ستظهر هنا كل عملية بيع أو استلام أو تسوية جرد.', 'Every sale, receipt, and stock adjustment will appear here.')}</Text>}
+    </Card>
     <Card title={t('آخر المصروفات', 'Recent expenses')}>
       {expenses.slice(0, 8).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{expenseCategories.find(category => category.value === item.category)?.[language === 'ar' ? 'ar' : 'en'] || item.category}</Text><Text style={styles.muted}>{item.occurred_on}{item.note ? ` · ${item.note}` : ''}</Text></View><Text style={styles.expenseAmount}>{amount(item.amount_aed)}</Text></View>)}
       {!expenses.length && <Text style={styles.muted}>{t('لم تسجل مصروفات بعد.', 'No expenses recorded yet.')}</Text>}
     </Card>
-    <Card title={t('الطلبات', 'Orders')}>
-      {orders.slice(0, 10).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.customer_name || t('عميل غير مسمى', 'Unnamed customer')}</Text><Text style={styles.muted}>{amount(item.total_aed)}</Text></View><View style={styles.orderAction}><StatusPill status={String(item.status || '')} t={t} />{['confirmed', 'reserved'].includes(String(item.status || '').toLowerCase()) && <Pressable disabled={saving || !operations?.can_manage} onPress={() => void mutate({ action: 'update_order_status', order_id: item.id, status: 'completed' }, t('تم إغلاق الطلب كمكتمل.', 'Order marked as completed.'))}><Text style={styles.linkSmall}>{t('إتمام', 'Complete')}</Text></Pressable>}</View></View>)}
-      {!orders.length && <Text style={styles.muted}>{t('لا توجد طلبات بعد.', 'No orders yet.')}</Text>}
+    <Card title={t('آخر عمليات البيع والطلبات', 'Recent sales & orders')}>
+      {orders.slice(0, 10).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.customer_name || t('بيع مباشر', 'Direct sale')}</Text><Text style={styles.muted}>{amount(item.total_aed)} · {paymentMethods.find(method => method.value === item.payment_method)?.[language === 'ar' ? 'ar' : 'en'] || item.payment_method || t('غير محدد', 'Unspecified')}</Text></View><View style={styles.orderAction}><StatusPill status={String(item.status || '')} t={t} />{['confirmed', 'reserved'].includes(String(item.status || '').toLowerCase()) && <Pressable disabled={saving || !operations?.can_manage} onPress={() => void mutate({ action: 'update_order_status', order_id: item.id, status: 'completed' }, t('تم إغلاق الطلب كمكتمل.', 'Order marked as completed.'))}><Text style={styles.linkSmall}>{t('إتمام', 'Complete')}</Text></Pressable>}</View></View>)}
+      {!orders.length && <Text style={styles.muted}>{t('لا توجد عمليات بيع أو طلبات بعد.', 'No sales or orders yet.')}</Text>}
     </Card>
   </>;
 
   const renderAssistant = () => <Card title={t('المساعد الذكي', 'Smart assistant')}>
     <Text style={styles.assistantIntro}>{t('اسأل بلغة طبيعية. الإجابات مبنية على بيانات متجرك الموثقة، ولن يدّعي المساعد تنفيذ إجراء لم يتم تنفيذه.', 'Ask in natural language. Answers use your verified store data, and the assistant will not claim an action it did not perform.')}</Text>
     <View style={styles.messageList}>{assistantMessages.map((item, index) => <View key={`${item.role}-${index}`} style={[styles.messageBubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}><Text style={item.role === 'user' ? styles.userMessage : styles.assistantMessage}>{item.text}</Text></View>)}</View>
-    <TextInput value={assistantInput} onChangeText={setAssistantInput} onSubmitEditing={() => void askAssistant()} returnKeyType="send" placeholder={t('مثال: كم صافي الحركة هذا الشهر؟', 'Example: what is my net movement this month?')} placeholderTextColor="#8A8D98" style={styles.input} />
+    <TextInput value={assistantInput} onChangeText={setAssistantInput} onSubmitEditing={() => void askAssistant()} returnKeyType="send" placeholder={t('مثال: ما مبيعات اليوم وما المنتجات المنخفضة؟', 'Example: what are today’s sales and low-stock products?')} placeholderTextColor="#8A8D98" style={styles.input} />
     <ActionButton disabled={assistantBusy || !assistantInput.trim() || !businessId} title={assistantBusy ? t('يفكر…', 'Thinking…') : t('اسأل دبّر', 'Ask DABBIR')} onPress={() => void askAssistant()} />
   </Card>;
 
@@ -372,6 +439,14 @@ const styles = StyleSheet.create({
   stockText: { color: '#047857', fontWeight: '800', textAlign: 'right', fontSize: 13 },
   stockAction: { alignItems: 'flex-end', gap: 4 },
   orderAction: { alignItems: 'flex-end', gap: 5 },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  quantityText: { color: '#111827', fontWeight: '900', minWidth: 18, textAlign: 'center' },
+  saleTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#EEF4FF', padding: 12, borderRadius: 12 },
+  saleTotal: { color: '#1D4ED8', fontSize: 18, fontWeight: '900' },
+  productRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7EAF0', paddingTop: 11, gap: 10 },
+  productActions: { alignItems: 'flex-end', gap: 9 },
+  smallAction: { backgroundColor: '#E7F0FF', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 9 },
+  smallActionText: { color: '#1D4ED8', fontWeight: '900', fontSize: 12 },
   pill: { borderRadius: 99, backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4 },
   pillText: { color: '#4F46E5', fontSize: 11, fontWeight: '800' },
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#DCE2EB', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 12, fontSize: 15, color: '#111827', textAlign: 'right' },
