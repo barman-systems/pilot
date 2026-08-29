@@ -253,6 +253,27 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     return t(label[0], label[1]);
   };
 
+  const adjustInventory = (product: any) => {
+    Alert.prompt(
+      t('تسوية الجرد', 'Stock adjustment'),
+      t(`اكتب الكمية الفعلية المتوفرة لمنتج ${product.name}. ستسجل العملية في دفتر الحركات.`, `Enter the actual counted quantity for ${product.name}. The adjustment will be saved to the movement ledger.`),
+      [
+        { text: t('إلغاء', 'Cancel'), style: 'cancel' },
+        { text: t('حفظ الجرد', 'Save count'), onPress: (value?: string) => {
+          const quantity = Number(String(value || '').trim());
+          if (!Number.isInteger(quantity) || quantity < 0) {
+            Alert.alert(t('كمية غير صحيحة', 'Invalid quantity'), t('اكتب عددًا صحيحًا يساوي صفرًا أو أكبر.', 'Enter a whole number equal to or greater than zero.'));
+            return;
+          }
+          void mutate({ action: 'set_inventory', product_id: product.id, quantity }, t('تم حفظ الجرد وتوثيق التسوية.', 'The stock count was saved and the adjustment recorded.'));
+        } },
+      ],
+      'plain-text',
+      String(Math.max(0, Number(product.quantity || 0))),
+      'number-pad',
+    );
+  };
+
   const completeSale = () => {
     if (!saleItems.length) {
       Alert.alert(t('أضف منتجًا للبيع', 'Add a product'), t('اختر منتجًا واحدًا على الأقل لإتمام البيع.', 'Choose at least one product to complete the sale.'));
@@ -348,7 +369,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     </Card>
     <Card title={t(`المنتجات والمخزون (${products.length})`, `Products & inventory (${products.length})`)}>
       <TextInput value={productQuery} onChangeText={setProductQuery} placeholder={t('ابحث بالاسم أو رمز المنتج', 'Search by name or SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
-      {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
+      {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => adjustInventory(item)}><Text style={styles.linkSmall}>{t('جرد', 'Count')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
       {!products.length && <Text style={styles.muted}>{t('أضف أول منتج لتبدأ إدارة مخزونك.', 'Add your first product to start managing inventory.')}</Text>}
       {products.length > 0 && !visibleProducts.length && <Text style={styles.muted}>{t('لا يوجد منتج مطابق للبحث.', 'No product matches your search.')}</Text>}
     </Card>

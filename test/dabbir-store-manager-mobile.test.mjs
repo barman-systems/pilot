@@ -118,3 +118,10 @@ test('iOS configuration is iPhone-first and fails closed until an HTTPS API URL 
   assert.match(clientSource, /DABBIR_API_BASE_URL_NOT_CONFIGURED/);
   assert.match(envExample, /EXPO_PUBLIC_DABBIR_API_BASE_URL=https:\/\/dabbir-nd56cm4j5v-3619s-projects\.vercel\.app/);
 });
+
+
+test('native store manager allows a validated manual stock count and records it through the audited inventory action', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ['adjustInventory', 'تسوية الجرد', "action: 'set_inventory'", 'تم حفظ الجرد وتوثيق التسوية', 'حفظ الجرد']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(source, /Number\.isInteger\(quantity\) \|\| quantity < 0/);
+});
