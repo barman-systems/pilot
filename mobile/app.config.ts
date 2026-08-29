@@ -8,6 +8,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: 'dabbir-ios',
   scheme: 'dabbir',
   version: '1.0.0',
+  icon: './assets/dabbir-app-icon.png',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   ios: {

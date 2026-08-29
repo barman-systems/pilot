@@ -125,3 +125,13 @@ test('native store manager allows a validated manual stock count and records it 
   for (const token of ['adjustInventory', 'تسوية الجرد', "action: 'set_inventory'", 'تم حفظ الجرد وتوثيق التسوية', 'حفظ الجرد']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(source, /Number\.isInteger\(quantity\) \|\| quantity < 0/);
 });
+
+
+test('DABBIR brand mark is shipped as an app icon and appears consistently across native entry points', () => {
+  const appSource = read('mobile/App.tsx');
+  const configSource = read('mobile/app.config.ts');
+  assert.equal(fs.existsSync(path.join(root, 'mobile/assets/dabbir-app-icon.png')), true);
+  assert.equal(fs.existsSync(path.join(root, 'mobile/assets/dabbir-logo-mark.png')), true);
+  assert.match(configSource, /icon: '\.\/assets\/dabbir-app-icon\.png'/);
+  for (const token of ['BrandLockup', 'dabbir-logo-mark.png', 'welcomeLogo', '<BrandLockup />', '<BrandLockup compact />']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});

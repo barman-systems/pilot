@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
@@ -17,6 +17,7 @@ const copyFor = (language: Language): Copy => (ar, en) => language === 'ar' ? ar
 const amount = (value: unknown) => `${Number(value || 0).toFixed(2)} AED`;
 const dateToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const isValidDateKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+const logoMark = require('./assets/dabbir-logo-mark.png');
 
 const expenseCategories = [
   { value: 'supplies', ar: 'مشتريات وتوريد', en: 'Supplies' },
@@ -41,6 +42,10 @@ function ActionButton({ title, onPress, secondary = false, disabled = false }: {
 
 function LanguageToggle({ language, onChange }: { language: Language; onChange: (language: Language) => void }) {
   return <View style={styles.languageToggle}><Pressable onPress={() => onChange('ar')} style={[styles.languageChoice, language === 'ar' && styles.languageChoiceActive]}><Text style={language === 'ar' ? styles.languageActiveText : styles.languageText}>عربي</Text></Pressable><Pressable onPress={() => onChange('en')} style={[styles.languageChoice, language === 'en' && styles.languageChoiceActive]}><Text style={language === 'en' ? styles.languageActiveText : styles.languageText}>EN</Text></Pressable></View>;
+}
+
+function BrandLockup({ compact = false }: { compact?: boolean }) {
+  return <View style={styles.brandLockup}><Image source={logoMark} style={[styles.brandMark, compact && styles.brandMarkCompact]} /><View style={styles.brandWords}><Text style={[styles.brandLatin, compact && styles.brandLatinCompact]}>DABBIR</Text><Text style={[styles.brandArabic, compact && styles.brandArabicCompact]}>دبّر</Text></View></View>;
 }
 
 function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthenticated: (session: DabbirSession) => Promise<void>; language: Language; onLanguageChange: (language: Language) => void }) {
@@ -81,7 +86,7 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
   };
 
   return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.authWrap}>
-    <View style={styles.authTop}><Text style={styles.brand}>DABBIR | دبّر</Text><LanguageToggle language={language} onChange={onLanguageChange} /></View>
+    <View style={styles.authTop}><BrandLockup /><LanguageToggle language={language} onChange={onLanguageChange} /></View>
     <Text style={styles.hero}>{t('مديرك الذكي لإدارة المتجر', 'Your smart store manager')}</Text>
     <Text style={styles.authSubtitle}>{t('المبيعات والمخزون والمصروفات في مكان واحد.', 'Sales, inventory, and expenses in one place.')}</Text>
     <View style={styles.authTabs}><Pressable onPress={() => setMode('login')} style={[styles.authTab, mode === 'login' && styles.authTabActive]}><Text style={mode === 'login' ? styles.authTabTextActive : styles.authTabText}>{t('تسجيل الدخول', 'Sign in')}</Text></Pressable><Pressable onPress={() => setMode('signup')} style={[styles.authTab, mode === 'signup' && styles.authTabActive]}><Text style={mode === 'signup' ? styles.authTabTextActive : styles.authTabText}>{t('إنشاء حساب', 'Create account')}</Text></Pressable></View>
@@ -115,7 +120,7 @@ function StoreOnboarding({ session, language, onLanguageChange, onReady }: { ses
   };
 
   return <SafeAreaView style={styles.safe}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.authWrap}>
-    <View style={styles.authTop}><Text style={styles.brand}>DABBIR | دبّر</Text><LanguageToggle language={language} onChange={onLanguageChange} /></View>
+    <View style={styles.authTop}><BrandLockup /><LanguageToggle language={language} onChange={onLanguageChange} /></View>
     <View style={styles.setupBadge}><Text style={styles.setupBadgeText}>{t('دبّر للمتاجر الصغيرة', 'DABBIR for small stores')}</Text></View>
     <Text style={styles.hero}>{t('لنجهّز متجرك في دقيقة.', "Let's set up your store in a minute.")}</Text>
     <Text style={styles.authSubtitle}>{t('ابدأ باسم المتجر فقط. ستضيف المنتجات أو تسجل أول بيع بعد الدخول، دون إعدادات طويلة.', 'Start with your store name only. Add products or record your first sale after entering, without lengthy setup.')}</Text>
@@ -324,12 +329,12 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     );
   };
 
-  if (!loading && loadError) return <SafeAreaView style={styles.safe}><View style={styles.errorWrap}><Text style={styles.brand}>DABBIR | دبّر</Text><Text style={styles.errorTitle}>{t('لم نتمكن من فتح متجرك الآن.', 'We could not open your store right now.')}</Text><Text style={styles.authSubtitle}>{loadError}</Text><ActionButton title={t('إعادة المحاولة', 'Try again')} onPress={() => void reload()} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('تسجيل الخروج', 'Sign out')}</Text></Pressable></View></SafeAreaView>;
+  if (!loading && loadError) return <SafeAreaView style={styles.safe}><View style={styles.errorWrap}><BrandLockup /><Text style={styles.errorTitle}>{t('لم نتمكن من فتح متجرك الآن.', 'We could not open your store right now.')}</Text><Text style={styles.authSubtitle}>{loadError}</Text><ActionButton title={t('إعادة المحاولة', 'Try again')} onPress={() => void reload()} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('تسجيل الخروج', 'Sign out')}</Text></Pressable></View></SafeAreaView>;
   if (!loading && runtime?.needs_onboarding) return <StoreOnboarding session={session} language={language} onLanguageChange={onLanguageChange} onReady={reload} />;
   if (!loading && !business) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.muted}>{t('تعذر العثور على متجر نشط. حدّث الصفحة أو سجّل الدخول مجددًا.', 'No active store was found. Refresh or sign in again.')}</Text><ActionButton title={t('إعادة التحميل', 'Reload')} onPress={() => void reload()} /></View></SafeAreaView>;
 
   const renderDashboard = () => <>
-    <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Text style={styles.welcomeOrbText}>✦</Text></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
+    <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Image source={logoMark} style={styles.welcomeLogo} /></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
     <View style={styles.grid}>
       <Metric label={t('مبيعات اليوم', "Today's sales")} value={amount(salesToday)} accent />
       <Metric label={t('تحصيل مسجل', 'Recorded collections')} value={amount(cashCollected)} />
@@ -411,7 +416,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const title = tabTitle[tab];
 
   return <SafeAreaView style={styles.safe}><ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}>
-    <View style={styles.header}><View style={styles.headerIdentity}><Text style={styles.brandSmall}>DABBIR | دبّر</Text><Text style={styles.business}>{business?.name || t('مساحة العمل', 'Workspace')}</Text></View><View style={styles.headerActions}><LanguageToggle language={language} onChange={onLanguageChange} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('خروج', 'Sign out')}</Text></Pressable></View></View>
+    <View style={styles.header}><View style={styles.headerIdentity}><BrandLockup compact /><Text style={styles.business}>{business?.name || t('مساحة العمل', 'Workspace')}</Text></View><View style={styles.headerActions}><LanguageToggle language={language} onChange={onLanguageChange} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('خروج', 'Sign out')}</Text></Pressable></View></View>
     <View style={styles.tabBar}>{(Object.keys(tabTitle) as Tab[]).map(item => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive]}><Text style={tab === item ? styles.tabButtonTextActive : styles.tabButtonText}>{t(tabTitle[item][0], tabTitle[item][1])}</Text></Pressable>)}</View>
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{t(title[0], title[1])}</Text><Text style={styles.updatedText}>{loading ? t('جارٍ التحديث…', 'Refreshing…') : t('بيانات مباشرة', 'Live data')}</Text></View>
     {tab === 'dashboard' ? renderDashboard() : null}
@@ -464,6 +469,14 @@ const styles = StyleSheet.create({
   authTabTextActive: { color: '#FFF', textAlign: 'center', fontWeight: '800' },
   brand: { fontSize: 25, fontWeight: '900', color: '#111827' },
   brandSmall: { fontSize: 13, fontWeight: '900', color: '#556070' },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  brandMark: { width: 46, height: 46, borderRadius: 14 },
+  brandMarkCompact: { width: 32, height: 32, borderRadius: 10 },
+  brandWords: { justifyContent: 'center' },
+  brandLatin: { color: '#111827', fontSize: 13, fontWeight: '900', letterSpacing: 1.1 },
+  brandLatinCompact: { fontSize: 10, letterSpacing: 0.9 },
+  brandArabic: { color: '#2563EB', fontSize: 19, fontWeight: '900', lineHeight: 23 },
+  brandArabicCompact: { fontSize: 14, lineHeight: 17 },
   hero: { fontSize: 27, fontWeight: '900', color: '#111827', textAlign: 'right', marginTop: 20 },
   authSubtitle: { fontSize: 15, lineHeight: 22, color: '#697386', textAlign: 'right', marginBottom: 8 },
   setupBadge: { alignSelf: 'flex-start', backgroundColor: '#E7F0FF', borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7, marginTop: 14 },
@@ -487,7 +500,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 24, fontWeight: '900', color: '#111827', textAlign: 'right' },
   updatedText: { color: '#7B8494', fontSize: 12 },
   welcomeCard: { backgroundColor: '#111827', borderRadius: 24, padding: 20, overflow: 'hidden' },
-  welcomeOrb: { position: 'absolute', top: -32, left: -20, width: 120, height: 120, borderRadius: 60, backgroundColor: '#2D3853', alignItems: 'center', justifyContent: 'center' },
+  welcomeOrb: { position: 'absolute', top: 16, left: 16, width: 54, height: 54, borderRadius: 17, backgroundColor: '#2D3853', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  welcomeLogo: { width: 54, height: 54 },
   welcomeOrbText: { color: '#93C5FD', fontSize: 34 },
   welcomeEyebrow: { color: '#93C5FD', textAlign: 'right', fontSize: 13, fontWeight: '800' },
   welcomeTitle: { color: '#FFF', textAlign: 'right', fontSize: 27, fontWeight: '900', marginTop: 5 },
