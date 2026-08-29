@@ -7,6 +7,7 @@ import {
 } from '../_auth-core.js';
 
 const OWNER_USERNAME = 'barmanadmin';
+const OWNER_EMAIL = process.env.DABBIR_OWNER_LOGIN_EMAIL || 'barman2013@icloud.com';
 const OWNER_USER_ID = process.env.DABBIR_OWNER_USER_ID || 'f1c5e98b-4060-43cb-a09b-a67a67028800';
 const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
 const OTP_RE = /^\d{6}$/;
@@ -37,7 +38,7 @@ async function broker(body) {
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store, max-age=0');
   res.setHeader('pragma', 'no-cache');
-  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v3');
+  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v4');
 
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
@@ -64,6 +65,7 @@ export default async function handler(req, res) {
       const { response, payload } = await broker({
         action: 'owner_otp_request',
         resend_key: resendKey,
+        owner_email: OWNER_EMAIL,
       });
 
       if (!response.ok || !payload?.ok || !payload?.challenge_id) {
@@ -100,7 +102,7 @@ export default async function handler(req, res) {
 
       if (!response.ok || !payload?.authenticated) {
         if (response.status !== 429) res.setHeader('set-cookie', clearChallengeCookie());
-        return json(res, response.status === 429 ? 429 : 401, {
+        return json(res, response.status === 429 ? 429 : response.status === 503 ? 503 : 401, {
           ok: false,
           error: response.status === 429 ? 'OTP_RATE_LIMITED' : (payload?.error || 'INVALID_OWNER_OTP'),
         });
