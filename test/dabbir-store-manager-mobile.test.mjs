@@ -208,3 +208,12 @@ test('workspace translation callback is memoized to avoid reload loops', () => {
   const appSource = read('mobile/App.tsx');
   assert.equal((appSource.match(/const t = useMemo\(\(\) => copyFor\(language\), \[language\]\);/g) || []).length, 3);
 });
+
+
+test('cashier operation notice and accessible tab states remain explicit', () => {
+  const appSource = read('mobile/App.tsx');
+  assert.match(appSource, /Store operation permission is required/);
+  assert.match(appSource, /accessibilityRole="tab"/);
+  assert.match(appSource, /accessibilityState=\{\{ selected: tab === item, disabled: saving \}\}/);
+  assert.match(appSource, /accessibilityState=\{\{ disabled \}\}/);
+});

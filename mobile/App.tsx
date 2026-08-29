@@ -37,7 +37,7 @@ const paymentMethods = [
 ];
 
 function ActionButton({ title, onPress, secondary = false, disabled = false }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.buttonSecondary, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{title}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.buttonSecondary, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{title}</Text></Pressable>;
 }
 
 function LanguageToggle({ language, onChange }: { language: Language; onChange: (language: Language) => void }) {
@@ -402,6 +402,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 
   const renderOperations = () => <>
     <Card title={t('بيع سريع', 'Quick sale')}>
+      {!operations?.can_operate && <Text style={styles.warningText}>{t('هذه المساحة للعرض فقط. تحتاج صلاحية تشغيل المتجر لتسجيل البيع أو إتمام الطلبات.', 'This workspace is view-only. Store operation permission is required to record sales or complete orders.')}</Text>}
       <Text style={styles.body}>{t('أضف المنتجات من القائمة أدناه، ثم ثبّت الدفع. لا يتم بيع كمية غير متاحة.', 'Add products from the list below, then confirm payment. Unavailable stock cannot be sold.')}</Text>
       {saleItems.map(item => <View key={item.product.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.product.name}</Text><Text style={styles.muted}>{item.quantity} × {amount(item.product.price_aed)}</Text></View><View style={styles.inlineActions}><Pressable accessibilityRole="button" disabled={saving} onPress={() => removeFromSale(item.product.id)}><Text style={styles.linkSmall}>−</Text></Pressable><Text style={styles.quantityText}>{item.quantity}</Text><Pressable accessibilityRole="button" disabled={saving} onPress={() => addToSale(item.product)}><Text style={styles.linkSmall}>+</Text></Pressable></View></View>)}
       {!saleItems.length && <Text style={styles.muted}>{t('اختر منتجات من المخزون لتبدأ البيع.', 'Choose products from inventory to begin the sale.')}</Text>}
@@ -465,7 +466,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 
   return <SafeAreaView style={styles.safe}><ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}>
     <View style={styles.header}><View style={styles.headerIdentity}><BrandLockup compact /><Text style={styles.business}>{business?.name || t('مساحة العمل', 'Workspace')}</Text></View><View style={styles.headerActions}><LanguageToggle language={language} onChange={onLanguageChange} /><Pressable disabled={saving || deleting} onPress={() => void onLogout()}><Text style={[styles.link, (saving || deleting) && styles.disabledText]}>{t('خروج', 'Sign out')}</Text></Pressable></View></View>
-    <View style={styles.tabBar}>{(Object.keys(tabTitle) as Tab[]).map(item => <Pressable key={item} disabled={saving} onPress={() => setTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive, saving && styles.tabButtonDisabled]}><Text style={tab === item ? styles.tabButtonTextActive : styles.tabButtonText}>{t(tabTitle[item][0], tabTitle[item][1])}</Text></Pressable>)}</View>
+    <View style={styles.tabBar}>{(Object.keys(tabTitle) as Tab[]).map(item => <Pressable key={item} accessibilityRole="tab" accessibilityLabel={t(tabTitle[item][0], tabTitle[item][1])} accessibilityState={{ selected: tab === item, disabled: saving }} disabled={saving} onPress={() => setTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive, saving && styles.tabButtonDisabled]}><Text style={tab === item ? styles.tabButtonTextActive : styles.tabButtonText}>{t(tabTitle[item][0], tabTitle[item][1])}</Text></Pressable>)}</View>
     <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{t(title[0], title[1])}</Text><Text style={styles.updatedText}>{saving ? t('جارٍ الحفظ…', 'Saving…') : loading ? t('جارٍ التحديث…', 'Refreshing…') : t('بيانات مباشرة', 'Live data')}</Text></View>
     {tab === 'dashboard' ? renderDashboard() : null}
     {tab === 'operations' ? renderOperations() : null}
