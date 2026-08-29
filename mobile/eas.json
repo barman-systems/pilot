@@ -13,11 +13,17 @@
     },
     "preview": {
       "distribution": "internal",
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_DABBIR_API_BASE_URL": "https://dabbir-nd56cm4j5v-3619s-projects.vercel.app"
+      }
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_DABBIR_API_BASE_URL": "https://dabbir-nd56cm4j5v-3619s-projects.vercel.app"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }

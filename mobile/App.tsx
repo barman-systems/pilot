@@ -147,6 +147,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const [runtime, setRuntime] = useState<any>(null);
   const [operations, setOperations] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [productForm, setProductForm] = useState({ sku: '', name: '', price: '', quantity: '0' });
@@ -160,6 +161,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const nextRuntime = await api.loadRuntime(session.access_token);
       setRuntime(nextRuntime);
@@ -167,7 +169,10 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       if (businessId) setOperations(await api.loadOwnerOperations(session.access_token, businessId));
       else setOperations(null);
     } catch (error) {
-      Alert.alert(t('تعذر تحميل بيانات المتجر', 'Unable to load store data'), String((error as Error)?.message || 'RUNTIME_FAILED'));
+      const code = String((error as Error)?.message || 'RUNTIME_FAILED');
+      setRuntime(null);
+      setOperations(null);
+      setLoadError(code === 'DABBIR_API_BASE_URL_NOT_CONFIGURED' ? t('إعداد خادم التطبيق غير مكتمل. أعد بناء التطبيق بإعداد عنوان API الآمن ثم حاول مجددًا.', 'The app server setup is incomplete. Rebuild with a secure API URL, then try again.') : t('تعذر تحميل بيانات المتجر. تحقق من الاتصال ثم حاول مجددًا.', 'Unable to load store data. Check your connection and try again.'));
     } finally { setLoading(false); }
   }, [session.access_token, t]);
 
@@ -298,8 +303,9 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     );
   };
 
+  if (!loading && loadError) return <SafeAreaView style={styles.safe}><View style={styles.errorWrap}><Text style={styles.brand}>DABBIR | دبّر</Text><Text style={styles.errorTitle}>{t('لم نتمكن من فتح متجرك الآن.', 'We could not open your store right now.')}</Text><Text style={styles.authSubtitle}>{loadError}</Text><ActionButton title={t('إعادة المحاولة', 'Try again')} onPress={() => void reload()} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('تسجيل الخروج', 'Sign out')}</Text></Pressable></View></SafeAreaView>;
   if (!loading && runtime?.needs_onboarding) return <StoreOnboarding session={session} language={language} onLanguageChange={onLanguageChange} onReady={reload} />;
-  if (!loading && !business) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.muted}>{t('تعذر العثور على متجر نشط. حدّث الصفحة أو سجّل الدخول مجددًا.', 'No active store was found. Refresh or sign in again.')}</Text></View></SafeAreaView>;
+  if (!loading && !business) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.muted}>{t('تعذر العثور على متجر نشط. حدّث الصفحة أو سجّل الدخول مجددًا.', 'No active store was found. Refresh or sign in again.')}</Text><ActionButton title={t('إعادة التحميل', 'Reload')} onPress={() => void reload()} /></View></SafeAreaView>;
 
   const renderDashboard = () => <>
     <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Text style={styles.welcomeOrbText}>✦</Text></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
@@ -427,6 +433,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F4F6FA' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   authWrap: { flex: 1, justifyContent: 'center', padding: 24, gap: 14 },
+  errorWrap: { flex: 1, justifyContent: 'center', padding: 24, gap: 16 },
+  errorTitle: { fontSize: 24, fontWeight: '900', color: '#111827', textAlign: 'right' },
   authTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   authTabs: { flexDirection: 'row', backgroundColor: '#E9ECF3', borderRadius: 14, padding: 4, gap: 4 },
   authTab: { flex: 1, padding: 11, borderRadius: 11 },
