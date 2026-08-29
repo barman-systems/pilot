@@ -1,19 +1,28 @@
 import dashboard from './platform-owner-dashboard.js';
-import {
-  accessTokenFromRequest,
-  clearAuthCookieHeaders,
-  getVerifiedUser,
-  supabaseRest,
-} from './_auth-core.js';
+import { parseCookies } from './_auth-core.js';
 
-const OWNER_USER_ID = process.env.DABBIR_OWNER_USER_ID || 'f1c5e98b-4060-43cb-a09b-a67a67028800';
+const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
+const SESSION_COOKIE = '__Host-dabbir_owner_session';
 
 function redirectToOwner(res, clear = false) {
   res.statusCode = 302;
   res.setHeader('location', '/owner');
   res.setHeader('cache-control', 'no-store, max-age=0');
-  if (clear) res.setHeader('set-cookie', clearAuthCookieHeaders());
+  if (clear) {
+    res.setHeader('set-cookie', `${SESSION_COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0`);
+  }
   res.end('Redirecting...');
+}
+
+async function verifyOwnerSession(token) {
+  const response = await fetch(BROKER_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'owner_session_verify', session_token: token }),
+  });
+  if (!response.ok) return false;
+  const payload = await response.json().catch(() => null);
+  return payload?.authenticated === true && payload?.role === 'platform_owner';
 }
 
 export default async function handler(req, res) {
@@ -23,26 +32,13 @@ export default async function handler(req, res) {
     return res.end('Method Not Allowed');
   }
 
-  const accessToken = accessTokenFromRequest(req);
-  if (!accessToken) return redirectToOwner(res);
+  const sessionToken = parseCookies(req.headers.cookie || '')[SESSION_COOKIE];
+  if (!sessionToken) return redirectToOwner(res);
 
   try {
-    const user = await getVerifiedUser(accessToken);
-    if (!user || String(user.id) !== OWNER_USER_ID) {
+    if (!(await verifyOwnerSession(sessionToken))) {
       return redirectToOwner(res, true);
     }
-
-    const adminResponse = await supabaseRest(
-      `dabbir_platform_admins?select=role,active&user_id=eq.${encodeURIComponent(OWNER_USER_ID)}&active=eq.true&limit=1`,
-      accessToken,
-    );
-    if (!adminResponse.ok) return redirectToOwner(res, true);
-
-    const admins = await adminResponse.json().catch(() => []);
-    if (!Array.isArray(admins) || !admins.some(row => row?.active === true && row?.role === 'platform_owner')) {
-      return redirectToOwner(res, true);
-    }
-
     return dashboard(req, res);
   } catch {
     return redirectToOwner(res, true);
