@@ -15,7 +15,8 @@ type SaleDraftItem = { product: any; quantity: number };
 const defaultLanguage: Language = (getLocales()[0]?.languageCode || 'ar').toLowerCase() === 'ar' ? 'ar' : 'en';
 const copyFor = (language: Language): Copy => (ar, en) => language === 'ar' ? ar : en;
 const amount = (value: unknown) => `${Number(value || 0).toFixed(2)} AED`;
-const dateToday = () => new Date().toISOString().slice(0, 10);
+const dateToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const isValidDateKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
 const expenseCategories = [
   { value: 'supplies', ar: 'مشتريات وتوريد', en: 'Supplies' },
@@ -152,6 +153,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const [expenseForm, setExpenseForm] = useState({ amount: '', category: 'supplies', note: '', occurred_on: dateToday() });
   const [saleDraft, setSaleDraft] = useState<Record<string, number>>({});
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [productQuery, setProductQuery] = useState('');
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([{ role: 'assistant', text: t('مرحبًا، أنا مديرك الذكي. اسألني عن المبيعات أو المخزون أو المصروفات.', 'Hello, I am your smart manager. Ask me about sales, inventory, or expenses.') }]);
@@ -179,6 +181,8 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const handoffs = Array.isArray(runtime?.handoffs) ? runtime.handoffs : [];
   const followups = Array.isArray(runtime?.followups) ? runtime.followups : [];
   const products = Array.isArray(operations?.products) ? operations.products : [];
+  const normalizedProductQuery = productQuery.trim().toLocaleLowerCase();
+  const visibleProducts = normalizedProductQuery ? products.filter((product: any) => `${product.name || ''} ${product.sku || ''}`.toLocaleLowerCase().includes(normalizedProductQuery)) : products;
   const orders = Array.isArray(operations?.orders) ? operations.orders : [];
   const expenses = Array.isArray(operations?.expenses) ? operations.expenses : [];
   const lowStock = Array.isArray(operations?.low_stock) ? operations.low_stock : [];
@@ -205,11 +209,13 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   };
 
   const createProduct = () => {
-    if (!productForm.sku.trim() || !productForm.name.trim() || Number(productForm.price) < 0 || Number(productForm.quantity) < 0) {
-      Alert.alert(t('بيانات غير مكتملة', 'Incomplete details'), t('أدخل رمز المنتج والاسم والسعر والكمية بشكل صحيح.', 'Enter a valid SKU, name, price, and quantity.'));
+    const price = Number(productForm.price);
+    const quantity = Number(productForm.quantity);
+    if (!productForm.sku.trim() || !productForm.name.trim() || !productForm.price.trim() || !productForm.quantity.trim() || !Number.isFinite(price) || price < 0 || !Number.isInteger(quantity) || quantity < 0) {
+      Alert.alert(t('بيانات غير مكتملة', 'Incomplete details'), t('أدخل رمز المنتج والاسم والسعر والكمية الصحيحة دون كسور في الكمية.', 'Enter a valid SKU, name, price, and whole-number quantity.'));
       return;
     }
-    void mutate({ action: 'create_product', sku: productForm.sku, name: productForm.name, price_aed: Number(productForm.price), quantity: Number(productForm.quantity) }, t('تمت إضافة المنتج إلى المخزون.', 'The product was added to inventory.')).then(ok => { if (ok) setProductForm({ sku: '', name: '', price: '', quantity: '0' }); });
+    void mutate({ action: 'create_product', sku: productForm.sku, name: productForm.name, price_aed: price, quantity }, t('تمت إضافة المنتج إلى المخزون.', 'The product was added to inventory.')).then(ok => { if (ok) setProductForm({ sku: '', name: '', price: '', quantity: '0' }); });
   };
 
   const addToSale = (product: any) => {
@@ -252,7 +258,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 
   const createExpense = () => {
     const value = Number(expenseForm.amount);
-    if (!Number.isFinite(value) || value <= 0 || !expenseForm.occurred_on.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    if (!expenseForm.amount.trim() || !Number.isFinite(value) || value <= 0 || !isValidDateKey(expenseForm.occurred_on)) {
       Alert.alert(t('بيانات المصروف غير صحيحة', 'Invalid expense'), t('أدخل مبلغًا موجبًا وتاريخًا بصيغة YYYY-MM-DD.', 'Enter a positive amount and a YYYY-MM-DD date.'));
       return;
     }
@@ -304,6 +310,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       <Metric label={t('مبالغ آجلة', 'Receivables')} value={amount(receivables)} />
     </View>
     <Card title={t('ابدأ الآن', 'Start now')}><Text style={styles.body}>{t('سجّل البيع أولًا، ودبّر يحدّث الكمية والتحصيل تلقائيًا.', 'Record the sale first; DABBIR updates stock and collections automatically.')}</Text><ActionButton disabled={!operations?.can_manage || saving} title={t('تسجيل بيع سريع', 'Record quick sale')} onPress={() => setTab('operations')} /></Card>
+    <Text style={styles.financialNote}>{t('المبيعات والتحصيل والمصروفات حقائق تشغيلية مسجلة؛ لا يمثل الفرق بينها ربحًا محاسبيًا قبل إدخال تكلفة البضاعة والضرائب والرسوم.', 'Sales, collections, and expenses are recorded operational facts; their difference is not accounting profit until cost of goods, taxes, and fees are included.')}</Text>
     <Card title={t('ما يحتاج انتباهك', 'Needs your attention')}>
       <View style={styles.attentionRow}><View style={[styles.attentionDot, attentionCount > 0 && styles.attentionDotHot]} /><View style={styles.flex}><Text style={styles.rowTitle}>{attentionCount > 0 ? t(`${attentionCount} عناصر تحتاج متابعة`, `${attentionCount} items need follow-up`) : t('لا توجد عناصر عاجلة', 'Nothing urgent')}</Text><Text style={styles.muted}>{t('المتابعات والتدخلات البشرية الموثقة', 'Verified follow-ups and human handoffs')}</Text></View><Text style={styles.attentionNumber}>{attentionCount}</Text></View>
       {lowStock.slice(0, 3).map((item: any, index: number) => <View key={item.id || index} style={styles.row}><Text style={styles.rowTitle}>{item.name || t('منتج', 'Product')}</Text><Text style={styles.warningText}>{t(`المتاح ${item.available}`, `${item.available} available`)}</Text></View>)}
@@ -322,6 +329,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       {!saleItems.length && <Text style={styles.muted}>{t('اختر منتجات من المخزون لتبدأ البيع.', 'Choose products from inventory to begin the sale.')}</Text>}
       <View style={styles.saleTotalRow}><Text style={styles.rowTitle}>{t('إجمالي البيع', 'Sale total')}</Text><Text style={styles.saleTotal}>{amount(saleTotal)}</Text></View>
       <View style={styles.categoryWrap}>{paymentMethods.map(item => <Pressable key={item.value} onPress={() => setPaymentMethod(item.value)} style={[styles.categoryChip, paymentMethod === item.value && styles.categoryChipActive]}><Text style={paymentMethod === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
+      <Text style={styles.muted}>{t('هذه طريقة دفع مسجلة داخل دبّر؛ لا يثبت التطبيق تسوية بطاقة أو تحويل من مزود خارجي غير مربوط.', 'This records a payment method inside DABBIR; it does not verify card or transfer settlement from an unconnected external provider.')}</Text>
       {paymentMethod === 'credit' && <Text style={styles.warningText}>{t('البيع الآجل يسجل كمبلغ مستحق، وليس تحصيلًا نقديًا.', 'Credit sales are recorded as receivables, not cash collection.')}</Text>}
       <ActionButton disabled={saving || !operations?.can_manage || !saleItems.length} title={saving ? t('جارٍ تسجيل البيع…', 'Recording sale…') : t(`إتمام البيع · ${amount(saleTotal)}`, `Complete sale · ${amount(saleTotal)}`)} onPress={completeSale} />
     </Card>
@@ -333,8 +341,10 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       {!operations?.can_manage && <Text style={styles.muted}>{t('تحتاج صلاحية المالك أو المدير لإدارة المنتجات.', 'Owner or admin permission is required to manage products.')}</Text>}
     </Card>
     <Card title={t(`المنتجات والمخزون (${products.length})`, `Products & inventory (${products.length})`)}>
-      {products.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
+      <TextInput value={productQuery} onChangeText={setProductQuery} placeholder={t('ابحث بالاسم أو رمز المنتج', 'Search by name or SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
+      {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
       {!products.length && <Text style={styles.muted}>{t('أضف أول منتج لتبدأ إدارة مخزونك.', 'Add your first product to start managing inventory.')}</Text>}
+      {products.length > 0 && !visibleProducts.length && <Text style={styles.muted}>{t('لا يوجد منتج مطابق للبحث.', 'No product matches your search.')}</Text>}
     </Card>
     <Card title={t('تسجيل مصروف', 'Record expense')}>
       <TextInput value={expenseForm.amount} onChangeText={value => setExpenseForm(current => ({ ...current, amount: value }))} placeholder={t('المبلغ بالدرهم', 'Amount in AED')} placeholderTextColor="#8A8D98" keyboardType="decimal-pad" style={styles.input} />
@@ -460,6 +470,7 @@ const styles = StyleSheet.create({
   metricValueAccent: { color: '#FFF' },
   metricLabel: { fontSize: 13, color: '#697386', textAlign: 'right', fontWeight: '700' },
   metricLabelAccent: { color: '#DCE9FF' },
+  financialNote: { color: '#697386', fontSize: 12, lineHeight: 18, textAlign: 'right', paddingHorizontal: 3 },
   card: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, gap: 11, borderWidth: 1, borderColor: '#E7EAF0' },
   cardTitle: { fontSize: 17, fontWeight: '900', color: '#111827', textAlign: 'right' },
   body: { fontSize: 14, lineHeight: 22, color: '#384152', textAlign: 'right' },

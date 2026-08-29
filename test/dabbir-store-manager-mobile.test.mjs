@@ -103,3 +103,18 @@ test('mobile runtime accepts authenticated setup writes and the native client cr
   assert.match(clientSource, /business_type: 'store'/);
   for (const token of ['StoreOnboarding', 'دبّر للمتاجر الصغيرة', 'ابدأ إدارة متجري']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
+
+
+test('native store UI validates operational inputs, uses Dubai-local dates, and supports product discovery', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ["timeZone: 'Asia/Dubai'", 'isValidDateKey', 'Number.isInteger(quantity)', 'ابحث بالاسم أو رمز المنتج', 'لا يوجد منتج مطابق للبحث', 'المبيعات والتحصيل والمصروفات حقائق تشغيلية مسجلة']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('iOS configuration is iPhone-first and fails closed until an HTTPS API URL is configured', () => {
+  const configSource = read('mobile/app.config.ts');
+  const clientSource = read('mobile/src/api.ts');
+  const envExample = read('mobile/.env.example');
+  assert.match(configSource, /supportsTablet: false/);
+  assert.match(clientSource, /DABBIR_API_BASE_URL_NOT_CONFIGURED/);
+  assert.match(envExample, /EXPO_PUBLIC_DABBIR_API_BASE_URL=https:\/\/dabbir-nd56cm4j5v-3619s-projects\.vercel\.app/);
+});
