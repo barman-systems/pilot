@@ -61,6 +61,9 @@ async function handleGet(req,res,context){
   const membership=membershipFor(context.memberships,requested);
   if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
   const businessId=membership.business_id;
+  const role=String(membership.role||'').toLowerCase();
+  const explicitPermissions=Array.isArray(membership.permissions)?membership.permissions:[];
+  const canOperate=explicitPermissions.length>0 ? explicitPermissions.includes('manage_store_operations') : ['owner','admin','manager','employee','staff'].includes(role);
 
   const [products,inventory,orders,orderItems,movements,customers,services,expenses,returns]=await Promise.all([
     rest(context.token,`dabbir_products?select=id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
@@ -122,7 +125,8 @@ async function handleGet(req,res,context){
     ok:true,
     business_id:businessId,
     role:membership.role,
-    can_manage:['owner','admin'].includes(String(membership.role||'').toLowerCase()),
+    can_manage:['owner','admin'].includes(role),
+    can_operate:canOperate,
     metrics:{
       active_products:productRows.filter(product=>product.active).length,
       active_services:serviceRows.filter(service=>service.active).length,
