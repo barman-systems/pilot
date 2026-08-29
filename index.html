@@ -11,7 +11,7 @@
 button,input,select{font:inherit}button,input,select,a{min-height:44px}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}a{color:inherit}.hidden{display:none!important}
 .loading{min-height:100vh;display:grid;place-items:center;color:var(--muted)}
 .authWrap{min-height:100vh;display:grid;place-items:center;padding:22px}.authCard{width:min(460px,100%);padding:24px;border:1px solid var(--line);border-radius:24px;background:#111315e8;box-shadow:var(--shadow)}
-.brand{display:flex;gap:11px;align-items:center}.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2e246b,#245fd6 55%,#38c8d9);border:1px solid #617dff66;font-weight:950;color:white}.brand small,.muted{color:var(--muted)}
+.brand{display:flex;gap:11px;align-items:center}.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2e246b,#245fd6 55%,#38c8d9);border:1px solid #617dff66;font-weight:950;color:white;overflow:hidden}.logo img{width:100%;height:100%;display:block;object-fit:contain}.brand small,.muted{color:var(--muted)}
 .authCard h1{font-size:24px;margin:22px 0 6px}.authCard p{color:var(--muted);font-size:12px;line-height:1.7}.field{margin-top:13px}.field label{display:block;color:var(--muted);font-size:10px;margin-bottom:6px}.field input,.field select{width:100%;border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:12px;padding:11px}
 .row{display:flex;align-items:center;gap:9px}.space{justify-content:space-between}.primary,.secondary,.navBtn,.iconBtn{border-radius:12px;font-weight:850}.primary{border:0;background:var(--accent);color:#10130b;padding:11px 14px}.secondary{border:1px solid var(--line);background:#181b1f;color:#fff;padding:10px 13px}.ghost{border:0;background:transparent;color:var(--muted);padding:8px}.wide{width:100%;margin-top:16px}
 .authTabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:#171a1d;border:1px solid var(--line);padding:4px;border-radius:13px;margin-top:18px}.authTabs button{border:0;background:transparent;color:var(--muted);border-radius:10px}.authTabs button.on{background:#30343a;color:#fff}.authMsg{min-height:28px;margin-top:10px;color:var(--yellow);font-size:11px}
@@ -36,7 +36,7 @@ button,input,select{font:inherit}button,input,select,a{min-height:44px}button{cu
 
 <section id="authGate" class="authWrap hidden">
   <div class="authCard">
-    <div class="brand"><div class="logo">D</div><div><b>DABBIR | دبّر</b><br><small id="authTag"></small></div></div>
+    <div class="brand"><div class="logo"><img src="/api/dabbir-approved-icon" alt="DABBIR"></div><div><b>DABBIR | دبّر</b><br><small id="authTag"></small></div></div>
     <h1 id="authTitle"></h1><p id="authDesc"></p>
     <div class="authTabs"><button id="loginTab" class="on"></button><button id="signupTab"></button></div>
     <form id="authForm">
@@ -51,7 +51,7 @@ button,input,select{font:inherit}button,input,select,a{min-height:44px}button{cu
 
 <section id="onboardingGate" class="authWrap hidden">
   <form class="authCard" id="businessForm">
-    <div class="brand"><div class="logo">D</div><div><b>DABBIR | دبّر</b><br><small id="setupTag"></small></div></div>
+    <div class="brand"><div class="logo"><img src="/api/dabbir-approved-icon" alt="DABBIR"></div><div><b>DABBIR | دبّر</b><br><small id="setupTag"></small></div></div>
     <h1 id="setupTitle"></h1><p id="setupDesc"></p>
     <div class="field"><label id="businessNameLabel"></label><input id="businessName" maxlength="120" required></div>
     <div class="field"><label id="businessTypeLabel"></label><select id="businessType"><option value="clinic"></option><option value="store"></option><option value="creator"></option><option value="salon"></option><option value="real_estate"></option><option value="services"></option><option value="other"></option></select></div>
@@ -62,7 +62,7 @@ button,input,select{font:inherit}button,input,select,a{min-height:44px}button{cu
 
 <div id="appShell" class="shell hidden">
 <aside class="side" id="side">
-  <div class="brand"><div class="logo">D</div><div><b>DABBIR</b><br><small id="brandTag"></small></div></div>
+  <div class="brand"><div class="logo"><img src="/api/dabbir-approved-icon" alt="DABBIR"></div><div><b>DABBIR</b><br><small id="brandTag"></small></div></div>
   <div class="workspace"><b id="workspaceName"></b><span id="workspaceState"></span></div>
   <nav class="nav" id="nav">
     <button class="navBtn active" data-screen="dashboard"><span class="navIcon">⌂</span><span data-label="dashboard"></span></button>

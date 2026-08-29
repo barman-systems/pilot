@@ -8,6 +8,8 @@ const read = path => readFile(new URL(path, root), 'utf8');
 const activityApi = await read('api/activity-tasks.js');
 const activityUi = await read('api/activity-profile-ui.js');
 const ownerUi = await read('api/dabbir-owner-first-ui.js');
+const brandUi = await read('api/brand-ui.js');
+const indexHtml = await read('index.html');
 const appRecovery = await read('api/app-recovery.js');
 const appointmentGuard = await read('db/dabbir_activity_type_appointment_guard_v1.sql');
 
@@ -75,4 +77,11 @@ test('owner-first UI is the only mobile presentation authority loaded after acti
 test('owner-first UI has no continuous presentation polling loop', () => {
   assert.doesNotMatch(ownerUi, /setInterval\(/);
   assert.match(ownerUi, /pollingLoops:0/);
+});
+
+
+test('brand layer leaves mobile header ownership to the owner-first shell', () => {
+  assert.match(brandUi, /owner-first shell owns the mobile header mark/);
+  assert.match(brandUi, /body\.dabbirAppActive>\.dabbirMobileBrand\{display:none!important\}/);
+  assert.match(indexHtml, /<img src="\/api\/dabbir-approved-icon" alt="DABBIR">/);
 });
