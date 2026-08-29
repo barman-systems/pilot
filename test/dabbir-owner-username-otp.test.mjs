@@ -4,19 +4,17 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('owner authentication is username + brokered Resend OTP and fail-closed to the canonical owner UUID', async () => {
+test('owner authentication is username + brokered Resend OTP with a signed owner session', async () => {
   const source = await read('api/auth/owner-otp.js');
   assert.match(source, /OWNER_USERNAME\s*=\s*'barmanadmin'/);
-  assert.match(source, /OWNER_USER_ID/);
-  assert.match(source, /f1c5e98b-4060-43cb-a09b-a67a67028800/);
   assert.match(source, /requireSameOrigin\(req\)/);
   assert.match(source, /RESEND_API_KEY/);
   assert.match(source, /bm-secret-broker/);
   assert.match(source, /owner_otp_request/);
   assert.match(source, /owner_otp_verify/);
   assert.match(source, /challenge_id/);
-  assert.match(source, /authCookieHeaders\(session\)/);
-  assert.match(source, /String\(session\?\.user\?\.id \|\| ''\) !== OWNER_USER_ID/);
+  assert.match(source, /session_token/);
+  assert.match(source, /__Host-dabbir_owner_session/);
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /grant_type=password/);
 });
@@ -43,14 +41,14 @@ test('canonical owner routes use the OTP gate and authenticated dashboard gatewa
   assert.equal(dashboardRoute?.dest, '/api/owner-dashboard-gateway');
 });
 
-test('dashboard gateway requires exact owner identity and active platform_owner', async () => {
+test('dashboard gateway validates the signed owner session fail-closed through the broker', async () => {
   const source = await read('api/owner-dashboard-gateway.js');
-  assert.match(source, /getVerifiedUser\(accessToken\)/);
-  assert.match(source, /String\(user\.id\) !== OWNER_USER_ID/);
-  assert.match(source, /dabbir_platform_admins/);
-  assert.match(source, /active=eq\.true/);
-  assert.match(source, /row\?\.role === 'platform_owner'/);
-  assert.match(source, /clearAuthCookieHeaders/);
+  assert.match(source, /__Host-dabbir_owner_session/);
+  assert.match(source, /owner_session_verify/);
+  assert.match(source, /payload\?\.authenticated === true/);
+  assert.match(source, /payload\?\.role === 'platform_owner'/);
+  assert.match(source, /redirectToOwner\(res, true\)/);
+  assert.doesNotMatch(source, /getVerifiedUser\(accessToken\)/);
 });
 
 test('ordinary DABBIR customer login remains email/password and is not replaced by owner OTP', async () => {
