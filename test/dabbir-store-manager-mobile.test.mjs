@@ -194,3 +194,11 @@ test('returns are exposed as a guarded, auditable operation with remaining-quant
   assert.match(apiSource, /action==='return_sale'/);
   for (const token of ['dabbir_order_returns', 'dabbir_owner_return_sale', 'RETURN', 'RETURN_QUANTITY_EXCEEDS_SOLD']) assert.match(migration, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
+
+
+test('daily metrics expose gross returns and net sales as separate facts', () => {
+  const apiSource = read('api/owner-operations.js');
+  const appSource = read('mobile/App.tsx');
+  for (const token of ['returned_today_aed', 'net_sales_today_aed', 'returns_reduce_net_sales']) assert.match(apiSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const token of ['صافي مبيعات اليوم', 'مرتجعات اليوم', 'netSalesToday']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});

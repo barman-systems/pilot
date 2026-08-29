@@ -201,6 +201,8 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const saleTotal = useMemo(() => saleItems.reduce((sum: number, item: SaleDraftItem) => sum + Number(item.product.price_aed || 0) * item.quantity, 0), [saleItems]);
   const attentionCount = Number(runtimeMetrics.needs_attention ?? (handoffs.length + followups.length));
   const salesToday = Number(metrics.sales_today_aed || 0);
+  const returnedToday = Number(metrics.returned_today_aed || 0);
+  const netSalesToday = Number(metrics.net_sales_today_aed ?? Math.max(0, salesToday - returnedToday));
   const cashCollected = Number(metrics.cash_collected_aed || 0);
   const receivables = Number(metrics.receivables_aed || 0);
 
@@ -378,8 +380,9 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const renderDashboard = () => <>
     <View style={styles.welcomeCard}><View style={styles.welcomeOrb}><Image source={logoMark} style={styles.welcomeLogo} /></View><Text style={styles.welcomeEyebrow}>{t('ملخص اليوم', "Today's overview")}</Text><Text style={styles.welcomeTitle}>{t('خلّك على الصورة.', 'Stay in control.')}</Text><Text style={styles.welcomeBody}>{t('دبّر يرتب لك أهم ما يحتاج قرارًا الآن.', 'DABBIR surfaces what needs your decision now.')}</Text></View>
     <View style={styles.grid}>
-      <Metric label={t('مبيعات اليوم', "Today's sales")} value={amount(salesToday)} accent />
+      <Metric label={t('صافي مبيعات اليوم', "Today's net sales")} value={amount(netSalesToday)} accent />
       <Metric label={t('تحصيل مسجل', 'Recorded collections')} value={amount(cashCollected)} />
+      <Metric label={t('مرتجعات اليوم', "Today's returns")} value={amount(returnedToday)} />
       <Metric label={t('مصروفات اليوم', "Today's expenses")} value={amount(Number(metrics.today_expenses_aed || 0))} />
       <Metric label={t('مبالغ آجلة', 'Receivables')} value={amount(receivables)} />
     </View>

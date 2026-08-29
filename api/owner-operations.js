@@ -92,7 +92,8 @@ async function handleGet(req,res,context){
     ...expense,
     amount_aed:Number(number(expense.amount_aed).toFixed(2)),
   }));
-  const todayDubai=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const dateKey=(value)=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}catch{return null}};
+  const todayDubai=dateKey(new Date());
 
   const returnedByItem=new Map();
   const returnedByOrder=new Map();
@@ -111,9 +112,10 @@ async function handleGet(req,res,context){
   const realOrders=(orders||[]).filter(order=>order.simulated===false);
   const recognizedOrders=realOrders.filter(order=>['confirmed','completed'].includes(String(order.status||'').toLowerCase()));
   const collectedOrders=recognizedOrders.filter(order=>String(order.payment_method||'cash').toLowerCase()!=='credit');
-  const salesToday=recognizedOrders.filter(order=>{
-    try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(order.completed_at||order.created_at))===todayDubai}catch{return false}
-  });
+  const salesToday=recognizedOrders.filter(order=>dateKey(order.completed_at||order.created_at)===todayDubai);
+  const returnsToday=(returns||[]).filter(returned=>dateKey(returned.created_at)===todayDubai);
+  const grossSalesToday=Number(salesToday.reduce((sum,order)=>sum+number(order.total_aed),0).toFixed(2));
+  const returnedTodayAed=Number(returnsToday.reduce((sum,returned)=>sum+number(returned.refund_aed),0).toFixed(2));
   const orderRows=(orders||[]).map(order=>{const items=itemsByOrder.get(order.id)||[];return {...order,total_aed:Number(number(order.total_aed).toFixed(2)),paid_aed:Number(number(order.paid_aed).toFixed(2)),returned_aed:Number((returnedByOrder.get(order.id)||0).toFixed(2)),fully_returned:items.length>0&&items.every(item=>Number(item.returned_quantity||0)>=Number(item.quantity||0)),customer_name:customerById.get(order.customer_id)||null,items}});
 
   return json(res,200,{
@@ -129,7 +131,9 @@ async function handleGet(req,res,context){
       low_stock_products:productRows.filter(product=>product.low_stock).length,
       real_orders:realOrders.length,
       recognized_sales_aed:Number(recognizedOrders.reduce((sum,order)=>sum+number(order.total_aed),0).toFixed(2)),
-      sales_today_aed:Number(salesToday.reduce((sum,order)=>sum+number(order.total_aed),0).toFixed(2)),
+      sales_today_aed:grossSalesToday,
+      returned_today_aed:returnedTodayAed,
+      net_sales_today_aed:Math.max(0,Number((grossSalesToday-returnedTodayAed).toFixed(2))),
       cash_collected_aed:Number(collectedOrders.reduce((sum,order)=>sum+number(order.paid_aed),0).toFixed(2)),
       receivables_aed:Number(recognizedOrders.reduce((sum,order)=>sum+Math.max(0,number(order.total_aed)-number(order.paid_aed)),0).toFixed(2)),
       completed_sales:recognizedOrders.length,
@@ -144,7 +148,7 @@ async function handleGet(req,res,context){
     returns:returns||[],
     inventory_movements:movementRows,
     low_stock:productRows.filter(product=>product.low_stock),
-    truth:{recognized_sales_statuses:['confirmed','completed'],simulated_orders_excluded_from_sales:true,sales_are_itemized_when_order_items_present:true,cash_collected_excludes_credit_sales:true,expenses_source:'dabbir_expenses_live_tenant_data',services_source:'dabbir_services_live_tenant_data'},
+    truth:{recognized_sales_statuses:['confirmed','completed'],simulated_orders_excluded_from_sales:true,sales_are_itemized_when_order_items_present:true,returns_reduce_net_sales:true,cash_collected_excludes_credit_sales:true,expenses_source:'dabbir_expenses_live_tenant_data',services_source:'dabbir_services_live_tenant_data'},
   });
 }
 
