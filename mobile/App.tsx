@@ -245,10 +245,27 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   });
 
   const receiveStock = (product: any) => {
-    Alert.alert(
-      t('تأكيد استلام المخزون', 'Confirm stock receipt'),
-      t(`سيتم تسجيل استلام 5 وحدات من ${product.name}. استخدم الجرد لتصحيح الكمية الفعلية.`, `This will record receipt of 5 units of ${product.name}. Use stock count to correct the actual quantity.`),
-      [{ text: t('إلغاء', 'Cancel'), style: 'cancel' }, { text: t('تأكيد الاستلام', 'Confirm receipt'), onPress: () => void mutate({ action: 'receive_stock', product_id: product.id, quantity: 5, note: 'Quick stock receipt' }, t('تم تسجيل استلام خمس وحدات في المخزون.', 'Five received units were recorded in inventory.')) }],
+    if (!operations?.can_manage) {
+      Alert.alert(t('صلاحية مطلوبة', 'Permission required'), t('تحتاج صلاحية المالك أو المدير لتسجيل استلام البضاعة.', 'Owner or admin permission is required to receive stock.'));
+      return;
+    }
+    Alert.prompt(
+      t('استلام بضاعة', 'Receive stock'),
+      t(`اكتب عدد الوحدات المستلمة من ${product.name}. ستسجل الحركة في دفتر المخزون.`, `Enter the received quantity for ${product.name}. The receipt will be recorded in the inventory ledger.`),
+      [
+        { text: t('إلغاء', 'Cancel'), style: 'cancel' },
+        { text: t('تسجيل الاستلام', 'Record receipt'), onPress: (value?: string) => {
+          const quantity = Number(String(value || '').trim());
+          if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
+            Alert.alert(t('كمية غير صحيحة', 'Invalid quantity'), t('اكتب عددًا صحيحًا من 1 إلى 100000.', 'Enter a whole number from 1 to 100000.'));
+            return;
+          }
+          void mutate({ action: 'receive_stock', product_id: product.id, quantity, note: 'Native stock receipt' }, t('تم تسجيل استلام البضاعة وتحديث المخزون.', 'The stock receipt was recorded and inventory updated.'));
+        } },
+      ],
+      'plain-text',
+      '1',
+      'number-pad',
     );
   };
 
@@ -277,6 +294,14 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       String(Math.max(0, Number(product.quantity || 0))),
       'number-pad',
     );
+  };
+
+  const clearSale = () => {
+    if (!saleItems.length || saving) return;
+    Alert.alert(t('تفريغ سلة البيع', 'Clear sale basket'), t('سيتم حذف المنتجات من مسودة البيع فقط، ولن يتغير المخزون.', 'Products will only be removed from this sale draft; inventory will not change.'), [
+      { text: t('إلغاء', 'Cancel'), style: 'cancel' },
+      { text: t('تفريغ السلة', 'Clear basket'), style: 'destructive', onPress: () => setSaleDraft({}) },
+    ]);
   };
 
   const completeSale = () => {
@@ -357,10 +382,11 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const renderOperations = () => <>
     <Card title={t('بيع سريع', 'Quick sale')}>
       <Text style={styles.body}>{t('أضف المنتجات من القائمة أدناه، ثم ثبّت الدفع. لا يتم بيع كمية غير متاحة.', 'Add products from the list below, then confirm payment. Unavailable stock cannot be sold.')}</Text>
-      {saleItems.map(item => <View key={item.product.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.product.name}</Text><Text style={styles.muted}>{item.quantity} × {amount(item.product.price_aed)}</Text></View><View style={styles.inlineActions}><Pressable accessibilityRole="button" onPress={() => removeFromSale(item.product.id)}><Text style={styles.linkSmall}>−</Text></Pressable><Text style={styles.quantityText}>{item.quantity}</Text><Pressable accessibilityRole="button" disabled={saving} onPress={() => addToSale(item.product)}><Text style={styles.linkSmall}>+</Text></Pressable></View></View>)}
+      {saleItems.map(item => <View key={item.product.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.product.name}</Text><Text style={styles.muted}>{item.quantity} × {amount(item.product.price_aed)}</Text></View><View style={styles.inlineActions}><Pressable accessibilityRole="button" disabled={saving} onPress={() => removeFromSale(item.product.id)}><Text style={styles.linkSmall}>−</Text></Pressable><Text style={styles.quantityText}>{item.quantity}</Text><Pressable accessibilityRole="button" disabled={saving} onPress={() => addToSale(item.product)}><Text style={styles.linkSmall}>+</Text></Pressable></View></View>)}
       {!saleItems.length && <Text style={styles.muted}>{t('اختر منتجات من المخزون لتبدأ البيع.', 'Choose products from inventory to begin the sale.')}</Text>}
       <View style={styles.saleTotalRow}><Text style={styles.rowTitle}>{t('إجمالي البيع', 'Sale total')}</Text><Text style={styles.saleTotal}>{amount(saleTotal)}</Text></View>
-      <View style={styles.categoryWrap}>{paymentMethods.map(item => <Pressable key={item.value} onPress={() => setPaymentMethod(item.value)} style={[styles.categoryChip, paymentMethod === item.value && styles.categoryChipActive]}><Text style={paymentMethod === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
+      {saleItems.length > 0 && <Pressable accessibilityRole="button" disabled={saving} onPress={clearSale}><Text style={styles.linkSmall}>{t('تفريغ سلة البيع', 'Clear sale basket')}</Text></Pressable>}
+      <View style={styles.categoryWrap}>{paymentMethods.map(item => <Pressable key={item.value} disabled={saving} onPress={() => setPaymentMethod(item.value)} style={[styles.categoryChip, paymentMethod === item.value && styles.categoryChipActive, saving && styles.tabButtonDisabled]}><Text style={paymentMethod === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
       <Text style={styles.muted}>{t('هذه طريقة دفع مسجلة داخل دبّر؛ لا يثبت التطبيق تسوية بطاقة أو تحويل من مزود خارجي غير مربوط.', 'This records a payment method inside DABBIR; it does not verify card or transfer settlement from an unconnected external provider.')}</Text>
       {paymentMethod === 'credit' && <Text style={styles.warningText}>{t('البيع الآجل يسجل كمبلغ مستحق، وليس تحصيلًا نقديًا.', 'Credit sales are recorded as receivables, not cash collection.')}</Text>}
       <ActionButton disabled={saving || !operations?.can_manage || !saleItems.length} title={saving ? t('جارٍ تسجيل البيع…', 'Recording sale…') : t(`إتمام البيع · ${amount(saleTotal)}`, `Complete sale · ${amount(saleTotal)}`)} onPress={completeSale} />
@@ -374,13 +400,13 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     </Card>
     <Card title={t(`المنتجات والمخزون (${products.length})`, `Products & inventory (${products.length})`)}>
       <TextInput value={productQuery} onChangeText={setProductQuery} placeholder={t('ابحث بالاسم أو رمز المنتج', 'Search by name or SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
-      {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => adjustInventory(item)}><Text style={styles.linkSmall}>{t('جرد', 'Count')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام +5', 'Receive +5')}</Text></Pressable></View></View>)}
+      {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => adjustInventory(item)}><Text style={styles.linkSmall}>{t('جرد', 'Count')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام', 'Receive')}</Text></Pressable></View></View>)}
       {!products.length && <Text style={styles.muted}>{t('أضف أول منتج لتبدأ إدارة مخزونك.', 'Add your first product to start managing inventory.')}</Text>}
       {products.length > 0 && !visibleProducts.length && <Text style={styles.muted}>{t('لا يوجد منتج مطابق للبحث.', 'No product matches your search.')}</Text>}
     </Card>
     <Card title={t('تسجيل مصروف', 'Record expense')}>
       <TextInput value={expenseForm.amount} onChangeText={value => setExpenseForm(current => ({ ...current, amount: value }))} placeholder={t('المبلغ بالدرهم', 'Amount in AED')} placeholderTextColor="#8A8D98" keyboardType="decimal-pad" style={styles.input} />
-      <View style={styles.categoryWrap}>{expenseCategories.map(item => <Pressable key={item.value} onPress={() => setExpenseForm(current => ({ ...current, category: item.value }))} style={[styles.categoryChip, expenseForm.category === item.value && styles.categoryChipActive]}><Text style={expenseForm.category === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
+      <View style={styles.categoryWrap}>{expenseCategories.map(item => <Pressable key={item.value} disabled={saving} onPress={() => setExpenseForm(current => ({ ...current, category: item.value }))} style={[styles.categoryChip, expenseForm.category === item.value && styles.categoryChipActive, saving && styles.tabButtonDisabled]}><Text style={expenseForm.category === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
       <TextInput value={expenseForm.note} onChangeText={value => setExpenseForm(current => ({ ...current, note: value }))} placeholder={t('ملاحظة اختيارية', 'Optional note')} placeholderTextColor="#8A8D98" style={styles.input} />
       <TextInput value={expenseForm.occurred_on} onChangeText={value => setExpenseForm(current => ({ ...current, occurred_on: value }))} placeholder="YYYY-MM-DD" placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
       <ActionButton disabled={saving || !operations?.can_manage} title={saving ? t('جارٍ الحفظ…', 'Saving…') : t('حفظ المصروف', 'Save expense')} onPress={createExpense} />
@@ -416,9 +442,9 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const title = tabTitle[tab];
 
   return <SafeAreaView style={styles.safe}><ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}>
-    <View style={styles.header}><View style={styles.headerIdentity}><BrandLockup compact /><Text style={styles.business}>{business?.name || t('مساحة العمل', 'Workspace')}</Text></View><View style={styles.headerActions}><LanguageToggle language={language} onChange={onLanguageChange} /><Pressable onPress={() => void onLogout()}><Text style={styles.link}>{t('خروج', 'Sign out')}</Text></Pressable></View></View>
-    <View style={styles.tabBar}>{(Object.keys(tabTitle) as Tab[]).map(item => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive]}><Text style={tab === item ? styles.tabButtonTextActive : styles.tabButtonText}>{t(tabTitle[item][0], tabTitle[item][1])}</Text></Pressable>)}</View>
-    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{t(title[0], title[1])}</Text><Text style={styles.updatedText}>{loading ? t('جارٍ التحديث…', 'Refreshing…') : t('بيانات مباشرة', 'Live data')}</Text></View>
+    <View style={styles.header}><View style={styles.headerIdentity}><BrandLockup compact /><Text style={styles.business}>{business?.name || t('مساحة العمل', 'Workspace')}</Text></View><View style={styles.headerActions}><LanguageToggle language={language} onChange={onLanguageChange} /><Pressable disabled={saving || deleting} onPress={() => void onLogout()}><Text style={[styles.link, (saving || deleting) && styles.disabledText]}>{t('خروج', 'Sign out')}</Text></Pressable></View></View>
+    <View style={styles.tabBar}>{(Object.keys(tabTitle) as Tab[]).map(item => <Pressable key={item} disabled={saving} onPress={() => setTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive, saving && styles.tabButtonDisabled]}><Text style={tab === item ? styles.tabButtonTextActive : styles.tabButtonText}>{t(tabTitle[item][0], tabTitle[item][1])}</Text></Pressable>)}</View>
+    <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{t(title[0], title[1])}</Text><Text style={styles.updatedText}>{saving ? t('جارٍ الحفظ…', 'Saving…') : loading ? t('جارٍ التحديث…', 'Refreshing…') : t('بيانات مباشرة', 'Live data')}</Text></View>
     {tab === 'dashboard' ? renderDashboard() : null}
     {tab === 'operations' ? renderOperations() : null}
     {tab === 'assistant' ? renderAssistant() : null}
@@ -494,6 +520,7 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: 'row', backgroundColor: '#E9ECF3', padding: 4, borderRadius: 15, gap: 4 },
   tabButton: { flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center' },
   tabButtonActive: { backgroundColor: '#111827' },
+  tabButtonDisabled: { opacity: 0.64 },
   tabButtonText: { color: '#697386', fontSize: 12, fontWeight: '700' },
   tabButtonTextActive: { color: '#FFF', fontSize: 12, fontWeight: '800' },
   sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
@@ -550,6 +577,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.78 },
   link: { textAlign: 'center', textDecorationLine: 'underline', paddingVertical: 7, color: '#2563EB', fontWeight: '700' },
+  disabledText: { opacity: 0.45 },
   linkSmall: { color: '#2563EB', fontWeight: '900', textDecorationLine: 'underline', fontSize: 13 },
   secureNote: { color: '#8A93A3', textAlign: 'center', fontSize: 12, marginTop: 8 },
   categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },

@@ -85,9 +85,9 @@ test('owner copilot grounds store answers in Dubai-day sales, collections, expen
 
 test('native store manager exposes a reviewable quick-sale flow and auditable inventory movements', () => {
   const source = read('mobile/App.tsx');
-  for (const token of ['بيع سريع', 'تسجيل بيع سريع', 'إتمام البيع', 'استلام +5', 'آخر حركات المخزون', 'paymentMethods', 'complete_sale', 'receive_stock']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const token of ['بيع سريع', 'تسجيل بيع سريع', 'إتمام البيع', 'استلام بضاعة', 'آخر حركات المخزون', 'paymentMethods', 'complete_sale', 'receive_stock']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(source, /بيع كمية غير متاحة/);
-  assert.match(source, /تأكيد استلام المخزون/);
+  assert.match(source, /تسجيل الاستلام/);
   assert.match(source, /البيع الآجل يسجل كمبلغ مستحق/);
 });
 
@@ -134,4 +134,19 @@ test('DABBIR brand mark is shipped as an app icon and appears consistently acros
   assert.equal(fs.existsSync(path.join(root, 'mobile/assets/dabbir-logo-mark.png')), true);
   assert.match(configSource, /icon: '\.\/assets\/dabbir-app-icon\.png'/);
   for (const token of ['BrandLockup', 'dabbir-logo-mark.png', 'welcomeLogo', '<BrandLockup />', '<BrandLockup compact />']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+
+test('native store tabs and mutable controls remain responsive without allowing concurrent operational mutations', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ['dashboard:', 'operations:', 'assistant:', 'account:', 'disabled={saving}', 'جارٍ الحفظ…', 'clearSale', 'تفريغ سلة البيع', "action: 'receive_stock'", 'صلاحية مطلوبة']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(source, /disabled=\{saving \|\| !operations\?\.can_manage\} onPress=\{\(\) => receiveStock\(item\)\}/);
+  assert.match(source, /disabled=\{saving \|\| deleting\} onPress=\{\(\) => void onLogout\(\)\}/);
+});
+
+
+test('quick store controls collect an actual received quantity and can clear only the local sale draft', () => {
+  const source = read('mobile/App.tsx');
+  for (const token of ['استلام بضاعة', 'تسجيل الاستلام', 'Native stock receipt', 'quantity < 1 || quantity > 100000', 'clearSale', 'تفريغ سلة البيع', 'inventory will not change']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(source, /Quick stock receipt/);
 });
