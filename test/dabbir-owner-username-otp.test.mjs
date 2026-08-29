@@ -4,20 +4,20 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('owner authentication is username + direct Resend OTP and fail-closed to the canonical owner UUID', async () => {
+test('owner authentication is username + brokered Resend OTP and fail-closed to the canonical owner UUID', async () => {
   const source = await read('api/auth/owner-otp.js');
   assert.match(source, /OWNER_USERNAME\s*=\s*'barmanadmin'/);
   assert.match(source, /OWNER_USER_ID/);
   assert.match(source, /f1c5e98b-4060-43cb-a09b-a67a67028800/);
   assert.match(source, /requireSameOrigin\(req\)/);
   assert.match(source, /RESEND_API_KEY/);
-  assert.match(source, /api\.resend\.com\/emails/);
-  assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(source, /\/auth\/v1\/admin\/generate_link/);
-  assert.match(source, /\/auth\/v1\/verify/);
-  assert.match(source, /type:\s*'magiclink'/);
+  assert.match(source, /bm-secret-broker/);
+  assert.match(source, /owner_otp_request/);
+  assert.match(source, /owner_otp_verify/);
+  assert.match(source, /challenge_id/);
   assert.match(source, /authCookieHeaders\(session\)/);
   assert.match(source, /String\(session\?\.user\?\.id \|\| ''\) !== OWNER_USER_ID/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(source, /grant_type=password/);
 });
 
