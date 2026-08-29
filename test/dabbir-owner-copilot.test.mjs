@@ -76,7 +76,7 @@ test('owner copilot UI gives natural-language options, value proof and accessibl
   assert.match(uiSource,/ماذا أنجزت اليوم؟/);
   assert.match(uiSource,/estimated_manual_minutes_saved/);
   assert.match(uiSource,/VERIFIED_EXACT_COUNTS/);
-  assert.match(uiSource,/\/api\/dabbir-approved-icon/);
+  assert.match(uiSource,/\/dabbir-app-icon\.png/);
   assert.match(uiSource,/role="status" aria-live="polite"/);
   assert.match(uiSource,/recommended_screen/);
   assert.match(uiSource,/prefers-reduced-motion/);

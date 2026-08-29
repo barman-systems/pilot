@@ -58,7 +58,7 @@ const script=String.raw`(()=>{
     const priorAnswer=q('#dcAnswerText')?.textContent||'';
     const priorMeta=q('#dcAnswerMeta')?.dataset.source||'';
     const screen=safeScreen(lastScreen);
-    card.innerHTML='<div class="dcHead"><div class="dcIdentity"><img class="dcLogo" src="/api/dabbir-approved-icon" alt=""><div><h2>'+esc(t.title)+'</h2><p>'+esc(t.desc)+'</p></div></div><span class="dcMode">'+esc(t.mode)+'</span></div>'+
+    card.innerHTML='<div class="dcHead"><div class="dcIdentity"><img class="dcLogo" src="/dabbir-app-icon.png" alt=""><div><h2>'+esc(t.title)+'</h2><p>'+esc(t.desc)+'</p></div></div><span class="dcMode">'+esc(t.mode)+'</span></div>'+
       '<div class="dcProof"><div class="dcMetric"><strong>'+(actions==null?esc(t.unknown):esc(actions))+'</strong><span>'+esc(t.actions)+'</span></div><div class="dcMetric"><strong>'+(minutes==null?esc(t.unknown):esc(minutes+t.minute))+'</strong><span>'+esc(t.time)+'</span></div><div class="dcMetric"><strong>'+(attention==null?esc(t.unknown):esc(attention))+'</strong><span>'+esc(t.attention)+'</span></div></div>'+
       '<form class="dcAsk" id="dcAskForm"><input class="dcInput" id="dcAskInput" maxlength="800" autocomplete="off" enterkeyhint="send" aria-label="'+esc(t.title)+'" placeholder="'+esc(t.placeholder)+'"><button id="dcAskButton" type="submit" '+(asking?'disabled':'')+'>'+esc(asking?t.loading:t.ask)+'</button></form>'+
       '<div class="dcSuggestions">'+suggestions().map(value=>'<button type="button" class="dcSuggestion" data-dc-suggest="'+esc(value)+'">'+esc(value)+'</button>').join('')+'</div>'+

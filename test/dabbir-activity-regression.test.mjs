@@ -56,7 +56,7 @@ test('owner-first mobile navigation stays one five-column row with settings reac
 });
 
 test('mobile header uses the approved DABBIR icon and no floating duplicate brand', () => {
-  assert.match(ownerUi, /const ICON='\/api\/dabbir-approved-icon'/);
+  assert.match(ownerUi, /const ICON='\/dabbir-app-icon\.png'/);
   assert.match(ownerUi, /d4-header-mark/);
   assert.match(ownerUi, /\.dabbirMobileBrand\{display:none!important\}/);
 });
@@ -83,5 +83,7 @@ test('owner-first UI has no continuous presentation polling loop', () => {
 test('brand layer leaves mobile header ownership to the owner-first shell', () => {
   assert.match(brandUi, /owner-first shell owns the mobile header mark/);
   assert.match(brandUi, /body\.dabbirAppActive>\.dabbirMobileBrand\{display:none!important\}/);
-  assert.match(indexHtml, /<img src="\/api\/dabbir-approved-icon" alt="DABBIR">/);
+  assert.match(brandUi, /const icon='\/dabbir-app-icon\.png'/);
+  assert.match(ownerUi, /const ICON='\/dabbir-app-icon\.png'/);
+  assert.match(indexHtml, /<img src="\/dabbir-app-icon\.png" alt="DABBIR">/);
 });

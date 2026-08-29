@@ -2,7 +2,7 @@ const script = String.raw`(()=>{
   if(window.__dabbirOwnerFirstUiV4) return;
   window.__dabbirOwnerFirstUiV4=true;
 
-  const ICON='/api/dabbir-approved-icon';
+  const ICON='/dabbir-app-icon.png';
   const isArabic=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const q=s=>document.querySelector(s);
   const qa=s=>[...document.querySelectorAll(s)];
