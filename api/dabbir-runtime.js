@@ -12,7 +12,7 @@ import {
 import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const BUSINESS_TYPES = new Set(['store', 'clinic', 'creator', 'salon', 'real_estate', 'services', 'other']);
+const BUSINESS_TYPES = new Set(['store', 'laundry', 'car_wash', 'clinic', 'creator', 'salon', 'real_estate', 'services', 'other']);
 
 function normalizeArabic(input = '') {
   return String(input)

@@ -159,6 +159,7 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
 function StoreOnboarding({ session, language, onLanguageChange, onReady }: { session: DabbirSession; language: Language; onLanguageChange: (language: Language) => void; onReady: () => Promise<void> }) {
   const t = useMemo(() => copyFor(language), [language]);
   const [name, setName] = useState('');
+  const [businessType, setBusinessType] = useState<api.DabbirBusinessType>('store');
   const [busy, setBusy] = useState(false);
 
   const createStore = async () => {
@@ -169,7 +170,7 @@ function StoreOnboarding({ session, language, onLanguageChange, onReady }: { ses
     }
     setBusy(true);
     try {
-      await api.createStore(session.access_token, trimmed, language === 'ar' ? 'ar-AE' : 'en-AE');
+      await api.createBusiness(session.access_token, trimmed, businessType, language === 'ar' ? 'ar-AE' : 'en-AE');
       await onReady();
       Alert.alert(t('متجرك جاهز', 'Your store is ready'), t('ابدأ بإضافة منتج أو تسجيل أول بيع. دبّر سيبني ملخص اليوم من بياناتك الفعلية.', 'Start by adding a product or recording your first sale. DABBIR will build Today from your real data.'));
     } catch (error) {
@@ -182,9 +183,17 @@ function StoreOnboarding({ session, language, onLanguageChange, onReady }: { ses
     <View style={styles.setupBadge}><Text style={styles.setupBadgeText}>{t('دبّر للمتاجر الصغيرة', 'DABBIR for small stores')}</Text></View>
     <Text style={styles.hero}>{t('لنجهّز متجرك في دقيقة.', "Let's set up your store in a minute.")}</Text>
     <Text style={styles.authSubtitle}>{t('ابدأ باسم المتجر فقط. ستضيف المنتجات أو تسجل أول بيع بعد الدخول، دون إعدادات طويلة.', 'Start with your store name only. Add products or record your first sale after entering, without lengthy setup.')}</Text>
-    <TextInput accessibilityLabel={t('اسم المتجر', 'Store name')} value={name} onChangeText={setName} placeholder={t('مثل: تموينات النخبة', 'Example: Elite Groceries')} placeholderTextColor="#8A8D98" style={styles.input} maxLength={120} />
-    <ActionButton disabled={busy || !name.trim()} title={busy ? t('جارٍ تجهيز المتجر…', 'Setting up store…') : t('ابدأ إدارة متجري', 'Start managing my store')} onPress={() => void createStore()} />
-    <Text style={styles.secureNote}>{t('سيدخل متجرك وضع البيع والمخزون والمصروفات. لا يلزم ربط واتساب أو إدخال بطاقة للبدء.', 'Your store starts with sales, inventory, and expenses. WhatsApp and payment-card setup are not required to start.')}</Text>
+    <TextInput accessibilityLabel={t('اسم النشاط', 'Business name')} value={name} onChangeText={setName} placeholder={businessType === 'store' ? t('مثل: تموينات النخبة', 'Example: Elite Groceries') : businessType === 'laundry' ? t('مثل: مغسلة النخبة', 'Example: Elite Laundry') : t('مثل: مغسلة اللمعة', 'Example: Al Lamah Car Wash')} placeholderTextColor="#8A8D98" style={styles.input} maxLength={120} />
+    <Text style={styles.fieldLabel}>{t('نوع النشاط', 'Business type')}</Text>
+    <View style={styles.businessTypeGrid}>
+      {([
+        ['store', 'متجر', 'Retail store'],
+        ['laundry', 'مغسلة ملابس', 'Laundry'],
+        ['car_wash', 'مغسلة سيارات', 'Car wash'],
+      ] as const).map(([value, ar, en]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: businessType === value }} onPress={() => setBusinessType(value)} style={[styles.businessTypeOption, businessType === value && styles.businessTypeOptionActive]}><Text style={[styles.businessTypeTitle, businessType === value && styles.businessTypeTitleActive]}>{t(ar, en)}</Text></Pressable>)}
+    </View>
+    <ActionButton disabled={busy || !name.trim()} title={busy ? t('جارٍ تجهيز النشاط…', 'Setting up business…') : businessType === 'store' ? t('ابدأ إدارة متجري', 'Start managing my store') : t('ابدأ إدارة نشاطي', 'Start managing my business')} onPress={() => void createStore()} />
+    <Text style={styles.secureNote}>{t('سيتم تجهيز الواجهة المناسبة لنوع نشاطك. يمكنك إضافة الخدمات والأسعار والطلبات بعد الدخول.', 'DABBIR will prepare the right workspace for your business. Add services, prices, and orders after entering.')}</Text>
   </KeyboardAvoidingView></SafeAreaView>;
 }
 
@@ -649,6 +658,12 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 99, backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4 },
   pillText: { color: '#4F46E5', fontSize: 11, fontWeight: '800' },
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#DCE2EB', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 12, fontSize: 15, color: '#111827', textAlign: 'right' },
+  fieldLabel: { color: '#384152', fontSize: 13, fontWeight: '800', textAlign: 'right', marginTop: 2 },
+  businessTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  businessTypeOption: { flexGrow: 1, minWidth: '30%', borderWidth: 1, borderColor: '#DCE2EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 12, backgroundColor: '#FFF' },
+  businessTypeOptionActive: { borderColor: '#2563EB', backgroundColor: '#EEF4FF' },
+  businessTypeTitle: { color: '#697386', fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  businessTypeTitleActive: { color: '#1D4ED8' },
   formRow: { flexDirection: 'row', gap: 10 },
   halfInput: { flex: 1 },
   button: { backgroundColor: '#2563EB', borderRadius: 13, padding: 14, minHeight: 48, justifyContent: 'center' },

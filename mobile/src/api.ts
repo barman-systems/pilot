@@ -75,6 +75,12 @@ export async function loadRuntime(accessToken: string): Promise<any> {
   return parseJson(response);
 }
 
+export type DabbirBusinessType = 'store' | 'laundry' | 'car_wash';
+
+export async function createBusiness(accessToken: string, name: string, businessType: DabbirBusinessType, locale: 'ar-AE' | 'en-AE'): Promise<any> {
+  return post('/api/mobile/runtime', { action: 'create_business', name, business_type: businessType, locale }, accessToken);
+}
+
 export async function createStore(accessToken: string, name: string, locale: 'ar-AE' | 'en-AE'): Promise<any> {
   return post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale }, accessToken);
 }
