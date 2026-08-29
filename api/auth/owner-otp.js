@@ -1,5 +1,4 @@
 import {
-  authCookieHeaders,
   json,
   parseCookies,
   readJsonBody,
@@ -8,17 +7,25 @@ import {
 
 const OWNER_USERNAME = 'barmanadmin';
 const OWNER_EMAIL = process.env.DABBIR_OWNER_LOGIN_EMAIL || 'barman2013@icloud.com';
-const OWNER_USER_ID = process.env.DABBIR_OWNER_USER_ID || 'f1c5e98b-4060-43cb-a09b-a67a67028800';
 const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
 const OTP_RE = /^\d{6}$/;
 const CHALLENGE_COOKIE = '__Host-dabbir_owner_otp_challenge';
+const SESSION_COOKIE = '__Host-dabbir_owner_session';
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function secureCookie(name, value, maxAge) {
+  return `${name}=${encodeURIComponent(value)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${Math.max(0, maxAge)}`;
+}
+
 function challengeCookie(value, maxAge = 600) {
-  return `${CHALLENGE_COOKIE}=${encodeURIComponent(value)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${Math.max(0, maxAge)}`;
+  return secureCookie(CHALLENGE_COOKIE, value, maxAge);
+}
+
+function sessionCookie(value, maxAge = 43200) {
+  return secureCookie(SESSION_COOKIE, value, maxAge);
 }
 
 function clearChallengeCookie() {
@@ -38,7 +45,7 @@ async function broker(body) {
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store, max-age=0');
   res.setHeader('pragma', 'no-cache');
-  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v4');
+  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v6');
 
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
@@ -100,30 +107,21 @@ export default async function handler(req, res) {
         otp,
       });
 
-      if (!response.ok || !payload?.authenticated) {
-        if (response.status !== 429) res.setHeader('set-cookie', clearChallengeCookie());
-        return json(res, response.status === 429 ? 429 : response.status === 503 ? 503 : 401, {
+      if (!response.ok || !payload?.authenticated || !payload?.session_token) {
+        res.setHeader('set-cookie', clearChallengeCookie());
+        return json(res, response.status === 503 ? 503 : 401, {
           ok: false,
-          error: response.status === 429 ? 'OTP_RATE_LIMITED' : (payload?.error || 'INVALID_OWNER_OTP'),
+          error: payload?.error || 'INVALID_OWNER_OTP',
         });
       }
 
-      const session = payload.session;
-      if (
-        !session?.access_token ||
-        !session?.refresh_token ||
-        String(session?.user?.id || '') !== OWNER_USER_ID
-      ) {
-        res.setHeader('set-cookie', clearChallengeCookie());
-        return json(res, 403, { ok: false, error: 'OWNER_IDENTITY_MISMATCH' });
-      }
-
-      res.setHeader('set-cookie', [...authCookieHeaders(session), clearChallengeCookie()]);
+      const maxAge = Math.max(60, Math.min(43200, Number(payload.expires_in || 43200)));
+      res.setHeader('set-cookie', [sessionCookie(payload.session_token, maxAge), clearChallengeCookie()]);
       return json(res, 200, {
         ok: true,
         authenticated: true,
         username: OWNER_USERNAME,
-        expires_in: session.expires_in ?? null,
+        expires_in: maxAge,
       });
     }
 
