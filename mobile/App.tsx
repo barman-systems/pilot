@@ -296,6 +296,23 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     );
   };
 
+  const returnSale = (order: any) => {
+    if (saving) return;
+    const items = (Array.isArray(order.items) ? order.items : []).map((item: any) => ({ order_item_id: item.id, quantity: Math.max(0, Number(item.quantity || 0) - Number(item.returned_quantity || 0)) })).filter((item: any) => item.quantity > 0);
+    if (!items.length) {
+      Alert.alert(t('تم إرجاع الطلب', 'Order already returned'), t('لا توجد كمية متبقية قابلة للإرجاع لهذا الطلب.', 'There is no remaining quantity eligible for return.'));
+      return;
+    }
+    const refund = items.reduce((sum: number, item: any) => {
+      const source = (order.items || []).find((candidate: any) => candidate.id === item.order_item_id);
+      return sum + Number(source?.unit_price_aed || 0) * item.quantity;
+    }, 0);
+    Alert.alert(t('تأكيد المرتجع', 'Confirm return'), t(`سيتم إرجاع ${amount(refund)} وإعادة الكمية إلى المخزون. لا يمكن التراجع عن العملية.`, `${amount(refund)} will be returned and the quantity restored to inventory. This cannot be undone.`), [
+      { text: t('إلغاء', 'Cancel'), style: 'cancel' },
+      { text: t('تسجيل المرتجع', 'Record return'), style: 'destructive', onPress: () => void mutate({ action: 'return_sale', order_id: order.id, items, reason: 'Native full sale return' }, t('تم تسجيل المرتجع وتحديث المخزون.', 'The return was recorded and inventory updated.')) },
+    ]);
+  };
+
   const clearSale = () => {
     if (!saleItems.length || saving) return;
     Alert.alert(t('تفريغ سلة البيع', 'Clear sale basket'), t('سيتم حذف المنتجات من مسودة البيع فقط، ولن يتغير المخزون.', 'Products will only be removed from this sale draft; inventory will not change.'), [
@@ -421,7 +438,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       {!expenses.length && <Text style={styles.muted}>{t('لم تسجل مصروفات بعد.', 'No expenses recorded yet.')}</Text>}
     </Card>
     <Card title={t('آخر عمليات البيع والطلبات', 'Recent sales & orders')}>
-      {orders.slice(0, 10).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.customer_name || t('بيع مباشر', 'Direct sale')}</Text><Text style={styles.muted}>{amount(item.total_aed)} · {paymentMethods.find(method => method.value === item.payment_method)?.[language === 'ar' ? 'ar' : 'en'] || item.payment_method || t('غير محدد', 'Unspecified')}</Text></View><View style={styles.orderAction}><StatusPill status={String(item.status || '')} t={t} />{['confirmed', 'reserved'].includes(String(item.status || '').toLowerCase()) && <Pressable disabled={saving || !operations?.can_manage} onPress={() => void mutate({ action: 'update_order_status', order_id: item.id, status: 'completed' }, t('تم إغلاق الطلب كمكتمل.', 'Order marked as completed.'))}><Text style={styles.linkSmall}>{t('إتمام', 'Complete')}</Text></Pressable>}</View></View>)}
+      {orders.slice(0, 10).map((item: any, index: number) => <View key={item.id || index} style={styles.listRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.customer_name || t('بيع مباشر', 'Direct sale')}</Text><Text style={styles.muted}>{amount(item.total_aed)} · {paymentMethods.find(method => method.value === item.payment_method)?.[language === 'ar' ? 'ar' : 'en'] || item.payment_method || t('غير محدد', 'Unspecified')}</Text></View><View style={styles.orderAction}><StatusPill status={String(item.status || '')} t={t} />{['confirmed', 'reserved'].includes(String(item.status || '').toLowerCase()) && <Pressable disabled={saving || !operations?.can_manage} onPress={() => void mutate({ action: 'update_order_status', order_id: item.id, status: 'completed' }, t('تم إغلاق الطلب كمكتمل.', 'Order marked as completed.'))}><Text style={styles.linkSmall}>{t('إتمام', 'Complete')}</Text></Pressable>}{String(item.status || '').toLowerCase() === 'completed' && !item.fully_returned && <Pressable disabled={saving || !operations?.can_manage} onPress={() => returnSale(item)}><Text style={styles.linkSmall}>{t('مرتجع', 'Return')}</Text></Pressable>}</View></View>)}
       {!orders.length && <Text style={styles.muted}>{t('لا توجد عمليات بيع أو طلبات بعد.', 'No sales or orders yet.')}</Text>}
     </Card>
   </>;

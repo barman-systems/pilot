@@ -62,7 +62,7 @@ async function handleGet(req,res,context){
   if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
   const businessId=membership.business_id;
 
-  const [products,inventory,orders,orderItems,movements,customers,services,expenses]=await Promise.all([
+  const [products,inventory,orders,orderItems,movements,customers,services,expenses,returns]=await Promise.all([
     rest(context.token,`dabbir_products?select=id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
     rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=200`,'INVENTORY_LOOKUP_FAILED'),
     rest(context.token,`dabbir_orders?select=id,customer_id,status,total_aed,paid_aed,payment_method,note,completed_at,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
@@ -71,6 +71,7 @@ async function handleGet(req,res,context){
     rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
     rest(context.token,`dabbir_services?select=id,name,duration_minutes,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'SERVICES_LOOKUP_FAILED'),
     rest(context.token,`dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at&business_id=eq.${businessId}&order=occurred_on.desc,created_at.desc&limit=100`,'EXPENSES_LOOKUP_FAILED'),
+    rest(context.token,`dabbir_order_returns?select=id,order_id,order_item_id,product_id,quantity,refund_aed,reason,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=500`,'RETURNS_LOOKUP_FAILED'),
   ]);
 
   const inventoryByProduct=new Map((inventory||[]).map(row=>[row.product_id,row]));
@@ -93,10 +94,17 @@ async function handleGet(req,res,context){
   }));
   const todayDubai=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 
+  const returnedByItem=new Map();
+  const returnedByOrder=new Map();
+  for(const returned of (returns||[])){
+    const quantity=Math.trunc(number(returned.quantity));
+    returnedByItem.set(returned.order_item_id,(returnedByItem.get(returned.order_item_id)||0)+quantity);
+    returnedByOrder.set(returned.order_id,Number(((returnedByOrder.get(returned.order_id)||0)+number(returned.refund_aed)).toFixed(2)));
+  }
   const itemsByOrder=new Map();
   for(const item of (orderItems||[])){
     const current=itemsByOrder.get(item.order_id)||[];
-    current.push({...item,unit_price_aed:Number(number(item.unit_price_aed).toFixed(2)),line_total_aed:Number(number(item.line_total_aed).toFixed(2))});
+    current.push({...item,unit_price_aed:Number(number(item.unit_price_aed).toFixed(2)),line_total_aed:Number(number(item.line_total_aed).toFixed(2)),returned_quantity:returnedByItem.get(item.id)||0});
     itemsByOrder.set(item.order_id,current);
   }
   const movementRows=(movements||[]).map(movement=>({...movement,quantity_delta:Math.trunc(number(movement.quantity_delta)),quantity_after:Math.trunc(number(movement.quantity_after))}));
@@ -106,7 +114,7 @@ async function handleGet(req,res,context){
   const salesToday=recognizedOrders.filter(order=>{
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(order.completed_at||order.created_at))===todayDubai}catch{return false}
   });
-  const orderRows=(orders||[]).map(order=>({...order,total_aed:Number(number(order.total_aed).toFixed(2)),paid_aed:Number(number(order.paid_aed).toFixed(2)),customer_name:customerById.get(order.customer_id)||null,items:itemsByOrder.get(order.id)||[]}));
+  const orderRows=(orders||[]).map(order=>{const items=itemsByOrder.get(order.id)||[];return {...order,total_aed:Number(number(order.total_aed).toFixed(2)),paid_aed:Number(number(order.paid_aed).toFixed(2)),returned_aed:Number((returnedByOrder.get(order.id)||0).toFixed(2)),fully_returned:items.length>0&&items.every(item=>Number(item.returned_quantity||0)>=Number(item.quantity||0)),customer_name:customerById.get(order.customer_id)||null,items}});
 
   return json(res,200,{
     ok:true,
@@ -133,6 +141,7 @@ async function handleGet(req,res,context){
     services:serviceRows,
     orders:orderRows,
     expenses:expenseRows,
+    returns:returns||[],
     inventory_movements:movementRows,
     low_stock:productRows.filter(product=>product.low_stock),
     truth:{recognized_sales_statuses:['confirmed','completed'],simulated_orders_excluded_from_sales:true,sales_are_itemized_when_order_items_present:true,cash_collected_excludes_credit_sales:true,expenses_source:'dabbir_expenses_live_tenant_data',services_source:'dabbir_services_live_tenant_data'},
@@ -179,6 +188,12 @@ async function handlePost(req,res,context){
     const note=clean(body.note,240);
     if(!productId||quantity<1||quantity>100000)return json(res,400,{ok:false,error:'INVALID_RECEIPT_INPUT'});
     result=await rpc(context.token,'dabbir_owner_receive_stock',{p_business_id:businessId,p_product_id:productId,p_quantity:quantity,p_note:note},'STOCK_RECEIPT_FAILED');
+  }else if(action==='return_sale'){
+    const orderId=safeId(body.order_id);
+    const items=Array.isArray(body.items)?body.items.slice(0,50).map(item=>({order_item_id:safeId(item?.order_item_id),quantity:Math.trunc(number(item?.quantity))})) : [];
+    const reason=clean(body.reason,240);
+    if(!orderId||!items.length||items.some(item=>!item.order_item_id||item.quantity<1||item.quantity>100000))return json(res,400,{ok:false,error:'INVALID_RETURN_INPUT'});
+    result=await rpc(context.token,'dabbir_owner_return_sale',{p_business_id:businessId,p_order_id:orderId,p_items:items,p_reason:reason},'SALE_RETURN_FAILED');
   }else if(action==='create_expense'){
     const amount=number(body.amount_aed);
     const category=clean(body.category,24).toLowerCase();

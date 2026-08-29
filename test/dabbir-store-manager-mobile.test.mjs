@@ -156,7 +156,7 @@ test('every native operational button maps to a supported server action and tabs
   const appSource = read('mobile/App.tsx');
   const serverSource = read('api/owner-operations.js');
   const actions = [...appSource.matchAll(/action: '([a-z_]+)'/g)].map(match => match[1]);
-  assert.deepEqual([...new Set(actions)].sort(), ['complete_sale', 'create_expense', 'create_product', 'receive_stock', 'set_inventory', 'update_order_status']);
+  assert.deepEqual([...new Set(actions)].sort(), ['complete_sale', 'create_expense', 'create_product', 'receive_stock', 'return_sale', 'set_inventory', 'update_order_status']);
   for (const action of actions) assert.match(serverSource, new RegExp(`action==='${action}'`));
   assert.match(appSource, /onPress=\{\(\) => setTab\(item\)\}/);
   assert.doesNotMatch(appSource, /onPress=\{\(\) => void api\.[^(]+\([^)]*setTab/);
@@ -183,4 +183,14 @@ test('native assistant offers guarded one-tap operational questions for today an
   const source = read('mobile/App.tsx');
   for (const token of ['askAssistant = async (preset?: string)', 'ما ملخص اليوم؟', 'ما المنتجات منخفضة المخزون؟', 'Today summary', 'Low stock']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(source, /disabled=\{assistantBusy \|\| !businessId\}/);
+});
+
+
+test('returns are exposed as a guarded, auditable operation with remaining-quantity protection', () => {
+  const appSource = read('mobile/App.tsx');
+  const apiSource = read('api/owner-operations.js');
+  const migration = read('db/dabbir_store_returns_v1.sql');
+  for (const token of ['returnSale', 'تأكيد المرتجع', 'تسجيل المرتجع', 'fully_returned', 'action: \'return_sale\'']) assert.match(appSource, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(apiSource, /action==='return_sale'/);
+  for (const token of ['dabbir_order_returns', 'dabbir_owner_return_sale', 'RETURN', 'RETURN_QUANTITY_EXCEEDS_SOLD']) assert.match(migration, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
