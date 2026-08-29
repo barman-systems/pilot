@@ -192,13 +192,13 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
   const followups = Array.isArray(runtime?.followups) ? runtime.followups : [];
   const products = Array.isArray(operations?.products) ? operations.products : [];
   const normalizedProductQuery = productQuery.trim().toLocaleLowerCase();
-  const visibleProducts = normalizedProductQuery ? products.filter((product: any) => `${product.name || ''} ${product.sku || ''}`.toLocaleLowerCase().includes(normalizedProductQuery)) : products;
+  const visibleProducts = useMemo(() => normalizedProductQuery ? products.filter((product: any) => `${product.name || ''} ${product.sku || ''}`.toLocaleLowerCase().includes(normalizedProductQuery)) : products, [products, normalizedProductQuery]);
   const orders = Array.isArray(operations?.orders) ? operations.orders : [];
   const expenses = Array.isArray(operations?.expenses) ? operations.expenses : [];
   const lowStock = Array.isArray(operations?.low_stock) ? operations.low_stock : [];
   const inventoryMovements = Array.isArray(operations?.inventory_movements) ? operations.inventory_movements : [];
-  const saleItems: SaleDraftItem[] = products.map((product: any): SaleDraftItem => ({ product, quantity: Number(saleDraft[product.id] || 0) })).filter((item: SaleDraftItem) => item.quantity > 0);
-  const saleTotal = saleItems.reduce((sum: number, item: SaleDraftItem) => sum + Number(item.product.price_aed || 0) * item.quantity, 0);
+  const saleItems: SaleDraftItem[] = useMemo(() => products.map((product: any): SaleDraftItem => ({ product, quantity: Number(saleDraft[product.id] || 0) })).filter((item: SaleDraftItem) => item.quantity > 0), [products, saleDraft]);
+  const saleTotal = useMemo(() => saleItems.reduce((sum: number, item: SaleDraftItem) => sum + Number(item.product.price_aed || 0) * item.quantity, 0), [saleItems]);
   const attentionCount = Number(runtimeMetrics.needs_attention ?? (handoffs.length + followups.length));
   const salesToday = Number(metrics.sales_today_aed || 0);
   const cashCollected = Number(metrics.cash_collected_aed || 0);

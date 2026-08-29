@@ -150,3 +150,22 @@ test('quick store controls collect an actual received quantity and can clear onl
   for (const token of ['استلام بضاعة', 'تسجيل الاستلام', 'Native stock receipt', 'quantity < 1 || quantity > 100000', 'clearSale', 'تفريغ سلة البيع', 'inventory will not change']) assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.doesNotMatch(source, /Quick stock receipt/);
 });
+
+
+test('every native operational button maps to a supported server action and tabs switch locally', () => {
+  const appSource = read('mobile/App.tsx');
+  const serverSource = read('api/owner-operations.js');
+  const actions = [...appSource.matchAll(/action: '([a-z_]+)'/g)].map(match => match[1]);
+  assert.deepEqual([...new Set(actions)].sort(), ['complete_sale', 'create_expense', 'create_product', 'receive_stock', 'set_inventory', 'update_order_status']);
+  for (const action of actions) assert.match(serverSource, new RegExp(`action==='${action}'`));
+  assert.match(appSource, /onPress=\{\(\) => setTab\(item\)\}/);
+  assert.doesNotMatch(appSource, /onPress=\{\(\) => void api\.[^(]+\([^)]*setTab/);
+});
+
+
+test('native store manager memoizes product discovery and sale calculations for responsive tab use', () => {
+  const source = read('mobile/App.tsx');
+  assert.match(source, /const visibleProducts = useMemo\(/);
+  assert.match(source, /const saleItems: SaleDraftItem\[\] = useMemo\(/);
+  assert.match(source, /const saleTotal = useMemo\(/);
+});
