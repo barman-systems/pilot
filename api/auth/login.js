@@ -13,26 +13,50 @@ async function revoke(accessToken) {
   }).catch(() => null);
 }
 
+async function onePasswordGrant(email, password, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await supabaseAuth('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function passwordGrant(email, password) {
-  const delays = [0, 350, 900];
-  let lastResponse = null;
+  // Supabase Auth on this project has shown intermittent DB connection stalls.
+  // Use short parallel probes so one healthy Auth worker can succeed without
+  // forcing the customer to wait through multiple serial 10s timeouts.
+  const waves = [0, 700, 1800];
+  let retryableResponse = null;
   let lastError = null;
 
-  for (let i = 0; i < delays.length; i += 1) {
-    if (delays[i]) await sleep(delays[i]);
-    try {
-      const response = await supabaseAuth('/auth/v1/token?grant_type=password', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      lastResponse = response;
-      if (response.ok || !RETRYABLE_AUTH_STATUSES.has(Number(response.status))) return response;
-    } catch (error) {
-      lastError = error;
+  for (const delay of waves) {
+    if (delay) await sleep(delay);
+    const attempts = await Promise.allSettled([
+      onePasswordGrant(email, password),
+      onePasswordGrant(email, password),
+      onePasswordGrant(email, password),
+    ]);
+
+    for (const attempt of attempts) {
+      if (attempt.status === 'rejected') {
+        lastError = attempt.reason;
+        continue;
+      }
+      const response = attempt.value;
+      if (response.ok) return response;
+      const status = Number(response.status || 500);
+      if (!RETRYABLE_AUTH_STATUSES.has(status)) return response;
+      retryableResponse = response;
     }
   }
 
-  if (lastResponse) return lastResponse;
+  if (retryableResponse) return retryableResponse;
   throw lastError || new Error('AUTH_UNAVAILABLE');
 }
 
