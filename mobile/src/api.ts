@@ -78,3 +78,19 @@ export async function loadAppleEntitlement(accessToken: string): Promise<any> {
   });
   return parseJson(response);
 }
+
+export async function loadOwnerOperations(accessToken: string, businessId?: string | null): Promise<any> {
+  const query = businessId ? `?business_id=${encodeURIComponent(businessId)}` : '';
+  const response = await fetch(`${apiBase()}/api/mobile/owner-operations${query}`, {
+    headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+  });
+  return parseJson(response);
+}
+
+export async function mutateOwnerOperations(accessToken: string, payload: Record<string, unknown>): Promise<any> {
+  return post('/api/mobile/owner-operations', payload, accessToken);
+}
+
+export async function askOwnerCopilot(accessToken: string, businessId: string, message: string, language: 'ar' | 'en' = 'ar'): Promise<any> {
+  return post('/api/mobile/owner-copilot', { business_id: businessId, message, language }, accessToken);
+}
