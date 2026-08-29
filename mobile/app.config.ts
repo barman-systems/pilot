@@ -31,6 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   plugins: [
+    'expo-apple-authentication',
     ['expo-secure-store', { configureAndroidBackup: false }],
     'expo-iap',
     [

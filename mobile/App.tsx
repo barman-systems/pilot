@@ -3,6 +3,11 @@ import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+import * as WebBrowser from 'expo-web-browser';
+import { ResponseType } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { clearSession, loadSession, saveSession, sessionNeedsRefresh, type DabbirSession } from './src/session';
 import * as api from './src/api';
 import { SubscriptionCard } from './src/SubscriptionCard';
@@ -18,6 +23,9 @@ const amount = (value: unknown) => `${Number(value || 0).toFixed(2)} AED`;
 const dateToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const isValidDateKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const logoMark = require('./assets/dabbir-logo-mark.png');
+const googleIosClientId = String(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '').trim();
+const googleWebClientId = String(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '').trim();
+WebBrowser.maybeCompleteAuthSession();
 
 const expenseCategories = [
   { value: 'supplies', ar: 'مشتريات وتوريد', en: 'Supplies' },
@@ -55,6 +63,52 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  const [socialBusy, setSocialBusy] = useState<'apple' | 'google' | null>(null);
+  const [, , promptGoogleAsync] = Google.useAuthRequest({
+    iosClientId: googleIosClientId || undefined,
+    webClientId: googleWebClientId || undefined,
+    responseType: ResponseType.IdToken,
+    scopes: ['openid', 'email', 'profile'],
+  });
+
+  const signInWithApple = async () => {
+    if (Platform.OS !== 'ios' || !(await AppleAuthentication.isAvailableAsync())) {
+      Alert.alert(t('Apple غير متاح', 'Apple unavailable'), t('يتطلب هذا الخيار جهاز iPhone متوافقًا.', 'This option requires a compatible iPhone.'));
+      return;
+    }
+    setSocialBusy('apple');
+    try {
+      const bytes = await Crypto.getRandomBytesAsync(32);
+      const rawNonce = Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce, { encoding: Crypto.CryptoEncoding.HEX });
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL, AppleAuthentication.AppleAuthenticationScope.FULL_NAME],
+        nonce: hashedNonce,
+      });
+      if (!credential.identityToken) throw new Error('APPLE_IDENTITY_TOKEN_MISSING');
+      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName].filter(Boolean).join(' ').trim();
+      await onAuthenticated(await api.providerLogin('apple', credential.identityToken, { nonce: rawNonce, fullName }));
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'ERR_REQUEST_CANCELED') Alert.alert(t('تعذر الدخول عبر Apple', 'Apple sign-in failed'), String((error as Error)?.message || 'APPLE_AUTH_FAILED'));
+    } finally { setSocialBusy(null); }
+  };
+
+  const signInWithGoogle = async () => {
+    if (!googleIosClientId) {
+      Alert.alert(t('إعداد Google غير مكتمل', 'Google setup incomplete'), t('يجب إضافة Google iOS Client ID إلى إعدادات البناء أولًا.', 'Add the Google iOS Client ID to the build configuration first.'));
+      return;
+    }
+    setSocialBusy('google');
+    try {
+      const result = await promptGoogleAsync();
+      if (result.type !== 'success') return;
+      const idToken = String(result.params?.id_token || '').trim();
+      if (!idToken) throw new Error('GOOGLE_IDENTITY_TOKEN_MISSING');
+      await onAuthenticated(await api.providerLogin('google', idToken));
+    } catch (error) {
+      Alert.alert(t('تعذر الدخول عبر Google', 'Google sign-in failed'), String((error as Error)?.message || 'GOOGLE_AUTH_FAILED'));
+    } finally { setSocialBusy(null); }
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -92,8 +146,12 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
     <View style={styles.authTabs}><Pressable onPress={() => setMode('login')} style={[styles.authTab, mode === 'login' && styles.authTabActive]}><Text style={mode === 'login' ? styles.authTabTextActive : styles.authTabText}>{t('تسجيل الدخول', 'Sign in')}</Text></Pressable><Pressable onPress={() => setMode('signup')} style={[styles.authTab, mode === 'signup' && styles.authTabActive]}><Text style={mode === 'signup' ? styles.authTabTextActive : styles.authTabText}>{t('إنشاء حساب', 'Create account')}</Text></Pressable></View>
     <TextInput accessibilityLabel={t('البريد الإلكتروني', 'Email')} autoCapitalize="none" keyboardType="email-address" returnKeyType="next" value={email} onChangeText={setEmail} placeholder={t('البريد الإلكتروني', 'Email')} placeholderTextColor="#8A8D98" style={styles.input} />
     <TextInput accessibilityLabel={t('كلمة المرور', 'Password')} secureTextEntry returnKeyType="done" value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} placeholder={t('كلمة المرور', 'Password')} placeholderTextColor="#8A8D98" style={styles.input} />
-    <ActionButton disabled={busy || recovering || !email || !password} title={busy ? t('جارٍ التنفيذ…', 'Working…') : mode === 'login' ? t('دخول إلى متجري', 'Enter my store') : t('إنشاء حساب المتجر', 'Create store account')} onPress={() => void submit()} />
-    {mode === 'login' ? <Pressable accessibilityRole="button" accessibilityLabel={t('نسيت كلمة المرور؟', 'Forgot password?')} hitSlop={8} disabled={recovering || busy} onPress={() => void recoverPassword()}><Text style={styles.link}>{recovering ? t('جارٍ إرسال رابط الاستعادة…', 'Sending recovery link…') : t('نسيت كلمة المرور؟', 'Forgot password?')}</Text></Pressable> : null}
+    <ActionButton disabled={busy || recovering || socialBusy !== null || !email || !password} title={busy ? t('جارٍ التنفيذ…', 'Working…') : mode === 'login' ? t('دخول إلى متجري', 'Enter my store') : t('إنشاء حساب المتجر', 'Create store account')} onPress={() => void submit()} />
+    {mode === 'login' ? <View style={styles.socialActions}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('الدخول عبر Apple', 'Continue with Apple')} disabled={busy || recovering || socialBusy !== null} onPress={() => void signInWithApple()} style={({ pressed }) => [styles.socialButton, styles.appleButton, pressed && styles.pressed, socialBusy === 'apple' && styles.disabled]}><Text style={styles.appleButtonText}>{socialBusy === 'apple' ? t('جارٍ الدخول…', 'Signing in…') : t(' الدخول عبر Apple', ' Continue with Apple')}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('الدخول عبر Google', 'Continue with Google')} disabled={busy || recovering || socialBusy !== null} onPress={() => void signInWithGoogle()} style={({ pressed }) => [styles.socialButton, pressed && styles.pressed, socialBusy === 'google' && styles.disabled]}><Text style={styles.googleButtonText}>{socialBusy === 'google' ? t('جارٍ الدخول…', 'Signing in…') : t('G الدخول عبر Google', 'G Continue with Google')}</Text></Pressable>
+    </View> : null}
+    {mode === 'login' ? <Pressable accessibilityRole="button" accessibilityLabel={t('نسيت كلمة المرور؟', 'Forgot password?')} hitSlop={8} disabled={recovering || busy || socialBusy !== null} onPress={() => void recoverPassword()}><Text style={styles.link}>{recovering ? t('جارٍ إرسال رابط الاستعادة…', 'Sending recovery link…') : t('نسيت كلمة المرور؟', 'Forgot password?')}</Text></Pressable> : null}
     <Text style={styles.secureNote}>{t('بيانات كل متجر معزولة ومحمية بصلاحيات الحساب.', 'Each store workspace is isolated and protected by account permissions.')}</Text>
   </KeyboardAvoidingView></SafeAreaView>;
 }
@@ -597,6 +655,11 @@ const styles = StyleSheet.create({
   buttonSecondary: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#B42318' },
   buttonText: { color: '#FFF', textAlign: 'center', fontWeight: '900' },
   buttonTextSecondary: { color: '#B42318' },
+  socialActions: { gap: 9, marginTop: 2 },
+  socialButton: { minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: '#DCE2EB', backgroundColor: '#FFF', justifyContent: 'center', paddingHorizontal: 14 },
+  appleButton: { backgroundColor: '#111827', borderColor: '#111827' },
+  appleButtonText: { color: '#FFF', textAlign: 'center', fontWeight: '900' },
+  googleButtonText: { color: '#202633', textAlign: 'center', fontWeight: '900' },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.78 },
   link: { textAlign: 'center', textDecorationLine: 'underline', paddingVertical: 7, color: '#2563EB', fontWeight: '700' },

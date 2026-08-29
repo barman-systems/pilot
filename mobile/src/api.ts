@@ -48,6 +48,17 @@ export async function requestPasswordRecovery(email: string): Promise<void> {
   await post('/api/mobile/auth/forgot-password', { email });
 }
 
+export async function providerLogin(provider: 'apple' | 'google', idToken: string, options: { accessToken?: string; nonce?: string; fullName?: string } = {}): Promise<DabbirSession> {
+  const payload = await post('/api/mobile/auth/provider', {
+    provider,
+    id_token: idToken,
+    ...(options.accessToken ? { access_token: options.accessToken } : {}),
+    ...(options.nonce ? { nonce: options.nonce } : {}),
+    ...(options.fullName ? { full_name: options.fullName } : {}),
+  });
+  return payload.session as DabbirSession;
+}
+
 export async function refresh(refreshToken: string): Promise<DabbirSession> {
   const payload = await post('/api/mobile/auth/refresh', { refresh_token: refreshToken });
   return payload.session as DabbirSession;
