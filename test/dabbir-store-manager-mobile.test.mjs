@@ -227,3 +227,22 @@ test('owner operations separates cashier actions from configuration actions', ()
   assert.match(migration, /manage_store_operations/);
   assert.match(migration, /dabbir_owner_update_order_status/);
 });
+
+
+test('native interaction follows accessible touch and keyboard best practices', () => {
+  const source = read('mobile/App.tsx');
+  assert.match(source, /hitSlop=\{8\}/);
+  assert.match(source, /accessibilityRole="tablist"/);
+  assert.match(source, /accessibilityState=\{\{ selected: language === 'ar' \}\}/);
+  assert.match(source, /keyboardShouldPersistTaps="handled"/);
+  assert.match(source, /returnKeyType="done"/);
+  assert.match(source, /onSubmitEditing=\{\(\) => void submit\(\)\}/);
+});
+
+
+test('native UI labels contextual actions for VoiceOver and preserves a visible retry path', () => {
+  const source = read('mobile/App.tsx');
+  assert.match(source, /accessibilityLabel=\{t\('إدارة المخزون الآن', 'Manage inventory now'\)\}/);
+  assert.match(source, /accessibilityLabel=\{t\('نسيت كلمة المرور؟', 'Forgot password\?'\)\}/);
+  assert.match(source, /title=\{t\('إعادة المحاولة', 'Try again'\)\}/);
+});
