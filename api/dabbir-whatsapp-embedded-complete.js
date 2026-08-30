@@ -63,6 +63,7 @@ function oauthRedirectUriFromRequest(req) {
       const localDevelopment = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
       if (url.protocol !== 'https:' && !(localDevelopment && url.protocol === 'http:')) continue;
       if (requestOrigin && url.origin !== requestOrigin) continue;
+      url.search = '';
       url.hash = '';
       return url.toString();
     } catch {
