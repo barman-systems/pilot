@@ -8,7 +8,10 @@ const read = path => readFile(new URL(path, root), 'utf8');
 test('DABBIR keeps non-secret Meta App and Embedded Signup IDs in one public registry', async () => {
   const registry = await read('api/_dabbir-meta-public-config.js');
   assert.match(registry, /1876008666699823/);
+  assert.match(registry, /1558897885963511/);
   assert.match(registry, /1984552462260787/);
+  assert.match(registry, /DABBIR_STALE_WHATSAPP_EMBEDDED_CONFIG_IDS/);
+  assert.match(registry, /useRegistryConfigId/);
   assert.match(registry, /dabbir_platform_registry/);
   assert.doesNotMatch(registry, /APP_SECRET|access_token|Bearer\s/i);
 });
