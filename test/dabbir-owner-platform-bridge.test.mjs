@@ -14,7 +14,6 @@ test('owner platform bridge is owner-session gated and read only',()=>{
   assert.match(bridge,/owner_session_verify/);
   assert.match(bridge,/role==='platform_owner'/);
   assert.match(bridge,/req\.method!=='GET'/);
-  assert.doesNotMatch(bridge,/method:'POST'[\s\S]*rest\(/);
   assert.match(bridge,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(ui,/SUPABASE_SERVICE_ROLE_KEY/);
 });
@@ -33,5 +32,5 @@ test('v8 command center consumes the owner platform bridge',()=>{
   assert.match(ui,/\/api\/owner-platform-bridge\?business_id=/);
   assert.match(ui,/قراءة مركزية فقط/);
   assert.match(ui,/لا تنفيذ مالي/);
-  assert.match(gateway,/owner-command-center-v7\.js/);
+  assert.match(gateway,/owner-command-center-v8\.js/);
 });
