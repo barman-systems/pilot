@@ -31,6 +31,12 @@ function whatsapp(rows){
   const status=String(w.status||'unknown');
   return {configured:true,connected:['connected','operational','verified','live'].includes(status.toLowerCase()),status,display_phone_number:w.display_phone_number||null,verified_name:w.verified_name||null,connected_at:w.connected_at||null,last_verified_at:w.last_verified_at||null,last_provider_status:w.last_provider_status||null,last_error:w.last_error?String(w.last_error).slice(0,240):null};
 }
+function operations(products,inventory,orders){
+  const stock=new Map(inventory.map(x=>[x.product_id,x]));
+  const productRows=products.map(p=>{const s=stock.get(p.id)||{};const quantity=num(s.quantity),reserved=num(s.reserved);return {id:p.id,sku:p.sku||null,name:p.name||'—',price_aed:num(p.price_aed),active:p.active!==false,quantity,reserved,available:Math.max(0,quantity-reserved)}});
+  const realOrders=orders.filter(o=>o.simulated===false).map(o=>({id:o.id,status:o.status||'unknown',total_aed:num(o.total_aed),created_at:o.created_at||null}));
+  return {metrics:{active_products:productRows.filter(p=>p.active).length,inventory_units:productRows.reduce((s,p)=>s+p.quantity,0),low_stock_products:productRows.filter(p=>p.active&&p.available<=5).length,recognized_sales_aed:realOrders.filter(o=>['paid','completed','fulfilled','delivered'].includes(String(o.status).toLowerCase())).reduce((s,o)=>s+o.total_aed,0)},products:productRows,orders:realOrders};
+}
 function priorities(products,inventory,orders,channels){
   const stock=new Map(inventory.map(x=>[x.product_id,x]));
   const items=[];
@@ -54,11 +60,11 @@ export default async function handler(req,res){
     const [billingRows,waRows,products,inventory,orders,channels]=await Promise.all([
       rest(`dabbir_billing_accounts?select=business_id,status,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,key),
       rest(`dabbir_whatsapp_connections?select=business_id,status,display_phone_number,verified_name,connected_at,last_verified_at,last_provider_status,last_error&business_id=eq.${businessId}&limit=1`,key),
-      rest(`dabbir_products?select=id,name,active&business_id=eq.${businessId}&limit=200`,key),
+      rest(`dabbir_products?select=id,sku,name,price_aed,active&business_id=eq.${businessId}&order=name.asc&limit=200`,key),
       rest(`dabbir_inventory?select=product_id,quantity,reserved&business_id=eq.${businessId}&limit=200`,key),
       rest(`dabbir_orders?select=id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,key),
       rest(`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&limit=50`,key),
     ]);
-    return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_read_only',billing:billing(billingRows),whatsapp:whatsapp(waRows),priorities:priorities(products,inventory,orders,channels),checked_at:new Date().toISOString()});
+    return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_read_only',billing:billing(billingRows),whatsapp:whatsapp(waRows),operations:operations(products,inventory,orders),priorities:priorities(products,inventory,orders,channels),checked_at:new Date().toISOString()});
   }catch(error){return json(res,Number(error?.status||503)>=500?503:Number(error?.status||500),{ok:false,error:'OWNER_BRIDGE_FAILED'});}
 }
