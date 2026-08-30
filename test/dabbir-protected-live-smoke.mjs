@@ -158,7 +158,7 @@ try {
     assert(await logo.count() === 1, `AUTH_APPROVED_LOGO_COUNT_${await logo.count()}`);
     await logo.waitFor({ state: 'visible', timeout: 10_000 });
     const logoBg = await logo.evaluate(element => getComputedStyle(element).backgroundImage);
-    assert(String(logoBg).includes('dabbir-approved-icon'), 'AUTH_APPROVED_LOGO_NOT_RENDERED');
+    assert(String(logoBg).includes('dabbir-app-icon'), 'AUTH_APPROVED_LOGO_NOT_RENDERED');
 
     assert(pageErrors.length === 0, `PAGE_ERRORS:${pageErrors.join(' | ')}`);
     assert(consoleErrors.length === 0, `CONSOLE_ERRORS:${consoleErrors.slice(0, 8).join(' | ')}`);
