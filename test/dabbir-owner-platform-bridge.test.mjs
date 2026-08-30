@@ -3,20 +3,22 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [bridge,actionBridge,ui10,ui11,ui12,ui13,gateway,migration,searchMigration]=await Promise.all([
+const [bridge,actionBridge,supportBridge,teamBridge,copilot,logout,ui14,gateway,migration,searchMigration,supportMigration]=await Promise.all([
   read('api/owner-platform-bridge.js'),
   read('api/owner-action-bridge.js'),
-  read('api/owner-command-center-v10.js'),
-  read('api/owner-command-center-v11.js'),
-  read('api/owner-command-center-v12.js'),
-  read('api/owner-command-center-v13.js'),
+  read('api/owner-support-bridge.js'),
+  read('api/owner-team-bridge.js'),
+  read('api/owner-platform-copilot.js'),
+  read('api/auth/owner-logout.js'),
+  read('api/owner-command-center-v14.js'),
   read('api/owner-dashboard-gateway.js'),
   read('supabase/migrations/20260830102000_dabbir_platform_owner_action_bridge_v2.sql'),
   read('supabase/migrations/20260827155045_dabbir_platform_customer_search_escape_fix_v3.sql'),
+  read('supabase/migrations/20260830112000_dabbir_platform_owner_support_summary_v1.sql'),
 ]);
 
 test('owner platform read bridge stays owner-session gated and read only',()=>{
-  assert.match(bridge,/__Host-dabbir_owner_session/);assert.match(bridge,/owner_session_verify/);assert.match(bridge,/role==='platform_owner'/);assert.match(bridge,/req\.method!=='GET'/);assert.doesNotMatch(ui13,/SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(bridge,/__Host-dabbir_owner_session/);assert.match(bridge,/owner_session_verify/);assert.match(bridge,/role==='platform_owner'/);assert.match(bridge,/req\.method!=='GET'/);assert.doesNotMatch(ui14,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(bridge,/operations:operations\(products,inventory,orders\)/);assert.match(bridge,/sku,name,price_aed,active/);assert.match(bridge,/inventory_units/);assert.match(bridge,/recognized_sales_aed/);
 });
 
@@ -30,16 +32,32 @@ test('database action function is service-role only and audited atomically',()=>
   assert.match(migration,/security definer/);assert.match(migration,/revoke all on function public\.dabbir_platform_owner_action_v1[\s\S]*public,anon,authenticated/);assert.match(migration,/grant execute[\s\S]*service_role/);assert.match(migration,/dabbir_platform_owner_audit/);assert.match(migration,/for update/);assert.match(migration,/ORDER_NOT_CANCELLABLE/);assert.match(migration,/platform_customer_support_notes/);assert.doesNotMatch(migration,/stripe|refund|create_expense|set_member_role/);
 });
 
-test('v11 inherits v10 audited controls and repairs customer result contract',()=>{
-  for(const action of ['set_service_active','support_create_case','support_add_note','support_set_status'])assert.match(ui10,new RegExp(action));
-  assert.match(ui11,/owner-command-center-v10\.js/);assert.match(ui11,/Array\.isArray\(p\.accounts\)/);assert.match(ui11,/customer_no/);assert.match(ui11,/businesses/);assert.match(ui11,/data-biz/);assert.match(ui11,/owner-dashboard-data\?action=search/);
+test('customer search contract remains accounts plus businesses',()=>{
   assert.match(searchMigration,/jsonb_build_object\('accounts',v_result,'count',v_count\)/);
+  assert.match(ui14,/Array\.isArray\(j\.accounts\)/);assert.match(ui14,/Array\.isArray\(x\.businesses\)/);assert.match(ui14,/DAB/);
 });
 
-test('v12 removes business-owner auth dependency from owner operations view',()=>{
-  assert.match(ui12,/owner-command-center-v11\.js/);assert.match(ui12,/owner-platform-bridge\?business_id/);assert.match(ui12,/j\.operations/);assert.match(ui12,/تم تحميل النشاط من جلسة المالك بنجاح/);assert.doesNotMatch(ui12,/\/api\/owner-operations\?business_id/);
+test('unified v14 has no legacy iframe or owner-business auth dependency',()=>{
+  assert.match(ui14,/x-dabbir-owner-command-center','v14-unified/);
+  for(const hash of ['home','customers','operations','ai','governance','system'])assert.match(ui14,new RegExp(`id=\\"${hash}\\"`));
+  assert.match(ui14,/owner-platform-bridge\?business_id/);assert.match(ui14,/owner-support-bridge\?customer_no/);assert.match(ui14,/owner-team-bridge\?business_id/);assert.match(ui14,/owner-platform-copilot/);assert.match(ui14,/owner-action-bridge/);
+  assert.doesNotMatch(ui14,/<iframe/);assert.doesNotMatch(ui14,/\/api\/owner-operations\?business_id/);assert.doesNotMatch(ui14,/\/api\/owner-copilot\b/);
+  assert.match(gateway,/owner-command-center-v14\.js/);
 });
 
-test('v13 resolves customer DAB references before operations loading',()=>{
-  assert.match(ui13,/owner-command-center-v12\.js/);assert.match(ui13,/رقم DAB أو Business ID/);assert.match(ui13,/owner-dashboard-data\?action=search/);assert.match(ui13,/Array\.isArray\(a\.businesses\)/);assert.match(ui13,/previousLoad/);assert.match(ui13,/أكثر من نشاط/);assert.match(gateway,/owner-command-center-v13\.js/);
+test('owner support read bridge is OTP owner-session gated and service-role RPC only',()=>{
+  assert.match(supportBridge,/__Host-dabbir_owner_session/);assert.match(supportBridge,/owner_session_verify/);assert.match(supportBridge,/role==='platform_owner'/);assert.match(supportBridge,/dabbir_platform_owner_support_summary_v1/);assert.match(supportBridge,/req\.method!=='GET'/);
+  assert.match(supportMigration,/security definer/);assert.match(supportMigration,/revoke all on function public\.dabbir_platform_owner_support_summary_v1\(text\) from public,anon,authenticated/);assert.match(supportMigration,/grant execute[\s\S]*service_role/);
+});
+
+test('owner team bridge is read-only and never mutates membership',()=>{
+  assert.match(teamBridge,/req\.method!=='GET'/);assert.match(teamBridge,/owner_session_verify/);assert.match(teamBridge,/dabbir_memberships\?select=/);assert.match(teamBridge,/dabbir_employee_invitations\?select=/);assert.doesNotMatch(teamBridge,/method:'PATCH'|method:'POST'|set_member_role|remove/);
+});
+
+test('owner copilot is same-origin, owner-session gated and grounded on server data',()=>{
+  assert.match(copilot,/requireSameOrigin/);assert.match(copilot,/owner_session_verify/);assert.match(copilot,/generateDABBIRAiReply/);assert.match(copilot,/DETERMINISTIC_VERIFIED_FALLBACK/);assert.match(copilot,/FREE_TIER_ONLY/);assert.doesNotMatch(ui14,/AI_GATEWAY_API_KEY|GROQ_API_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test('owner logout clears only the owner session cookie through same-origin POST',()=>{
+  assert.match(logout,/requireSameOrigin/);assert.match(logout,/req\.method!=='POST'/);assert.match(logout,/__Host-dabbir_owner_session/);assert.match(logout,/Max-Age=0/);
 });
