@@ -40,7 +40,7 @@ function metaProviderError(payload, response, fallback) {
   return error;
 }
 
-function oauthRedirectUriFromRequest(req) {
+function requestPageRedirectUri(req) {
   const header = name => {
     const value = req?.headers?.[name] ?? req?.headers?.[name.toLowerCase()];
     return Array.isArray(value) ? String(value[0] || '').trim() : String(value || '').trim();
@@ -75,6 +75,10 @@ function oauthRedirectUriFromRequest(req) {
   throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
 }
 
+function oauthRedirectUriFromRequest(req) {
+  return requestPageRedirectUri(req);
+}
+
 function normalizedHost(value) {
   const text = String(value || '').trim();
   if (!text) return '';
@@ -105,6 +109,14 @@ function isMetaAppDomainError(error) {
   return Number(error?.providerCode || 0) === 191
     || message.includes("domain of this url isn't included")
     || message.includes('app domains field');
+}
+
+function isRedirectMismatchError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return Number(error?.providerSubcode || 0) === 36008
+    || message.includes('redirect_uri is identical')
+    || message.includes('redirect_uri is not identical')
+    || message.includes('redirect_uri');
 }
 
 async function readMetaAppDomains(platform) {
@@ -188,6 +200,7 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
   url.searchParams.set('client_id', platform.appId);
   url.searchParams.set('client_secret', platform.appSecret);
   url.searchParams.set('code', String(code));
+  url.searchParams.set('grant_type', 'authorization_code');
   url.searchParams.set('redirect_uri', redirectUri);
 
   const controller = new AbortController();
@@ -207,21 +220,59 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
   }
 }
 
+function sdkRedirectCandidates(requestRedirectUri) {
+  const values = [
+    'https://www.facebook.com/connect/login_success.html',
+    'https://www.facebook.com/connect/login_success.html?display=popup',
+    String(requestRedirectUri || '').trim(),
+  ];
+  try {
+    const page = new URL(String(requestRedirectUri || ''));
+    values.push(`${page.origin}/`);
+  } catch {
+    // Ignore malformed optional fallback.
+  }
+  return [...new Set(values.filter(Boolean))];
+}
+
 async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri) {
+  let lastRedirectError = null;
+  for (const candidate of sdkRedirectCandidates(redirectUri)) {
+    try {
+      return {
+        exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
+        domainRepairAttempted: false,
+        domainRepairChanged: false,
+        redirectFallbackUsed: candidate !== redirectUri,
+      };
+    } catch (error) {
+      if (isMetaAppDomainError(error) && candidate === redirectUri) {
+        const repair = await ensureMetaAppDomain(platform, redirectUri);
+        return {
+          exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
+          domainRepairAttempted: true,
+          domainRepairChanged: Boolean(repair.changed),
+          redirectFallbackUsed: false,
+        };
+      }
+      if (isRedirectMismatchError(error)) {
+        lastRedirectError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
   try {
     return {
-      exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
+      exchange: await exchangeEmbeddedCode(platform, code),
       domainRepairAttempted: false,
       domainRepairChanged: false,
+      redirectFallbackUsed: true,
     };
   } catch (error) {
-    if (!isMetaAppDomainError(error)) throw error;
-    const repair = await ensureMetaAppDomain(platform, redirectUri);
-    return {
-      exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
-      domainRepairAttempted: true,
-      domainRepairChanged: Boolean(repair.changed),
-    };
+    if (lastRedirectError && isRedirectMismatchError(error)) throw lastRedirectError;
+    throw error;
   }
 }
 
@@ -374,6 +425,7 @@ export default async function handler(req, res) {
       waba_source: cleanId(body?.waba_id) ? 'embedded_session' : 'debug_token',
       meta_app_domain_repair_attempted: Boolean(exchangeResult.domainRepairAttempted),
       meta_app_domain_repaired: Boolean(exchangeResult.domainRepairChanged),
+      meta_sdk_redirect_fallback_used: Boolean(exchangeResult.redirectFallbackUsed),
       secrets_exposed: false,
     });
   } catch (error) {
