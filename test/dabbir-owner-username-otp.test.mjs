@@ -27,6 +27,8 @@ test('owner login UI never asks for email or password', async () => {
   assert.match(source, /inputmode="numeric"/);
   assert.match(source, /\/api\/auth\/owner-otp/);
   assert.match(source, /location\.replace\('\/owner-dashboard'\)/);
+  assert.match(source, /OWNER_OTP_NOT_CONFIGURED/);
+  assert.match(source, /خدمة OTP غير مهيأة في هذه المعاينة/);
   assert.doesNotMatch(source, /type="email"/);
   assert.doesNotMatch(source, /type="password"/);
   assert.doesNotMatch(source, /\/api\/auth\/login/);
