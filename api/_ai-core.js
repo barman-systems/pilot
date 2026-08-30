@@ -1,11 +1,24 @@
+const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
 export function getDABBIRAiConfig(env = process.env) {
+  if (env.GEMINI_API_KEY) {
+    return {
+      provider: 'google-gemini',
+      endpoint: GEMINI_ENDPOINT,
+      model: String(env.DABBIR_GEMINI_MODEL || DEFAULT_GEMINI_MODEL),
+      configured: true,
+      auth_mode: 'API_KEY',
+      cost_mode: 'FREE_TIER_ONLY',
+    };
+  }
+
   if (env.GROQ_API_KEY) {
     return {
       provider: 'groq',
@@ -224,12 +237,83 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   if (!input) return { ok: false, state: 'REJECTED', error: 'message_required' };
 
   const config = getDABBIRAiConfig(env);
+  const geminiKey = String(env.GEMINI_API_KEY || '');
   const groqKey = String(env.GROQ_API_KEY || '');
   const messages = [
     { role: 'system', content: systemPrompt(normalizedProject, language, businessContext) },
     ...normalizeHistory(history),
     { role: 'user', content: input },
   ];
+
+  if (geminiKey) {
+    try {
+      const { response, payload } = await callOpenAiCompatible({
+        endpoint: GEMINI_ENDPOINT,
+        credential: geminiKey,
+        model: config.model,
+        messages,
+        fetchImpl,
+        timeoutMs: 5000,
+      });
+      if (response.ok) {
+        return finalizeReply({
+          reply: String(payload?.choices?.[0]?.message?.content || '').trim(),
+          input,
+          language,
+          config,
+          model: String(payload?.model || config.model),
+        });
+      }
+
+      if (groqKey || env.VERCEL_ENV) {
+        const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({
+          project: normalizedProject,
+          message: input,
+          language,
+          businessContext,
+          history,
+          env: fallbackEnv,
+          fetchImpl,
+          oidcGetter,
+        });
+      }
+
+      return {
+        ok: false,
+        state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR',
+        error: `gemini_http_${response.status}`,
+        provider: config.provider,
+        model: config.model,
+        auth_mode: config.auth_mode,
+        cost_mode: config.cost_mode,
+      };
+    } catch (error) {
+      if (groqKey || env.VERCEL_ENV) {
+        const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({
+          project: normalizedProject,
+          message: input,
+          language,
+          businessContext,
+          history,
+          env: fallbackEnv,
+          fetchImpl,
+          oidcGetter,
+        });
+      }
+
+      return {
+        ok: false,
+        state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR',
+        error: error?.name === 'AbortError' ? 'gemini_timeout' : 'gemini_network_error',
+        provider: config.provider,
+        model: config.model,
+        auth_mode: config.auth_mode,
+        cost_mode: config.cost_mode,
+      };
+    }
+  }
 
   if (!groqKey && env.VERCEL_ENV) {
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
