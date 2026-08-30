@@ -35,3 +35,13 @@ test('main HTML recovery handler applies security headers', () => {
     assert.match(source, new RegExp(`['"]${header}['"]`));
   }
 });
+
+test('public auth onboarding explains password requirements and legal links', () => {
+  const html = read('index.html');
+  assert.match(html, /id="authHint"/);
+  assert.match(html, /href="\/privacy"/);
+  assert.match(html, /href="\/terms"/);
+  assert.match(html, /href="\/support"/);
+  assert.match(html, /passwordHintSignup/);
+  assert.match(html, /aria-selected/);
+});
