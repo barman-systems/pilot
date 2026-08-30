@@ -221,38 +221,64 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
 }
 
 function sdkRedirectCandidates(requestRedirectUri) {
-  const values = [
-    'https://www.facebook.com/connect/login_success.html',
-    'https://www.facebook.com/connect/login_success.html?display=popup',
-    String(requestRedirectUri || '').trim(),
-  ];
+  const values = [String(requestRedirectUri || '').trim()];
   try {
     const page = new URL(String(requestRedirectUri || ''));
     values.push(`${page.origin}/`);
   } catch {
     // Ignore malformed optional fallback.
   }
+  values.push(
+    'https://www.facebook.com/connect/login_success.html',
+    'https://www.facebook.com/connect/login_success.html?display=popup',
+  );
   return [...new Set(values.filter(Boolean))];
 }
 
+function safeCandidateHost(candidate) {
+  try {
+    return new URL(String(candidate || '')).hostname;
+  } catch {
+    return 'invalid';
+  }
+}
+
 async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri) {
+  const appHost = normalizedHost(redirectUri);
+  let domainRepairAttempted = false;
+  let domainRepairChanged = false;
   let lastRedirectError = null;
+  let lastAppDomainError = null;
+
   for (const candidate of sdkRedirectCandidates(redirectUri)) {
+    const candidateIsAppDomain = normalizedHost(candidate) === appHost;
     try {
       return {
         exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
-        domainRepairAttempted: false,
-        domainRepairChanged: false,
+        domainRepairAttempted,
+        domainRepairChanged,
         redirectFallbackUsed: candidate !== redirectUri,
       };
     } catch (error) {
       if (isMetaAppDomainError(error)) {
+        if (!candidateIsAppDomain) {
+          console.warn('dabbir_whatsapp_redirect_candidate_skipped', {
+            reason: 'provider_domain_rejection',
+            candidate_host: safeCandidateHost(candidate),
+            provider_code: error?.providerCode || null,
+          });
+          continue;
+        }
+
+        lastAppDomainError = error;
+        domainRepairAttempted = true;
         const repair = await ensureMetaAppDomain(platform, redirectUri);
+        domainRepairChanged = domainRepairChanged || Boolean(repair.changed);
         try {
           return {
             exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
-            domainRepairAttempted: true,
-            domainRepairChanged: Boolean(repair.changed),
+            domainRepairAttempted,
+            domainRepairChanged,
             redirectFallbackUsed: candidate !== redirectUri,
           };
         } catch (retryError) {
@@ -260,9 +286,14 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
             lastRedirectError = retryError;
             continue;
           }
+          if (isMetaAppDomainError(retryError)) {
+            lastAppDomainError = retryError;
+            continue;
+          }
           throw retryError;
         }
       }
+
       if (isRedirectMismatchError(error)) {
         lastRedirectError = error;
         continue;
@@ -274,12 +305,13 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
   try {
     return {
       exchange: await exchangeEmbeddedCode(platform, code),
-      domainRepairAttempted: false,
-      domainRepairChanged: false,
+      domainRepairAttempted,
+      domainRepairChanged,
       redirectFallbackUsed: true,
     };
   } catch (error) {
-    if (lastRedirectError && isRedirectMismatchError(error)) throw lastRedirectError;
+    if (isRedirectMismatchError(error) && lastRedirectError) throw lastRedirectError;
+    if (lastAppDomainError && isMetaAppDomainError(error)) throw lastAppDomainError;
     throw error;
   }
 }
@@ -378,9 +410,8 @@ export default async function handler(req, res) {
     const redirectUri = oauthRedirectUriFromRequest(req);
     const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri);
     const exchanged = exchangeResult.exchange;
-    if (!wabaId) {
-      wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
-    }
+
+    if (!wabaId) wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
     if (!wabaId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_WABA_REQUIRED' });
 
     if (!phoneNumberId && onboardingMode === 'whatsapp_business_app_onboarding') {
@@ -438,6 +469,12 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     const status = Number(error?.status || 500);
+    console.warn('dabbir_whatsapp_embedded_complete_failed', {
+      error: String(error?.message || 'WHATSAPP_EMBEDDED_SIGNUP_FAILED').slice(0, 180),
+      provider_status: error?.providerStatus || null,
+      provider_code: error?.providerCode || null,
+      provider_subcode: error?.providerSubcode || null,
+    });
     return json(res, status, {
       ok: false,
       error: String(error?.message || 'WHATSAPP_EMBEDDED_SIGNUP_FAILED').slice(0, 300),
