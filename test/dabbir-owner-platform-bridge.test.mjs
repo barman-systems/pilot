@@ -3,19 +3,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [bridge,actionBridge,ui10,ui11,ui12,gateway,migration,searchMigration]=await Promise.all([
+const [bridge,actionBridge,ui10,ui11,ui12,ui13,gateway,migration,searchMigration]=await Promise.all([
   read('api/owner-platform-bridge.js'),
   read('api/owner-action-bridge.js'),
   read('api/owner-command-center-v10.js'),
   read('api/owner-command-center-v11.js'),
   read('api/owner-command-center-v12.js'),
+  read('api/owner-command-center-v13.js'),
   read('api/owner-dashboard-gateway.js'),
   read('supabase/migrations/20260830102000_dabbir_platform_owner_action_bridge_v2.sql'),
   read('supabase/migrations/20260827155045_dabbir_platform_customer_search_escape_fix_v3.sql'),
 ]);
 
 test('owner platform read bridge stays owner-session gated and read only',()=>{
-  assert.match(bridge,/__Host-dabbir_owner_session/);assert.match(bridge,/owner_session_verify/);assert.match(bridge,/role==='platform_owner'/);assert.match(bridge,/req\.method!=='GET'/);assert.doesNotMatch(ui12,/SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(bridge,/__Host-dabbir_owner_session/);assert.match(bridge,/owner_session_verify/);assert.match(bridge,/role==='platform_owner'/);assert.match(bridge,/req\.method!=='GET'/);assert.doesNotMatch(ui13,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(bridge,/operations:operations\(products,inventory,orders\)/);assert.match(bridge,/sku,name,price_aed,active/);assert.match(bridge,/inventory_units/);assert.match(bridge,/recognized_sales_aed/);
 });
 
@@ -36,5 +37,9 @@ test('v11 inherits v10 audited controls and repairs customer result contract',()
 });
 
 test('v12 removes business-owner auth dependency from owner operations view',()=>{
-  assert.match(ui12,/owner-command-center-v11\.js/);assert.match(ui12,/owner-platform-bridge\?business_id/);assert.match(ui12,/j\.operations/);assert.match(ui12,/تم تحميل النشاط من جلسة المالك بنجاح/);assert.doesNotMatch(ui12,/\/api\/owner-operations\?business_id/);assert.match(gateway,/owner-command-center-v12\.js/);
+  assert.match(ui12,/owner-command-center-v11\.js/);assert.match(ui12,/owner-platform-bridge\?business_id/);assert.match(ui12,/j\.operations/);assert.match(ui12,/تم تحميل النشاط من جلسة المالك بنجاح/);assert.doesNotMatch(ui12,/\/api\/owner-operations\?business_id/);
+});
+
+test('v13 resolves customer DAB references before operations loading',()=>{
+  assert.match(ui13,/owner-command-center-v12\.js/);assert.match(ui13,/رقم DAB أو Business ID/);assert.match(ui13,/owner-dashboard-data\?action=search/);assert.match(ui13,/Array\.isArray\(a\.businesses\)/);assert.match(ui13,/previousLoad/);assert.match(ui13,/أكثر من نشاط/);assert.match(gateway,/owner-command-center-v13\.js/);
 });
