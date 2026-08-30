@@ -246,14 +246,22 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
         redirectFallbackUsed: candidate !== redirectUri,
       };
     } catch (error) {
-      if (isMetaAppDomainError(error) && candidate === redirectUri) {
+      if (isMetaAppDomainError(error)) {
         const repair = await ensureMetaAppDomain(platform, redirectUri);
-        return {
-          exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri),
-          domainRepairAttempted: true,
-          domainRepairChanged: Boolean(repair.changed),
-          redirectFallbackUsed: false,
-        };
+        try {
+          return {
+            exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
+            domainRepairAttempted: true,
+            domainRepairChanged: Boolean(repair.changed),
+            redirectFallbackUsed: candidate !== redirectUri,
+          };
+        } catch (retryError) {
+          if (isRedirectMismatchError(retryError)) {
+            lastRedirectError = retryError;
+            continue;
+          }
+          throw retryError;
+        }
       }
       if (isRedirectMismatchError(error)) {
         lastRedirectError = error;
