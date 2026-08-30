@@ -2,7 +2,7 @@ import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
 import { ownerBroker } from './_owner-broker-client.js';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTIONS=new Set(['set_inventory','set_product_active','cancel_pending_order','set_service_active','support_create_case','support_add_note','support_set_status','update_business_profile']);
+const ACTIONS=new Set(['set_inventory','set_product_active','cancel_pending_order','set_service_active','support_create_case','support_add_note','support_set_status','update_business_profile','update_customer_profile']);
 const OPTIONAL=new Set(['support_create_case']);
 const safe=v=>UUID.test(String(v||'').trim())?String(v).trim():null;
 export default async function handler(req,res){if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});if(req.method==='GET'){const businessId=safe(singleQueryValue(req,'business_id'));if(!businessId)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});const{status,payload}=await ownerBroker(req,'audit',{business_id:businessId});if(status===401)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});if(status!==200||!payload?.ok)return json(res,status>=500?503:status,{ok:false,error:payload?.error||'OWNER_AUDIT_FAILED'});return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_audited_actions',actions:[...ACTIONS],audit:Array.isArray(payload.audit)?payload.audit:[]})}
