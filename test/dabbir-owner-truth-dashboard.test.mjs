@@ -29,28 +29,23 @@ test('platform admin API exposes authenticated owner overview action',()=>{
   assert.match(api,/adminContext\(req,res\)/);
 });
 
-test('owner dashboard renders truth-first labels and no raw totals as Live',()=>{
+test('legacy platform owner page contains no independent password login',()=>{
   const src=read('api/platform-owner-dashboard.js');
-  assert.match(src,/Verified Live customers/);
-  assert.match(src,/QA customers excluded/);
-  assert.match(src,/verified_live_customers/);
-  assert.match(src,/qa_customers_excluded/);
-  assert.match(src,/no_verified_external_integration|UNVERIFIED/);
-  assert.doesNotMatch(src,/mLiveCustomers[^\n]*raw_customers/);
+  assert.match(src,/location','\/owner-dashboard/);
+  assert.match(src,/x-dabbir-legacy-owner-dashboard/);
+  assert.doesNotMatch(src,/type="password"|api\/auth\/login|Platform Admin/);
 });
 
-test('owner dashboard endpoint returns secure no-store HTML',()=>{
+test('legacy owner endpoint redirects to canonical owner dashboard',()=>{
   const headers={};
   let body='';
   const res={statusCode:0,setHeader(k,v){headers[String(k).toLowerCase()]=v},end(v=''){body=String(v)}};
   ownerDashboard({method:'GET'},res);
-  assert.equal(res.statusCode,200);
-  assert.match(headers['content-type'],/text\/html/);
-  assert.equal(headers['cache-control'],'no-store');
-  assert.equal(headers['x-frame-options'],'DENY');
-  assert.equal(headers['x-dabbir-owner-dashboard'],'truth-v1');
-  assert.match(body,/Owner Control Center/);
-  assert.match(body,/\/api\/platform-customers\?action=overview/);
+  assert.equal(res.statusCode,302);
+  assert.equal(headers.location,'/owner-dashboard');
+  assert.equal(headers['cache-control'],'no-store, max-age=0');
+  assert.equal(headers['x-dabbir-legacy-owner-dashboard'],'retired');
+  assert.match(body,/canonical owner dashboard/i);
 });
 
 test('OTP-native owner dashboard uses the owner session data contract without a second login',()=>{
