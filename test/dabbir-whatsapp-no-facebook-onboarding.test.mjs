@@ -22,7 +22,22 @@ test('DABBIR offers one-action Facebook creation and automatic WhatsApp resume',
   assert.match(guardUi,/window\.addEventListener\('focus'/);
   assert.match(guardUi,/visibilitychange/);
   assert.match(guardUi,/primary\.click\(\)/);
-  assert.match(guardUi,/meta-resume-v2/);
+});
+
+test('WhatsApp connect uses one exact manual OAuth redirect instead of the JS SDK hidden callback',()=>{
+  assert.match(guardUi,/META_OAUTH_PENDING_KEY/);
+  assert.match(guardUi,/https:\/\/dabbir\.bmalman\.com\//);
+  assert.match(guardUi,/dialog\/oauth/);
+  assert.match(guardUi,/redirect_uri/);
+  assert.match(guardUi,/response_type','code'/);
+  assert.match(guardUi,/override_default_response_type','true'/);
+  assert.match(guardUi,/config_id/);
+  assert.match(guardUi,/whatsapp_business_app_onboarding/);
+  assert.match(guardUi,/state/);
+  assert.match(guardUi,/manual_oauth_complete_start/);
+  assert.match(guardUi,/\/api\/dabbir-whatsapp-embedded-complete/);
+  assert.match(guardUi,/stopImmediatePropagation/);
+  assert.match(guardUi,/meta-direct-oauth-v1/);
 });
 
 test('the rejected skip-WhatsApp workaround is gone',()=>{
