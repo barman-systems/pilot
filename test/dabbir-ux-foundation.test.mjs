@@ -5,6 +5,7 @@ import test from 'node:test';
 const root = new URL('../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 const index = read('index.html');
+const shell = read('api/app-recovery.js');
 const recovery = read('api/auth/recovery-ui.js');
 const resend = read('api/auth/resend-verification.js');
 const activation = read('api/customer-activation-ui.js');
@@ -76,6 +77,9 @@ test('base shell exposes progressive onboarding, bounded API waits, modal focus 
   assert.match(index, /window\.__dabbirConfirm/);
   assert.match(index, /button:active:not\(:disabled\)/);
   assert.match(index, /prefers-reduced-motion:reduce/);
+  assert.match(shell, /const UI_BUNDLE_VERSION = '[^']+'/);
+  assert.match(shell, /dabbir-ui-critical\.js\?v=\$\{UI_BUNDLE_VERSION\}/);
+  assert.match(shell, /dabbir-ui-deferred\.js\?v=\$\{UI_BUNDLE_VERSION\}/);
 });
 
 test('workspace UX foundation covers discovery, empty states, preferences, feedback and first-run guidance', () => {

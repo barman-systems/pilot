@@ -10,6 +10,9 @@ const SECURITY_HEADERS = {
 
 // The source-module order remains explicit for architecture and regression tests.
 // Runtime delivery is now two static bundles: critical auth UI, then deferred workspace UI.
+// Change this release token whenever generated bundle behavior changes so browsers
+// can keep long-lived asset caching without serving a previous UI after deployment.
+const UI_BUNDLE_VERSION = '20260830-ux-v1';
 const UI_MODULE_ORDER = [
   '/api/brand-ui',
   '/api/dabbir-whatsapp-embedded-ui',
@@ -45,7 +48,7 @@ const UI_BUNDLE_LOADER = `<script>
     if(!window.__dabbirCriticalUiReady||window.__dabbirDeferredUiRequested)return;
     window.__dabbirDeferredUiRequested=true;
     const script=document.createElement('script');
-    script.src='/dabbir-ui-deferred.js';
+    script.src='/dabbir-ui-deferred.js?v=${UI_BUNDLE_VERSION}';
     script.async=false;
     script.dataset.dabbirDeferredUi='true';
     script.onload=()=>{window.__dabbirDeferredUiReady=true};
@@ -87,7 +90,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', '<script src="/dabbir-ui-critical.js"></script>\n' + UI_BUNDLE_LOADER + '\n</body>')
+        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + UI_BUNDLE_LOADER + '\n</body>')
         : body;
       return res.end(html);
     },
