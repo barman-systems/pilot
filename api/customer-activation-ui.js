@@ -210,6 +210,18 @@ const uxFoundation=String.raw`(()=>{
   }
 
   function announce(message){const el=q('#uxAnnouncer');if(el)el.textContent='';setTimeout(()=>{if(el)el.textContent=message||''},20)}
+  function uxStartKey(){return 'dabbir_ux_started_'+String(workspace?.business?.id||'workspace')}
+  function uxFirstValueKey(){return 'dabbir_ux_first_value_'+String(workspace?.business?.id||'workspace')}
+  function ensureUxStart(){if(!workspace?.business?.id)return;try{if(!localStorage.getItem(uxStartKey()))localStorage.setItem(uxStartKey(),String(Date.now()))}catch{}}
+  function trackUx(eventName,extra={}){
+    const businessId=workspace?.business?.id;if(!businessId)return;
+    const duration=Number.isInteger(extra.duration_ms)?extra.duration_ms:null;
+    const context={screen:String(typeof current!=='undefined'?current:''),language:document.documentElement.lang,viewport:innerWidth+'x'+innerHeight,release:'ux-foundation-v1'};
+    if(extra.item_type)context.item_type=String(extra.item_type);
+    fetch('/api/ux-events',{method:'POST',credentials:'same-origin',cache:'no-store',keepalive:true,headers:{'content-type':'application/json'},body:JSON.stringify({business_id:businessId,event_name:eventName,duration_ms:duration,context})}).catch(()=>{});
+    if(['conversation_created','appointment_created'].includes(eventName)){try{if(!localStorage.getItem(uxFirstValueKey())){const started=Number(localStorage.getItem(uxStartKey())||Date.now());localStorage.setItem(uxFirstValueKey(),'done');trackUx('workspace_first_value',{duration_ms:Math.max(0,Math.min(86400000,Date.now()-started))})}}catch{}}
+  }
+  window.__dabbirTrackUx=trackUx;
   function setBusy(active){q('#uxBusyBar')?.classList.toggle('show',Boolean(active));q('.main')?.setAttribute('aria-busy',String(Boolean(active)));if(active)announce(t().loading)}
   function showNetwork(online){const el=q('#uxNetwork');if(!el)return;el.textContent=online?t().online:t().offline;el.classList.toggle('online',online);el.classList.add('show');if(online)setTimeout(()=>el.classList.remove('show'),2400)}
   window.addEventListener('offline',()=>showNetwork(false));
@@ -235,7 +247,7 @@ const uxFoundation=String.raw`(()=>{
     button.innerHTML='<span>⌕</span><span id="uxSearchButtonText"></span><kbd>/</kbd>';
     actions.insertBefore(button,actions.firstChild);button.onclick=openSearch;
   }
-  function openSearch(){ensureBase();q('#uxSearch').classList.add('open');q('#uxSearchInput').value='';renderSearch('');setTimeout(()=>q('#uxSearchInput')?.focus(),0)}
+  function openSearch(){ensureBase();q('#uxSearch').classList.add('open');q('#uxSearchInput').value='';renderSearch('');trackUx('search_opened');setTimeout(()=>q('#uxSearchInput')?.focus(),0)}
   function closeSearch(){q('#uxSearch')?.classList.remove('open')}
   function searchItems(){
     const items=[];
@@ -252,7 +264,7 @@ const uxFoundation=String.raw`(()=>{
     q('#uxSearchMeta').textContent=t().results+' · '+items.length;
     q('#uxSearchResults').innerHTML=items.length?items.map((item,index)=>'<button class="uxResult" type="button" data-ux-result="'+index+'"><span class="uxResultIcon">'+(item.type==='chat'?'◉':item.type==='customer'?'♙':item.type==='appointment'?'□':'✓')+'</span><span><b>'+html(item.title)+'</b><small>'+html(item.sub)+'</small></span></button>').join(''):'<div class="uxNoResults">'+html(t().noResults)+'</div>';
     qa('[data-ux-result]').forEach(button=>button.onclick=async()=>{
-      const item=items[Number(button.dataset.uxResult)];if(!item)return;closeSearch();
+      const item=items[Number(button.dataset.uxResult)];if(!item)return;closeSearch();trackUx('search_result_opened',{item_type:item.type});
       if(item.type==='chat'&&item.id){selectedConversationId=item.id;if(typeof loadRuntime==='function')await loadRuntime(workspace?.business?.id,item.id)}
       if(typeof showScreen==='function')showScreen(item.screen);
     });
@@ -329,7 +341,7 @@ const uxFoundation=String.raw`(()=>{
     const id=workspace?.business?.id;if(!id)return;
     try{
       const response=await fetch('/api/user-preferences',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:id,...preferences})});
-      if(!response.ok)throw new Error('save');if(typeof toast==='function')toast(t().prefsSaved);
+      if(!response.ok)throw new Error('save');trackUx('preferences_saved');if(typeof toast==='function')toast(t().prefsSaved);
     }catch{if(typeof toast==='function')toast(t().prefsFailed)}
   }
   function metricLabel(key){return {conversations:t().metricConversations,appointments:t().metricAppointments,customers:t().metricCustomers,attention:t().metricAttention}[key]||key}
@@ -388,21 +400,21 @@ const uxFoundation=String.raw`(()=>{
     q('#uxFeedbackForm').onsubmit=async event=>{
       event.preventDefault();const button=q('#uxFeedbackSubmit'),status=q('#uxFeedbackStatus'),message=q('#uxFeedbackMessage').value.trim();if(message.length<3)return;
       button.disabled=true;status.textContent='';
-      try{const response=await fetch('/api/feedback',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:workspace?.business?.id,category:q('#uxFeedbackCategory').value,rating,message,context:{screen:String(typeof current!=='undefined'?current:''),language:document.documentElement.lang,viewport:innerWidth+'x'+innerHeight,release:'ux-foundation-v1'}})});const body=await response.json().catch(()=>({}));if(!response.ok||!body.ok)throw new Error('feedback');status.textContent=t().feedbackSent;q('#uxFeedbackForm').reset();rating=null;qa('[data-ux-rating]').forEach(item=>item.classList.remove('active'))}catch{status.textContent=t().feedbackFailed}finally{button.disabled=false}
+      try{const response=await fetch('/api/feedback',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:workspace?.business?.id,category:q('#uxFeedbackCategory').value,rating,message,context:{screen:String(typeof current!=='undefined'?current:''),language:document.documentElement.lang,viewport:innerWidth+'x'+innerHeight,release:'ux-foundation-v1'}})});const body=await response.json().catch(()=>({}));if(!response.ok||!body.ok)throw new Error('feedback');trackUx('feedback_submitted');status.textContent=t().feedbackSent;q('#uxFeedbackForm').reset();rating=null;qa('[data-ux-rating]').forEach(item=>item.classList.remove('active'))}catch{status.textContent=t().feedbackFailed}finally{button.disabled=false}
     };
   }
 
   function tourKey(){return 'dabbir_tour_v1_'+String(workspace?.business?.id||'workspace')}
   const tourSteps=()=>[{target:'#dabbirActivation',title:t().tourWelcome,body:t().tourWelcomeBody},{target:'#attentionList',title:t().tourPriority,body:t().tourPriorityBody},{target:matchMedia('(max-width:700px)').matches?'#bottomNav [data-screen="more"]':'#nav [data-screen="more"]',title:t().tourMore,body:t().tourMoreBody}];
-  function startTour(){if(!workspace?.business||localStorage.getItem(tourKey())==='done'||q('#uxTour'))return;tourIndex=0;document.body.insertAdjacentHTML('beforeend','<div id="uxTour" class="uxTour"><div class="uxTourCard"><h2 id="uxTourTitle"></h2><p id="uxTourBody"></p><div class="uxTourActions"><button id="uxTourSkip" class="uxDialogSecondary" type="button"></button><button id="uxTourNext" class="uxDialogPrimary" type="button"></button></div></div></div>');q('#uxTourSkip').onclick=finishTour;q('#uxTourNext').onclick=()=>{tourIndex++;if(tourIndex>=tourSteps().length)finishTour();else renderTour()};renderTour()}
+  function startTour(){if(!workspace?.business||localStorage.getItem(tourKey())==='done'||q('#uxTour'))return;tourIndex=0;trackUx('tour_started');document.body.insertAdjacentHTML('beforeend','<div id="uxTour" class="uxTour"><div class="uxTourCard"><h2 id="uxTourTitle"></h2><p id="uxTourBody"></p><div class="uxTourActions"><button id="uxTourSkip" class="uxDialogSecondary" type="button"></button><button id="uxTourNext" class="uxDialogPrimary" type="button"></button></div></div></div>');q('#uxTourSkip').onclick=finishTour;q('#uxTourNext').onclick=()=>{tourIndex++;if(tourIndex>=tourSteps().length)finishTour();else renderTour()};renderTour()}
   function renderTour(){qa('.uxTourTarget').forEach(node=>node.classList.remove('uxTourTarget'));const steps=tourSteps(),step=steps[tourIndex],target=q(step.target);if(target){target.classList.add('uxTourTarget');target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})}q('#uxTourTitle').textContent=step.title;q('#uxTourBody').textContent=step.body;q('#uxTourSkip').textContent=t().skip;q('#uxTourNext').textContent=tourIndex===steps.length-1?t().finish:t().next}
-  function finishTour(){qa('.uxTourTarget').forEach(node=>node.classList.remove('uxTourTarget'));q('#uxTour')?.remove();localStorage.setItem(tourKey(),'done')}
+  function finishTour(){qa('.uxTourTarget').forEach(node=>node.classList.remove('uxTourTarget'));q('#uxTour')?.remove();localStorage.setItem(tourKey(),'done');trackUx('tour_completed')}
 
   function applyCopy(){
     ensureSearchButton();if(q('#uxSearchButtonText'))q('#uxSearchButtonText').textContent=t().search;if(q('#uxSearchTitle'))q('#uxSearchTitle').textContent=t().search;if(q('#uxSearchHint'))q('#uxSearchHint').textContent=t().searchHint;if(q('#uxSearchInput'))q('#uxSearchInput').placeholder=t().searchPlaceholder;if(q('#uxSearchClear'))q('#uxSearchClear').textContent=t().clear;if(q('#uxDashboardButton'))q('#uxDashboardButton').textContent=t().customize;
     ensureFilters();refreshFilters();renderNotificationPreferences();if(q('#uxFeedback'))renderFeedback();
   }
-  function afterRender(){ensureBase();ensureFilters();enrichEmptyStates();applyDashboardPreferences();renderNotificationPreferences();applyNotificationVisibility();ensureFeedback();loadPreferences();setTimeout(()=>startTour(),450)}
+  function afterRender(){ensureUxStart();ensureBase();ensureFilters();enrichEmptyStates();applyDashboardPreferences();renderNotificationPreferences();applyNotificationVisibility();ensureFeedback();loadPreferences();setTimeout(()=>startTour(),450)}
 
   ensureBase();
   q('#uxConfirmCancel')?.addEventListener('click',()=>settleConfirm(false));q('#uxConfirmAccept')?.addEventListener('click',()=>settleConfirm(true));
@@ -410,7 +422,7 @@ const uxFoundation=String.raw`(()=>{
   q('#uxSearchClose')?.addEventListener('click',closeSearch);q('#uxSearchInput')?.addEventListener('input',event=>renderSearch(event.target.value));q('#uxSearchClear')?.addEventListener('click',()=>{q('#uxSearchInput').value='';renderSearch('');q('#uxSearchInput').focus()});
 
   try{
-    if(typeof loadRuntime==='function'){const base=loadRuntime;loadRuntime=async function(){setBusy(true);try{return await base.apply(this,arguments)}catch{if(typeof toast==='function')toast(t().loadError);return null}finally{setBusy(false)}}}
+    if(typeof loadRuntime==='function'){const base=loadRuntime;loadRuntime=async function(){setBusy(true);try{return await base.apply(this,arguments)}catch{trackUx('load_error_shown');if(typeof toast==='function')toast(t().loadError);return null}finally{setBusy(false)}}}
     if(typeof renderAll==='function'){const base=renderAll;renderAll=function(){const result=base.apply(this,arguments);setTimeout(afterRender,0);return result}}
     if(typeof renderDashboard==='function'){const base=renderDashboard;renderDashboard=function(){const result=base.apply(this,arguments);setTimeout(afterRender,0);return result}}
     if(typeof renderChats==='function'){const base=renderChats;renderChats=function(){const result=base.apply(this,arguments);setTimeout(afterRender,0);return result}}

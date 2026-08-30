@@ -12,11 +12,14 @@ const activation = read('api/customer-activation-ui.js');
 const chat = read('api/chat-human-ui.js');
 const preferences = read('api/user-preferences.js');
 const feedback = read('api/feedback.js');
+const uxEvents = read('api/ux-events.js');
+const uxEventsMigration = read('supabase/migrations/20260830130000_dabbir_ux_event_metrics_v1.sql');
 const migration = read('supabase/migrations/20260830124500_dabbir_ux_preferences_feedback_v1.sql');
-const [{ default: resendHandler }, { default: preferencesHandler }, { default: feedbackHandler }] = await Promise.all([
+const [{ default: resendHandler }, { default: preferencesHandler }, { default: feedbackHandler }, { default: uxEventsHandler }] = await Promise.all([
   import('../api/auth/resend-verification.js'),
   import('../api/user-preferences.js'),
   import('../api/feedback.js'),
+  import('../api/ux-events.js'),
 ]);
 
 function responseRecorder() {
@@ -52,6 +55,10 @@ test('new UX APIs fail closed before any provider or database call', async () =>
   const noOriginResponse = responseRecorder();
   await feedbackHandler({ method: 'POST', headers: {} }, noOriginResponse);
   assert.equal(noOriginResponse.statusCode, 403);
+
+  const eventNoOriginResponse = responseRecorder();
+  await uxEventsHandler({ method: 'POST', headers: {} }, eventNoOriginResponse);
+  assert.equal(eventNoOriginResponse.statusCode, 403);
 
   const unauthenticatedResponse = responseRecorder();
   await preferencesHandler({ method: 'GET', headers: {}, url: '/api/user-preferences?business_id=00000000-0000-4000-8000-000000000000' }, unauthenticatedResponse);
@@ -96,6 +103,9 @@ test('workspace UX foundation covers discovery, empty states, preferences, feedb
     '/api/feedback',
     'window.__dabbirConfirm',
     'applyNotificationVisibility',
+    'window.__dabbirTrackUx',
+    '/api/ux-events',
+    'workspace_first_value',
   ]) assert.match(activation, new RegExp(marker.replaceAll('/', '\\/')));
   assert.match(activation, /const copy=\{/);
   assert.match(activation, /ar:\{search:/);
@@ -122,6 +132,19 @@ test('preference and feedback APIs are authenticated, membership scoped and same
   assert.match(preferences, /resolution=merge-duplicates/);
   assert.match(feedback, /message\.length < 3 \|\| message\.length > 2000/);
   assert.match(feedback, /CONTEXT_KEYS/);
+});
+
+test('UX event API and migration collect bounded non-content metrics under membership RLS', () => {
+  assert.match(uxEvents, /const EVENTS = new Set/);
+  assert.match(uxEvents, /CONTEXT_KEYS/);
+  assert.match(uxEvents, /duration > 86400000/);
+  assert.match(uxEvents, /requireSameOrigin/);
+  assert.match(uxEvents, /getBusinessMemberships/);
+  assert.doesNotMatch(uxEvents, /body\.(message|customer_name|email)|customer_text|conversation_body/);
+  assert.match(uxEventsMigration, /create table if not exists public\.dabbir_ux_events/);
+  assert.match(uxEventsMigration, /alter table public\.dabbir_ux_events enable row level security/);
+  assert.match(uxEventsMigration, /membership\.user_id = \(select auth\.uid\(\)\)/);
+  assert.match(uxEventsMigration, /grant insert on public\.dabbir_ux_events to authenticated/);
 });
 
 test('UX persistence migration enables RLS and limits rows to active business members', () => {
