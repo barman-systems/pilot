@@ -218,7 +218,7 @@ async function browserJourney() {
   const logo = page.locator('.brand .logo').first();
   await logo.waitFor({ state: 'visible', timeout: 10_000 });
   const logoBg = await logo.evaluate(element => getComputedStyle(element).backgroundImage);
-  assert(String(logoBg).includes('dabbir-approved-icon'), 'APPROVED_LOGO_NOT_RENDERED');
+  assert(String(logoBg).includes('dabbir-app-icon'), 'APPROVED_LOGO_NOT_RENDERED');
 
   await page.locator('[data-screen="conversations"]').first().click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
