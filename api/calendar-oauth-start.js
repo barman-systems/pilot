@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { json } from './_auth-core.js';
 import {
   authorizationUrl,
@@ -19,7 +20,7 @@ export default async function handler(req,res){
     const ctx=await requireCalendarMember(req,businessId,{manage:true});
     const config=providerConfig(provider,req);
     if(!config.configured)throw calendarError('CALENDAR_PROVIDER_NOT_CONFIGURED',503);
-    const state=signOauthState({business_id:businessId,provider,user_id:ctx.user.id,exp:Date.now()+10*60*1000,nonce:crypto.randomUUID?.()||String(Date.now())});
+    const state=signOauthState({business_id:businessId,provider,user_id:ctx.user.id,exp:Date.now()+10*60*1000,nonce:crypto.randomUUID()});
     const location=authorizationUrl(config,state);
     res.statusCode=302;res.setHeader('location',location);res.setHeader('cache-control','no-store');res.end();
   }catch(error){
