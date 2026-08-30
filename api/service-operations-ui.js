@@ -25,7 +25,7 @@ const client=String.raw`
     nav:'Services',title:'Services',desc:'The real services your business provides. DABBIR uses active services when replying to customers.',truth:'Active services here are treated as live operational facts by AI.',add:'Add service',name:'Service name',price:'Service price',aed:'AED',duration:'Duration',minutes:'min',status:'Status',active:'Active',inactive:'Inactive',edit:'Edit',save:'Save',cancel:'Cancel',empty:'No services yet.',loading:'Loading services…',failed:'Could not load services.',created:'Service added.',updated:'Service updated.',activeMetric:'Active services',totalMetric:'Total services'
   };
 
-  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
   function notify(message){try{if(typeof toast==='function')toast(message)}catch{}}
   function money(value){const n=Number(value||0);return Number.isFinite(n)?n.toLocaleString(ar()?'ar-AE':'en-AE',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}):'0'}
 
@@ -170,6 +170,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
-  res.setHeader('x-dabbir-service-operations-ui','v4-price');
+  res.setHeader('x-dabbir-service-operations-ui','v3');
   return res.status(200).send(client);
 }
