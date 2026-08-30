@@ -9,6 +9,7 @@ import {
   saveCalendarConnection,
   verifyOauthState,
 } from './_calendar-core.js';
+import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
 function statusCode(error){const code=Number(error?.code||500);return [400,401,403,404,409,429,502,503].includes(code)?code:500}
 function redirect(res,location){res.statusCode=302;res.setHeader('location',location);res.setHeader('cache-control','no-store');res.end()}
@@ -27,6 +28,7 @@ export default async function handler(req,res){
     const token=await exchangeAuthorizationCode(config,code);
     const identity=await providerIdentity(state.provider,token.access_token);
     await saveCalendarConnection({businessId:state.business_id,userId:ctx.user.id,provider:state.provider,identity,token});
+    await syncBusinessCalendars(req,state.business_id).catch(error=>console.error('dabbir_calendar_initial_sync_failed',{error:String(error?.message||error).slice(0,140)}));
     if(origin)return redirect(res,`${origin}/?calendar=connected&provider=${encodeURIComponent(state.provider)}`);
     return json(res,200,{ok:true,provider:state.provider});
   }catch(error){
