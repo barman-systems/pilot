@@ -26,7 +26,7 @@ declare
 begin
   if v_user is null then raise exception 'AUTH_REQUIRED'; end if;
   if nullif(trim(p_name),'') is null then raise exception 'BUSINESS_NAME_REQUIRED'; end if;
-  if p_business_type not in ('store','clinic','creator','salon','real_estate','services','other') then
+  if p_business_type not in ('store','laundry','car_wash','clinic','creator','salon','real_estate','services','other') then
     raise exception 'UNSUPPORTED_BUSINESS_TYPE';
   end if;
 

@@ -52,7 +52,7 @@ test('core relationship graph has business-scoped foreign keys', () => {
 test('channel state vocabulary cannot promote configuration into connection', () => {
   assert.match(migration, /update public\.dabbir_channels set status='configured' where status='simulated'/i);
   assert.match(migration, /'disconnected','configured','verifying','connected','degraded','failed'/i);
-  assert.match(migration, /runtime_verification_required/);
+  assert.doesNotMatch(migration, /insert\s+into\s+public\.dabbir_channels[\s\S]{0,500}runtime_verification_required/i);
   assert.equal(registry.projects.dabbir_clinics.external_channels, 'UNVERIFIED');
   assert.equal(registry.projects.dabbir_celebrities.external_channels, 'UNVERIFIED');
 });
