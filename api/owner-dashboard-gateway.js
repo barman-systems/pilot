@@ -1,4 +1,4 @@
-import dashboard from './owner-command-center-v16.js';
+import dashboard from './owner-command-center-v18.js';
 import { parseCookies } from './_auth-core.js';
 
 const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
