@@ -19,6 +19,10 @@ async function rest(path,key){
   if(!r.ok||!Array.isArray(p))throw Object.assign(new Error('OWNER_BRIDGE_STORAGE_FAILED'),{status:r.status});
   return p;
 }
+async function safeRead(name,path,key){
+  try{return {name,rows:await rest(path,key),ok:true,error:null}}
+  catch(error){return {name,rows:[],ok:false,error:Number(error?.status||503)}}
+}
 function num(v){return Number.isFinite(Number(v))?Number(v):0}
 function billing(rows){
   const a=rows[0]||null;
@@ -49,6 +53,7 @@ function priorities(products,inventory,orders,channels){
 }
 
 export default async function handler(req,res){
+  res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
   const token=parseCookies(req.headers.cookie||'')[SESSION_COOKIE];
   if(!token)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
@@ -57,14 +62,18 @@ export default async function handler(req,res){
   const key=serviceKey();if(!key)return json(res,503,{ok:false,error:'OWNER_BRIDGE_NOT_CONFIGURED'});
   try{
     if(!(await verifyOwnerSession(token)))return json(res,401,{ok:false,error:'OWNER_SESSION_INVALID'});
-    const [billingRows,waRows,products,inventory,orders,channels]=await Promise.all([
-      rest(`dabbir_billing_accounts?select=business_id,status,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,key),
-      rest(`dabbir_whatsapp_connections?select=business_id,status,display_phone_number,verified_name,connected_at,last_verified_at,last_provider_status,last_error&business_id=eq.${businessId}&limit=1`,key),
-      rest(`dabbir_products?select=id,sku,name,price_aed,active&business_id=eq.${businessId}&order=name.asc&limit=200`,key),
-      rest(`dabbir_inventory?select=product_id,quantity,reserved&business_id=eq.${businessId}&limit=200`,key),
-      rest(`dabbir_orders?select=id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,key),
-      rest(`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&limit=50`,key),
+    const reads=await Promise.all([
+      safeRead('billing',`dabbir_billing_accounts?select=business_id,status,trial_ends_at,current_period_ends_at,cancel_at_period_end,last_invoice_status,updated_at&business_id=eq.${businessId}&limit=1`,key),
+      safeRead('whatsapp',`dabbir_whatsapp_connections?select=business_id,status,display_phone_number,verified_name,connected_at,last_verified_at,last_provider_status,last_error&business_id=eq.${businessId}&limit=1`,key),
+      safeRead('products',`dabbir_products?select=id,sku,name,price_aed,active&business_id=eq.${businessId}&order=name.asc&limit=200`,key),
+      safeRead('inventory',`dabbir_inventory?select=product_id,quantity,reserved&business_id=eq.${businessId}&limit=200`,key),
+      safeRead('orders',`dabbir_orders?select=id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,key),
+      safeRead('channels',`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&limit=50`,key),
     ]);
-    return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_read_only',billing:billing(billingRows),whatsapp:whatsapp(waRows),operations:operations(products,inventory,orders),priorities:priorities(products,inventory,orders,channels),checked_at:new Date().toISOString()});
-  }catch(error){return json(res,Number(error?.status||503)>=500?503:Number(error?.status||500),{ok:false,error:'OWNER_BRIDGE_FAILED'});}
+    const by=Object.fromEntries(reads.map(x=>[x.name,x]));
+    const operationFailures=['products','inventory','orders'].filter(name=>!by[name].ok);
+    const componentFailures=reads.filter(x=>!x.ok).map(x=>({component:x.name,status:x.error}));
+    const op=operations(by.products.rows,by.inventory.rows,by.orders.rows);
+    return json(res,200,{ok:true,partial:componentFailures.length>0,business_id:businessId,mode:'platform_owner_read_only',billing:billing(by.billing.rows),whatsapp:whatsapp(by.whatsapp.rows),operations:op,operations_verified:operationFailures.length===0,priorities:priorities(by.products.rows,by.inventory.rows,by.orders.rows,by.channels.rows),component_failures:componentFailures,checked_at:new Date().toISOString()});
+  }catch(error){return json(res,503,{ok:false,error:'OWNER_BRIDGE_FAILED'});}
 }
