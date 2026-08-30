@@ -1,6 +1,7 @@
 import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import {
+  exchangeEmbeddedCode,
   ownerContext,
   resolveEmbeddedPlatformConfig,
   sealAccessToken,
@@ -315,8 +316,11 @@ export default async function handler(req, res) {
     const platform = applyDabbirMetaPublicIdentifiers(await resolveEmbeddedPlatformConfig());
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
-    const oauthRedirectUri = oauthRedirectUriFromRequest(req);
-    const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, oauthRedirectUri);
+    const exchangeResult = {
+      exchange: await exchangeEmbeddedCode(platform, code),
+      domainRepairAttempted: false,
+      domainRepairChanged: false,
+    };
     const exchanged = exchangeResult.exchange;
     if (!wabaId) {
       wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
