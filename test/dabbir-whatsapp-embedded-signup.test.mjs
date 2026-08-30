@@ -40,7 +40,7 @@ test('DABBIR prefers WhatsApp Business app coexistence so verification happens t
   assert.match(ui, /FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/);
   assert.match(ui, /FINISH_ONLY_WABA/);
   assert.match(ui, /onboarding_mode:COEXISTENCE_FEATURE/);
-  assert.match(ui, /extras:\{setup:\{\}\}/);
+  assert.match(ui, /extras:\{setup:\{\},featureType:COEXISTENCE_FEATURE\}/);
   assert.doesNotMatch(ui, /sessionInfoVersion:'3'/);
 
   assert.match(endpoint, /resolveCoexistencePhoneNumberId/);
@@ -108,7 +108,7 @@ test('WhatsApp uses the current Graph API version by default and surfaces action
   assert.match(ui, /Valid OAuth Redirect URIs/);
   assert.match(ui, /provider_code/);
   assert.match(ui, /function canonicalRedirectUri\(\)/);
-  assert.match(ui, /redirect_uri:canonicalRedirectUri\(\)/);
+  assert.doesNotMatch(ui, /redirect_uri:canonicalRedirectUri\(\)/);
   assert.match(endpoint, /url\.search = ''/);
 });
 
@@ -123,13 +123,13 @@ test('Embedded completion exchanges authorization code server-side and never ret
   assert.doesNotMatch(endpoint, /access_token:\s*exchanged\.accessToken/);
 });
 
-test('Embedded completion binds Meta code exchange to the exact same-origin page redirect URI', async () => {
+test('Embedded completion exchanges v4 authorization code without forcing a redirect URI', async () => {
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
-  assert.match(endpoint, /function oauthRedirectUriFromRequest\(req\)/);
-  assert.match(endpoint, /header\('referer'\)/);
-  assert.match(endpoint, /url\.origin !== requestOrigin/);
-  assert.match(endpoint, /url\.searchParams\.set\('redirect_uri', redirectUri\)/);
-  assert.match(endpoint, /META_OAUTH_REDIRECT_URI_REQUIRED/);
+  const handlerStart = endpoint.indexOf('export default async function handler');
+  assert.ok(handlerStart >= 0);
+  const handler = endpoint.slice(handlerStart);
+  assert.match(handler, /exchangeEmbeddedCode\(platform, code\)/);
+  assert.doesNotMatch(handler, /exchangeEmbeddedCodeWithDomainRepair\(platform, code/);
   assert.match(endpoint, /providerSubcode/);
 });
 
