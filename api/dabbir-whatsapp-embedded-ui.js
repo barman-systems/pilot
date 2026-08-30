@@ -319,8 +319,7 @@ const script = String.raw`(()=>{
             config_id:cfg.config_id,
             response_type:'code',
             override_default_response_type:true,
-            redirect_uri:canonicalRedirectUri(),
-            extras:{setup:{}}
+            extras:{setup:{},featureType:COEXISTENCE_FEATURE}
           });
           report('login_invoked',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
         }catch(error){reject(error)}
