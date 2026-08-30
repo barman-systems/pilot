@@ -3,7 +3,8 @@ const script = String.raw`(()=>{
   window.__dabbirWhatsAppEmbeddedUiLoaded=true;
 
   const SESSION_TIMEOUT_MS=15*60*1000;
-  const POST_LOGIN_SESSION_GRACE_MS=1800;
+  const POST_LOGIN_SESSION_GRACE_MS=5000;
+  const EMBEDDED_SIGNUP_VERSION='v4';
   const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
   const META_FINISH_EVENTS=new Set([
     'FINISH',
@@ -41,6 +42,15 @@ const script = String.raw`(()=>{
       const host=String(url.hostname||'').toLowerCase();
       return url.protocol==='https:'&&(host==='facebook.com'||host.endsWith('.facebook.com'));
     }catch{return false}
+  }
+
+  function canonicalRedirectUri(){
+    try{
+      const url=new URL(window.location.href);
+      url.search='';
+      url.hash='';
+      return url.toString();
+    }catch{return ''}
   }
 
   function report(event,extra={}){
@@ -221,6 +231,7 @@ const script = String.raw`(()=>{
     report('complete_start',{
       stage:'server_complete',
       onboarding_mode:COEXISTENCE_FEATURE,
+      embedded_signup_version:EMBEDDED_SIGNUP_VERSION,
       has_code:Boolean(code),
       has_waba:Boolean(safeSession.waba_id),
       has_phone:Boolean(safeSession.phone_number_id)
@@ -238,7 +249,12 @@ const script = String.raw`(()=>{
       })
     });
     const payload=await response.json().catch(()=>({}));
-    if(!response.ok||!payload.ok) throw new Error(payload.error||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
+    if(!response.ok||!payload.ok){
+      const error=new Error(String(payload.error||'WHATSAPP_EMBEDDED_SIGNUP_FAILED').slice(0,240));
+      error.providerCode=payload.provider_code||null;
+      error.providerStatus=payload.provider_status||null;
+      throw error;
+    }
     report('complete_ok',{stage:'server_complete',onboarding_mode:COEXISTENCE_FEATURE,has_waba:true,has_phone:true});
     if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={...(workspace.whatsapp||{}),...payload};
     configCache=null;
@@ -247,14 +263,20 @@ const script = String.raw`(()=>{
     tell(ar()?'تم ربط رقم WhatsApp Business بنجاح':'WhatsApp Business number connected successfully');
   }
 
-  function failureText(key){
-    if(key==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد ربط WhatsApp Business في Meta غير مكتمل بعد':'Meta WhatsApp Business onboarding is not configured yet';
-    if(key==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. أغلق نافذة Meta وأعد المحاولة من داخل دبّر.':'Meta did not return an authorization code. Close the Meta window and retry from DABBIR.';
-    if(key==='META_EMBEDDED_SIGNUP_SESSION_MISSING') return ar()?'لم يصل تأكيد ربط WhatsApp Business من Meta. لم يتم حفظ أي ربط ناقص.':'Meta did not return the WhatsApp Business connection confirmation. No incomplete connection was saved.';
-    if(key==='META_WABA_DISCOVERY_EMPTY') return ar()?'أكملت Meta تسجيل الدخول، لكن لم تشارك أي حساب WhatsApp Business مع دبّر.':'Meta login completed, but no WhatsApp Business Account was shared with DABBIR.';
-    if(key==='META_WABA_RESOLUTION_REQUIRED') return ar()?'تمت مشاركة أكثر من حساب WhatsApp Business ولا يمكن اختيار أحدها تلقائيًا بأمان.':'More than one WhatsApp Business Account was shared, so DABBIR cannot safely choose one automatically.';
-    if(key==='META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED') return ar()?'يوجد أكثر من رقم داخل حساب WhatsApp Business ولم تتمكن Meta من تحديد الرقم المختار تلقائيًا.':'More than one WhatsApp Business number is available and Meta did not identify the selected number.';
-    if(key==='META_SDK_NOT_READY'||key==='META_SDK_LOAD_FAILED'||key==='META_SDK_LOAD_TIMEOUT') return ar()?'جاري تجهيز الربط الآمن من Meta. أعد الضغط بعد أن يصبح الزر جاهزًا.':'Meta secure onboarding is still preparing. Retry when the connect button is ready.';
+  function failureText(key,providerCode=null){
+    const raw=String(key||'');
+    const lower=raw.toLowerCase();
+    if(raw==='META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED') return ar()?'إعداد ربط WhatsApp Business في Meta غير مكتمل بعد':'Meta WhatsApp Business onboarding is not configured yet';
+    if(raw==='META_AUTHORIZATION_CODE_MISSING') return ar()?'لم تُرجع Meta رمز التفويض. أغلق نافذة Meta وأعد المحاولة من داخل دبّر.':'Meta did not return an authorization code. Close the Meta window and retry from DABBIR.';
+    if(raw==='META_LOGIN_FAILED'||lower.includes('user denied')||lower.includes('cancel')) return ar()?'تم إلغاء ربط Meta. أعد المحاولة واضغط متابعة حتى نهاية الخطوات.':'Meta connection was cancelled. Retry and continue through all setup steps.';
+    if(raw==='META_EMBEDDED_SIGNUP_SESSION_MISSING') return ar()?'لم يصل تأكيد ربط WhatsApp Business من Meta. لم يتم حفظ أي ربط ناقص.':'Meta did not return the WhatsApp Business connection confirmation. No incomplete connection was saved.';
+    if(raw==='META_WABA_DISCOVERY_EMPTY') return ar()?'أكملت Meta تسجيل الدخول، لكن لم تشارك أي حساب WhatsApp Business مع دبّر.':'Meta login completed, but no WhatsApp Business Account was shared with DABBIR.';
+    if(raw==='META_WABA_RESOLUTION_REQUIRED') return ar()?'تمت مشاركة أكثر من حساب WhatsApp Business ولا يمكن اختيار أحدها تلقائيًا بأمان.':'More than one WhatsApp Business Account was shared, so DABBIR cannot safely choose one automatically.';
+    if(raw==='META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED') return ar()?'يوجد أكثر من رقم داخل حساب WhatsApp Business ولم تتمكن Meta من تحديد الرقم المختار تلقائيًا.':'More than one WhatsApp Business number is available and Meta did not identify the selected number.';
+    if(raw==='META_PHONE_NOT_IN_SELECTED_WABA'||raw==='META_PHONE_NUMBER_ID_MISMATCH') return ar()?'لم يتطابق رقم WhatsApp المختار مع حساب WhatsApp Business. أعد الربط واختر الرقم من داخل نافذة Meta نفسها.':'The selected WhatsApp number does not match the WhatsApp Business Account. Retry and choose the number inside Meta.';
+    if(raw==='META_APP_DOMAIN_REPAIR_NOT_ALLOWED'||raw==='META_APP_DOMAIN_REPAIR_CONFIGURATION_MISSING'||raw==='META_APP_DOMAIN_UPDATE_UNVERIFIED'||Number(providerCode)===191||lower.includes("domain of this url")||lower.includes('valid oauth redirect')) return ar()?'رفضت Meta نطاق الموقع. يجب إضافة dabbir.bmalman.com إلى Allowed domains وValid OAuth Redirect URIs في إعدادات Facebook Login for Business ثم إعادة المحاولة.':'Meta rejected the site domain. Add dabbir.bmalman.com to Allowed domains and Valid OAuth Redirect URIs in Facebook Login for Business, then retry.';
+    if(raw==='META_CODE_EXCHANGE_FAILED'||raw==='META_WABA_DISCOVERY_FAILED') return ar()?'تعذر تأكيد التفويض من Meta. تحقق من صلاحيات WhatsApp Business وتكوين Embedded Signup ثم أعد المحاولة.':'Meta authorization could not be confirmed. Check WhatsApp Business permissions and the Embedded Signup configuration, then retry.';
+    if(raw==='META_SDK_NOT_READY'||raw==='META_SDK_LOAD_FAILED'||raw==='META_SDK_LOAD_TIMEOUT') return ar()?'جاري تجهيز الربط الآمن من Meta. أعد الضغط بعد أن يصبح الزر جاهزًا.':'Meta secure onboarding is still preparing. Retry when the connect button is ready.';
     return ar()?'تعذر ربط WhatsApp Business. لم يتم حفظ أي ربط غير مكتمل.':'WhatsApp Business could not be connected. No incomplete connection was saved.';
   }
 
@@ -264,7 +286,7 @@ const script = String.raw`(()=>{
     const FB=window.FB;
     embeddedSession=null;
     let stage='start';
-    report('connect_start',{stage,onboarding_mode:COEXISTENCE_FEATURE});
+    report('connect_start',{stage,onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
 
     if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
       report('connect_error',{stage:'platform_config',error:'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED',has_waba:false,has_phone:false});
@@ -286,15 +308,21 @@ const script = String.raw`(()=>{
       const authPromise=new Promise((resolve,reject)=>{
         try{
           FB.login(response=>{
-            report('login_callback',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE,has_code:Boolean(response?.authResponse?.code)});
+            report('login_callback',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION,has_code:Boolean(response?.authResponse?.code)});
+            if(response?.error){
+              const message=String(response.error.message||response.error.error_message||'META_LOGIN_FAILED').slice(0,160);
+              reject(new Error(message));
+              return;
+            }
             resolve(response);
           },{
             config_id:cfg.config_id,
             response_type:'code',
             override_default_response_type:true,
-            extras:{setup:{},featureType:COEXISTENCE_FEATURE,sessionInfoVersion:'3'}
+            redirect_uri:canonicalRedirectUri(),
+            extras:{setup:{}}
           });
-          report('login_invoked',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE});
+          report('login_invoked',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
         }catch(error){reject(error)}
       });
 
@@ -320,8 +348,8 @@ const script = String.raw`(()=>{
       await completeSignup(code,session);
     }catch(error){
       const key=String(error?.message||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
-      report('connect_error',{stage,error:key,onboarding_mode:COEXISTENCE_FEATURE,has_waba:Boolean(embeddedSession?.waba_id),has_phone:Boolean(embeddedSession?.phone_number_id)});
-      tell(failureText(key));
+      report('connect_error',{stage,error:key,onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION,has_waba:Boolean(embeddedSession?.waba_id),has_phone:Boolean(embeddedSession?.phone_number_id)});
+      tell(failureText(key,error?.providerCode));
     }finally{
       setBusy(false);
       renderActions();

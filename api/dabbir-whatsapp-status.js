@@ -41,7 +41,8 @@ export function getWhatsAppConfig() {
     'WHATSAPP_BUSINESS_ACCOUNT_ID',
     'WABA_ID',
   );
-  const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION') || 'v23.0';
+  const configuredGraphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION');
+  const graphVersion = configuredGraphVersion === 'v23.0' ? 'v26.0' : (configuredGraphVersion || 'v26.0');
   const webhookConfigured = Boolean(verifyToken && appSecret);
   const outboundConfigured = Boolean(accessToken && phoneNumberId);
   const configured = webhookConfigured || outboundConfigured;

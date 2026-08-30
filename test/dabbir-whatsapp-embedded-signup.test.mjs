@@ -36,11 +36,12 @@ test('DABBIR prefers WhatsApp Business app coexistence so verification happens t
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
 
   assert.match(ui, /whatsapp_business_app_onboarding/);
-  assert.match(ui, /featureType:COEXISTENCE_FEATURE/);
+  assert.match(ui, /EMBEDDED_SIGNUP_VERSION='v4'/);
   assert.match(ui, /FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING/);
   assert.match(ui, /FINISH_ONLY_WABA/);
   assert.match(ui, /onboarding_mode:COEXISTENCE_FEATURE/);
-  assert.doesNotMatch(ui, /featureType:''/);
+  assert.match(ui, /extras:\{setup:\{\}\}/);
+  assert.doesNotMatch(ui, /sessionInfoVersion:'3'/);
 
   assert.match(endpoint, /resolveCoexistencePhoneNumberId/);
   assert.match(endpoint, /is_on_biz_app/);
@@ -93,6 +94,22 @@ test('Embedded Signup reports safe client stages to production logs without toke
   assert.doesNotMatch(events, /access_token/);
   assert.doesNotMatch(events, /phone_number_id/);
   assert.doesNotMatch(events, /waba_id/);
+});
+
+test('WhatsApp uses the current Graph API version by default and surfaces actionable Meta link errors', async () => {
+  const core = await read('api/_whatsapp-embedded-core.js');
+  const status = await read('api/dabbir-whatsapp-status.js');
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+  assert.match(core, /configuredGraphVersion === 'v23\.0' \? 'v26\.0'/);
+  assert.match(status, /configuredGraphVersion === 'v23\.0' \? 'v26\.0'/);
+  assert.match(ui, /dabbir\.bmalman\.com/);
+  assert.match(ui, /Allowed domains/);
+  assert.match(ui, /Valid OAuth Redirect URIs/);
+  assert.match(ui, /provider_code/);
+  assert.match(ui, /function canonicalRedirectUri\(\)/);
+  assert.match(ui, /redirect_uri:canonicalRedirectUri\(\)/);
+  assert.match(endpoint, /url\.search = ''/);
 });
 
 test('Embedded completion exchanges authorization code server-side and never returns access token', async () => {

@@ -49,7 +49,8 @@ export function embeddedPlatformConfig() {
     'WHATSAPP_EMBEDDED_CONFIG_ID',
     'META_CONFIG_ID',
   );
-  const graphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION') || 'v23.0';
+  const configuredGraphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION');
+  const graphVersion = configuredGraphVersion === 'v23.0' ? 'v26.0' : (configuredGraphVersion || 'v26.0');
   const encryptionSecret = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY') || appSecret;
   const encryptionKeyVersion = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY_VERSION') || 'whatsapp_v1';
   const previousEncryptionSecret = firstEnv('DABBIR_INTEGRATION_ENCRYPTION_KEY_PREVIOUS');

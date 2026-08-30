@@ -75,7 +75,7 @@ test('iPhone Embedded Signup falls back to the server shortly after authorizatio
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
 
-  assert.match(ui, /POST_LOGIN_SESSION_GRACE_MS=1800/);
+  assert.match(ui, /POST_LOGIN_SESSION_GRACE_MS=5000/);
   assert.match(ui, /session_server_fallback/);
   assert.match(ui, /Promise\.race\(\[/);
   assert.match(ui, /await completeSignup\(code,session\)/);
