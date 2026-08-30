@@ -56,7 +56,7 @@ test('performance bundles are present and shell delivery is split by lifecycle',
     assert.ok(fs.statSync(bundlePath).size > 0);
   }
   assert.equal(manifest.critical.length, 3);
-  assert.equal(manifest.deferred.length, 22);
+  assert.equal(manifest.deferred.length, 23);
   assert.match(shell, /dabbir-ui-critical\.js/);
   assert.match(shell, /dabbir-ui-deferred\.js/);
   assert.match(shell, /__dabbirLoadDeferredUi/);

@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
@@ -19,7 +19,7 @@
   },
   "temporary_exceptions": {},
   "shell": {
-    "maximum_injected_api_modules": 25,
+    "maximum_injected_api_modules": 26,
     "require_unique_modules": true,
     "last_loaded_ui_observer": "/api/auth-session-stability-ui",
     "retired_modules_forbidden": [
@@ -70,5 +70,6 @@
     "release_ready_requires_exact_ready_deployment": true,
     "release_ready_requires_real_production_journey": true
   },
-  "change_rule": "Any change to this contract must explain the root cause, the removed competing owner, and the regression proof. Raising a limit without removing complexity is not stabilization."
+  "change_rule": "Any change to this contract must explain the root cause, the removed competing owner, and the regression proof. Raising a limit without removing complexity is not stabilization.",
+  "car_wash_booking_change": "The explicit ceiling increased from 25 to 26 only for the single deferred car-wash booking catalog owner; public booking remains a /book page and does not add a primary navigation destination."
 }

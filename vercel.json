@@ -31,6 +31,10 @@
       "dest": "/api/owner-dashboard-gateway"
     },
     {
+      "src": "^/book/?$",
+      "dest": "/booking.html"
+    },
+    {
       "src": "^/$",
       "dest": "/api/app-recovery"
     }
@@ -55,6 +59,10 @@
     {
       "source": "/owner-dashboard",
       "destination": "/api/owner-dashboard-gateway"
+    },
+    {
+      "source": "/book",
+      "destination": "/booking.html"
     },
     {
       "source": "/",
