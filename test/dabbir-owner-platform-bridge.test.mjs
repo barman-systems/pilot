@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [bridge,actionBridge,ui,gateway,migration]=await Promise.all([
+const [bridge,actionBridge,ui,gateway,migration,searchMigration]=await Promise.all([
   read('api/owner-platform-bridge.js'),
   read('api/owner-action-bridge.js'),
-  read('api/owner-command-center-v10.js'),
+  read('api/owner-command-center-v11.js'),
   read('api/owner-dashboard-gateway.js'),
   read('supabase/migrations/20260830102000_dabbir_platform_owner_action_bridge_v2.sql'),
+  read('supabase/migrations/20260827155045_dabbir_platform_customer_search_escape_fix_v3.sql'),
 ]);
 
 test('owner platform read bridge stays owner-session gated and read only',()=>{
@@ -25,6 +26,8 @@ test('database action function is service-role only and audited atomically',()=>
   assert.match(migration,/security definer/);assert.match(migration,/revoke all on function public\.dabbir_platform_owner_action_v1[\s\S]*public,anon,authenticated/);assert.match(migration,/grant execute[\s\S]*service_role/);assert.match(migration,/dabbir_platform_owner_audit/);assert.match(migration,/for update/);assert.match(migration,/ORDER_NOT_CANCELLABLE/);assert.match(migration,/platform_customer_support_notes/);assert.doesNotMatch(migration,/stripe|refund|create_expense|set_member_role/);
 });
 
-test('v10 exposes service and support controls without financial/team mutation',()=>{
-  assert.match(ui,/set_service_active/);assert.match(ui,/support_create_case/);assert.match(ui,/support_add_note/);assert.match(ui,/support_set_status/);assert.match(ui,/waiting/);assert.match(ui,/resolved/);assert.match(ui,/EXECUTE/);assert.doesNotMatch(ui,/create_expense|refund|set_member_role/);assert.match(gateway,/owner-command-center-v10\.js/);
+test('v11 preserves audited controls and repairs customer result contract',()=>{
+  for(const action of ['set_service_active','support_create_case','support_add_note','support_set_status'])assert.match(ui,new RegExp(action));
+  assert.match(ui,/Array\.isArray\(p\.accounts\)/);assert.match(ui,/customer_no/);assert.match(ui,/businesses/);assert.match(ui,/data-biz/);assert.match(ui,/owner-dashboard-data\?action=search/);assert.match(gateway,/owner-command-center-v11\.js/);
+  assert.match(searchMigration,/jsonb_build_object\('accounts',v_result,'count',v_count\)/);
 });
