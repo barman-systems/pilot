@@ -1,4 +1,6 @@
-const script=String.raw`(()=>{
+import activityProfileHandler from './activity-profile-ui.js';
+
+const liveScript=String.raw`(()=>{
   if(window.__dabbirCalendarLiveUi)return;
   const q=s=>document.querySelector(s);
   let busy=false,lastBusiness=null,lastSyncAt=0,lastBusy=[];
@@ -24,7 +26,7 @@ const script=String.raw`(()=>{
   function renderBusy(){
     const panel=q('#dabbirExternalBusy');if(!panel)return;
     const now=Date.now(),rows=lastBusy.filter(x=>new Date(x.ends_at).getTime()>now).slice(0,8);
-    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class="dabbirExternalBusyList">'+rows.map(row=>'<div class="dabbirExternalBusyRow"><b>'+esc(row.summary|| (ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style="font-size:8px;color:var(--muted)">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
+    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class="dabbirExternalBusyList">'+rows.map(row=>'<div class="dabbirExternalBusyRow"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style="font-size:8px;color:var(--muted)">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
   }
 
   async function connectionState(id){
@@ -66,13 +68,26 @@ const script=String.raw`(()=>{
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   setInterval(()=>{if(screenActive()&&businessId())sync(false)},60000);
   setTimeout(()=>{if(screenActive()&&businessId())sync(false)},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v1'};
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v2-composite'};
 })();`;
 
-export default function handler(req,res){
+function captureResponse(){
+  return {
+    statusCode:200,headers:{},body:'',
+    status(code){this.statusCode=Number(code||200);return this},
+    setHeader(key,value){this.headers[String(key).toLowerCase()]=value;return this},
+    end(body=''){this.body=String(body);return this},
+    send(body=''){this.body=String(body);return this},
+  };
+}
+
+export default async function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
+  const captured=captureResponse();
+  await activityProfileHandler(req,captured);
+  if(captured.statusCode!==200||!captured.body) return res.status(500).end('Activity profile UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v1');
-  return res.status(200).send(script);
+  res.setHeader('x-dabbir-calendar-live-ui','v2-composite');
+  return res.status(200).send(captured.body+'\n'+liveScript);
 }
