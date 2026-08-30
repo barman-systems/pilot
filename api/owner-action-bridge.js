@@ -5,7 +5,8 @@ const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygt
 const BROKER_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
 const SESSION_COOKIE='__Host-dabbir_owner_session';
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTIONS=new Set(['set_inventory','set_product_active','cancel_pending_order']);
+const ACTIONS=new Set(['set_inventory','set_product_active','cancel_pending_order','set_service_active','support_create_case','support_add_note','support_set_status']);
+const ENTITY_OPTIONAL=new Set(['support_create_case']);
 const safeId=v=>UUID_RE.test(String(v||'').trim())?String(v).trim():null;
 const serviceKey=()=>{const k=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();return k&&!k.startsWith('sb_publishable_')?k:null};
 async function verify(token){const r=await fetch(BROKER_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'owner_session_verify',session_token:token}),cache:'no-store'});const p=await r.json().catch(()=>null);return r.ok&&p?.authenticated===true&&p?.role==='platform_owner'}
@@ -25,14 +26,16 @@ export default async function handler(req,res){
       return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_audited_actions',actions:[...ACTIONS],audit:await audit(businessId,key)});
     }
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
-    const body=await readJsonBody(req,8192);
-    const businessId=safeId(body.business_id),entityId=safeId(body.entity_id),action=String(body.action||'').trim();
+    const body=await readJsonBody(req,16384);
+    const businessId=safeId(body.business_id),action=String(body.action||'').trim(),rawEntity=String(body.entity_id||'').trim(),entityId=rawEntity?safeId(rawEntity):null;
     const reason=String(body.reason||'').trim().slice(0,500),confirmation=String(body.confirmation||'').trim();
-    if(!businessId||!entityId)return json(res,400,{ok:false,error:'INVALID_ID'});
+    if(!businessId)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});
     if(!ACTIONS.has(action))return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});
+    if((!ENTITY_OPTIONAL.has(action)&&!entityId)||(rawEntity&&!entityId))return json(res,400,{ok:false,error:'INVALID_ENTITY_ID'});
     if(reason.length<8)return json(res,400,{ok:false,error:'REASON_REQUIRED'});
     if(confirmation!=='EXECUTE')return json(res,400,{ok:false,error:'CONFIRMATION_REQUIRED'});
-    const result=await service('rpc/dabbir_platform_owner_action_v1',key,{method:'POST',body:JSON.stringify({p_business_id:businessId,p_action:action,p_entity_id:entityId,p_reason:reason,p_confirmation:confirmation,p_payload:body.payload&&typeof body.payload==='object'?body.payload:{}})});
+    const payload=body.payload&&typeof body.payload==='object'&&!Array.isArray(body.payload)?body.payload:{};
+    const result=await service('rpc/dabbir_platform_owner_action_v1',key,{method:'POST',body:JSON.stringify({p_business_id:businessId,p_action:action,p_entity_id:entityId,p_reason:reason,p_confirmation:confirmation,p_payload:payload})});
     return json(res,200,{ok:true,result,audit:await audit(businessId,key)});
   }catch(error){const status=Number(error?.status||500);return json(res,status>=400&&status<500?status:503,{ok:false,error:String(error?.message||'OWNER_ACTION_FAILED').slice(0,160)});}
 }
