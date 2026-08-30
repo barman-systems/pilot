@@ -7,6 +7,9 @@
     },
     "api/app-recovery.js": {
       "includeFiles": "index.html"
+    },
+    "api/car-wash-booking.js": {
+      "includeFiles": "booking.html"
     }
   },
   "routes": [
@@ -32,7 +35,7 @@
     },
     {
       "src": "^/book/?$",
-      "dest": "/booking.html"
+      "dest": "/api/car-wash-booking"
     },
     {
       "src": "^/$",
@@ -62,7 +65,7 @@
     },
     {
       "source": "/book",
-      "destination": "/booking.html"
+      "destination": "/api/car-wash-booking"
     },
     {
       "source": "/",

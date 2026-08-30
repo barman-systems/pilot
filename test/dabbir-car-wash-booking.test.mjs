@@ -62,7 +62,7 @@ test('booking migration has owner RLS, public functions, collision checks, and b
 test('Vercel exposes the shareable booking route and deferred UI bundle',()=>{
   const vercel=JSON.parse(read('vercel.json'));
   const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
-  assert.ok(vercel.routes.some(route=>route.src==='^/book/?$'&&route.dest==='/booking.html'));
-  assert.ok(vercel.rewrites.some(route=>route.source==='/book'&&route.destination==='/booking.html'));
+  assert.ok(vercel.routes.some(route=>route.src==='^/book/?$'&&route.dest==='/api/car-wash-booking'));
+  assert.ok(vercel.rewrites.some(route=>route.source==='/book'&&route.destination==='/api/car-wash-booking'));
   assert.ok(manifest.deferred.includes('/api/car-wash-booking-ui'));
 });
