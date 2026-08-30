@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dabbir.bmalman.com/sitemap.xml

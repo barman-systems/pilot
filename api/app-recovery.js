@@ -1,6 +1,15 @@
 import appHandler from './app.js';
 
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'content-security-policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net",
+};
+
 function forwardHeaders(res, headers) {
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(key, value);
   for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
 }
 
