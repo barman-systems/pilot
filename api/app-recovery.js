@@ -8,6 +8,54 @@ const SECURITY_HEADERS = {
   'content-security-policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net",
 };
 
+// The source-module order remains explicit for architecture and regression tests.
+// Runtime delivery is now two static bundles: critical auth UI, then deferred workspace UI.
+const UI_MODULE_ORDER = [
+  '/api/brand-ui',
+  '/api/dabbir-whatsapp-embedded-ui',
+  '/api/dabbir-whatsapp-connect-guard-ui',
+  '/api/timezone-ui',
+  '/api/auth/recovery-ui',
+  '/api/chat-human-ui',
+  '/api/translation-ui',
+  '/api/owner-operations-ui',
+  '/api/service-operations-ui',
+  '/api/activity-profile-ui',
+  '/api/owner-action-center-ui',
+  '/api/dabbir-owner-away-ui',
+  '/api/dabbir-owner-decision-memory-ui',
+  '/api/business-profile-ui',
+  '/api/dabbir-customer-number-ui',
+  '/api/dabbir-billing-ui',
+  '/api/platform-customers-ui',
+  '/api/platform-customer-support-ui',
+  '/api/platform-recovery-reconciliation-ui',
+  '/api/dabbir-owner-first-ui',
+  '/api/verified-metrics-ui',
+  '/api/customer-activation-ui',
+  '/api/owner-copilot-ui',
+  '/api/dabbir-contextual-navigation-ui',
+  '/api/auth-session-stability-ui',
+];
+
+const UI_BUNDLE_LOADER = `<script>
+(()=>{
+  window.__dabbirCriticalUiReady=true;
+  const load=()=>{
+    if(!window.__dabbirCriticalUiReady||window.__dabbirDeferredUiRequested)return;
+    window.__dabbirDeferredUiRequested=true;
+    const script=document.createElement('script');
+    script.src='/dabbir-ui-deferred.js';
+    script.async=false;
+    script.dataset.dabbirDeferredUi='true';
+    script.onload=()=>{window.__dabbirDeferredUiReady=true};
+    document.body.appendChild(script);
+  };
+  window.__dabbirLoadDeferredUi=load;
+  if(document.querySelector('#appShell:not(.hidden)')) load();
+})();
+</script>`;
+
 function forwardHeaders(res, headers) {
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(key, value);
   for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
@@ -39,7 +87,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', '<script src="/api/brand-ui"></script>\n<script src="/api/dabbir-whatsapp-embedded-ui"></script>\n<script src="/api/dabbir-whatsapp-connect-guard-ui"></script>\n<script src="/api/timezone-ui"></script>\n<script src="/api/auth/recovery-ui"></script>\n<script src="/api/chat-human-ui"></script>\n<script src="/api/translation-ui"></script>\n<script src="/api/owner-operations-ui"></script>\n<script src="/api/service-operations-ui"></script>\n<script src="/api/activity-profile-ui"></script>\n<script src="/api/owner-action-center-ui"></script>\n<script src="/api/dabbir-owner-away-ui"></script>\n<script src="/api/dabbir-owner-decision-memory-ui"></script>\n<script src="/api/business-profile-ui"></script>\n<script src="/api/dabbir-customer-number-ui"></script>\n<script src="/api/dabbir-billing-ui"></script>\n<script src="/api/platform-customers-ui"></script>\n<script src="/api/platform-customer-support-ui"></script>\n<script src="/api/platform-recovery-reconciliation-ui"></script>\n<script src="/api/dabbir-owner-first-ui"></script>\n<script src="/api/verified-metrics-ui"></script>\n<script src="/api/customer-activation-ui"></script>\n<script>(()=>{try{if(!Object.prototype.hasOwnProperty.call(window,"workspace"))Object.defineProperty(window,"workspace",{configurable:true,enumerable:false,get(){try{return workspace}catch{return null}}})}catch{}})();</script>\n<script src="/api/owner-copilot-ui"></script>\n<script src="/api/dabbir-contextual-navigation-ui"></script>\n<script src="/api/auth-session-stability-ui"></script>\n</body>')
+        ? body.replace('</body>', '<script src="/dabbir-ui-critical.js"></script>\n' + UI_BUNDLE_LOADER + '\n</body>')
         : body;
       return res.end(html);
     },

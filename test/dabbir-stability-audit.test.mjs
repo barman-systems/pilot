@@ -5,10 +5,11 @@ import { access, readFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const platformApi = await readFile(new URL('api/platform-customers.js', root), 'utf8');
 const shell = await readFile(new URL('api/app-recovery.js', root), 'utf8');
+const uiBundles = JSON.parse(await readFile(new URL('config/dabbir-ui-bundles.json', root), 'utf8'));
 const whatsappStatus = await readFile(new URL('api/dabbir-whatsapp-status.js', root), 'utf8');
 
-function injectedApiScripts(source) {
-  return [...source.matchAll(/<script src=\"(\/api\/[^\"]+)\"><\/script>/g)].map(match => match[1]);
+function injectedApiScripts() {
+  return [...uiBundles.critical, ...uiBundles.deferred];
 }
 
 test('platform capability is quiet and fail-closed while privileged operations retain admin enforcement', () => {
@@ -29,10 +30,12 @@ test('platform capability is quiet and fail-closed while privileged operations r
 });
 
 test('authoritative shell injects every UI module exactly once and keeps auth stability last', async () => {
-  const scripts = injectedApiScripts(shell);
+  const scripts = injectedApiScripts();
   assert.ok(scripts.length >= 20, 'expected the authoritative UI module stack');
   assert.equal(new Set(scripts).size, scripts.length, 'duplicate UI module injection detected');
-  assert.equal(scripts.at(-1), '/api/auth-session-stability-ui', 'auth stability must remain the final UI authority');
+  assert.equal(uiBundles.critical.at(-1), '/api/auth-session-stability-ui', 'auth stability must remain the final critical UI authority');
+  assert.match(shell, /dabbir-ui-critical\.js/);
+  assert.match(shell, /dabbir-ui-deferred\.js/);
 
   await Promise.all(scripts.map(async src => {
     const relative = `${src.slice(1)}.js`;

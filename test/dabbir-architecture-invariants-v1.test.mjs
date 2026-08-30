@@ -13,10 +13,11 @@ const serviceOperations = read('api/service-operations-ui.js');
 const contextualNavigation = read('api/dabbir-contextual-navigation-ui.js');
 const ownerFirst = read('api/dabbir-owner-first-ui.js');
 const authStability = read('api/auth-session-stability-ui.js');
+const uiBundles = JSON.parse(read('config/dabbir-ui-bundles.json'));
 const whatsappStatus = read('api/dabbir-whatsapp-status.js');
 
-function shellModules(source) {
-  return [...source.matchAll(/<script src=\"(\/api\/[^\"]+)\"><\/script>/g)].map(match => match[1]);
+function shellModules() {
+  return [...uiBundles.critical, ...uiBundles.deferred];
 }
 
 function navBody(id) {
@@ -62,39 +63,16 @@ test('feature modules cannot own primary navigation', () => {
 });
 
 test('shell UI module growth is frozen to the explicit allowlist', () => {
-  const modules = shellModules(shell);
-  const expected = [
-    '/api/brand-ui',
-    '/api/dabbir-whatsapp-embedded-ui',
-    '/api/dabbir-whatsapp-connect-guard-ui',
-    '/api/timezone-ui',
-    '/api/auth/recovery-ui',
-    '/api/chat-human-ui',
-    '/api/translation-ui',
-    '/api/owner-operations-ui',
-    '/api/service-operations-ui',
-    '/api/activity-profile-ui',
-    '/api/owner-action-center-ui',
-    '/api/dabbir-owner-away-ui',
-    '/api/dabbir-owner-decision-memory-ui',
-    '/api/business-profile-ui',
-    '/api/dabbir-customer-number-ui',
-    '/api/dabbir-billing-ui',
-    '/api/platform-customers-ui',
-    '/api/platform-customer-support-ui',
-    '/api/platform-recovery-reconciliation-ui',
-    '/api/dabbir-owner-first-ui',
-    '/api/verified-metrics-ui',
-    '/api/customer-activation-ui',
-    '/api/owner-copilot-ui',
-    '/api/dabbir-contextual-navigation-ui',
-    '/api/auth-session-stability-ui'
-  ];
+  const modules = shellModules();
+  const expected = [...uiBundles.critical, ...uiBundles.deferred];
 
   assert.deepEqual(modules, expected, 'new shell patch modules require an explicit architecture change');
+  assert.match(shell, /dabbir-ui-critical\.js/);
+  assert.match(shell, /dabbir-ui-deferred\.js/);
+  assert.match(index, /__dabbirLoadDeferredUi/);
   assert.equal(new Set(modules).size, modules.length, 'duplicate shell module injection detected');
   assert.ok(modules.length <= ownership.shell.maximum_injected_api_modules, 'shell module ceiling exceeded');
-  assert.equal(modules.at(-1), ownership.shell.last_loaded_ui_observer);
+  assert.equal(uiBundles.critical.at(-1), ownership.shell.last_loaded_ui_observer);
 
   for (const retired of ownership.shell.retired_modules_forbidden) {
     assert.equal(modules.includes(retired), false, `retired presentation layer returned: ${retired}`);

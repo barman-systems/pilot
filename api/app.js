@@ -365,7 +365,9 @@ export default function handler(req, res) {
   html = html.replace('</body>', `${interfacePerformanceUi}\n${conversationPerformanceUi}\n${truthVisibilityUi}\n</body>`);
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
-  res.setHeader('cache-control', 'no-store');
+  // The shell is identical for every visitor; private workspace data arrives via no-store API calls.
+  // Cache at Vercel's edge, not in the browser, to remove a cold Lambda from repeat visits.
+  res.setHeader('cache-control', 'public, max-age=0, s-maxage=600, stale-while-revalidate=86400');
   res.setHeader('x-dabbir-interface', 'operational-runtime-v2-truth');
   res.setHeader('x-dabbir-chat-path', 'chat-send-truth-v4-whatsapp-reserve-v2');
   res.setHeader('x-dabbir-performance', 'interface-fast-v4-truth');

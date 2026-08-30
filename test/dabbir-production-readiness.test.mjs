@@ -45,3 +45,21 @@ test('public auth onboarding explains password requirements and legal links', ()
   assert.match(html, /passwordHintSignup/);
   assert.match(html, /aria-selected/);
 });
+
+test('performance bundles are present and shell delivery is split by lifecycle', () => {
+  const shell = read('api/app-recovery.js');
+  const app = read('api/app.js');
+  const vercel = JSON.parse(read('vercel.json'));
+  const manifest = JSON.parse(read('config/dabbir-ui-bundles.json'));
+  for (const bundle of ['critical', 'deferred']) {
+    const bundlePath = path.join(root, `public/dabbir-ui-${bundle}.js`);
+    assert.ok(fs.statSync(bundlePath).size > 0);
+  }
+  assert.equal(manifest.critical.length, 3);
+  assert.equal(manifest.deferred.length, 22);
+  assert.match(shell, /dabbir-ui-critical\.js/);
+  assert.match(shell, /dabbir-ui-deferred\.js/);
+  assert.match(shell, /__dabbirLoadDeferredUi/);
+  assert.match(app, /public, max-age=0, s-maxage=600/);
+  assert.ok(vercel.headers.some(rule => rule.source.includes('/dabbir-ui-') && rule.source.includes('critical')));
+});

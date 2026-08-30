@@ -9,7 +9,7 @@ const gatePath = 'scripts/vercel-build-gate.mjs';
 const gate = fs.readFileSync(new URL(`../${gatePath}`, import.meta.url), 'utf8');
 
 test('Vercel uses the fail-closed DABBIR build gate without changing the Functions deployment contract', () => {
-  assert.equal(pkg.scripts?.['vercel-build'], 'node scripts/vercel-build-gate.mjs');
+  assert.equal(pkg.scripts?.['vercel-build'], 'node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs');
   assert.equal(pkg.scripts?.test, 'node --test test/*.test.mjs');
   const parse = spawnSync(process.execPath, ['--check', gatePath], { encoding: 'utf8' });
   assert.equal(parse.status, 0, parse.stderr || parse.stdout);
