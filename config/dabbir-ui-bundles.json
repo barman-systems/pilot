@@ -14,6 +14,7 @@
     "/api/owner-operations-ui",
     "/api/service-operations-ui",
     "/api/activity-profile-ui",
+    "/api/calendar-live-ui",
     "/api/owner-action-center-ui",
     "/api/dabbir-owner-away-ui",
     "/api/dabbir-owner-decision-memory-ui",
