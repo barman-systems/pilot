@@ -123,13 +123,14 @@ test('Embedded completion exchanges authorization code server-side and never ret
   assert.doesNotMatch(endpoint, /access_token:\s*exchanged\.accessToken/);
 });
 
-test('Embedded completion exchanges v4 authorization code without forcing a redirect URI', async () => {
+test('Embedded completion exchanges v4 authorization code with the exact request-derived redirect URI', async () => {
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
   const handlerStart = endpoint.indexOf('export default async function handler');
   assert.ok(handlerStart >= 0);
   const handler = endpoint.slice(handlerStart);
-  assert.match(handler, /exchangeEmbeddedCode\(platform, code\)/);
-  assert.doesNotMatch(handler, /exchangeEmbeddedCodeWithDomainRepair\(platform, code/);
+  assert.match(handler, /oauthRedirectUriFromRequest\(req\)/);
+  assert.match(handler, /exchangeEmbeddedCodeWithDomainRepair\(platform, code, redirectUri\)/);
+  assert.doesNotMatch(handler, /exchangeEmbeddedCode\(platform, code\)/);
   assert.match(endpoint, /providerSubcode/);
 });
 
