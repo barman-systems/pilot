@@ -40,8 +40,52 @@ const script=String.raw`(()=>{
   window.dabbirLocalTimeToIso=dubaiLocalToIso;
 
   const appointmentForm=document.querySelector('#appointmentForm');
+  const appointmentModal=document.querySelector('#appointmentModal');
+  const appointmentTime=document.querySelector('#apptTime');
+  const appointmentFields={
+    salon:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['specialist','text','الموظفة / المختصة','Specialist'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر (درهم)','Price (AED)'],['status','select','حالة الموعد','Status'],['notes','text','ملاحظات','Notes']],
+    clinic:[['phone','tel','رقم الهاتف','Phone'],['service','text','نوع الموعد','Appointment type'],['specialist','text','الطبيب / المختص','Doctor / specialist'],['duration','number','المدة بالدقائق','Duration (minutes)'],['status','select','حالة الموعد','Status'],['notes','text','ملاحظات إدارية','Administrative notes']],
+    car_wash:[['phone','tel','رقم الهاتف','Phone'],['vehicle','text','نوع السيارة','Vehicle type'],['service','text','الخدمة / الباقة','Service / package'],['location','text','الموقع','Location'],['price','number','السعر (درهم)','Price (AED)'],['notes','text','ملاحظات','Notes']],
+    services:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['location','text','الموقع','Location'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر (درهم)','Price (AED)'],['notes','text','ملاحظات','Notes']],
+    other:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة / سبب الموعد','Service / purpose'],['notes','text','ملاحظات','Notes']],
+  };
+
+  function businessType(){
+    try{return workspace?.business?.business_type||'other'}catch{return'other'}
+  }
+  function isArabic(){return document.documentElement.lang!=='en'}
+  function renderAdaptiveFields(){
+    if(!appointmentForm||!appointmentTime)return;
+    appointmentForm.querySelector('#adaptiveApptFields')?.remove();
+    const wrap=document.createElement('div');wrap.id='adaptiveApptFields';
+    const fields=appointmentFields[businessType()]||appointmentFields.other;
+    for(const [key,type,arLabel,enLabel] of fields){
+      const field=document.createElement('div');field.className='field';
+      const label=document.createElement('label');label.textContent=isArabic()?arLabel:enLabel;
+      let input;
+      if(type==='select'){
+        input=document.createElement('select');
+        [['requested','بانتظار التأكيد','Pending'],['confirmed','مؤكد','Confirmed'],['cancelled','ملغي','Cancelled']].forEach(([value,arText,enText])=>{
+          const option=document.createElement('option');option.value=value;option.textContent=isArabic()?arText:enText;input.append(option);
+        });
+      }else{
+        input=document.createElement('input');input.type=type;
+        if(type==='text')input.maxLength=500;
+        if(type==='tel')input.maxLength=40;
+        if(type==='number'){input.min='0';input.step=key==='price'?'0.01':'5';}
+      }
+      input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
+    }
+    appointmentTime.closest('.field')?.after(wrap);
+  }
+
+  if(appointmentModal){
+    new MutationObserver(()=>{if(appointmentModal.classList.contains('open'))renderAdaptiveFields()})
+      .observe(appointmentModal,{attributes:true,attributeFilter:['class']});
+  }
+
   if(appointmentForm&&!appointmentForm.dataset.dabbirDubaiTime){
-    appointmentForm.dataset.dabbirDubaiTime='v1';
+    appointmentForm.dataset.dabbirDubaiTime='v2-adaptive';
     appointmentForm.addEventListener('submit',async event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -55,9 +99,17 @@ const script=String.raw`(()=>{
       try{
         const businessId=typeof workspace!=='undefined'&&workspace&&workspace.business?workspace.business.id:null;
         if(!businessId)return;
-        const response=await fetch('/api/dabbir-runtime-fast',{
+        const details={};
+        appointmentForm.querySelectorAll('[data-appt-key]').forEach(node=>{details[node.dataset.apptKey]=node.value});
+        const response=await fetch('/api/adaptive-appointment',{
           method:'POST',cache:'no-store',headers:{'content-type':'application/json'},
-          body:JSON.stringify({action:'create_appointment',business_id:businessId,customer_name:String(customer&&customer.value||'').trim(),starts_at:startsAt})
+          body:JSON.stringify({
+            business_id:businessId,
+            business_type:businessType(),
+            customer_name:String(customer&&customer.value||'').trim(),
+            starts_at:startsAt,
+            details,
+          })
         });
         const payload=await response.json().catch(()=>({}));
         if(!response.ok||!payload.ok){
