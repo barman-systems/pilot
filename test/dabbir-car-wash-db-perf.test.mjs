@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const migrationPath='supabase/migrations/20260831195000_dabbir_car_wash_rls_fk_perf_v1.sql';
+const cleanupPath='supabase/migrations/20260831195500_dabbir_car_wash_duplicate_index_cleanup_v1.sql';
 const source=readFileSync(migrationPath,'utf8');
+const cleanup=readFileSync(cleanupPath,'utf8');
 
 test('car wash RLS policies use statement-stable auth uid lookup',()=>{
   const directAuthUid=(source.match(/m\.user_id\s*=\s*auth\.uid\(\)/g)||[]).length;
@@ -33,4 +35,22 @@ test('car wash foreign keys have covering indexes',()=>{
     'dabbir_car_wash_recurring_vehicle_fk_idx',
     'dabbir_car_wash_recurring_offer_fk_idx'
   ]) assert.match(source,new RegExp(`create index if not exists ${indexName}`));
+});
+
+test('concurrent duplicate car wash indexes are removed without dropping canonical coverage',()=>{
+  for(const indexName of [
+    'dabbir_car_wash_photos_business_fk_idx',
+    'dabbir_car_wash_history_business_fk_idx',
+    'dabbir_car_wash_recurring_offer_fk_idx',
+    'dabbir_car_wash_recurring_vehicle_fk_idx'
+  ]) assert.match(cleanup,new RegExp(`drop index if exists public\\.${indexName}`));
+
+  for(const indexName of [
+    'dabbir_car_wash_booking_requests_customer_fk_idx',
+    'dabbir_car_wash_booking_requests_vehicle_fk_idx',
+    'dabbir_car_wash_history_changed_by_fk_idx',
+    'dabbir_car_wash_photos_vehicle_fk_idx',
+    'dabbir_car_wash_photos_created_by_fk_idx',
+    'dabbir_car_wash_recurring_customer_fk_idx'
+  ]) assert.ok(!cleanup.includes(`drop index if exists public.${indexName}`));
 });
