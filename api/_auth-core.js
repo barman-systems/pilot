@@ -100,6 +100,19 @@ export async function supabaseRest(path, accessToken, options = {}) {
   });
 }
 
+export async function supabaseStorage(path, accessToken, options = {}) {
+  if (!accessToken) throw Object.assign(new Error('AUTH_REQUIRED'), { code: 401 });
+  const headers = new Headers(options.headers || {});
+  headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
+  headers.set('authorization', `Bearer ${accessToken}`);
+  return fetch(`${SUPABASE_URL}/storage/v1/${String(path || '').replace(/^\/+/, '')}`, {
+    ...options,
+    headers,
+    cache: 'no-store',
+    signal: boundedSignal(options),
+  });
+}
+
 export function accessTokenFromRequest(req) {
   return parseCookies(req.headers.cookie || '')[ACCESS_COOKIE] || null;
 }
