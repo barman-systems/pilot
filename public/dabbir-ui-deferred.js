@@ -320,8 +320,7 @@
             config_id:cfg.config_id,
             response_type:'code',
             override_default_response_type:true,
-            redirect_uri:canonicalRedirectUri(),
-            extras:{setup:{}}
+            extras:{setup:{},featureType:COEXISTENCE_FEATURE}
           });
           report('login_invoked',{stage:'meta_login',onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
         }catch(error){reject(error)}
@@ -466,15 +465,31 @@
   let cachedAt=0;
   let patchScheduled=false;
   let metaSignupStartedAt=0;
+  let oauthReturnBusy=false;
+  let oauthLaunchBusy=false;
   const CACHE_MS=5000;
   const META_SIGNUP_RESUME_KEY='dabbir_meta_signup_resume_v2';
+  const META_OAUTH_PENDING_KEY='dabbir_whatsapp_manual_oauth_v1';
+  const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
+  const OAUTH_TTL_MS=15*60*1000;
+  const CONNECT_SELECTOR='.dabbirWhatsAppConnect,.dabbirWhatsAppChange';
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
 
+  function report(event,extra={}){
+    try{
+      fetch('/api/dabbir-whatsapp-client-event',{
+        method:'POST',cache:'no-store',keepalive:true,
+        headers:{'content-type':'application/json','accept':'application/json'},
+        body:JSON.stringify({event,...extra})
+      }).catch(()=>{});
+    }catch{}
+  }
+
   const style=document.createElement('style');
-  style.dataset.dabbirWhatsAppMetaResume='v2';
+  style.dataset.dabbirWhatsAppMetaResume='v4';
   style.textContent=[
     '.dabbirWhatsAppMetaResume{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.55}',
     '.dabbirWhatsAppMetaResume strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
@@ -483,10 +498,10 @@
   ].join('');
   document.head.appendChild(style);
 
-  async function config(){
+  async function config(force=false){
     const bid=businessId();
     if(!bid) return null;
-    if(cachedConfig&&cachedBusinessId===bid&&Date.now()-cachedAt<CACHE_MS) return cachedConfig;
+    if(!force&&cachedConfig&&cachedBusinessId===bid&&Date.now()-cachedAt<CACHE_MS) return cachedConfig;
     try{
       const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{
         cache:'no-store',headers:{accept:'application/json'}
@@ -515,6 +530,184 @@
       : 'WhatsApp connection cannot open because platform setup is incomplete: '+items+'. No incomplete connection was saved.';
   }
 
+  function authoritativeRedirectUri(){
+    const host=String(window.location.hostname||'').toLowerCase();
+    if(host==='dabbir.bmalman.com') return 'https://dabbir.bmalman.com/';
+    return window.location.origin+'/';
+  }
+
+  function randomState(){
+    try{
+      const bytes=new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+    }catch{
+      return String(Date.now())+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+    }
+  }
+
+  function saveOauthPending(record){
+    try{sessionStorage.setItem(META_OAUTH_PENDING_KEY,JSON.stringify(record));return true}catch{return false}
+  }
+
+  function readOauthPending(){
+    try{
+      const raw=sessionStorage.getItem(META_OAUTH_PENDING_KEY);
+      if(!raw)return null;
+      const data=JSON.parse(raw);
+      if(!data||typeof data!=='object')return null;
+      if(Date.now()-Number(data.started_at||0)>OAUTH_TTL_MS){sessionStorage.removeItem(META_OAUTH_PENDING_KEY);return null}
+      return data;
+    }catch{return null}
+  }
+
+  function clearOauthPending(){try{sessionStorage.removeItem(META_OAUTH_PENDING_KEY)}catch{}}
+
+  function cleanOauthLocation(){
+    try{
+      const url=new URL(window.location.href);
+      ['code','state','error','error_code','error_reason','error_description'].forEach(key=>url.searchParams.delete(key));
+      const next=url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():'')+url.hash;
+      history.replaceState({},document.title,next||'/');
+    }catch{}
+  }
+
+  function buildManualOauthUrl(cfg,state){
+    const graph=String(cfg?.graph_version||'v26.0').replace(/[^a-zA-Z0-9.]/g,'');
+    const url=new URL('https://www.facebook.com/'+graph+'/dialog/oauth');
+    url.searchParams.set('client_id',String(cfg.app_id));
+    url.searchParams.set('config_id',String(cfg.config_id));
+    url.searchParams.set('redirect_uri',authoritativeRedirectUri());
+    url.searchParams.set('response_type','code');
+    url.searchParams.set('override_default_response_type','true');
+    url.searchParams.set('state',state);
+    url.searchParams.set('extras',JSON.stringify({setup:{},featureType:COEXISTENCE_FEATURE}));
+    return url.toString();
+  }
+
+  async function beginManualOauth(event,button,cfgOverride=null){
+    if(event){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation()}
+    if(oauthLaunchBusy||oauthReturnBusy)return;
+    oauthLaunchBusy=true;
+    if(button){button.disabled=true;button.textContent=ar()?'جارٍ فتح Meta…':'Opening Meta…'}
+    try{
+      const cfg=cfgOverride||await config(true);
+      if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
+        tell(blockedText(missingParts(cfg)));
+        if(button)button.disabled=false;
+        return;
+      }
+      const bid=businessId();
+      if(!bid){
+        tell(ar()?'لم يتم تحديد النشاط بعد':'Business is not ready yet');
+        if(button)button.disabled=false;
+        return;
+      }
+      const state=randomState();
+      const redirectUri=authoritativeRedirectUri();
+      const pending={state,business_id:bid,redirect_uri:redirectUri,started_at:Date.now(),onboarding_mode:COEXISTENCE_FEATURE};
+      if(!saveOauthPending(pending)){
+        tell(ar()?'تعذر بدء الربط الآمن. أعد تحميل الصفحة.':'Could not start secure onboarding. Reload the page.');
+        if(button)button.disabled=false;
+        return;
+      }
+      report('manual_oauth_start',{stage:'meta_login'});
+      window.location.assign(buildManualOauthUrl(cfg,state));
+    }finally{
+      setTimeout(()=>{oauthLaunchBusy=false},1000);
+    }
+  }
+
+  function delegatedManualOauthClick(event){
+    const target=event.target instanceof Element?event.target:null;
+    const button=target?.closest(CONNECT_SELECTOR);
+    if(!(button instanceof HTMLButtonElement))return;
+
+    // This listener runs on document capture. It is the sole click authority for
+    // WhatsApp onboarding and stops the older FB.login target handler even when
+    // renderIntegrations recreates the button immediately before a tap.
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    if(oauthLaunchBusy||oauthReturnBusy)return;
+    void beginManualOauth(null,button,null);
+  }
+  document.addEventListener('click',delegatedManualOauthClick,true);
+
+  async function finishManualOauthReturn(){
+    if(oauthReturnBusy)return;
+    let url;
+    try{url=new URL(window.location.href)}catch{return}
+    const code=String(url.searchParams.get('code')||'');
+    const state=String(url.searchParams.get('state')||'');
+    const providerError=String(url.searchParams.get('error_description')||url.searchParams.get('error_reason')||url.searchParams.get('error')||'');
+    if(!code&&!providerError)return;
+
+    oauthReturnBusy=true;
+    const pending=readOauthPending();
+    try{
+      if(providerError){
+        clearOauthPending();
+        cleanOauthLocation();
+        report('manual_oauth_provider_error',{stage:'meta_login',error:providerError.slice(0,160)});
+        tell(ar()?'تم إلغاء ربط Meta أو رفضه. لم يتم حفظ أي ربط ناقص.':'Meta onboarding was cancelled or rejected. No incomplete connection was saved.');
+        return;
+      }
+      if(!pending||!pending.state||pending.state!==state||!pending.business_id){
+        clearOauthPending();
+        cleanOauthLocation();
+        report('manual_oauth_state_error',{stage:'meta_login',error:'META_OAUTH_STATE_MISMATCH'});
+        tell(ar()?'انتهت جلسة الربط الآمن. ابدأ ربط واتساب من جديد.':'Secure onboarding session expired. Start WhatsApp connection again.');
+        return;
+      }
+      if(String(pending.redirect_uri||'')!==authoritativeRedirectUri()){
+        clearOauthPending();
+        cleanOauthLocation();
+        report('manual_oauth_state_error',{stage:'meta_login',error:'META_OAUTH_REDIRECT_MISMATCH'});
+        tell(ar()?'عنوان الرجوع للربط تغير. أعد المحاولة من دبّر.':'OAuth return address changed. Retry from DABBIR.');
+        return;
+      }
+
+      report('manual_oauth_complete_start',{stage:'server_complete',has_code:true});
+      const response=await fetch('/api/dabbir-whatsapp-embedded-complete',{
+        method:'POST',cache:'no-store',
+        headers:{'content-type':'application/json','accept':'application/json'},
+        body:JSON.stringify({
+          business_id:String(pending.business_id),
+          code,
+          waba_id:'',
+          phone_number_id:'',
+          onboarding_mode:COEXISTENCE_FEATURE
+        })
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok||!payload.ok){
+        const key=String(payload?.error||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
+        report('manual_oauth_complete_error',{stage:'server_complete',error:key.slice(0,160),has_code:true});
+        throw Object.assign(new Error(key),{providerCode:payload?.provider_code||null});
+      }
+      report('manual_oauth_complete_ok',{stage:'server_complete',has_code:true,has_waba:true,has_phone:true});
+      clearOauthPending();
+      cleanOauthLocation();
+      try{if(typeof workspace!=='undefined'&&workspace)workspace.whatsapp={...(workspace.whatsapp||{}),...payload}}catch{}
+      tell(ar()?'تم ربط رقم WhatsApp Business بنجاح':'WhatsApp Business number connected successfully');
+      setTimeout(()=>window.location.replace('/'),350);
+    }catch(error){
+      const key=String(error?.message||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
+      cleanOauthLocation();
+      report('manual_oauth_complete_error',{stage:'server_complete',error:key.slice(0,160),has_code:true});
+      if(key.toLowerCase().includes('redirect_uri')){
+        tell(ar()?'رفضت Meta عنوان الرجوع المستخدم في هذه المحاولة. لم يتم حفظ أي ربط ناقص.':'Meta rejected the callback URL used for this attempt. No incomplete connection was saved.');
+      }else{
+        tell(ar()?'تعذر إكمال ربط WhatsApp Business من Meta. لم يتم حفظ أي ربط ناقص.':'Meta could not complete WhatsApp Business setup. No incomplete connection was saved.');
+      }
+      clearOauthPending();
+    }finally{
+      oauthReturnBusy=false;
+      schedulePatch();
+    }
+  }
+
   function markMetaSignupResume(){
     metaSignupStartedAt=Date.now();
     try{sessionStorage.setItem(META_SIGNUP_RESUME_KEY,JSON.stringify({business_id:businessId(),started_at:metaSignupStartedAt}))}catch{}
@@ -541,10 +734,11 @@
   function resumeOfficialWhatsAppSignup(){
     if(!pendingMetaSignup())return;
     if(Date.now()-metaSignupStartedAt<1500)return;
-    const primary=document.querySelector('.dabbirWhatsAppConnect,.dabbirWhatsAppChange');
-    if(!(primary instanceof HTMLButtonElement)||primary.disabled)return;
+    const primary=document.querySelector(CONNECT_SELECTOR);
+    if(!(primary instanceof HTMLButtonElement))return;
     clearMetaSignupResume();
     tell(ar()?'جاري إكمال ربط واتساب…':'Continuing WhatsApp connection…');
+    primary.disabled=false;
     setTimeout(()=>primary.click(),150);
   }
 
@@ -583,28 +777,31 @@
 
   async function patch(){
     patchScheduled=false;
+    void finishManualOauthReturn();
     const cfg=await config();
     const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
     document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureMetaResumeNotice);
-    document.querySelectorAll('.dabbirWhatsAppConnect,.dabbirWhatsAppChange').forEach(button=>{
+    document.querySelectorAll(CONNECT_SELECTOR).forEach(button=>{
       if(!(button instanceof HTMLButtonElement)) return;
       const box=button.closest('[data-dabbir-whatsapp-actions]');
       if(box) ensureMetaResumeNotice(box);
-      if(platformReady||button.dataset.platformReady!=='false') return;
-      if(button.closest('.dabbirWhatsAppBusy')) return;
       const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
+      if(platformReady){
+        button.disabled=oauthReturnBusy||oauthLaunchBusy;
+        button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
+        button.dataset.platformReady='true';
+        button.dataset.dabbirDirectOauthAuthority='document-capture-v1';
+        if(hint) hint.textContent=ar()
+          ? 'اضغط ربط. سيستخدم دبّر مسار Meta المباشر بعنوان رجوع ثابت، ولن يستخدم مسار FB.login القديم.'
+          : 'Tap Connect. DABBIR will use the direct Meta OAuth path with one fixed callback and will not use the old FB.login path.';
+        return;
+      }
+      if(button.closest('.dabbirWhatsAppBusy')) return;
       const text=blockedText(missingParts(cfg));
       button.disabled=false;
       button.setAttribute('aria-disabled','false');
       button.title=text;
       if(hint&&hint.textContent!==text) hint.textContent=text;
-      if(button.dataset.dabbirWhatsAppGuardBound!=='true'){
-        button.dataset.dabbirWhatsAppGuardBound='true';
-        button.addEventListener('click',()=>{
-          const currentHint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
-          if(currentHint&&currentHint.textContent!==text) currentHint.textContent=text;
-        },true);
-      }
     });
   }
 
@@ -619,7 +816,7 @@
 
   const observer=new MutationObserver(schedulePatch);
   observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready']});
-  setTimeout(()=>{patch();resumeOfficialWhatsAppSignup()},800);
+  setTimeout(()=>{void finishManualOauthReturn();schedulePatch();resumeOfficialWhatsAppSignup()},200);
 })();
 (()=>{
   if(window.__dabbirTimezoneLoaded)return;
@@ -1278,7 +1475,7 @@
   if(window.__dabbirServiceOperations)return;
   const style=document.createElement('style');
   style.dataset.dabbirServices='v1';
-  style.textContent="\n.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:9px}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:9px}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .55fr .55fr auto;gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:10px}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:9px}.svcName b{display:block;font-size:11px}.svcName small{color:var(--muted);font-size:8px}.svcStatus{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:7px 9px;min-height:38px;font-size:9px;font-weight:800}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:10px}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(120px,1fr) .6fr auto}.svcRow .svcStateCol{display:none}}\n";
+  style.textContent="\n.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:9px}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:9px}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .58fr .55fr .55fr auto;gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:10px}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:9px}.svcName b{display:block;font-size:11px}.svcName small{color:var(--muted);font-size:8px}.svcPrice{font-weight:900;white-space:nowrap}.svcStatus{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:7px 9px;min-height:38px;font-size:9px;font-weight:800}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:10px}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(105px,1fr) .62fr .62fr auto;gap:7px}.svcRow .svcStateCol{display:none}.svcRow{font-size:9px}.svcName b{font-size:10px}}\n";
   document.head.append(style);
 
   const q=s=>document.querySelector(s);
@@ -1291,13 +1488,14 @@
   let observedScreen=null;
 
   const copy=()=>ar()?{
-    nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
+    nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',price:'قيمة الخدمة',aed:'درهم',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
   }:{
-    nav:'Services',title:'Services',desc:'The real services your business provides. DABBIR uses active services when replying to customers.',truth:'Active services here are treated as live operational facts by AI.',add:'Add service',name:'Service name',duration:'Duration',minutes:'min',status:'Status',active:'Active',inactive:'Inactive',edit:'Edit',save:'Save',cancel:'Cancel',empty:'No services yet.',loading:'Loading services…',failed:'Could not load services.',created:'Service added.',updated:'Service updated.',activeMetric:'Active services',totalMetric:'Total services'
+    nav:'Services',title:'Services',desc:'The real services your business provides. DABBIR uses active services when replying to customers.',truth:'Active services here are treated as live operational facts by AI.',add:'Add service',name:'Service name',price:'Service price',aed:'AED',duration:'Duration',minutes:'min',status:'Status',active:'Active',inactive:'Inactive',edit:'Edit',save:'Save',cancel:'Cancel',empty:'No services yet.',loading:'Loading services…',failed:'Could not load services.',created:'Service added.',updated:'Service updated.',activeMetric:'Active services',totalMetric:'Total services'
   };
 
-  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
   function notify(message){try{if(typeof toast==='function')toast(message)}catch{}}
+  function money(value){const n=Number(value||0);return Number.isFinite(n)?n.toLocaleString(ar()?'ar-AE':'en-AE',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}):'0'}
 
   function ensureScreen(){
     if(!isServiceBusiness())return null;
@@ -1318,7 +1516,7 @@
     if(q('#svcModal'))return;
     const modal=document.createElement('div');
     modal.id='svcModal';modal.className='modal';
-    modal.innerHTML='<form id="svcForm" class="modalBox"><h3 id="svcModalTitle"></h3><div class="field"><label id="svcNameLabel"></label><input id="svcName" maxlength="160" required></div><div class="field"><label id="svcDurationLabel"></label><input id="svcDuration" type="number" min="1" max="1440" step="1" required></div><div class="field" id="svcActiveField"><label id="svcActiveLabel"></label><select id="svcActive"><option value="true"></option><option value="false"></option></select></div><div class="modalActions"><button id="svcCancel" type="button" class="secondary"></button><button id="svcSave" type="submit" class="primary"></button></div></form>';
+    modal.innerHTML='<form id="svcForm" class="modalBox"><h3 id="svcModalTitle"></h3><div class="field"><label id="svcNameLabel"></label><input id="svcName" maxlength="160" required></div><div class="field"><label id="svcPriceLabel"></label><input id="svcPrice" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" required></div><div class="field"><label id="svcDurationLabel"></label><input id="svcDuration" type="number" inputmode="numeric" min="1" max="1440" step="1" required></div><div class="field" id="svcActiveField"><label id="svcActiveLabel"></label><select id="svcActive"><option value="true"></option><option value="false"></option></select></div><div class="modalActions"><button id="svcCancel" type="button" class="secondary"></button><button id="svcSave" type="submit" class="primary"></button></div></form>';
     document.body.append(modal);
     q('#svcCancel').onclick=()=>modal.classList.remove('open');
     modal.addEventListener('click',event=>{if(event.target===modal)modal.classList.remove('open')});
@@ -1334,6 +1532,7 @@
     if(q('#svcTruth'))q('#svcTruth').textContent=t.truth;
     if(q('#svcAdd'))q('#svcAdd').textContent=t.add;
     if(q('#svcNameLabel'))q('#svcNameLabel').textContent=t.name;
+    if(q('#svcPriceLabel'))q('#svcPriceLabel').textContent=t.price+' ('+t.aed+')';
     if(q('#svcDurationLabel'))q('#svcDurationLabel').textContent=t.duration+' ('+t.minutes+')';
     if(q('#svcActiveLabel'))q('#svcActiveLabel').textContent=t.status;
     if(q('#svcActive option[value="true"]'))q('#svcActive option[value="true"]').textContent=t.active;
@@ -1348,9 +1547,9 @@
   async function request(options={}){
     const id=workspace?.business?.id;
     if(!id)throw new Error('BUSINESS_REQUIRED');
-    const response=await fetch('/api/owner-operations?business_id='+encodeURIComponent(id),{cache:'no-store',credentials:'same-origin',...options,headers:{accept:'application/json','content-type':'application/json',...(options.headers||{})}});
+    const response=await fetch('/api/service-catalog?business_id='+encodeURIComponent(id),{cache:'no-store',credentials:'same-origin',...options,headers:{accept:'application/json','content-type':'application/json',...(options.headers||{})}});
     const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok)throw new Error(payload?.detail||payload?.error||'OWNER_OPERATIONS_FAILED');
+    if(!response.ok||!payload?.ok)throw new Error(payload?.detail||payload?.error||'SERVICE_CATALOG_FAILED');
     return payload;
   }
 
@@ -1373,8 +1572,8 @@
     const services=Array.isArray(data.services)?data.services:[];
     const active=services.filter(service=>service.active!==false).length;
     const metrics='<div class="svcMetrics"><div class="svcMetric"><span>'+escapeHtml(t.activeMetric)+'</span><strong>'+active+'</strong></div><div class="svcMetric"><span>'+escapeHtml(t.totalMetric)+'</span><strong>'+services.length+'</strong></div></div>';
-    const rows=services.length?services.map(service=>'<div class="svcRow"><div class="svcName"><b>'+escapeHtml(service.name)+'</b><small>'+escapeHtml(String(service.id||'').slice(0,8))+'</small></div><span>'+escapeHtml(service.duration_minutes)+' '+escapeHtml(t.minutes)+'</span><span class="svcStateCol"><span class="svcStatus '+(service.active!==false?'on':'off')+'">'+escapeHtml(service.active!==false?t.active:t.inactive)+'</span></span>'+(data.can_manage?'<button class="svcAction" data-svc-edit="'+escapeHtml(service.id)+'">'+escapeHtml(t.edit)+'</button>':'<span></span>')+'</div>').join(''):'<div class="svcEmpty">'+escapeHtml(t.empty)+'</div>';
-    body.innerHTML=metrics+'<div class="svcTable"><div class="svcRow head"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.duration)+'</span><span class="svcStateCol">'+escapeHtml(t.status)+'</span><span></span></div>'+rows+'</div>';
+    const rows=services.length?services.map(service=>'<div class="svcRow"><div class="svcName"><b>'+escapeHtml(service.name)+'</b><small>'+escapeHtml(String(service.id||'').slice(0,8))+'</small></div><span class="svcPrice">'+escapeHtml(money(service.price_aed))+' '+escapeHtml(t.aed)+'</span><span>'+escapeHtml(service.duration_minutes)+' '+escapeHtml(t.minutes)+'</span><span class="svcStateCol"><span class="svcStatus '+(service.active!==false?'on':'off')+'">'+escapeHtml(service.active!==false?t.active:t.inactive)+'</span></span>'+(data.can_manage?'<button class="svcAction" data-svc-edit="'+escapeHtml(service.id)+'">'+escapeHtml(t.edit)+'</button>':'<span></span>')+'</div>').join(''):'<div class="svcEmpty">'+escapeHtml(t.empty)+'</div>';
+    body.innerHTML=metrics+'<div class="svcTable"><div class="svcRow head"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.duration)+'</span><span class="svcStateCol">'+escapeHtml(t.status)+'</span><span></span></div>'+rows+'</div>';
     if(q('#svcAdd'))q('#svcAdd').style.display=data.can_manage?'inline-flex':'none';
     body.querySelectorAll('[data-svc-edit]').forEach(button=>button.addEventListener('click',()=>openModal(services.find(service=>service.id===button.dataset.svcEdit)||null)));
   }
@@ -1383,6 +1582,7 @@
     const t=copy();editingId=service?.id||null;
     q('#svcModalTitle').textContent=service?t.edit:t.add;
     q('#svcName').value=service?.name||'';
+    q('#svcPrice').value=Number(service?.price_aed||0).toFixed(2).replace(/\.00$/,'');
     q('#svcDuration').value=service?.duration_minutes||30;
     q('#svcActive').value=service?.active===false?'false':'true';
     q('#svcActiveField').style.display=service?'block':'none';
@@ -1396,9 +1596,10 @@
     const t=copy();
     try{
       const name=q('#svcName').value.trim();
+      const price=Number(q('#svcPrice').value);
       const duration=Number(q('#svcDuration').value);
-      const body=editingId?{action:'update_service',business_id:workspace.business.id,service_id:editingId,name,duration_minutes:duration,active:q('#svcActive').value==='true'}:{action:'create_service',business_id:workspace.business.id,name,duration_minutes:duration};
-      const response=await fetch('/api/owner-operations',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
+      const body=editingId?{action:'update_service',business_id:workspace.business.id,service_id:editingId,name,price_aed:price,duration_minutes:duration,active:q('#svcActive').value==='true'}:{action:'create_service',business_id:workspace.business.id,name,price_aed:price,duration_minutes:duration};
+      const response=await fetch('/api/service-catalog',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok)throw new Error(payload?.detail||payload?.error||'SERVICE_SAVE_FAILED');
       q('#svcModal').classList.remove('open');
@@ -1429,28 +1630,45 @@
   }catch{}
 
   setTimeout(initialize,500);
-  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v3'};
+  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v4-price'};
 })();
 
 (()=>{
   if(window.__dabbirActivityProfile)return;
   const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
   let state=null,loading=false,lastBusiness=null;
+  let calendarView=(()=>{try{return localStorage.getItem('dabbir_calendar_view')||'month'}catch{return 'month'}})();
+  if(!['day','week','month'].includes(calendarView))calendarView='month';
+  let calendarCursor=new Date(),calendarConnections=null,calendarConnectionsBusiness=null,calendarConnectionsLoading=false;
   const ar=()=>document.documentElement.lang!=='en';
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const copy=()=>ar()?{
-    operational:'تشغيلي',activityTasks:'مهام خاصة بهذا النشاط',activityDesc:'دَبِّر يغيّر الأولويات والوحدات حسب نوع نشاطك، وليس بنفس القالب لكل الأعمال.',pending:'مطلوبة',progress:'قيد التنفيذ',done:'مكتملة',complete:'تم',reopen:'إعادة فتح',priority:'الأولوية',followups:'المتابعات',handoffs:'التدخل البشري',loading:'جارٍ تحميل مهام النشاط…',empty:'لا توجد مهام نشاط مفتوحة.',customersDesc:'السجلات المرتبطة بهذا النوع من النشاط.',appointmentsDesc:'المواعيد والجدول التشغيلي لهذا النشاط.',tasksDesc:'المهام التشغيلية الخاصة بنوع نشاطك، إضافة إلى المتابعات والتدخلات البشرية.',dashboardDesc:'لوحة تشغيل مخصصة لهذا النوع من النشاط من بياناتك الفعلية.',conversationsDesc:'الاستفسارات والمحادثات المرتبطة بهذا النوع من النشاط.'
+    operational:'تشغيلي',activityTasks:'مهام خاصة بهذا النشاط',activityDesc:'دَبِّر يغيّر الأولويات والوحدات حسب نوع نشاطك، وليس بنفس القالب لكل الأعمال.',pending:'مطلوبة',progress:'قيد التنفيذ',done:'مكتملة',complete:'تم',reopen:'إعادة فتح',priority:'الأولوية',followups:'المتابعات',handoffs:'التدخل البشري',loading:'جارٍ تحميل مهام النشاط…',empty:'لا توجد مهام نشاط مفتوحة.',customersDesc:'السجلات المرتبطة بهذا النوع من النشاط.',appointmentsDesc:'المواعيد والجدول التشغيلي لهذا النشاط.',tasksDesc:'المهام التشغيلية الخاصة بنوع نشاطك، إضافة إلى المتابعات والتدخلات البشرية.',dashboardDesc:'لوحة تشغيل مخصصة لهذا النوع من النشاط من بياناتك الفعلية.',conversationsDesc:'الاستفسارات والمحادثات المرتبطة بهذا النوع من النشاط.',
+    calendar:'التقويم',today:'اليوم',day:'يومي',week:'أسبوعي',month:'شهري',previous:'السابق',next:'التالي',noDayBookings:'لا توجد حجوزات في هذا اليوم.',calendarSync:'ربط التقويم',calendarSyncDesc:'تقويم دبّر هو الأساس. يمكنك ربط Google Calendar أو Outlook ومتابعة حالة الاتصال من هنا.',google:'Google Calendar',outlook:'Outlook / Microsoft 365',connect:'ربط',disconnect:'فصل',connected:'متصل',notConnected:'غير متصل',providerSetup:'يحتاج إعداد OAuth',loadingConnections:'جارٍ فحص الربط…',connectionFailed:'تعذر فحص حالة التقويم',calendarConnected:'تم ربط التقويم بنجاح',calendarError:'تعذر إكمال ربط التقويم',statusRequested:'مطلوب',statusConfirmed:'مؤكد',statusCancelled:'ملغي',statusCompleted:'مكتمل',busy:'مشغول'
   }:{
-    operational:'Operational',activityTasks:'Activity-specific tasks',activityDesc:'DABBIR changes priorities and modules by business type instead of using one template for every business.',pending:'Pending',progress:'In progress',done:'Done',complete:'Done',reopen:'Reopen',priority:'Priority',followups:'Follow-ups',handoffs:'Human intervention',loading:'Loading activity tasks…',empty:'No open activity tasks.',customersDesc:'Records relevant to this business type.',appointmentsDesc:'The operational schedule for this business type.',tasksDesc:'Operational tasks for this business type, plus follow-ups and human handoffs.',dashboardDesc:'An operations dashboard tailored to this business type using live data.',conversationsDesc:'Inquiries and conversations relevant to this business type.'
+    operational:'Operational',activityTasks:'Activity-specific tasks',activityDesc:'DABBIR changes priorities and modules by business type instead of using one template for every business.',pending:'Pending',progress:'In progress',done:'Done',complete:'Done',reopen:'Reopen',priority:'Priority',followups:'Follow-ups',handoffs:'Human intervention',loading:'Loading activity tasks…',empty:'No open activity tasks.',customersDesc:'Records relevant to this business type.',appointmentsDesc:'The operational schedule for this business type.',tasksDesc:'Operational tasks for this business type, plus follow-ups and human handoffs.',dashboardDesc:'An operations dashboard tailored to this business type using live data.',conversationsDesc:'Inquiries and conversations relevant to this business type.',
+    calendar:'Calendar',today:'Today',day:'Day',week:'Week',month:'Month',previous:'Previous',next:'Next',noDayBookings:'No bookings on this day.',calendarSync:'Calendar connections',calendarSyncDesc:'DABBIR Calendar is the source of truth. Connect Google Calendar or Outlook and manage the connection here.',google:'Google Calendar',outlook:'Outlook / Microsoft 365',connect:'Connect',disconnect:'Disconnect',connected:'Connected',notConnected:'Not connected',providerSetup:'OAuth setup required',loadingConnections:'Checking calendar connections…',connectionFailed:'Could not check calendar status',calendarConnected:'Calendar connected successfully',calendarError:'Calendar connection could not be completed',statusRequested:'Requested',statusConfirmed:'Confirmed',statusCancelled:'Cancelled',statusCompleted:'Completed',busy:'Busy'
   };
 
   const style=document.createElement('style');
-  style.textContent='.activityIdentity{display:flex;align-items:center;gap:8px;margin:8px 0 0}.activityPill{display:inline-flex;align-items:center;border:1px solid #3a4330;background:#172016;color:var(--accent);padding:5px 9px;border-radius:999px;font-size:9px;font-weight:900}.activityTaskCard{margin-bottom:12px}.activityTaskGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.activityTask{border:1px solid #292f34;background:#15181b;border-radius:14px;padding:11px;display:flex;gap:10px;align-items:flex-start}.activityTask .grow{flex:1;min-width:0}.activityTask b{display:block;font-size:11px;line-height:1.5}.activityTask small{display:block;color:var(--muted);font-size:8px;margin-top:4px}.activityTask button{min-height:34px;padding:6px 9px}.activityDone{opacity:.58}.activityPriority{font-size:8px;color:var(--yellow);font-weight:900}.navBtn>.navIcon{display:none!important}@media(max-width:700px){.activityTaskGrid{grid-template-columns:1fr}}';
+  style.textContent=[
+    '.activityIdentity{display:flex;align-items:center;gap:8px;margin:8px 0 0}.activityPill{display:inline-flex;align-items:center;border:1px solid #3a4330;background:#172016;color:var(--accent);padding:5px 9px;border-radius:999px;font-size:9px;font-weight:900}.activityTaskCard{margin-bottom:12px}.activityTaskGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.activityTask{border:1px solid #292f34;background:#15181b;border-radius:14px;padding:11px;display:flex;gap:10px;align-items:flex-start}.activityTask .grow{flex:1;min-width:0}.activityTask b{display:block;font-size:11px;line-height:1.5}.activityTask small{display:block;color:var(--muted);font-size:8px;margin-top:4px}.activityTask button{min-height:34px;padding:6px 9px}.activityDone{opacity:.58}.activityPriority{font-size:8px;color:var(--yellow);font-weight:900}.navBtn>.navIcon{display:none!important}',
+    '.dabbirCalendarShell{display:grid;gap:12px}.dabbirCalendarCard{border:1px solid var(--line);background:#111315;border-radius:18px;padding:12px;overflow:hidden}.dabbirCalendarToolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}.dabbirCalendarNav,.dabbirCalendarViews{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.dabbirCalendarTitle{font-size:14px;font-weight:900;min-width:160px}.dabbirCalendarToolbar button{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:7px 10px;min-height:38px;font-size:10px}.dabbirCalendarToolbar button.on{border-color:#4f46e5;background:#24204e;color:#fff}.dabbirCalendarToolbar .todayBtn{background:#252c1d;border-color:#414d2a}.dabbirMonthWeekdays,.dabbirMonthGrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.dabbirMonthWeekdays span{text-align:center;color:var(--muted);font-size:9px;padding:5px 2px}.dabbirCalDay{border:1px solid #252a2f;background:#15181b;border-radius:11px;min-height:92px;padding:6px;min-width:0}.dabbirCalDay.out{opacity:.38}.dabbirCalDay.today{border-color:#4f46e5;box-shadow:inset 0 0 0 1px #4f46e555}.dabbirCalDate{display:flex;align-items:center;justify-content:space-between;font-size:9px;font-weight:900;margin-bottom:5px}.dabbirCalCount{color:var(--muted);font-size:8px}.dabbirCalEvent{display:block;width:100%;border:0;background:#14243a;color:#d7e8ff;border-radius:7px;padding:5px 6px;margin-top:4px;text-align:start;min-height:0;font-size:8px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dabbirCalEvent.cancelled{background:#34191b;color:#ffb9b9}.dabbirCalEvent.completed{background:#17311f;color:#bce8c7}.dabbirCalEvent.requested{background:#3a3014;color:#ffe29c}.dabbirAgenda{display:grid;gap:7px}.dabbirAgendaRow{display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;align-items:stretch}.dabbirAgendaTime{color:var(--muted);font-size:9px;padding:9px 4px;text-align:center}.dabbirAgendaSlot{border:1px solid #292f34;background:#15181b;border-radius:10px;min-height:46px;padding:6px}.dabbirAgendaEvent{border:1px solid #334861;background:#14243a;border-radius:8px;padding:7px 8px;font-size:9px}.dabbirWeek{overflow-x:auto;padding-bottom:3px}.dabbirWeekGrid{display:grid;grid-template-columns:repeat(7,minmax(112px,1fr));gap:6px;min-width:784px}.dabbirWeekDay{border:1px solid #292f34;background:#15181b;border-radius:11px;padding:7px;min-height:150px}.dabbirWeekDay.today{border-color:#4f46e5}.dabbirWeekHead{font-size:9px;font-weight:900;margin-bottom:7px}.dabbirCalendarEmpty{border:1px dashed #31363c;border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:10px}.dabbirCalendarConnections{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}.dabbirCalendarConnectionsHead{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:9px}.dabbirCalendarConnectionsHead h3{font-size:12px;margin:0 0 3px}.dabbirCalendarConnectionsHead p{font-size:9px;color:var(--muted);margin:0;line-height:1.55}.dabbirProviderGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dabbirProvider{border:1px solid #292f34;background:#15181b;border-radius:12px;padding:10px}.dabbirProviderTop{display:flex;gap:8px;justify-content:space-between;align-items:center}.dabbirProvider b{font-size:10px}.dabbirProvider small{display:block;color:var(--muted);font-size:8px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dabbirProvider button,.dabbirProvider a{display:inline-flex;align-items:center;justify-content:center;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850;text-decoration:none}.dabbirProvider a{background:#252c1d;border:1px solid #414d2a}.dabbirProvider button{background:#181b1f;border:1px solid var(--line);color:#fff}.dabbirProvider button:disabled{opacity:.55}.dabbirProviderBadge{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;background:#25282d;color:#c5cad0}.dabbirProviderBadge.ok{background:#14331e;color:var(--green)}.dabbirProviderBadge.warn{background:#3a3014;color:var(--yellow)}',
+    '@media(max-width:700px){.activityTaskGrid{grid-template-columns:1fr}.dabbirCalendarCard{padding:9px;border-radius:15px}.dabbirCalendarToolbar{align-items:stretch}.dabbirCalendarTitle{order:-1;width:100%;text-align:center}.dabbirCalendarNav,.dabbirCalendarViews{flex:1;justify-content:center}.dabbirMonthWeekdays,.dabbirMonthGrid{gap:3px}.dabbirMonthWeekdays span{font-size:8px}.dabbirCalDay{min-height:74px;padding:4px;border-radius:8px}.dabbirCalDate{font-size:8px}.dabbirCalEvent{font-size:7px;padding:4px}.dabbirCalCount{display:none}.dabbirProviderGrid{grid-template-columns:1fr}.dabbirAgendaRow{grid-template-columns:58px minmax(0,1fr)}}'
+  ].join('');
   document.head.append(style);
 
   function businessId(){return workspace?.business?.id||null}
   function setText(selector,value){const el=q(selector);if(el&&value!==undefined&&value!==null)el.textContent=value}
   function setLabel(screen,value){qa('[data-screen="'+screen+'"] [data-label]').forEach(el=>{if(value)el.textContent=value})}
+  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}
+  function plusDays(value,days){const d=new Date(value);d.setDate(d.getDate()+days);return d}
+  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
+  function fmtDay(value,opts={}){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',opts).format(value)}catch{return ''}}
+  function customerLabel(id){const row=(workspace?.customers||[]).find(x=>x.id===id);return row?.display_name||(ar()?'عميل':'Customer')}
+  function appointmentStatus(value){const t=copy(),s=String(value||'').toLowerCase();if(['cancelled','canceled'].includes(s))return {label:t.statusCancelled,cls:'cancelled'};if(['completed','done'].includes(s))return {label:t.statusCompleted,cls:'completed'};if(['confirmed','approved'].includes(s))return {label:t.statusConfirmed,cls:'confirmed'};return {label:t.statusRequested,cls:'requested'}}
+  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}
 
   function ensureTaskCard(){
     const screen=q('#screen-tasks');if(!screen)return null;
@@ -1479,6 +1697,107 @@
     }else{
       D.ar.todayAppointments='المتابعات';D.en.todayAppointments='Follow-ups';
     }
+  }
+
+  function ensureCalendar(){
+    const screen=q('#screen-appointments');if(!screen)return null;
+    let shell=q('#dabbirCalendarShell');
+    if(!shell){
+      shell=document.createElement('div');shell.id='dabbirCalendarShell';shell.className='dabbirCalendarShell';
+      const table=q('#appointmentsTable');if(table){table.style.display='none';table.parentNode.insertBefore(shell,table)}else screen.append(shell);
+    }
+    return shell;
+  }
+
+  function calendarTitle(){
+    if(calendarView==='month')return fmtDay(calendarCursor,{month:'long',year:'numeric'});
+    if(calendarView==='day')return fmtDay(calendarCursor,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const start=startOfWeek(calendarCursor),end=plusDays(start,6);
+    return fmtDay(start,{day:'numeric',month:'short'})+' — '+fmtDay(end,{day:'numeric',month:'short',year:'numeric'});
+  }
+
+  function monthBody(rows){
+    const t=copy(),year=calendarCursor.getFullYear(),month=calendarCursor.getMonth(),first=new Date(year,month,1),start=startOfWeek(first),today=dayKey(new Date());
+    const weekdays=ar()?['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت','الأحد']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const groups=new Map();rows.forEach(a=>{const key=dayKey(a.starts_at);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(a)});
+    let cells='';for(let i=0;i<42;i++){
+      const d=plusDays(start,i),key=dayKey(d),events=groups.get(key)||[],outside=d.getMonth()!==month;
+      cells+='<div class="dabbirCalDay '+(outside?'out ':'')+(key===today?'today':'')+'"><div class="dabbirCalDate"><span>'+esc(String(d.getDate()))+'</span>'+(events.length?'<span class="dabbirCalCount">'+events.length+'</span>':'')+'</div>'+events.slice(0,3).map(a=>{const s=appointmentStatus(a.status);return '<button type="button" class="dabbirCalEvent '+s.cls+'" data-calendar-day="'+esc(key)+'" title="'+esc(customerLabel(a.customer_id)+' · '+fmtTime(a.starts_at))+'">'+esc(fmtTime(a.starts_at)+' · '+customerLabel(a.customer_id))+'</button>'}).join('')+(events.length>3?'<button type="button" class="dabbirCalEvent" data-calendar-day="'+esc(key)+'">+'+(events.length-3)+'</button>':'')+'</div>';
+    }
+    return '<div class="dabbirMonthWeekdays">'+weekdays.map(x=>'<span>'+esc(x)+'</span>').join('')+'</div><div class="dabbirMonthGrid">'+cells+'</div>';
+  }
+
+  function dayBody(rows){
+    const t=copy(),key=dayKey(calendarCursor),todayRows=rows.filter(a=>dayKey(a.starts_at)===key),byHour=new Map();
+    todayRows.forEach(a=>{const h=new Date(a.starts_at).getHours();if(!byHour.has(h))byHour.set(h,[]);byHour.get(h).push(a)});
+    const hours=[];for(let h=7;h<=21;h++)hours.push(h);
+    const body=hours.map(h=>{
+      const slot=byHour.get(h)||[];const clock=new Date(calendarCursor);clock.setHours(h,0,0,0);
+      return '<div class="dabbirAgendaRow"><div class="dabbirAgendaTime">'+esc(fmtTime(clock))+'</div><div class="dabbirAgendaSlot">'+slot.map(a=>{const s=appointmentStatus(a.status);return '<div class="dabbirAgendaEvent"><b>'+esc(customerLabel(a.customer_id))+'</b><div class="muted">'+esc(fmtTime(a.starts_at)+' · '+s.label)+'</div></div>'}).join('')+'</div></div>';
+    }).join('');
+    return todayRows.length?'<div class="dabbirAgenda">'+body+'</div>':'<div class="dabbirCalendarEmpty">'+esc(t.noDayBookings)+'</div>';
+  }
+
+  function weekBody(rows){
+    const t=copy(),start=startOfWeek(calendarCursor),today=dayKey(new Date());let out='<div class="dabbirWeek"><div class="dabbirWeekGrid">';
+    for(let i=0;i<7;i++){
+      const d=plusDays(start,i),key=dayKey(d),events=rows.filter(a=>dayKey(a.starts_at)===key);
+      out+='<div class="dabbirWeekDay '+(key===today?'today':'')+'"><div class="dabbirWeekHead">'+esc(fmtDay(d,{weekday:'short',day:'numeric',month:'short'}))+'</div>'+(events.length?events.map(a=>{const s=appointmentStatus(a.status);return '<button type="button" class="dabbirCalEvent '+s.cls+'" data-calendar-day="'+esc(key)+'">'+esc(fmtTime(a.starts_at)+' · '+customerLabel(a.customer_id))+'</button>'}).join(''):'<div class="muted" style="font-size:8px">—</div>')+'</div>';
+    }
+    return out+'</div></div>';
+  }
+
+  function providerCard(provider,title){
+    const t=copy(),connections=calendarConnections?.connections||[],row=connections.find(c=>c.provider===provider&&c.status==='active'),configured=Boolean(calendarConnections?.providers?.[provider]?.configured),id=businessId();
+    const badge=row?'<span class="dabbirProviderBadge ok">'+esc(t.connected)+'</span>':configured?'<span class="dabbirProviderBadge">'+esc(t.notConnected)+'</span>':'<span class="dabbirProviderBadge warn">'+esc(t.providerSetup)+'</span>';
+    const account=row?'<small>'+esc(row.provider_email||row.provider_display_name||'')+'</small>':'<small>'+esc(configured?t.notConnected:t.providerSetup)+'</small>';
+    const action=row?'<button type="button" data-calendar-disconnect="'+esc(row.id)+'">'+esc(t.disconnect)+'</button>':configured?'<a href="/api/calendar-oauth-start?provider='+encodeURIComponent(provider)+'&business_id='+encodeURIComponent(id||'')+'">'+esc(t.connect)+'</a>':'<button type="button" disabled>'+esc(t.connect)+'</button>';
+    return '<div class="dabbirProvider"><div class="dabbirProviderTop"><div><b>'+esc(title)+'</b>'+account+'</div>'+badge+'</div><div style="margin-top:8px">'+action+'</div></div>';
+  }
+
+  function renderCalendarConnections(){
+    const host=q('#dabbirCalendarConnections');if(!host)return;const t=copy();
+    if(calendarConnectionsLoading&&!calendarConnections){host.innerHTML='<div class="dabbirCalendarEmpty">'+esc(t.loadingConnections)+'</div>';return}
+    if(!calendarConnections){host.innerHTML='<div class="dabbirCalendarEmpty">'+esc(t.connectionFailed)+'</div>';return}
+    host.innerHTML='<div class="dabbirProviderGrid">'+providerCard('google',t.google)+providerCard('outlook',t.outlook)+'</div>';
+    host.querySelectorAll('[data-calendar-disconnect]').forEach(btn=>btn.onclick=()=>disconnectCalendar(btn.dataset.calendarDisconnect));
+  }
+
+  async function loadCalendarConnections(force=false){
+    const id=businessId();if(!id||calendarConnectionsLoading)return;
+    if(!force&&calendarConnections&&calendarConnectionsBusiness===id){renderCalendarConnections();return}
+    calendarConnectionsLoading=true;renderCalendarConnections();
+    try{
+      const response=await fetch('/api/calendar-connections?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+      const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_CONNECTIONS_FAILED');
+      calendarConnections=body;calendarConnectionsBusiness=id;
+    }catch(error){calendarConnections=null;calendarConnectionsBusiness=id;console.error('dabbir_calendar_connections_ui_failed',String(error?.message||error).slice(0,120))}
+    finally{calendarConnectionsLoading=false;renderCalendarConnections()}
+  }
+
+  async function disconnectCalendar(connectionId){
+    const id=businessId();if(!id||!connectionId)return;
+    try{
+      const response=await fetch('/api/calendar-connections',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action:'disconnect',business_id:id,connection_id:connectionId})});
+      const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_DISCONNECT_FAILED');
+      calendarConnections=null;await loadCalendarConnections(true);
+      try{toast(ar()?'تم فصل التقويم':'Calendar disconnected')}catch{}
+    }catch(error){try{toast(ar()?'تعذر فصل التقويم':'Could not disconnect calendar')}catch{}}
+  }
+
+  function bindCalendarControls(shell){
+    shell.querySelectorAll('[data-calendar-view]').forEach(btn=>btn.onclick=()=>{calendarView=btn.dataset.calendarView;try{localStorage.setItem('dabbir_calendar_view',calendarView)}catch{}renderCalendar()});
+    shell.querySelector('[data-calendar-today]')?.addEventListener('click',()=>{calendarCursor=new Date();renderCalendar()},{once:true});
+    shell.querySelector('[data-calendar-prev]')?.addEventListener('click',()=>{if(calendarView==='month')calendarCursor.setMonth(calendarCursor.getMonth()-1);else calendarCursor=plusDays(calendarCursor,calendarView==='week'?-7:-1);renderCalendar()},{once:true});
+    shell.querySelector('[data-calendar-next]')?.addEventListener('click',()=>{if(calendarView==='month')calendarCursor.setMonth(calendarCursor.getMonth()+1);else calendarCursor=plusDays(calendarCursor,calendarView==='week'?7:1);renderCalendar()},{once:true});
+    shell.querySelectorAll('[data-calendar-day]').forEach(btn=>btn.onclick=()=>{const parts=btn.dataset.calendarDay.split('-').map(Number);calendarCursor=new Date(parts[0],parts[1]-1,parts[2]);calendarView='day';try{localStorage.setItem('dabbir_calendar_view','day')}catch{}renderCalendar()});
+  }
+
+  function renderCalendar(){
+    if(!state?.profile?.show_appointments)return;const shell=ensureCalendar();if(!shell)return;const t=copy(),rows=appointments();
+    const body=calendarView==='month'?monthBody(rows):calendarView==='week'?weekBody(rows):dayBody(rows);
+    shell.innerHTML='<section class="dabbirCalendarCard"><div class="dabbirCalendarToolbar"><div class="dabbirCalendarNav"><button type="button" data-calendar-prev aria-label="'+esc(t.previous)+'">‹</button><button type="button" class="todayBtn" data-calendar-today>'+esc(t.today)+'</button><button type="button" data-calendar-next aria-label="'+esc(t.next)+'">›</button></div><div class="dabbirCalendarTitle">'+esc(calendarTitle())+'</div><div class="dabbirCalendarViews"><button type="button" data-calendar-view="day" class="'+(calendarView==='day'?'on':'')+'">'+esc(t.day)+'</button><button type="button" data-calendar-view="week" class="'+(calendarView==='week'?'on':'')+'">'+esc(t.week)+'</button><button type="button" data-calendar-view="month" class="'+(calendarView==='month'?'on':'')+'">'+esc(t.month)+'</button></div></div>'+body+'<div class="dabbirCalendarConnections"><div class="dabbirCalendarConnectionsHead"><div><h3>'+esc(t.calendarSync)+'</h3><p>'+esc(t.calendarSyncDesc)+'</p></div></div><div id="dabbirCalendarConnections"></div></div></section>';
+    bindCalendarControls(shell);renderCalendarConnections();loadCalendarConnections(false);
   }
 
   function applyProfile(){
@@ -1514,6 +1833,7 @@
       setText('#apptTitle',appointmentLabel);
       setText('#apptDesc',t.appointmentsDesc);
       if(q('#newApptBtn'))q('#newApptBtn').textContent=ar()?('إضافة '+appointmentLabel):('Add '+appointmentLabel.toLowerCase());
+      renderCalendar();
     }else if(current==='appointments'&&typeof showScreen==='function')showScreen('dashboard');
 
     const serviceNav=q('#dabbirServicesNav');
@@ -1568,7 +1888,7 @@
     try{
       const response=await fetch('/api/activity-tasks?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'ACTIVITY_PROFILE_FAILED');
-      state=body;lastBusiness=id;applyProfile();
+      state=body;lastBusiness=id;calendarConnections=null;calendarConnectionsBusiness=null;applyProfile();
     }catch(error){console.error('dabbir_activity_profile_failed',String(error?.message||error).slice(0,120))}
     finally{loading=false;renderTasks()}
   }
@@ -1577,9 +1897,224 @@
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   const baseSetLanguage=typeof setLanguage==='function'?setLanguage:null;
   if(baseSetLanguage)setLanguage=function(next){const result=baseSetLanguage(next);setTimeout(applyProfile,0);return result};
+  const baseRenderAppointments=typeof window.renderAppointments==='function'?window.renderAppointments:null;
+  if(baseRenderAppointments)window.renderAppointments=function(...args){const result=baseRenderAppointments.apply(this,args);setTimeout(renderCalendar,0);return result};
+  const params=new URLSearchParams(location.search);
+  if(params.get('calendar')){
+    setTimeout(()=>{try{if(typeof showScreen==='function')showScreen('appointments');toast(params.get('calendar')==='connected'?copy().calendarConnected:copy().calendarError)}catch{}const u=new URL(location.href);u.searchParams.delete('calendar');u.searchParams.delete('provider');u.searchParams.delete('code');history.replaceState(null,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash)},900);
+  }
   setInterval(()=>{if(workspace?.business?.id&&workspace.business.id!==lastBusiness)load(true)},1200);
   setTimeout(()=>load(false),500);
-  window.__dabbirActivityProfile={refresh:()=>load(true),version:'activity-profile-v2'};
+  window.__dabbirActivityProfile={refresh:()=>load(true),refreshCalendar:()=>{renderCalendar();return loadCalendarConnections(true)},version:'activity-profile-v3-calendar'};
+})();
+(()=>{
+  if(window.__dabbirCalendarLiveUi)return;
+  const q=s=>document.querySelector(s);
+  let busy=false,lastBusiness=null,lastSyncAt=0,lastBusy=[];
+  const ar=()=>document.documentElement.lang!=='en';
+  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const businessId=()=>{try{return workspace?.business?.id||null}catch{return null}};
+  const screenActive=()=>q('#screen-appointments')?.classList.contains('active');
+  const fmt=value=>{try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return String(value||'')}};
+
+  const style=document.createElement('style');
+  style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}';
+  document.head.append(style);
+
+  function ensureUi(){
+    const head=q('.dabbirCalendarConnectionsHead'),host=q('#dabbirCalendarConnections');if(!head||!host)return false;
+    let btn=q('#dabbirCalendarSyncNow');
+    if(!btn){btn=document.createElement('button');btn.id='dabbirCalendarSyncNow';btn.type='button';btn.className='dabbirSyncBtn';btn.onclick=()=>sync(true);head.append(btn)}
+    btn.textContent=busy?(ar()?'جارٍ المزامنة…':'Syncing…'):(ar()?'مزامنة الآن':'Sync now');btn.disabled=busy;
+    let panel=q('#dabbirExternalBusy');if(!panel){panel=document.createElement('div');panel.id='dabbirExternalBusy';panel.className='dabbirExternalBusy';host.append(panel)}
+    renderBusy();return true;
+  }
+
+  function renderBusy(){
+    const panel=q('#dabbirExternalBusy');if(!panel)return;
+    const now=Date.now(),rows=lastBusy.filter(x=>new Date(x.ends_at).getTime()>now).slice(0,8);
+    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class="dabbirExternalBusyList">'+rows.map(row=>'<div class="dabbirExternalBusyRow"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style="font-size:8px;color:var(--muted)">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
+  }
+
+  async function connectionState(id){
+    const response=await fetch('/api/calendar-connections?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+    const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_CONNECTIONS_FAILED');
+    return body;
+  }
+
+  async function loadBusy(id){
+    const response=await fetch('/api/calendar-sync?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+    const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_BUSY_FAILED');
+    lastBusy=Array.isArray(body.busy_blocks)?body.busy_blocks:[];renderBusy();
+  }
+
+  async function sync(force=false){
+    const id=businessId();if(!id||busy)return;
+    ensureUi();
+    if(id!==lastBusiness){lastBusiness=id;lastSyncAt=0;lastBusy=[]}
+    try{
+      const connections=await connectionState(id),active=(connections.connections||[]).filter(c=>c.status==='active'&&c.sync_enabled!==false);
+      if(!active.length){lastBusy=[];renderBusy();return}
+      const due=force||Date.now()-lastSyncAt>5*60*1000;
+      if(due){
+        busy=true;ensureUi();
+        const response=await fetch('/api/calendar-sync',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({business_id:id})});
+        const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_SYNC_FAILED');
+        lastSyncAt=Date.now();
+        try{window.__dabbirActivityProfile?.refresh?.()}catch{}
+      }
+      await loadBusy(id);
+      if(force)try{toast(ar()?'تمت مزامنة التقويم':'Calendar synced')}catch{}
+    }catch(error){
+      console.error('dabbir_calendar_live_ui_failed',String(error?.message||error).slice(0,120));
+      if(force)try{toast(ar()?'تعذرت مزامنة التقويم':'Calendar sync failed')}catch{}
+    }finally{busy=false;ensureUi()}
+  }
+
+  const observer=new MutationObserver(()=>{if(screenActive()&&businessId()){ensureUi();sync(false)}});
+  observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+  setInterval(()=>{if(screenActive()&&businessId())sync(false)},60000);
+  setTimeout(()=>{if(screenActive()&&businessId())sync(false)},1200);
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v3-composite-management'};
+})();
+(()=>{
+  if(window.__dabbirAppointmentManagementUi)return;
+  window.__dabbirAppointmentManagementUi=true;
+  const q=s=>document.querySelector(s);
+  const ar=()=>document.documentElement.lang!=='en';
+  const ws=()=>{try{return typeof workspace!=='undefined'?workspace:null}catch{return null}};
+  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const copy=()=>ar()?{
+    title:'إدارة الحجوزات',desc:'يمكنك تعديل موعد العميل أو حذفه. أي تغيير يُحفظ في دبّر ويُزامن مع التقويم المرتبط.',
+    customer:'العميل',time:'الموعد',status:'الحالة',edit:'تعديل',del:'حذف',save:'حفظ التعديل',cancel:'إلغاء',
+    editTitle:'تعديل الموعد',deleteTitle:'حذف الموعد؟',deleteBody:'سيتم حذف الموعد من دبّر ومن التقويمات المرتبطة إن وُجدت.',
+    requested:'مطلوب',confirmed:'مؤكد',rescheduled:'أعيدت جدولته',completed:'مكتمل',cancelled:'ملغي',
+    saved:'تم تعديل الموعد.',deleted:'تم حذف الموعد.',deletePending:'تم إلغاء الموعد، لكن حذف التقويم الخارجي يحتاج إعادة مزامنة.',
+    failed:'تعذر إكمال العملية.',past:'لا يمكن تعديل موعد مضى وقته.',empty:'لا توجد حجوزات لإدارتها.'
+  }:{
+    title:'Manage bookings',desc:'Edit or delete a customer booking. Changes are saved in DABBIR and synced to connected calendars.',
+    customer:'Customer',time:'Booking',status:'Status',edit:'Edit',del:'Delete',save:'Save changes',cancel:'Cancel',
+    editTitle:'Edit booking',deleteTitle:'Delete booking?',deleteBody:'The booking will be removed from DABBIR and connected calendars when available.',
+    requested:'Requested',confirmed:'Confirmed',rescheduled:'Rescheduled',completed:'Completed',cancelled:'Cancelled',
+    saved:'Booking updated.',deleted:'Booking deleted.',deletePending:'Booking was cancelled, but the external calendar delete still needs reconciliation.',
+    failed:'Could not complete the action.',past:'Past bookings cannot be rescheduled.',empty:'No bookings to manage.'
+  };
+
+  const style=document.createElement('style');
+  style.textContent='.dabbirApptManage{border:1px solid var(--line);background:#111315;border-radius:18px;padding:12px;margin-top:12px}.dabbirApptManageHead{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}.dabbirApptManageHead h3{font-size:13px;margin:0 0 4px}.dabbirApptManageHead p{font-size:9px;color:var(--muted);margin:0;line-height:1.55}.dabbirApptManageList{display:grid;gap:7px}.dabbirApptManageRow{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(135px,1fr) 90px auto;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:11px;padding:9px}.dabbirApptManageRow b{font-size:10px}.dabbirApptManageRow span{font-size:9px;color:var(--muted)}.dabbirApptManageActions{display:flex;gap:6px;justify-content:flex-end}.dabbirApptManageActions button{min-height:34px;border-radius:9px;padding:6px 9px;font-size:9px;font-weight:850}.dabbirApptEdit{border:1px solid #414d2a;background:#252c1d;color:#fff}.dabbirApptDelete{border:1px solid #5b2b2b;background:#32191a;color:#ffb9b9}.dabbirApptEdit:disabled{opacity:.45}.dabbirApptEmpty{border:1px dashed #31363c;border-radius:11px;padding:16px;text-align:center;color:var(--muted);font-size:9px}.dabbirApptModal{position:fixed;inset:0;z-index:90;background:#000b;display:none;align-items:center;justify-content:center;padding:18px}.dabbirApptModal.open{display:flex}.dabbirApptModalBox{width:min(430px,100%);background:#131518;border:1px solid #343940;border-radius:18px;padding:16px}.dabbirApptModalBox h3{margin:0 0 10px;font-size:14px}.dabbirApptField{display:grid;gap:5px;margin-top:9px}.dabbirApptField label{font-size:9px;color:var(--muted)}.dabbirApptField input,.dabbirApptField select{width:100%;border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:9px;min-height:42px}.dabbirApptModalActions{display:flex;gap:7px;justify-content:flex-end;margin-top:13px}.dabbirApptModalActions button{border-radius:10px;padding:8px 11px;font-weight:850}.dabbirApptModalActions .save{border:0;background:var(--accent);color:#10130b}.dabbirApptModalActions .cancel{border:1px solid var(--line);background:#181b1f;color:#fff}@media(max-width:700px){.dabbirApptManageRow{grid-template-columns:1fr}.dabbirApptManageActions{justify-content:stretch}.dabbirApptManageActions button{flex:1}.dabbirApptManageHead{display:block}}';
+  document.head.append(style);
+
+  let signature='',editingId=null,busy=false;
+  function customerName(id){
+    const row=(ws()?.customers||[]).find(x=>x.id===id);
+    return row?.display_name||(ar()?'عميل':'Customer');
+  }
+  function fmt(value){
+    try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Dubai'}).format(new Date(value))}catch{return String(value||'')}
+  }
+  function statusLabel(status){
+    const c=copy(),s=String(status||'requested').toLowerCase();
+    return c[s]||s;
+  }
+  function dubaiLocalMinute(date=new Date()){
+    const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+    const p=Object.fromEntries(f.formatToParts(date).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+    return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;
+  }
+  function isoFromDubaiLocal(value){
+    const raw=String(value||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw))return null;
+    const d=new Date(raw+':00+04:00');
+    return Number.isNaN(d.getTime())?null:d.toISOString();
+  }
+  function ensurePanel(){
+    const screen=q('#screen-appointments');if(!screen)return null;
+    let panel=q('#dabbirApptManage');
+    if(panel)return panel;
+    panel=document.createElement('section');panel.id='dabbirApptManage';panel.className='dabbirApptManage';
+    const table=q('#appointmentsTable');
+    if(table?.parentNode)table.parentNode.insertBefore(panel,table);
+    else screen.append(panel);
+    return panel;
+  }
+  function ensureModal(){
+    let modal=q('#dabbirApptEditModal');if(modal)return modal;
+    modal=document.createElement('div');modal.id='dabbirApptEditModal';modal.className='dabbirApptModal';
+    document.body.append(modal);return modal;
+  }
+  function render(){
+    const w=ws();if(!w?.business)return;
+    const panel=ensurePanel();if(!panel)return;
+    const rows=[...(w.appointments||[])].filter(a=>a?.id&&a?.starts_at).sort((a,b)=>{
+      const an=new Date(a.starts_at).getTime(),bn=new Date(b.starts_at).getTime(),now=Date.now();
+      const af=an>=now,bf=bn>=now;if(af!==bf)return af?-1:1;return af?an-bn:bn-an;
+    });
+    const nextSig=(ar()?'ar':'en')+'|'+rows.map(a=>[a.id,a.starts_at,a.status].join(':')).join('|');
+    if(nextSig===signature&&panel.dataset.ready==='1')return;
+    signature=nextSig;panel.dataset.ready='1';
+    const c=copy();
+    panel.innerHTML='<div class="dabbirApptManageHead"><div><h3>'+esc(c.title)+'</h3><p>'+esc(c.desc)+'</p></div></div><div class="dabbirApptManageList">'+(rows.length?rows.map(a=>{
+      const future=new Date(a.starts_at).getTime()>=Date.now();
+      return '<div class="dabbirApptManageRow" data-appt-row="'+esc(a.id)+'"><b>'+esc(customerName(a.customer_id))+'</b><span>'+esc(fmt(a.starts_at))+'</span><span>'+esc(statusLabel(a.status))+'</span><div class="dabbirApptManageActions"><button type="button" class="dabbirApptEdit" data-appt-edit="'+esc(a.id)+'" '+(future?'':'disabled title="'+esc(c.past)+'"')+'>'+esc(c.edit)+'</button><button type="button" class="dabbirApptDelete" data-appt-delete="'+esc(a.id)+'">'+esc(c.del)+'</button></div></div>';
+    }).join(''):'<div class="dabbirApptEmpty">'+esc(c.empty)+'</div>')+'</div>';
+    panel.querySelectorAll('[data-appt-edit]').forEach(btn=>btn.onclick=()=>openEdit(btn.dataset.apptEdit));
+    panel.querySelectorAll('[data-appt-delete]').forEach(btn=>btn.onclick=()=>removeAppointment(btn.dataset.apptDelete));
+  }
+  function openEdit(id){
+    const w=ws(),a=(w?.appointments||[]).find(x=>x.id===id);if(!a)return;
+    if(new Date(a.starts_at).getTime()<Date.now()){try{toast(copy().past)}catch{};return}
+    editingId=id;const c=copy(),modal=ensureModal();
+    modal.innerHTML='<form class="dabbirApptModalBox" id="dabbirApptEditForm"><h3>'+esc(c.editTitle)+'</h3><div class="dabbirApptField"><label>'+esc(c.customer)+'</label><input value="'+esc(customerName(a.customer_id))+'" disabled></div><div class="dabbirApptField"><label>'+esc(c.time)+'</label><input id="dabbirApptEditTime" type="datetime-local" min="'+esc(dubaiLocalMinute(new Date(Date.now()+60000)))+'" value="'+esc(dubaiLocalMinute(new Date(a.starts_at)))+'" required></div><div class="dabbirApptField"><label>'+esc(c.status)+'</label><select id="dabbirApptEditStatus"><option value="requested" '+(a.status==='requested'?'selected':'')+'>'+esc(c.requested)+'</option><option value="confirmed" '+(a.status==='confirmed'?'selected':'')+'>'+esc(c.confirmed)+'</option><option value="rescheduled" '+(a.status==='rescheduled'?'selected':'')+'>'+esc(c.rescheduled)+'</option><option value="completed" '+(a.status==='completed'?'selected':'')+'>'+esc(c.completed)+'</option><option value="cancelled" '+(a.status==='cancelled'?'selected':'')+'>'+esc(c.cancelled)+'</option></select></div><div class="dabbirApptModalActions"><button type="button" class="cancel" id="dabbirApptEditCancel">'+esc(c.cancel)+'</button><button type="submit" class="save">'+esc(c.save)+'</button></div></form>';
+    q('#dabbirApptEditCancel').onclick=closeModal;
+    q('#dabbirApptEditForm').onsubmit=saveEdit;
+    modal.onclick=e=>{if(e.target===modal)closeModal()};
+    modal.classList.add('open');setTimeout(()=>q('#dabbirApptEditTime')?.focus(),0);
+  }
+  function closeModal(){const modal=q('#dabbirApptEditModal');modal?.classList.remove('open');editingId=null}
+  async function request(body){
+    const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
+    const data=await response.json().catch(()=>({}));return {response,data};
+  }
+  async function refresh(){
+    const w=ws();if(!w?.business?.id)return;
+    signature='';
+    try{if(typeof loadRuntime==='function')await loadRuntime(w.business.id,typeof selectedConversationId!=='undefined'?selectedConversationId:null)}catch{}
+    render();
+    try{window.__dabbirCalendarLiveUi?.refreshBusy?.()}catch{}
+  }
+  async function saveEdit(event){
+    event.preventDefault();if(busy||!editingId)return;
+    const w=ws(),start=isoFromDubaiLocal(q('#dabbirApptEditTime')?.value),status=q('#dabbirApptEditStatus')?.value;
+    if(!w?.business?.id||!start)return;
+    if(new Date(start).getTime()<Date.now()){try{toast(copy().past)}catch{};return}
+    busy=true;const submit=event.submitter;if(submit)submit.disabled=true;
+    try{
+      const {response,data}=await request({action:'update',business_id:w.business.id,appointment_id:editingId,starts_at:start,status});
+      if(!response.ok||!data.ok)throw new Error(data.error||copy().failed);
+      closeModal();try{toast(copy().saved)}catch{};await refresh();
+    }catch(error){try{toast(copy().failed+' '+String(error?.message||''))}catch{}}
+    finally{busy=false;if(submit)submit.disabled=false}
+  }
+  async function removeAppointment(id){
+    if(busy)return;const w=ws();if(!w?.business?.id)return;const c=copy();
+    const confirmed=window.__dabbirConfirm?await window.__dabbirConfirm({title:c.deleteTitle,body:c.deleteBody}):window.confirm(c.deleteTitle+'\n'+c.deleteBody);
+    if(!confirmed)return;
+    busy=true;
+    try{
+      const {response,data}=await request({action:'delete',business_id:w.business.id,appointment_id:id});
+      if(response.ok&&data.ok){try{toast(c.deleted)}catch{};await refresh();return}
+      if(data.state==='CANCELLED_PENDING_EXTERNAL_DELETE'){try{toast(c.deletePending)}catch{};await refresh();return}
+      throw new Error(data.error||c.failed);
+    }catch(error){try{toast(c.failed+' '+String(error?.message||''))}catch{}}
+    finally{busy=false}
+  }
+
+  const observer=new MutationObserver(()=>{if(q('#screen-appointments')?.classList.contains('active'))setTimeout(render,0)});
+  observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+  setInterval(()=>{if(q('#screen-appointments')?.classList.contains('active'))render()},1500);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&q('#dabbirApptEditModal.open'))closeModal()});
+  setTimeout(render,500);
+  window.__dabbirAppointmentManagement={render,version:'appointment-management-v1'};
 })();
 
 (()=>{
@@ -2408,6 +2943,302 @@
 
   load().then(()=>render());
   document.documentElement.dataset.dabbirCustomerNumber='enabled';
+})();
+(()=>{
+  if(window.__dabbirCustomerCrmUi)return;
+  window.__dabbirCustomerCrmUi=true;
+
+  const q=s=>document.querySelector(s);
+  const qa=s=>[...document.querySelectorAll(s)];
+  const ar=()=>document.documentElement.lang!=='en';
+  const copy=()=>ar()?{
+    total:'إجمالي العملاء',newCustomers:'عملاء جدد',repeat:'عملاء متكررون',inactive:'غير نشطين',
+    search:'ابحث بالاسم أو رقم الهاتف…',all:'كل العملاء',newStatus:'جديد',repeatStatus:'متكرر',inactiveStatus:'غير نشط',
+    sortLatest:'الأحدث نشاطًا',sortActivity:'الأكثر تعاملًا',sortName:'الاسم',
+    appointments:'الحجوزات',conversations:'المحادثات',orders:'الطلبات',spent:'إجمالي التعاملات',
+    lastActivity:'آخر تعامل',created:'منذ',phone:'الهاتف',noPhone:'لا يوجد رقم محفوظ',
+    call:'اتصال',whatsapp:'واتساب',newBooking:'حجز جديد',newOrder:'طلب جديد',close:'إغلاق',
+    customerHistory:'سجل العميل',recentAppointments:'آخر الحجوزات',recentOrders:'آخر الطلبات',notes:'ملاحظات',noNotes:'لا توجد ملاحظات.',
+    noResults:'لا توجد نتائج مطابقة.',merged:'سجلات موحّدة لنفس الرقم',
+    orderProduct:'المنتج',orderQty:'الكمية',payment:'طريقة الدفع',cash:'نقدي',card:'بطاقة',transfer:'تحويل',credit:'آجل',other:'أخرى',saveOrder:'تأكيد الطلب',cancel:'إلغاء',orderSaved:'تم إنشاء الطلب وربطه بالعميل.',orderFailed:'تعذر إنشاء الطلب.',loadingOrders:'جارٍ تحميل سجل الطلبات…',
+    statuses:{new:'جديد',active:'نشط',qualified:'مهتم',converted:'عميل',won:'عميل',closed:'مغلق',inactive:'غير نشط',lost:'غير نشط'}
+  }:{
+    total:'Total customers',newCustomers:'New customers',repeat:'Repeat customers',inactive:'Inactive',
+    search:'Search name or phone…',all:'All customers',newStatus:'New',repeatStatus:'Repeat',inactiveStatus:'Inactive',
+    sortLatest:'Latest activity',sortActivity:'Most activity',sortName:'Name',
+    appointments:'Bookings',conversations:'Conversations',orders:'Orders',spent:'Total value',
+    lastActivity:'Last activity',created:'Since',phone:'Phone',noPhone:'No phone stored',
+    call:'Call',whatsapp:'WhatsApp',newBooking:'New booking',newOrder:'New order',close:'Close',
+    customerHistory:'Customer history',recentAppointments:'Recent bookings',recentOrders:'Recent orders',notes:'Notes',noNotes:'No notes.',
+    noResults:'No matching customers.',merged:'records merged for the same number',
+    orderProduct:'Product',orderQty:'Quantity',payment:'Payment method',cash:'Cash',card:'Card',transfer:'Transfer',credit:'Credit',other:'Other',saveOrder:'Confirm order',cancel:'Cancel',orderSaved:'Order created and linked to customer.',orderFailed:'Could not create order.',loadingOrders:'Loading order history…',
+    statuses:{new:'New',active:'Active',qualified:'Qualified',converted:'Customer',won:'Customer',closed:'Closed',inactive:'Inactive',lost:'Inactive'}
+  };
+
+  const style=document.createElement('style');
+  style.dataset.dabbirCustomerCrm='v1';
+  style.textContent=[
+    '#customersTable.crmHost{border:0;border-radius:0;overflow:visible;background:transparent}',
+    '.crmMetrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px}',
+    '.crmMetric{border:1px solid var(--line);background:linear-gradient(180deg,#15181b,#101214);border-radius:15px;padding:12px}',
+    '.crmMetric span{display:block;color:var(--muted);font-size:9px}.crmMetric strong{display:block;font-size:22px;margin-top:5px}',
+    '.crmToolbar{display:grid;grid-template-columns:minmax(0,1fr) 170px 170px;gap:8px;margin-bottom:12px}',
+    '.crmToolbar input,.crmToolbar select{width:100%;border:1px solid var(--line);background:#15181b;color:#fff;border-radius:12px;padding:10px 11px}',
+    '.crmList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}',
+    '.crmCard{border:1px solid #293039;background:linear-gradient(180deg,#141922,#0f1724);border-radius:17px;padding:13px;text-align:inherit;color:inherit;min-width:0}',
+    '.crmCard:hover{border-color:#43506a}.crmCardTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}',
+    '.crmIdentity{min-width:0}.crmIdentity b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crmIdentity small{display:block;color:var(--muted);font-size:9px;margin-top:4px;direction:ltr;text-align:start}',
+    '.crmBadges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.crmBadge{border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;background:#202630;color:#cbd3df}.crmBadge.new{background:#14331e;color:var(--green)}.crmBadge.inactive{background:#3b1717;color:var(--red)}.crmBadge.repeat{background:#1f2550;color:#aebcff}',
+    '.crmStats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:11px}.crmStat{background:#121722;border:1px solid #222a36;border-radius:11px;padding:8px}.crmStat span{display:block;font-size:8px;color:var(--muted)}.crmStat b{font-size:12px;margin-top:3px}',
+    '.crmLast{margin-top:9px;color:var(--muted);font-size:9px;display:flex;justify-content:space-between;gap:8px}',
+    '.crmEmpty{border:1px dashed #31363c;border-radius:14px;padding:26px;text-align:center;color:var(--muted);font-size:11px;grid-column:1/-1}',
+    '.crmModal{z-index:55}.crmModal .modalBox{width:min(620px,100%);max-height:min(82vh,760px);overflow:auto}.crmDetailHead{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}.crmDetailHead h3{font-size:19px;margin:0}.crmDetailHead small{display:block;color:var(--muted);margin-top:4px;direction:ltr;text-align:start}',
+    '.crmQuick{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0}.crmQuick button,.crmQuick a{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:40px;font-size:9px;font-weight:850;text-decoration:none;display:inline-flex;align-items:center}.crmQuick .primary{border:0;background:var(--accent);color:#10130b}',
+    '.crmDetailGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:10px 0 14px}.crmDetailMetric{border:1px solid var(--line);background:#15181b;border-radius:12px;padding:9px}.crmDetailMetric span{display:block;color:var(--muted);font-size:8px}.crmDetailMetric b{display:block;font-size:13px;margin-top:4px}',
+    '.crmSection{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.crmSection h4{font-size:11px;margin:0 0 8px}.crmHistory{display:flex;flex-direction:column;gap:6px}.crmHistoryRow{border:1px solid #252b32;background:#15181b;border-radius:11px;padding:9px;display:flex;justify-content:space-between;gap:8px;font-size:9px}.crmHistoryRow b{font-size:10px}.crmHistoryRow span{color:var(--muted)}',
+    '.crmNotes{white-space:pre-wrap;color:#c7ccd3;font-size:10px;line-height:1.7}',
+    '.crmOrderModal{z-index:60}',
+    '@media(max-width:760px){.crmMetrics{grid-template-columns:repeat(2,1fr)}.crmToolbar{grid-template-columns:1fr 1fr}.crmToolbar input{grid-column:1/-1}.crmList{grid-template-columns:1fr}.crmStats{grid-template-columns:repeat(3,1fr)}.crmDetailGrid{grid-template-columns:repeat(2,1fr)}}',
+    '@media(max-width:430px){.crmMetric{padding:10px}.crmMetric strong{font-size:19px}.crmCard{padding:12px}.crmDetailHead{display:block}.crmBadges{justify-content:flex-start;margin-top:8px}.crmQuick{display:grid;grid-template-columns:repeat(2,1fr)}.crmQuick button,.crmQuick a{justify-content:center}.crmLast{display:block}.crmLast span{display:block;margin-top:3px}}'
+  ].join('');
+  document.head.appendChild(style);
+
+  let state={query:'',filter:'all',sort:'latest',selected:null};
+  let operationsCache=null;
+  let operationsBusinessId=null;
+  let operationsLoading=null;
+
+  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function lower(value){return String(value||'').trim().toLocaleLowerCase()}
+  function date(value,withTime=false){if(!value)return '—';try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',withTime?{dateStyle:'medium',timeStyle:'short'}:{dateStyle:'medium'}).format(new Date(value))}catch{return String(value)}}
+  function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{style:'currency',currency:'AED',maximumFractionDigits:2}).format(Number(value||0))}catch{return Number(value||0).toFixed(2)+' AED'}}
+  function metadata(customer){const value=customer?.metadata;if(!value)return{};if(typeof value==='object')return value;try{return JSON.parse(value)}catch{return{}}}
+  function phoneOf(customer){const m=metadata(customer);const candidates=[m.phone,m.phone_number,m.whatsapp,m.whatsapp_number,m.wa_id,m.sender_phone,m.sender,m.mobile,m.contact_phone];for(const value of candidates){const raw=String(value||'').trim();if(raw){const digits=raw.replace(/\D/g,'');if(digits.length>=7)return{raw,digits}}}return null}
+  function noteOf(customer){const m=metadata(customer);return String(m.note||m.notes||m.customer_note||m.internal_note||'').trim()}
+  function statusLabel(value){const key=String(value||'new').toLowerCase();return copy().statuses[key]||key}
+  function maxDate(values){let best=null,bestMs=-Infinity;for(const value of values){if(!value)continue;const ms=new Date(value).getTime();if(Number.isFinite(ms)&&ms>bestMs){best=value;bestMs=ms}}return best}
+  function isRecent(value,days){const ms=new Date(value||0).getTime();return Number.isFinite(ms)&&Date.now()-ms<=days*86400000}
+
+  function buildCustomers(){
+    const rows=Array.isArray(workspace?.customers)?workspace.customers:[];
+    const groups=[];
+    const byPhone=new Map();
+    for(const customer of rows){
+      const phone=phoneOf(customer);
+      if(phone){
+        const key=phone.digits;
+        if(byPhone.has(key)){byPhone.get(key).members.push(customer);continue}
+        const group={members:[customer],phone};byPhone.set(key,group);groups.push(group);
+      }else groups.push({members:[customer],phone:null});
+    }
+    const conversations=Array.isArray(workspace?.conversations)?workspace.conversations:[];
+    const appointments=Array.isArray(workspace?.appointments)?workspace.appointments:[];
+    return groups.map(group=>{
+      const ids=new Set(group.members.map(item=>item.id));
+      const conv=conversations.filter(item=>ids.has(item.customer_id));
+      const appts=appointments.filter(item=>ids.has(item.customer_id));
+      const memberLatest=maxDate(group.members.map(item=>item.created_at));
+      const last=maxDate([...conv.map(item=>item.updated_at||item.created_at),...appts.map(item=>item.starts_at||item.created_at),memberLatest]);
+      const newest=[...group.members].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))[0]||group.members[0];
+      const name=group.members.map(item=>String(item.display_name||'').trim()).find(Boolean)||'—';
+      const activityCount=conv.length+appts.length;
+      const rawStatus=String(newest?.lead_status||'new').toLowerCase();
+      const inactive=rawStatus==='inactive'||rawStatus==='lost'||(!isRecent(last,60)&&!isRecent(memberLatest,60));
+      const repeat=activityCount>=2;
+      const isNew=rawStatus==='new'||isRecent(memberLatest,30);
+      return {
+        key:group.phone?'phone:'+group.phone.digits:'id:'+String(newest?.id||Math.random()),
+        id:newest?.id||null,ids:[...ids],name,phone:group.phone,status:rawStatus,created:memberLatest,last,conversations:conv,appointments:appts,activityCount,repeat,inactive,isNew,merged:group.members.length,notes:group.members.map(noteOf).filter(Boolean).join('\n'),members:group.members
+      };
+    });
+  }
+
+  async function loadOperations(){
+    const businessId=workspace?.business?.id||null;
+    if(!businessId)return null;
+    if(operationsCache&&operationsBusinessId===businessId)return operationsCache;
+    if(operationsLoading)return operationsLoading;
+    operationsBusinessId=businessId;
+    operationsLoading=(async()=>{
+      try{
+        const response=await fetch('/api/owner-operations?business_id='+encodeURIComponent(businessId),{cache:'no-store',credentials:'same-origin',headers:{accept:'application/json'}});
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok||!payload.ok)return null;
+        operationsCache=payload;
+        return payload;
+      }catch{return null}finally{operationsLoading=null}
+    })();
+    return operationsLoading;
+  }
+
+  function ordersFor(customer,ops){
+    if(!ops||!Array.isArray(ops.orders))return[];
+    const ids=new Set(customer.ids);
+    return ops.orders.filter(order=>ids.has(order.customer_id)&&order.simulated===false);
+  }
+
+  function metrics(customers){
+    return {total:customers.length,newCustomers:customers.filter(c=>c.isNew).length,repeat:customers.filter(c=>c.repeat).length,inactive:customers.filter(c=>c.inactive).length};
+  }
+
+  function filtered(customers){
+    const query=lower(state.query);
+    let rows=customers.filter(customer=>{
+      if(query&&!lower(customer.name+' '+(customer.phone?.raw||customer.phone?.digits||'')).includes(query))return false;
+      if(state.filter==='new'&&!customer.isNew)return false;
+      if(state.filter==='repeat'&&!customer.repeat)return false;
+      if(state.filter==='inactive'&&!customer.inactive)return false;
+      return true;
+    });
+    if(state.sort==='activity')rows.sort((a,b)=>b.activityCount-a.activityCount||new Date(b.last||0)-new Date(a.last||0));
+    else if(state.sort==='name')rows.sort((a,b)=>a.name.localeCompare(b.name,ar()?'ar':'en'));
+    else rows.sort((a,b)=>new Date(b.last||b.created||0)-new Date(a.last||a.created||0));
+    return rows;
+  }
+
+  function customerBadges(customer){
+    const t=copy();
+    const badges=[];
+    badges.push('<span class="crmBadge '+(customer.inactive?'inactive':customer.isNew?'new':'')+'">'+escapeHtml(customer.inactive?t.inactiveStatus:statusLabel(customer.status))+'</span>');
+    if(customer.repeat)badges.push('<span class="crmBadge repeat">'+escapeHtml(t.repeatStatus)+'</span>');
+    if(customer.merged>1)badges.push('<span class="crmBadge">'+escapeHtml(customer.merged+' '+t.merged)+'</span>');
+    return badges.join('');
+  }
+
+  function card(customer){
+    const t=copy();
+    return '<button type="button" class="crmCard" data-crm-customer="'+escapeHtml(customer.key)+'">'+
+      '<div class="crmCardTop"><div class="crmIdentity"><b>'+escapeHtml(customer.name)+'</b><small>'+escapeHtml(customer.phone?.raw||customer.phone?.digits||t.noPhone)+'</small></div><div class="crmBadges">'+customerBadges(customer)+'</div></div>'+
+      '<div class="crmStats"><div class="crmStat"><span>'+escapeHtml(t.appointments)+'</span><b>'+customer.appointments.length+'</b></div><div class="crmStat"><span>'+escapeHtml(t.conversations)+'</span><b>'+customer.conversations.length+'</b></div><div class="crmStat"><span>'+escapeHtml(t.lastActivity)+'</span><b>'+escapeHtml(date(customer.last))+'</b></div></div>'+
+      '<div class="crmLast"><span>'+escapeHtml(t.created)+': '+escapeHtml(date(customer.created))+'</span><span>'+escapeHtml(statusLabel(customer.status))+'</span></div></button>';
+  }
+
+  function bindToolbar(customers){
+    const input=q('#crmSearch');
+    if(input){input.oninput=()=>{state.query=input.value;const pos=input.selectionStart;renderCustomersEnhanced();requestAnimationFrame(()=>{const next=q('#crmSearch');if(next){next.focus();try{next.setSelectionRange(pos,pos)}catch{}}})}}
+    const filter=q('#crmFilter');if(filter)filter.onchange=()=>{state.filter=filter.value;renderCustomersEnhanced()};
+    const sort=q('#crmSort');if(sort)sort.onchange=()=>{state.sort=sort.value;renderCustomersEnhanced()};
+    qa('[data-crm-customer]').forEach(button=>button.onclick=()=>openDetail(customers.find(item=>item.key===button.dataset.crmCustomer)));
+  }
+
+  function ensureDetailModal(){
+    if(q('#crmDetailModal'))return;
+    const modal=document.createElement('div');
+    modal.id='crmDetailModal';modal.className='modal crmModal';
+    modal.innerHTML='<div class="modalBox"><div id="crmDetailBody"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click',event=>{if(event.target===modal)closeDetail()});
+
+    const order=document.createElement('div');
+    order.id='crmOrderModal';order.className='modal crmOrderModal';
+    order.innerHTML='<form class="modalBox" id="crmOrderForm"><h3 id="crmOrderTitle"></h3><div class="field"><label id="crmOrderProductLabel"></label><select id="crmOrderProduct" required></select></div><div class="field"><label id="crmOrderQtyLabel"></label><input id="crmOrderQty" type="number" min="1" step="1" value="1" required></div><div class="field"><label id="crmOrderPaymentLabel"></label><select id="crmOrderPayment"><option value="cash"></option><option value="card"></option><option value="transfer"></option><option value="credit"></option><option value="other"></option></select></div><div class="modalActions"><button type="button" class="secondary" id="crmOrderCancel"></button><button class="primary" type="submit" id="crmOrderSave"></button></div></form>';
+    document.body.appendChild(order);
+    q('#crmOrderCancel').onclick=()=>order.classList.remove('open');
+    order.addEventListener('click',event=>{if(event.target===order)order.classList.remove('open')});
+    q('#crmOrderForm').onsubmit=saveQuickOrder;
+  }
+
+  function closeDetail(){q('#crmDetailModal')?.classList.remove('open');state.selected=null}
+
+  async function openDetail(customer){
+    if(!customer)return;
+    state.selected=customer;
+    ensureDetailModal();
+    q('#crmDetailModal').classList.add('open');
+    renderDetail(customer,null,true);
+    const ops=await loadOperations();
+    if(state.selected?.key===customer.key)renderDetail(customer,ops,false);
+  }
+
+  function renderDetail(customer,ops,loadingOps){
+    const body=q('#crmDetailBody');if(!body)return;
+    const t=copy();
+    const orders=ordersFor(customer,ops);
+    const total=orders.filter(order=>['confirmed','completed'].includes(String(order.status||'').toLowerCase())).reduce((sum,order)=>sum+Number(order.total_aed||0),0);
+    const phoneDigits=customer.phone?.digits||'';
+    const phoneHref=phoneDigits?'tel:+'+phoneDigits:'';
+    const waHref=phoneDigits?'https://wa.me/'+phoneDigits:'';
+    const canOrder=Boolean(ops?.can_operate&&Array.isArray(ops?.products)&&ops.products.some(p=>p.active!==false&&Number(p.available||0)>0));
+    const quick=[
+      phoneDigits?'<a href="'+escapeHtml(phoneHref)+'">☎ '+escapeHtml(t.call)+'</a>':'',
+      phoneDigits?'<a href="'+escapeHtml(waHref)+'" target="_blank" rel="noopener noreferrer">◉ '+escapeHtml(t.whatsapp)+'</a>':'',
+      '<button type="button" class="secondary" id="crmNewBooking">＋ '+escapeHtml(t.newBooking)+'</button>',
+      canOrder?'<button type="button" class="primary" id="crmNewOrder">＋ '+escapeHtml(t.newOrder)+'</button>':''
+    ].join('');
+    const apptRows=customer.appointments.slice().sort((a,b)=>new Date(b.starts_at||b.created_at||0)-new Date(a.starts_at||a.created_at||0)).slice(0,6).map(item=>'<div class="crmHistoryRow"><b>'+escapeHtml(date(item.starts_at,true))+'</b><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
+    const orderRows=orders.slice(0,6).map(item=>'<div class="crmHistoryRow"><div><b>'+escapeHtml(money(item.total_aed))+'</b><span style="display:block;margin-top:3px">'+escapeHtml(date(item.created_at))+'</span></div><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
+    body.innerHTML='<div class="crmDetailHead"><div><h3>'+escapeHtml(customer.name)+'</h3><small>'+escapeHtml(customer.phone?.raw||customer.phone?.digits||t.noPhone)+'</small></div><div class="crmBadges">'+customerBadges(customer)+'</div></div>'+
+      '<div class="crmQuick">'+quick+'</div>'+
+      '<div class="crmDetailGrid"><div class="crmDetailMetric"><span>'+escapeHtml(t.appointments)+'</span><b>'+customer.appointments.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.conversations)+'</span><b>'+customer.conversations.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.orders)+'</span><b>'+(loadingOps?'…':orders.length)+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.spent)+'</span><b>'+(loadingOps?'…':escapeHtml(money(total)))+'</b></div></div>'+
+      '<div class="crmSection"><h4>'+escapeHtml(t.lastActivity)+'</h4><div class="crmHistoryRow"><b>'+escapeHtml(date(customer.last,true))+'</b><span>'+escapeHtml(t.created)+': '+escapeHtml(date(customer.created))+'</span></div></div>'+
+      '<div class="crmSection"><h4>'+escapeHtml(t.recentAppointments)+'</h4><div class="crmHistory">'+(apptRows||'<div class="crmHistoryRow"><span>—</span></div>')+'</div></div>'+
+      '<div class="crmSection"><h4>'+escapeHtml(t.recentOrders)+'</h4><div class="crmHistory">'+(loadingOps?'<div class="crmHistoryRow"><span>'+escapeHtml(t.loadingOrders)+'</span></div>':orderRows||'<div class="crmHistoryRow"><span>—</span></div>')+'</div></div>'+
+      '<div class="crmSection"><h4>'+escapeHtml(t.notes)+'</h4><div class="crmNotes">'+escapeHtml(customer.notes||t.noNotes)+'</div></div>'+
+      '<div class="modalActions"><button type="button" class="secondary" id="crmDetailClose">'+escapeHtml(t.close)+'</button></div>';
+    q('#crmDetailClose').onclick=closeDetail;
+    q('#crmNewBooking').onclick=()=>{const input=q('#apptCustomer');if(input)input.value=customer.name;q('#appointmentModal')?.classList.add('open');requestAnimationFrame(()=>q('#apptTime')?.focus())};
+    const orderButton=q('#crmNewOrder');if(orderButton)orderButton.onclick=()=>openQuickOrder(customer,ops);
+  }
+
+  function openQuickOrder(customer,ops){
+    if(!customer||!ops)return;
+    state.selected=customer;
+    ensureDetailModal();
+    const t=copy();
+    q('#crmOrderTitle').textContent=t.newOrder+' — '+customer.name;
+    q('#crmOrderProductLabel').textContent=t.orderProduct;
+    q('#crmOrderQtyLabel').textContent=t.orderQty;
+    q('#crmOrderPaymentLabel').textContent=t.payment;
+    q('#crmOrderCancel').textContent=t.cancel;
+    q('#crmOrderSave').textContent=t.saveOrder;
+    const productSelect=q('#crmOrderProduct');
+    productSelect.innerHTML=(ops.products||[]).filter(p=>p.active!==false&&Number(p.available||0)>0).map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.name)+' · '+escapeHtml(money(p.price_aed))+' · '+escapeHtml(String(p.available))+'</option>').join('');
+    const payment=q('#crmOrderPayment');
+    const labels={cash:t.cash,card:t.card,transfer:t.transfer,credit:t.credit,other:t.other};
+    [...payment.options].forEach(option=>option.textContent=labels[option.value]||option.value);
+    q('#crmOrderQty').value='1';
+    q('#crmOrderModal').classList.add('open');
+  }
+
+  async function saveQuickOrder(event){
+    event.preventDefault();
+    const t=copy(),customer=state.selected,button=q('#crmOrderSave');
+    if(!customer?.id||!workspace?.business?.id)return;
+    const productId=q('#crmOrderProduct').value;
+    const quantity=Math.max(1,Math.trunc(Number(q('#crmOrderQty').value||1)));
+    const paymentMethod=q('#crmOrderPayment').value;
+    button.disabled=true;
+    try{
+      const response=await fetch('/api/owner-operations',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'complete_sale',business_id:workspace.business.id,customer_id:customer.id,payment_method:paymentMethod,items:[{product_id:productId,quantity}]})});
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok||!payload.ok)throw new Error(payload.error||t.orderFailed);
+      operationsCache=null;
+      q('#crmOrderModal').classList.remove('open');
+      try{if(typeof toast==='function')toast(t.orderSaved)}catch{}
+      const ops=await loadOperations();
+      if(state.selected)renderDetail(state.selected,ops,false);
+    }catch(error){try{if(typeof toast==='function')toast(error.message||t.orderFailed)}catch{}}
+    finally{button.disabled=false}
+  }
+
+  function renderCustomersEnhanced(){
+    const host=q('#customersTable');if(!host||typeof workspace==='undefined'||!workspace)return;
+    host.classList.add('crmHost');
+    const t=copy(),customers=buildCustomers(),m=metrics(customers),rows=filtered(customers);
+    host.innerHTML='<div class="crmMetrics"><div class="crmMetric"><span>'+escapeHtml(t.total)+'</span><strong>'+m.total+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.newCustomers)+'</span><strong>'+m.newCustomers+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.repeat)+'</span><strong>'+m.repeat+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.inactive)+'</span><strong>'+m.inactive+'</strong></div></div>'+
+      '<div class="crmToolbar"><input id="crmSearch" value="'+escapeHtml(state.query)+'" placeholder="'+escapeHtml(t.search)+'"><select id="crmFilter"><option value="all">'+escapeHtml(t.all)+'</option><option value="new">'+escapeHtml(t.newStatus)+'</option><option value="repeat">'+escapeHtml(t.repeatStatus)+'</option><option value="inactive">'+escapeHtml(t.inactiveStatus)+'</option></select><select id="crmSort"><option value="latest">'+escapeHtml(t.sortLatest)+'</option><option value="activity">'+escapeHtml(t.sortActivity)+'</option><option value="name">'+escapeHtml(t.sortName)+'</option></select></div>'+
+      '<div class="crmList">'+(rows.length?rows.map(card).join(''):'<div class="crmEmpty">'+escapeHtml(t.noResults)+'</div>')+'</div>';
+    q('#crmFilter').value=state.filter;
+    q('#crmSort').value=state.sort;
+    bindToolbar(customers);
+  }
+
+  const previous=typeof window.renderCustomers==='function'?window.renderCustomers:(typeof renderCustomers==='function'?renderCustomers:null);
+  window.renderCustomers=renderCustomersEnhanced;
+  try{renderCustomers=renderCustomersEnhanced}catch{}
+  ensureDetailModal();
+  try{renderCustomersEnhanced()}catch{}
+  document.documentElement.dataset.dabbirCustomerCrm='v1';
 })();
 (()=>{
   if(window.__dabbirBillingUiLoaded)return;
