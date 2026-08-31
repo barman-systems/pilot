@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { userClaimsFromValidatedAccessToken } from '../api/_auth-core.js';
+import { getBusinessMemberships, userClaimsFromValidatedAccessToken } from '../api/_auth-core.js';
 
 const root = new URL('../', import.meta.url);
 const runtimeSource = await readFile(new URL('api/dabbir-runtime-fast.js', root), 'utf8');
+const authSource = await readFile(new URL('api/_auth-core.js', root), 'utf8');
 
 const now = 1_800_000_000;
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -44,6 +45,32 @@ test('validated-token claims fail closed for wrong issuer, role, audience, expir
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ nbf: now + 30 })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken(token(validPayload({ sub: 'not-a-uuid' })), now), null);
   assert.equal(userClaimsFromValidatedAccessToken('not-a-jwt', now), null);
+});
+
+test('membership lookup is self-scoped and receives a default abort deadline', async () => {
+  const previousFetch = globalThis.fetch;
+  let seenUrl = '';
+  let seenSignal = null;
+  globalThis.fetch = async (url, options = {}) => {
+    seenUrl = String(url);
+    seenSignal = options.signal || null;
+    return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    await getBusinessMemberships(token(validPayload()));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  assert.match(seenUrl, new RegExp(`user_id=eq\\.${userId}`));
+  assert.ok(seenSignal instanceof AbortSignal, 'Supabase request must have a bounded signal');
+  assert.match(authSource, /DABBIR_SUPABASE_TIMEOUT_MS/);
+});
+
+test('Supabase endpoint remains cutover-ready through environment configuration', () => {
+  assert.match(authSource, /process\.env\.SUPABASE_URL/);
+  assert.match(authSource, /process\.env\.SUPABASE_PUBLISHABLE_KEY/);
 });
 
 test('fast runtime validates membership before trusting decoded claims and retains fallback verification', () => {

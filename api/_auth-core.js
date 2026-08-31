@@ -1,10 +1,15 @@
-export const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+export const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
+const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
+const DEFAULT_SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.DABBIR_SUPABASE_TIMEOUT_MS || 15000));
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const ACCESS_COOKIE = '__Host-dabbir_access';
 export const REFRESH_COOKIE = '__Host-dabbir_refresh';
+
+function boundedSignal(options = {}) {
+  return options.signal || AbortSignal.timeout(DEFAULT_SUPABASE_TIMEOUT_MS);
+}
 
 export function json(res, status, body, extraHeaders = {}) {
   res.statusCode = status;
@@ -72,7 +77,12 @@ export async function supabaseAuth(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
   headers.set('content-type', 'application/json');
-  return fetch(`${SUPABASE_URL}${path}`, { ...options, headers, redirect: 'manual' });
+  return fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers,
+    redirect: 'manual',
+    signal: boundedSignal(options),
+  });
 }
 
 export async function supabaseRest(path, accessToken, options = {}) {
@@ -82,7 +92,12 @@ export async function supabaseRest(path, accessToken, options = {}) {
   headers.set('authorization', `Bearer ${accessToken}`);
   headers.set('accept', 'application/json');
   if (options.body !== undefined) headers.set('content-type', 'application/json');
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers, cache: 'no-store' });
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers,
+    cache: 'no-store',
+    signal: boundedSignal(options),
+  });
 }
 
 export function accessTokenFromRequest(req) {
@@ -119,7 +134,7 @@ export async function getVerifiedUserWithAccess(accessToken, options = {}) {
     accessToken,
     options,
   ).catch(error => {
-    if (options.signal?.aborted) throw error;
+    if (options.signal?.aborted || error?.name === 'TimeoutError' || error?.name === 'AbortError') throw error;
     return null;
   });
   if (!response?.ok) return null;
@@ -175,8 +190,11 @@ export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Mat
 }
 
 export async function getBusinessMemberships(accessToken, options = {}) {
+  const payload = decodeJwtPayload(accessToken);
+  const userId = UUID_RE.test(String(payload?.sub || '')) ? String(payload.sub) : null;
+  const selfFilter = userId ? `&user_id=eq.${encodeURIComponent(userId)}` : '';
   const response = await supabaseRest(
-    'dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active',
+    `dabbir_memberships?select=business_id,role,status,permissions,accepted_at&status=eq.active${selfFilter}`,
     accessToken,
     options,
   );
