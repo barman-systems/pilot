@@ -84,6 +84,45 @@ const script=String.raw`(()=>{
       .observe(appointmentModal,{attributes:true,attributeFilter:['class']});
   }
 
+  function fixMobileHeaderSearch(){
+    const buttons=[...document.querySelectorAll('.topActions > button,.topActions .iconBtn')];
+    const button=buttons.find(node=>{
+      const text=String(node.textContent||'').trim();
+      const label=String(node.getAttribute('aria-label')||node.getAttribute('title')||'').toLowerCase();
+      return text==='م'||text==='⌕'||label.includes('search')||label.includes('بحث');
+    });
+    if(!button||button.dataset.dabbirSearchIcon==='v1')return;
+    button.dataset.dabbirSearchIcon='v1';
+    button.setAttribute('aria-label',isArabic()?'بحث':'Search');
+    button.setAttribute('title',isArabic()?'بحث':'Search');
+    button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" style="width:21px;height:21px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>';
+  }
+
+  function ensureSettingsInMore(){
+    const grid=document.querySelector('#screen-more .moreGrid');
+    if(!grid)return;
+    let card=grid.querySelector('[data-screen="settings"],#dabbirMoreSettingsAccess');
+    if(!card){
+      card=document.createElement('button');
+      card.type='button';
+      card.id='dabbirMoreSettingsAccess';
+      card.className='moreCard';
+      card.dataset.screen='settings';
+      card.addEventListener('click',()=>{try{if(typeof showScreen==='function')showScreen('settings')}catch{}});
+      grid.append(card);
+    }
+    card.hidden=false;card.classList.remove('hidden');card.style.removeProperty('display');
+    const title=isArabic()?'الإعدادات':'Settings';
+    const desc=isArabic()?'بيانات النشاط، السياسات، ساعات العمل والحساب.':'Business details, policies, hours and account.';
+    if(card.id==='dabbirMoreSettingsAccess'||!card.querySelector('h3'))card.innerHTML='<h3>'+title+'</h3><p>'+desc+'</p>';
+    card.setAttribute('aria-label',title);
+  }
+
+  function refreshMobileUtilityUi(){fixMobileHeaderSearch();ensureSettingsInMore()}
+  const utilityObserver=new MutationObserver(()=>requestAnimationFrame(refreshMobileUtilityUi));
+  if(document.body)utilityObserver.observe(document.body,{subtree:true,childList:true});
+  document.addEventListener('click',event=>{if(event.target?.closest?.('#menuBtn,[data-screen="more"],.topActions'))setTimeout(refreshMobileUtilityUi,0)},true);
+
   if(appointmentForm&&!appointmentForm.dataset.dabbirDubaiTime){
     appointmentForm.dataset.dabbirDubaiTime='v2-adaptive';
     appointmentForm.addEventListener('submit',async event=>{
@@ -129,7 +168,9 @@ const script=String.raw`(()=>{
   document.documentElement.dataset.dabbirTimezone=DABBIR_TIME_ZONE;
   setTimeout(()=>{
     try{if(typeof workspace!=='undefined'&&workspace&&typeof renderAll==='function')renderAll()}catch{}
+    refreshMobileUtilityUi();
   },0);
+  setTimeout(refreshMobileUtilityUi,500);
 })();`;
 
 export default function handler(req,res){
