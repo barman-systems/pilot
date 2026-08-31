@@ -1,5 +1,6 @@
 import activityProfileHandler from './activity-profile-ui.js';
 import appointmentManagementUiHandler from './appointment-management-ui.js';
+import salonModeUiHandler from './salon-mode-ui.js';
 
 const liveScript=String.raw`(()=>{
   if(window.__dabbirCalendarLiveUi)return;
@@ -101,12 +102,15 @@ export default async function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   const activityCaptured=captureResponse();
   const managementCaptured=captureResponse();
+  const salonCaptured=captureResponse();
   await activityProfileHandler(req,activityCaptured);
   await appointmentManagementUiHandler(req,managementCaptured);
+  await salonModeUiHandler(req,salonCaptured);
   if(activityCaptured.statusCode!==200||!activityCaptured.body) return res.status(500).end('Activity profile UI unavailable');
   if(managementCaptured.statusCode!==200||!managementCaptured.body) return res.status(500).end('Appointment management UI unavailable');
+  if(salonCaptured.statusCode!==200||!salonCaptured.body) return res.status(500).end('Salon Mode UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v4-free-cancelled');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body);
+  res.setHeader('x-dabbir-calendar-live-ui','v5-salon-mode');
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body);
 }
