@@ -31,7 +31,7 @@ const script=String.raw`(()=>{
 
   function ensure(){
     if(!isSalon())return false;
-    document.body.classList.add('salonMode');
+    if(!document.body.classList.contains('salonMode'))document.body.classList.add('salonMode');
     business=workspace.business;
     if(!q('#salonToday')){const host=document.createElement('section');host.id='salonToday';host.className='salonToday salonOnly';q('#screen-dashboard .hero')?.after(host)}
     const appt=q('#screen-appointments');
@@ -57,7 +57,7 @@ const script=String.raw`(()=>{
 
   async function load(force=false){
     if(!ensure()||loading)return;
-    if(data&&!force){renderAllSalon();return}
+    if(data&&!force)return;
     loading=true;q('#salonCalendarHost').innerHTML='<div class="empty">'+esc(text().loading)+'</div>';
     const from=plus(startDay(cursor),view==='month'?-10:view==='week'?-2:-2),to=plus(startDay(cursor),view==='month'?45:view==='week'?12:3);
     try{data=await api('?business_id='+encodeURIComponent(id())+'&resource=snapshot&from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(to.toISOString()));renderAllSalon()}
@@ -136,10 +136,8 @@ const script=String.raw`(()=>{
 
   function renderReminderSettings(){const host=q('#screen-salon-reminders'),t=text();if(!host)return;const s=data.settings||{};host.innerHTML='<div class="hero"><div><h1>'+esc(t.reminders)+'</h1><p>'+esc(t.whatsappWorkflow)+' '+esc(t.noDuplicate)+'</p></div></div><form class="card" id="salonReminderForm"><label class="salonToggle"><span>'+esc(t.reminderBooking)+'</span><input id="srBooking" type="checkbox" '+(s.reminder_on_booking?'checked':'')+'></label><label class="salonToggle"><span>'+esc(t.reminder24)+'</span><input id="sr24" type="checkbox" '+(s.reminder_24h?'checked':'')+'></label><label class="salonToggle"><span>'+esc(t.reminder2)+'</span><input id="sr2" type="checkbox" '+(s.reminder_2h?'checked':'')+'></label><button class="salonBtn primary" type="submit">'+esc(t.save)+'</button></form><div class="card"><h3>WhatsApp Workflow</h3><div class="salonList">'+((data.notifications||[]).slice(0,20).map(n=>'<div class="salonRow"><b>'+esc(n.notification_type)+'</b><small>'+esc(fmt(n.scheduled_for)+' · '+n.status)+'</small></div>').join('')||'<div class="empty">'+esc(t.empty)+'</div>')+'</div></div>';q('#salonReminderForm').onsubmit=async e=>{e.preventDefault();try{await post({action:'save_reminder_settings',reminder_on_booking:q('#srBooking').checked,reminder_24h:q('#sr24').checked,reminder_2h:q('#sr2').checked});notify(t.saved);await load(true)}catch(error){notify(t.failed+' · '+error.message)}}}
 
-  const observer=new MutationObserver(()=>{if(isSalon()){ensure();setTimeout(()=>load(false),0)}});observer.observe(document.body,{attributes:true,subtree:true,attributeFilter:['class']});
   const baseSetLanguage=typeof setLang==='function'?setLang:null;if(baseSetLanguage)setLang=function(next){const result=baseSetLanguage(next);setTimeout(renderAllSalon,0);return result};
   const baseRenderAll=typeof renderAll==='function'?renderAll:null;if(baseRenderAll)renderAll=function(...args){const result=baseRenderAll.apply(this,args);if(isSalon())setTimeout(()=>{ensure();load(false)},0);return result};
-  setInterval(()=>{if(isSalon()&&workspace?.business?.id!==business?.id){data=null;reports=null;load(true)}},1500);
   setTimeout(()=>load(false),700);
   window.__dabbirSalonMode={refresh:()=>load(true),quickBooking:openQuickBooking,openScreen,version:'salon-mode-p0'};
 })();`;
