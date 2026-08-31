@@ -118,10 +118,23 @@ const script=String.raw`(()=>{
     card.setAttribute('aria-label',title);
   }
 
-  function refreshMobileUtilityUi(){fixMobileHeaderSearch();ensureSettingsInMore()}
+  function markOwnerCopilotAsAi(){
+    const card=document.querySelector('#dabbirOwnerCopilot');
+    if(!card)return;
+    const mode=card.querySelector('.dcMode');
+    if(mode){
+      mode.textContent=isArabic()?'AI • بيانات موثقة':'AI • Verified data';
+      mode.setAttribute('aria-label',isArabic()?'مساعد ذكاء اصطناعي مبني على بيانات النشاط الموثقة':'AI assistant grounded on verified business data');
+    }
+    const desc=card.querySelector('.dcHead p');
+    if(desc)desc.textContent=isArabic()?'ذكاء اصطناعي يجيب عن أسئلتك اعتمادًا على بيانات نشاطك الموثقة فقط.':'AI answers your questions using your verified business data only.';
+    card.dataset.aiAssistant='true';
+  }
+
+  function refreshMobileUtilityUi(){fixMobileHeaderSearch();ensureSettingsInMore();markOwnerCopilotAsAi()}
   const utilityObserver=new MutationObserver(()=>requestAnimationFrame(refreshMobileUtilityUi));
   if(document.body)utilityObserver.observe(document.body,{subtree:true,childList:true});
-  document.addEventListener('click',event=>{if(event.target?.closest?.('#menuBtn,[data-screen="more"],.topActions'))setTimeout(refreshMobileUtilityUi,0)},true);
+  document.addEventListener('click',event=>{if(event.target?.closest?.('#menuBtn,[data-screen="more"],.topActions,#dabbirOwnerCopilot'))setTimeout(refreshMobileUtilityUi,0)},true);
 
   if(appointmentForm&&!appointmentForm.dataset.dabbirDubaiTime){
     appointmentForm.dataset.dabbirDubaiTime='v2-adaptive';
