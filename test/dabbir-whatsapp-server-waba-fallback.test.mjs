@@ -71,15 +71,15 @@ test('server refuses to guess when Meta shares multiple WABAs', async () => {
   }
 });
 
-test('iPhone Embedded Signup falls back to the server shortly after authorization code returns', async () => {
+test('iPhone Embedded Signup refuses incomplete authorization when Meta returns no session event', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
 
   assert.match(ui, /POST_LOGIN_SESSION_GRACE_MS=5000/);
-  assert.match(ui, /session_server_fallback/);
+  assert.match(ui, /session_missing/);
   assert.match(ui, /Promise\.race\(\[/);
   assert.match(ui, /await completeSignup\(code,session\)/);
-  assert.doesNotMatch(ui, /if\(!session\?\.waba_id\) throw new Error\('META_EMBEDDED_SIGNUP_SESSION_MISSING'\)/);
+  assert.match(ui, /if\(!session\?\.waba_id\)\{[\s\S]*META_EMBEDDED_SIGNUP_SESSION_MISSING/);
 
   assert.match(endpoint, /discoverWabaIdFromAccessToken/);
   assert.match(endpoint, /debug_token/);

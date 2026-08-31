@@ -339,9 +339,9 @@ const script = String.raw`(()=>{
         ]);
       }
       if(!session?.waba_id){
-        report('session_server_fallback',{stage:'meta_session',has_code:true,has_waba:false,has_phone:false});
+        report('session_missing',{stage:'meta_session',has_code:true,has_waba:false,has_phone:false});
         settleSession(null);
-        session=null;
+        throw new Error('META_EMBEDDED_SIGNUP_SESSION_MISSING');
       }
 
       stage='server_complete';

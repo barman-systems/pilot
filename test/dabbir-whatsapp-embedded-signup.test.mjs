@@ -73,6 +73,9 @@ test('iPhone Meta login preserves the original user activation by prewarming the
   assert.match(ui, /Meta secure onboarding/);
   assert.match(body, /const sessionPromise=waitForSession\(\)/);
   assert.match(body, /login_invoked/);
+  assert.match(body, /session_missing/);
+  assert.match(body, /META_EMBEDDED_SIGNUP_SESSION_MISSING/);
+  assert.doesNotMatch(body, /session_server_fallback/);
 });
 
 test('Embedded Signup does not time out during a normal multi-step Meta mobile journey and trusts only HTTPS facebook.com hosts', async () => {
