@@ -64,6 +64,32 @@ async function readOrders(token,businessId){
   return (orders||[]).map(order=>({...order,customer_name:names.get(order.customer_id)||null}));
 }
 
+async function findOrCreateCustomer(ctx,businessId,displayName,phone){
+  if(phone){
+    const existingRows=await supabaseRest(
+      `dabbir_customers?select=id,display_name,channel_handle&business_id=eq.${businessId}&channel_handle=eq.${encodeURIComponent(phone)}&limit=1`,
+      ctx.token,
+    ).then(r=>parse(r,'WORKFLOW_CUSTOMER_LOOKUP_FAILED'));
+    const existing=Array.isArray(existingRows)?existingRows[0]:null;
+    if(existing?.id)return existing;
+  }
+
+  const customerRows=await supabaseRest('dabbir_customers?select=id,display_name,channel_handle,created_at',ctx.token,{
+    method:'POST',
+    headers:{prefer:'return=representation'},
+    body:JSON.stringify({
+      business_id:businessId,
+      display_name:displayName,
+      channel_handle:phone||null,
+      lead_status:'new',
+      metadata:{source:'dabbir_quick_order'},
+    }),
+  }).then(r=>parse(r,'WORKFLOW_CUSTOMER_CREATE_FAILED'));
+  const customer=Array.isArray(customerRows)?customerRows[0]:null;
+  if(!customer?.id)throw Object.assign(new Error('WORKFLOW_CUSTOMER_CREATE_UNVERIFIED'),{status:502});
+  return customer;
+}
+
 async function createOrder(ctx,businessId,body){
   const displayName=clean(body.display_name,120)||'عميل';
   const phone=clean(body.phone,40);
@@ -72,19 +98,7 @@ async function createOrder(ctx,businessId,body){
   const requestedState=clean(body.workflow_status,40).toLowerCase();
   const workflowStatus=WORKFLOW_STATES.has(requestedState)?requestedState:'new';
 
-  const customerRows=await supabaseRest('dabbir_customers?select=id,display_name,created_at',ctx.token,{
-    method:'POST',
-    headers:{prefer:'return=representation'},
-    body:JSON.stringify({
-      business_id:businessId,
-      display_name:displayName,
-      lead_status:'new',
-      metadata:{source:'dabbir_quick_order',phone:phone||undefined},
-    }),
-  }).then(r=>parse(r,'WORKFLOW_CUSTOMER_CREATE_FAILED'));
-  const customer=Array.isArray(customerRows)?customerRows[0]:null;
-  if(!customer?.id)throw Object.assign(new Error('WORKFLOW_CUSTOMER_CREATE_UNVERIFIED'),{status:502});
-
+  const customer=await findOrCreateCustomer(ctx,businessId,displayName,phone);
   const now=new Date().toISOString();
   const orderRows=await supabaseRest('dabbir_orders?select=id,customer_id,status,workflow_status,total_aed,paid_aed,note,public_status_token,created_at,workflow_updated_at',ctx.token,{
     method:'POST',
