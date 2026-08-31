@@ -1,0 +1,38 @@
+name: DABBIR UAE Infra Validate
+
+on:
+  pull_request:
+    paths:
+      - 'infra/aws-uae/**'
+      - 'scripts/dabbir-uae-preflight.sql'
+      - '.github/workflows/dabbir-uae-infra-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/aws-uae
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.13.3'
+      - name: Terraform format
+        run: terraform fmt -check -recursive
+      - name: Terraform init without backend
+        run: terraform init -backend=false -input=false
+      - name: Terraform validate
+        run: terraform validate
+      - name: Reject public PostgreSQL ingress
+        run: |
+          if grep -RInE 'from_port\s*=\s*(5432|6543)|to_port\s*=\s*(5432|6543)' .; then
+            echo 'Public PostgreSQL/Supavisor ingress is forbidden for DABBIR UAE.'
+            exit 1
+          fi
+          echo 'No PostgreSQL public-ingress rule detected.'
