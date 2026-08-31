@@ -28,6 +28,17 @@ test('official Embedded Signup owns WhatsApp taps and guard defers when it is mo
   assert.match(guard, /dabbirEmbeddedSignupAuthority='official-message-flow-v1'/);
 });
 
+test('WhatsApp guard attribute writes are idempotent to prevent a WebKit mutation loop', async () => {
+  const guard = await read('api/dabbir-whatsapp-connect-guard-ui.js');
+  assert.match(guard, /if\(button\.disabled!==next\) button\.disabled=next/);
+  assert.match(guard, /if\(button\.dataset\[key\]!==value\) button\.dataset\[key\]=value/);
+  assert.match(guard, /setDisabled\(button,oauthReturnBusy\|\|oauthLaunchBusy\)/);
+  assert.match(guard, /setData\(button,'platformReady','true'\)/);
+  assert.match(guard, /setDisabled\(button,false\)/);
+  assert.doesNotMatch(guard, /button\.disabled=oauthReturnBusy\|\|oauthLaunchBusy/);
+  assert.doesNotMatch(guard, /button\.dataset\.platformReady='true'/);
+});
+
 test('authoritative shell mounts the WhatsApp truth guard immediately after Embedded Signup UI', async () => {
   const shell = await read('api/app-recovery.js');
   const embedded = shell.indexOf('/api/dabbir-whatsapp-embedded-ui');
