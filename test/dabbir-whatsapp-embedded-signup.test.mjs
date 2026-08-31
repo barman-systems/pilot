@@ -158,6 +158,18 @@ test('WhatsApp connection storage is tenant-scoped and RLS protected', async () 
   assert.doesNotMatch(migration, /grant .* to anon/i);
 });
 
+test('WhatsApp connection persistence uses the tenant-checked database RPC', async () => {
+  const core = await read('api/_whatsapp-embedded-core.js');
+  const migration = await read('supabase/migrations/20260831032000_dabbir_whatsapp_connection_upsert_rpc_v1.sql');
+  assert.match(core, /supabaseRpc\('dabbir_whatsapp_upsert_connection'/);
+  assert.doesNotMatch(core, /supabaseRest\('dabbir_whatsapp_connections\?on_conflict=business_id'/);
+  assert.match(migration, /create or replace function public\.dabbir_whatsapp_upsert_connection/);
+  assert.match(migration, /dabbir_private\.is_active_member\(p_business_id\)/);
+  assert.match(migration, /WHATSAPP_PHONE_ALREADY_CONNECTED/);
+  assert.match(migration, /on conflict \(business_id\) do update/);
+  assert.match(migration, /grant execute on function public\.dabbir_whatsapp_upsert_connection/);
+});
+
 test('production shell mounts Embedded Signup and CSP permits only required Meta browser origins', async () => {
   const shell = await read('api/app-recovery.js');
   const vercel = await read('vercel.json');

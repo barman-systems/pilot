@@ -287,7 +287,7 @@
     const FB=window.FB;
     embeddedSession=null;
     let stage='start';
-      report('connect_start',{stage,onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
+    report('connect_start',{stage,onboarding_mode:COEXISTENCE_FEATURE,embedded_signup_version:EMBEDDED_SIGNUP_VERSION});
 
     if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
       report('connect_error',{stage:'platform_config',error:'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED',has_waba:false,has_phone:false});

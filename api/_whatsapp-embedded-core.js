@@ -4,6 +4,7 @@ import {
   getVerifiedUser,
   getBusinessMemberships,
   supabaseRest,
+  supabaseRpc,
 } from './_auth-core.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
 
@@ -378,11 +379,25 @@ export async function loadBusinessConnection(accessToken, businessId, options = 
 
 export async function upsertBusinessConnection(accessToken, row, options = {}) {
   return withServerReadTimeout(async signal => {
-    const response = await supabaseRest('dabbir_whatsapp_connections?on_conflict=business_id', accessToken, {
-      method: 'POST',
-      headers: { prefer: 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(row),
-      signal,
+    const response = await supabaseRpc('dabbir_whatsapp_upsert_connection', accessToken, {
+      p_business_id: row.business_id,
+      p_provider: row.provider,
+      p_status: row.status,
+      p_meta_app_id: row.meta_app_id,
+      p_waba_id: row.waba_id,
+      p_phone_number_id: row.phone_number_id,
+      p_display_phone_number: row.display_phone_number,
+      p_verified_name: row.verified_name,
+      p_access_token_ciphertext: row.access_token_ciphertext,
+      p_access_token_iv: row.access_token_iv,
+      p_access_token_tag: row.access_token_tag,
+      p_token_expires_at: row.token_expires_at,
+      p_token_key_version: row.token_key_version,
+      p_connected_by: row.connected_by,
+      p_connected_at: row.connected_at,
+      p_last_verified_at: row.last_verified_at,
+      p_last_provider_status: row.last_provider_status,
+      p_last_error: row.last_error,
     });
     const payload = await readConnectionRows(
       response,
