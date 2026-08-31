@@ -52,4 +52,5 @@ as $$
 $$;
 
 revoke all on function public.dabbir_public_order_status(uuid) from public;
-grant execute on function public.dabbir_public_order_status(uuid) to anon, authenticated, service_role;
+revoke execute on function public.dabbir_public_order_status(uuid) from authenticated, service_role;
+grant execute on function public.dabbir_public_order_status(uuid) to anon;
