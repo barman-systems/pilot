@@ -1,9 +1,25 @@
+import { timingSafeEqual } from 'node:crypto';
 import { json, supabaseRpc } from './_auth-core.js';
 import { loadBusinessConnection } from './_whatsapp-embedded-core.js';
 import { sendMetaTemplate } from './_whatsapp-live-core.js';
 
 const clean=(value,max=500)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const serviceKey=()=>clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);
+const EXPECTED_SCHEDULE='*/5 * * * *';
+
+function sameSecret(left,right){
+  const a=Buffer.from(String(left||''));const b=Buffer.from(String(right||''));
+  return a.length===b.length&&a.length>0&&timingSafeEqual(a,b);
+}
+export function cronAuthMode(req,env=process.env){
+  const secret=clean(env.CRON_SECRET,4096);
+  const authorization=clean(req.headers?.authorization,8192);
+  if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
+  const userAgent=clean(req.headers?.['user-agent'],120).toLowerCase();
+  const schedule=clean(req.headers?.['x-vercel-cron-schedule'],120);
+  const production=clean(env.VERCEL_ENV,32)==='production';
+  return production&&userAgent==='vercel-cron/1.0'&&schedule===EXPECTED_SCHEDULE?'vercel_schedule':null;
+}
 
 async function readRpc(response,fallback){
   const text=await response.text();let payload=null;
@@ -63,15 +79,17 @@ async function deliver(key,item){
 
 export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
-  const secret=clean(process.env.CRON_SECRET,4096);
-  if(!secret||clean(req.headers?.authorization,8192)!==`Bearer ${secret}`)return json(res,401,{ok:false,error:'CRON_AUTH_REQUIRED'});
+  const authMode=cronAuthMode(req);
+  if(!authMode)return json(res,401,{ok:false,error:'CRON_AUTH_REQUIRED'});
   const key=serviceKey();
   if(!key)return json(res,503,{ok:false,error:'SUPABASE_SERVICE_ROLE_REQUIRED'});
   try{
     const claimed=await rpc(key,'dabbir_claim_workflow_notifications',{p_limit:25});
     const results=[];
     for(const item of Array.isArray(claimed)?claimed:[])results.push(await deliver(key,item));
-    return json(res,200,{ok:true,claimed:results.length,sent:results.filter(x=>x.status==='sent').length,failed:results.filter(x=>x.status==='failed').length,ambiguous:results.filter(x=>x.status==='ambiguous').length,results});
+    const summary={ok:true,claimed:results.length,sent:results.filter(x=>x.status==='sent').length,failed:results.filter(x=>x.status==='failed').length,ambiguous:results.filter(x=>x.status==='ambiguous').length,results};
+    console.info('dabbir_salon_reminder_cron',{auth_mode:authMode,claimed:summary.claimed,sent:summary.sent,failed:summary.failed,ambiguous:summary.ambiguous});
+    return json(res,200,summary);
   }catch(error){
     const code=clean(error?.message||'SALON_REMINDER_CRON_FAILED',160);
     console.error('dabbir_salon_reminder_cron_failed',{error:code});
