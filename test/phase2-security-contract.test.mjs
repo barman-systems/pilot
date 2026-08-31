@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseCookies } from '../api/_auth-core.js';
+import { parseCookies, requireSameOrigin } from '../api/_auth-core.js';
 
 const root = new URL('../', import.meta.url);
 const read = async path => readFile(new URL(path, root), 'utf8');
@@ -94,6 +94,13 @@ test('session identity is verified server-side and memberships are resolved unde
   assert.match(session, /getVerifiedUser/);
   assert.match(session, /getBusinessMemberships/);
   assert.doesNotMatch(session, /dabbir_customers/);
+});
+
+test('Safari same-origin requests without Origin use the explicit web-client marker', () => {
+  const safariHeaders = { host: 'dabbir.bmalman.com', 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile/15E148 Safari/604.1', 'x-dabbir-client': 'web' };
+  assert.equal(requireSameOrigin({ headers: safariHeaders }), true);
+  assert.equal(requireSameOrigin({ headers: { host: 'dabbir.bmalman.com' } }), false);
+  assert.equal(requireSameOrigin({ headers: { host: 'dabbir.bmalman.com', origin: 'https://attacker.example', 'x-dabbir-client': 'web' } }), false);
 });
 
 test('cookie parser preserves encoded session token values', () => {
