@@ -202,8 +202,63 @@ $function$;
 revoke all on function public.dabbir_create_business(text, text, text) from public, anon;
 grant execute on function public.dabbir_create_business(text, text, text) to authenticated, service_role;
 
+-- One RLS-aware query supplies the owner portfolio without N queries per business.
+create or replace function public.dabbir_owner_business_metrics()
+returns table(
+  business_id uuid,
+  customers_total bigint,
+  appointments_today bigint,
+  orders_today bigint,
+  revenue_today_aed numeric,
+  branches_total bigint
+)
+language sql
+stable
+security invoker
+set search_path to 'public', 'pg_temp'
+as $function$
+  with active_businesses as (
+    select m.business_id
+    from public.dabbir_memberships m
+    where m.user_id = (select auth.uid())
+      and m.status = 'active'
+  ), bounds as (
+    select
+      ((now() at time zone 'Asia/Dubai')::date at time zone 'Asia/Dubai') as day_start,
+      (((now() at time zone 'Asia/Dubai')::date + 1) at time zone 'Asia/Dubai') as day_end
+  )
+  select
+    ab.business_id,
+    (select count(*) from public.dabbir_customers c where c.business_id = ab.business_id) as customers_total,
+    (select count(*) from public.dabbir_appointments a, bounds b
+      where a.business_id = ab.business_id
+        and a.simulated = false
+        and a.starts_at >= b.day_start
+        and a.starts_at < b.day_end) as appointments_today,
+    (select count(*) from public.dabbir_orders o, bounds b
+      where o.business_id = ab.business_id
+        and o.simulated = false
+        and o.created_at >= b.day_start
+        and o.created_at < b.day_end) as orders_today,
+    coalesce((select sum(o.total_aed) from public.dabbir_orders o, bounds b
+      where o.business_id = ab.business_id
+        and o.simulated = false
+        and o.created_at >= b.day_start
+        and o.created_at < b.day_end), 0)::numeric as revenue_today_aed,
+    (select count(*) from public.dabbir_business_branches branch
+      where branch.business_id = ab.business_id
+        and branch.status = 'active') as branches_total
+  from active_businesses ab;
+$function$;
+
+revoke all on function public.dabbir_owner_business_metrics() from public, anon;
+grant execute on function public.dabbir_owner_business_metrics() to authenticated, service_role;
+
 comment on table public.dabbir_business_branches is
   'Branches belonging to one DABBIR business. Business data remains tenant-scoped by business_id.';
 
 comment on function public.dabbir_create_business(text, text, text) is
   'Creates a DABBIR business, active owner membership, and primary branch in one transaction.';
+
+comment on function public.dabbir_owner_business_metrics() is
+  'RLS-aware owner portfolio metrics across the authenticated users active DABBIR memberships.';
