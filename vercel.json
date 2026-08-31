@@ -42,8 +42,7 @@
       "dest": "/team.html"
     },
     {
-      "src": "^/team\\.html/?$",
-      "dest": "/team.html"
+      "handle": "filesystem"
     },
     {
       "src": "^/owner/?$",
