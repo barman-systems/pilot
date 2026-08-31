@@ -196,7 +196,7 @@ export function readJsonBody(req, maxBytes = 8192) {
     req.on('data', chunk => {
       size += chunk.length;
       if (size > maxBytes) {
-        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 });
+        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 }));
         req.destroy();
         return;
       }
@@ -218,7 +218,13 @@ export async function readRpcJson(response) {
 }
 
 export function rpcErrorCode(payload, fallback = 'REQUEST_FAILED') {
-  if (!payload || typeof payload !== 'object') return fallback;
-  const code = String(payload.code || payload.error || payload.message || fallback).trim();
-  return code || fallback;
+  const raw = String(payload?.message || payload?.error || '').toUpperCase();
+  const known = [
+    'AUTH_REQUIRED','BUSINESS_REQUIRED','INVALID_EMAIL','INVALID_ROLE','INVALID_TOKEN_HASH','INVALID_EXPIRY',
+    'TEAM_MANAGEMENT_REQUIRED','PERMISSION_GRANT_NOT_ALLOWED','INVITATION_ALREADY_PENDING','EMPLOYEE_ALREADY_MEMBER',
+    'INVALID_INVITATION','VERIFIED_EMAIL_REQUIRED','INVITATION_NOT_FOUND','INVITATION_NOT_PENDING','INVITATION_EXPIRED',
+    'INVITATION_EMAIL_MISMATCH','INVITER_NO_LONGER_AUTHORIZED','MEMBERSHIP_ALREADY_EXISTS','MEMBERSHIP_NOT_FOUND',
+    'OWNER_IMMUTABLE','INVALID_STATUS','NEW_INVITATION_REQUIRED','DABBIR_ACCOUNT_SUSPENDED'
+  ];
+  return known.find(code => raw.includes(code)) || fallback;
 }
