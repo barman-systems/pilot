@@ -13,21 +13,28 @@ function statusCode(error){
   return [400,401,403,404,409,429,502,503].includes(code)?code:500;
 }
 
+function calendarStorageConfigured(){
+  const key=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
+  return Boolean(key&&!key.startsWith('sb_publishable_'));
+}
+
 export default async function handler(req,res){
   try{
     if(req.method==='GET'){
       const businessId=safeBusinessId(req.query?.business_id);
       await requireCalendarMember(req,businessId);
-      const connections=await listConnections(businessId);
       const google=providerConfig('google',req),outlook=providerConfig('outlook',req);
       const securityReady=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24&&String(process.env.DABBIR_CALENDAR_STATE_SECRET||process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24;
+      const storageConfigured=calendarStorageConfigured();
+      const connections=storageConfigured?await listConnections(businessId):[];
       return json(res,200,{
         ok:true,
         business_id:businessId,
+        storage_configured:storageConfigured,
         connections,
         providers:{
-          google:{configured:Boolean(google.configured&&securityReady)},
-          outlook:{configured:Boolean(outlook.configured&&securityReady)},
+          google:{configured:Boolean(storageConfigured&&google.configured&&securityReady)},
+          outlook:{configured:Boolean(storageConfigured&&outlook.configured&&securityReady)},
         },
       });
     }
