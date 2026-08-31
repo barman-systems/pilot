@@ -278,26 +278,71 @@ function idsFromRows(rows) {
   return (Array.isArray(rows) ? rows : []).map(row => cleanId(row?.id)).filter(Boolean);
 }
 
-async function listBusinessWabas(platform, token) {
-  let businesses;
-  try {
-    const payload = await graphJson(platform, 'me/businesses', token, { params: { fields: 'id,name', limit: 100 } });
-    businesses = (Array.isArray(payload?.data) ? payload.data : []).map(row => cleanId(row?.id)).filter(Boolean);
-  } catch (error) {
-    console.warn('dabbir_whatsapp_business_discovery_failed', {
-      provider_status: error?.providerStatus || null,
-      provider_code: error?.providerCode || null,
-    });
-    return [];
+function granularTargetIds(granularScopes, scopeName) {
+  return [...new Set((Array.isArray(granularScopes) ? granularScopes : [])
+    .filter(item => String(item?.scope || '') === scopeName)
+    .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
+    .map(cleanId)
+    .filter(Boolean))];
+}
+
+function businessIdFromActor(payload) {
+  const direct = cleanId(payload?.business?.id || payload?.business);
+  return direct || '';
+}
+
+async function listBusinessWabas(platform, token, seedBusinessIds = []) {
+  let businessIds = [...new Set((Array.isArray(seedBusinessIds) ? seedBusinessIds : []).map(cleanId).filter(Boolean))];
+
+  if (!businessIds.length) {
+    try {
+      const actor = await graphJson(platform, 'me', token, { params: { fields: 'id,business' } });
+      const actorBusinessId = businessIdFromActor(actor);
+      if (actorBusinessId) businessIds.push(actorBusinessId);
+    } catch (error) {
+      console.warn('dabbir_whatsapp_actor_business_discovery_failed', {
+        provider_status: error?.providerStatus || null,
+        provider_code: error?.providerCode || null,
+        provider_message: String(error?.message || '').slice(0, 180),
+      });
+    }
   }
-  const businessIds = [...new Set(businesses)].slice(0, 30);
+
+  if (!businessIds.length) {
+    try {
+      const payload = await graphJson(platform, 'me/businesses', token, { params: { fields: 'id,name', limit: 100 } });
+      businessIds = (Array.isArray(payload?.data) ? payload.data : []).map(row => cleanId(row?.id)).filter(Boolean);
+    } catch (error) {
+      console.warn('dabbir_whatsapp_business_discovery_failed', {
+        provider_status: error?.providerStatus || null,
+        provider_code: error?.providerCode || null,
+        provider_message: String(error?.message || '').slice(0, 180),
+      });
+    }
+  }
+
+  businessIds = [...new Set(businessIds)].slice(0, 30);
+  if (!businessIds.length) return [];
+
   const results = await Promise.allSettled(businessIds.flatMap(businessId => [
     graphJson(platform, `${encodeURIComponent(businessId)}/owned_whatsapp_business_accounts`, token, { params: { fields: 'id,name', limit: 100 } }),
     graphJson(platform, `${encodeURIComponent(businessId)}/client_whatsapp_business_accounts`, token, { params: { fields: 'id,name', limit: 100 } }),
   ]));
   const ids = [];
+  const failures = [];
   for (const result of results) {
     if (result.status === 'fulfilled') ids.push(...idsFromRows(result.value?.data));
+    else failures.push(result.reason);
+  }
+  if (!ids.length && failures.length) {
+    const firstFailure = failures[0];
+    console.warn('dabbir_whatsapp_waba_edge_discovery_failed', {
+      business_count: businessIds.length,
+      failed_edges: failures.length,
+      provider_status: firstFailure?.providerStatus || null,
+      provider_code: firstFailure?.providerCode || null,
+      provider_message: String(firstFailure?.message || '').slice(0, 180),
+    });
   }
   return [...new Set(ids)];
 }
@@ -339,17 +384,13 @@ export async function discoverWabaIdFromAccessToken(platform, token, options = {
     throw Object.assign(new Error('META_WABA_DISCOVERY_FAILED'), { status: 502 });
   }
   const granularScopes = Array.isArray(payload?.data?.granular_scopes) ? payload.data.granular_scopes : [];
-  const targetIds = granularScopes
-    .filter(item => String(item?.scope || '') === 'whatsapp_business_management')
-    .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
-    .map(cleanId)
-    .filter(Boolean);
-  const uniqueWabas = [...new Set(targetIds)];
+  const uniqueWabas = granularTargetIds(granularScopes, 'whatsapp_business_management');
   if (uniqueWabas.length === 1) return uniqueWabas[0];
   if (uniqueWabas.length > 1) {
     throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
   }
 
+  const businessTargetIds = granularTargetIds(granularScopes, 'business_management');
   const scopes = new Set((Array.isArray(payload?.data?.scopes) ? payload.data.scopes : []).map(value => String(value || '')));
   const granularNames = new Set(granularScopes.map(item => String(item?.scope || '')));
   const regressionShape = scopes.has('whatsapp_business_management')
@@ -357,7 +398,14 @@ export async function discoverWabaIdFromAccessToken(platform, token, options = {
     || granularNames.has('business_management');
   if (!regressionShape) throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
 
-  const graphWabas = await listBusinessWabas(platform, token);
+  console.info('dabbir_whatsapp_debug_scope_shape', {
+    whatsapp_target_count: uniqueWabas.length,
+    business_target_count: businessTargetIds.length,
+    scope_count: scopes.size,
+    granular_scope_names: [...granularNames].slice(0, 12),
+  });
+
+  const graphWabas = await listBusinessWabas(platform, token, businessTargetIds);
   if (graphWabas.length === 1) return graphWabas[0];
   if (graphWabas.length > 1 && options.onboardingMode === 'whatsapp_business_app_onboarding') {
     const coexistenceWabas = await narrowWabasByCoexistencePhone(platform, token, graphWabas);
