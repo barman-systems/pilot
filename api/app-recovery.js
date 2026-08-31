@@ -12,7 +12,7 @@ const SECURITY_HEADERS = {
 // Runtime delivery is now two static bundles: critical auth UI, then deferred workspace UI.
 // Change this release token whenever generated bundle behavior changes so browsers
 // can keep long-lived asset caching without serving a previous UI after deployment.
-const UI_BUNDLE_VERSION = '20260831-calendar-free-cancelled-v1';
+const UI_BUNDLE_VERSION = '20260831-activity-experience-v1';
 const UI_MODULE_ORDER = [
   '/api/brand-ui',
   '/api/dabbir-whatsapp-embedded-ui',
@@ -38,6 +38,7 @@ const UI_MODULE_ORDER = [
   '/api/customer-activation-ui',
   '/api/owner-copilot-ui',
   '/api/dabbir-contextual-navigation-ui',
+  '/api/dabbir-activity-experience-ui',
   '/api/auth-session-stability-ui',
 ];
 
@@ -56,6 +57,31 @@ const UI_BUNDLE_LOADER = `<script>
   };
   window.__dabbirLoadDeferredUi=load;
   if(document.querySelector('#appShell:not(.hidden)')) load();
+})();
+</script>`;
+
+const ACTIVITY_ONBOARDING_PATCH = `<script>
+(()=>{
+  if(window.__dabbirActivityOnboardingPatch)return;
+  window.__dabbirActivityOnboardingPatch=true;
+  const labels={
+    ar:{clinic:'عيادة / منشأة خدمية',store:'متجر',creator:'بيع عبر Instagram / WhatsApp',salon:'صالون / مركز تجميل',real_estate:'عقارات',services:'خدمات / ورشة / مشروع منزلي',car_wash:'غسيل سيارات',laundry:'مغسلة',other:'أخرى'},
+    en:{clinic:'Clinic / service facility',store:'Store',creator:'Instagram / WhatsApp seller',salon:'Salon / beauty center',real_estate:'Real estate',services:'Services / workshop / home business',car_wash:'Car wash',laundry:'Laundry',other:'Other'}
+  };
+  const apply=()=>{
+    const select=document.querySelector('#businessType');
+    if(!select)return;
+    if(!select.querySelector('option[value="laundry"]')){
+      const option=document.createElement('option');
+      option.value='laundry';
+      const other=select.querySelector('option[value="other"]');
+      select.insertBefore(option,other||null);
+    }
+    const lang=String(document.documentElement.lang||'ar').toLowerCase().startsWith('en')?'en':'ar';
+    for(const option of select.options){if(labels[lang][option.value])option.textContent=labels[lang][option.value]}
+  };
+  apply();
+  new MutationObserver(apply).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
 })();
 </script>`;
 
@@ -156,7 +182,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n</body>')
+        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + UI_BUNDLE_LOADER + '\n' + ACTIVITY_ONBOARDING_PATCH + '\n' + BOOKING_TIME_GUARD + '\n</body>')
         : body;
       return res.end(html);
     },

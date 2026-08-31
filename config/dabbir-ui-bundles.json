@@ -28,6 +28,7 @@
     "/api/customer-activation-ui",
     "/api/owner-copilot-ui",
     "/api/dabbir-contextual-navigation-ui",
+    "/api/dabbir-activity-experience-ui",
     "/api/car-wash-booking-ui"
   ]
 }
