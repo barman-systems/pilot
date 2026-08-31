@@ -622,6 +622,11 @@
     const target=event.target instanceof Element?event.target:null;
     const button=target?.closest(CONNECT_SELECTOR);
     if(!(button instanceof HTMLButtonElement))return;
+    // The official Embedded Signup UI owns the button when it is mounted. Meta
+    // returns WABA/phone IDs through WA_EMBEDDED_SIGNUP message events; do not
+    // replace that flow with the legacy manual OAuth path, which cannot receive
+    // those asset IDs and falls back to unreliable Graph discovery.
+    if(window.__dabbirWhatsAppEmbeddedUiLoaded)return;
 
     // This listener runs on document capture. It is the sole click authority for
     // WhatsApp onboarding and stops the older FB.login target handler even when

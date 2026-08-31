@@ -31,6 +31,13 @@ test('Embedded Signup UI connects WhatsApp Business through Meta inside DABBIR w
   assert.doesNotMatch(ui, /type=["']password["']/);
 });
 
+test('WhatsApp connect guard defers to official Embedded Signup message flow', async () => {
+  const guard = await read('api/dabbir-whatsapp-connect-guard-ui.js');
+  assert.match(guard, /__dabbirWhatsAppEmbeddedUiLoaded/);
+  assert.match(guard, /returns WABA\/phone IDs through WA_EMBEDDED_SIGNUP message events/);
+  assert.match(guard, /if\(window\.__dabbirWhatsAppEmbeddedUiLoaded\)return/);
+});
+
 test('DABBIR prefers WhatsApp Business app coexistence so verification happens through the existing WhatsApp Business account', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
