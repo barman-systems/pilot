@@ -9,6 +9,7 @@
     "/api/dabbir-whatsapp-embedded-ui",
     "/api/dabbir-whatsapp-connect-guard-ui",
     "/api/timezone-ui",
+    "/api/adaptive-appointment-ui",
     "/api/chat-human-ui",
     "/api/translation-ui",
     "/api/owner-operations-ui",
