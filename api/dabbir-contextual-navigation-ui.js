@@ -19,13 +19,14 @@ const script=String.raw`(()=>{
 
   const businessType=()=>String(currentWorkspace()?.business?.business_type||'').toLowerCase();
   const isStore=()=>businessType()==='store';
-  const isServiceBusiness=()=>Boolean(businessType())&&!isStore();
+  const isOrderBusiness=()=>['creator','laundry','services'].includes(businessType());
+  const isServiceBusiness=()=>['clinic','salon','car_wash','services'].includes(businessType());
   const isOwner=()=>String(currentWorkspace()?.membership?.role||'').toLowerCase()==='owner';
   const hasBusiness=()=>Boolean(currentWorkspace()?.business?.id);
   const copy=()=>ar()?{
     servicesTitle:'الخدمات',
     servicesDesc:'الخدمات الفعلية التي يقدمها نشاطك. عدّلها عند الحاجة بدون زيادة القوائم الرئيسية.',
-    operations:'العمليات',
+    operations:'العمليات',orders:'الطلبات',laundry:'الغسيل',jobs:'الأعمال',
     teamTitle:'الفريق والموظفون',
     teamDesc:'إدارة أعضاء الفريق والدعوات والصلاحيات من مكان واضح.',
     assistantTitle:'مساعد دبّر',
@@ -33,7 +34,7 @@ const script=String.raw`(()=>{
   }:{
     servicesTitle:'Services',
     servicesDesc:'The real services your business provides. Manage them when needed without adding another primary destination.',
-    operations:'Operations',
+    operations:'Operations',orders:'Orders',laundry:'Laundry',jobs:'Jobs',
     teamTitle:'Team & employees',
     teamDesc:'Manage team members, invitations and permissions from one clear place.',
     assistantTitle:'DABBIR Assistant',
@@ -41,7 +42,7 @@ const script=String.raw`(()=>{
   };
 
   function activitySlots(){
-    qa('#nav [data-screen="appointments"],#bottomNav [data-screen="appointments"],#nav [data-screen="operations"],#bottomNav [data-screen="operations"],#nav [data-dabbir-activity-slot="true"],#bottomNav [data-dabbir-activity-slot="true"]').forEach(node=>{
+    qa('#nav [data-screen="appointments"],#bottomNav [data-screen="appointments"],#nav [data-screen="operations"],#bottomNav [data-screen="operations"],#nav [data-screen="workflow"],#bottomNav [data-screen="workflow"],#nav [data-dabbir-activity-slot="true"],#bottomNav [data-dabbir-activity-slot="true"]').forEach(node=>{
       node.dataset.dabbirActivitySlot='true';
     });
     return qa('[data-dabbir-activity-slot="true"]');
@@ -58,10 +59,16 @@ const script=String.raw`(()=>{
     const icon=node.querySelector(':scope > .d4-nav-icon');
     if(icon&&icon.dataset.routerTarget!==target){
       icon.dataset.routerTarget=target;
-      icon.innerHTML=target==='operations'
+      icon.innerHTML=(target==='operations'||target==='workflow')
         ? '<svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg>'
         : '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg>';
     }
+  }
+
+  function workflowLabel(t){
+    if(businessType()==='laundry')return t.laundry;
+    if(businessType()==='services')return t.jobs;
+    return t.orders;
   }
 
   function adaptPrimaryActivitySlot(){
@@ -69,13 +76,18 @@ const script=String.raw`(()=>{
     for(const node of activitySlots()){
       if(isStore()){
         setActivitySlot(node,'operations',t.operations);
+      }else if(isOrderBusiness()){
+        setActivitySlot(node,'workflow',workflowLabel(t));
       }else{
         let appointmentLabel='';
         try{appointmentLabel=String(T()?.appointments||'').trim()}catch{}
         setActivitySlot(node,'appointments',appointmentLabel||(ar()?'المواعيد':'Appointments'));
       }
     }
-    if(isStore()&&typeof current!=='undefined'&&current==='appointments'&&typeof showScreen==='function')showScreen('operations');
+    if(typeof current!=='undefined'&&current==='appointments'&&typeof showScreen==='function'){
+      if(isStore())showScreen('operations');
+      else if(isOrderBusiness())showScreen('workflow');
+    }
   }
 
   function openServices(){
@@ -187,7 +199,7 @@ const script=String.raw`(()=>{
   setTimeout(enforce,0);
   setTimeout(enforce,650);
   setTimeout(enforce,1600);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v6',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true,team_access:'more-and-sidebar',owner_assistant_access:'more'};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v7-activity-workflow',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true,team_access:'more-and-sidebar',owner_assistant_access:'more'};
 })();`;
 
 export default function handler(req,res){
@@ -195,6 +207,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v6');
+  res.setHeader('x-dabbir-contextual-navigation','v7-activity-workflow');
   return res.status(200).send(script);
 }
