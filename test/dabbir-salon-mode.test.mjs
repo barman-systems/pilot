@@ -91,6 +91,13 @@ test('calendar UI provides day, week, month, employee columns, drag/drop and dur
   assert.match(calendarOwner,/managementCaptured\.body\+'\\n'\+salonCaptured\.body/);
 });
 
+test('Salon Mode cannot create a self-triggering Safari mutation loop',()=>{
+  assert.match(ui,/if\(!document\.body\.classList\.contains\('salonMode'\)\)document\.body\.classList\.add\('salonMode'\)/);
+  assert.match(ui,/if\(data&&!force\)return/);
+  assert.doesNotMatch(ui,/observer\.observe\(document\.body,\{attributes:true,subtree:true/);
+  assert.doesNotMatch(ui,/setInterval\(/);
+});
+
 test('P0 interface includes staff, services, customer 360, payments, today board, reports and reminders',()=>{
   hasAll(ui,['renderTeam','renderServices','openCustomer360','openPayment','renderToday','renderReports','renderReminderSettings','revenueReport','employeeReport','servicesReport','recurringReport','inactiveReport','noShowReport','cancellationReport','peakReport','gapReport','commissionReport']);
   hasAll(api,['resource===\'customer_360\'','resource===\'reports\'','aggregateReports','save_worker','save_service','save_schedule','save_reminder_settings']);
