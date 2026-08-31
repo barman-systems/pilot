@@ -91,7 +91,7 @@ function captureResponse(){
   };
 }
 
-export default async function handler(req,res){
+export default function handler(req,res){
   if(req.method!=='GET'){
     res.statusCode=405;
     res.setHeader('allow','GET');
@@ -99,7 +99,7 @@ export default async function handler(req,res){
   }
 
   const crmResponse=captureResponse();
-  await customerCrmHandler({method:'GET'},crmResponse);
+  customerCrmHandler({method:'GET'},crmResponse);
   if(crmResponse.statusCode!==200||!crmResponse.body){
     res.statusCode=500;
     res.setHeader('content-type','application/javascript; charset=utf-8');
