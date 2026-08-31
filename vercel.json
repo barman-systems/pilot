@@ -38,6 +38,14 @@
       "dest": "/support.html"
     },
     {
+      "src": "^/team/?$",
+      "dest": "/team.html"
+    },
+    {
+      "src": "^/team\\.html/?$",
+      "dest": "/team.html"
+    },
+    {
       "src": "^/owner/?$",
       "dest": "/api/owner-login"
     },
@@ -66,6 +74,10 @@
     {
       "source": "/support",
       "destination": "/support.html"
+    },
+    {
+      "source": "/team",
+      "destination": "/team.html"
     },
     {
       "source": "/owner",
