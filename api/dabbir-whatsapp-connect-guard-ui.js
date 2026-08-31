@@ -5,7 +5,11 @@ const script = String.raw`(()=>{
   let cachedConfig=null;
   let cachedBusinessId='';
   let cachedAt=0;
+  let configInFlight=null;
+  let configInFlightBusinessId='';
   let patchScheduled=false;
+  let patchRunning=false;
+  let patchQueued=false;
   let metaSignupStartedAt=0;
   let oauthReturnBusy=false;
   let oauthLaunchBusy=false;
@@ -56,15 +60,27 @@ const script = String.raw`(()=>{
     const bid=businessId();
     if(!bid) return null;
     if(!force&&cachedConfig&&cachedBusinessId===bid&&Date.now()-cachedAt<CACHE_MS) return cachedConfig;
-    try{
-      const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{
-        cache:'no-store',headers:{accept:'application/json'}
-      });
-      const payload=await response.json().catch(()=>({}));
-      if(!response.ok||!payload.ok) return null;
-      cachedConfig=payload;cachedBusinessId=bid;cachedAt=Date.now();
-      return payload;
-    }catch{return null}
+    if(configInFlight&&configInFlightBusinessId===bid) return configInFlight;
+
+    configInFlightBusinessId=bid;
+    configInFlight=(async()=>{
+      try{
+        const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{
+          cache:'no-store',headers:{accept:'application/json'}
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok||!payload.ok) return null;
+        cachedConfig=payload;cachedBusinessId=bid;cachedAt=Date.now();
+        return payload;
+      }catch{return null}
+      finally{
+        if(configInFlightBusinessId===bid){
+          configInFlight=null;
+          configInFlightBusinessId='';
+        }
+      }
+    })();
+    return configInFlight;
   }
 
   function missingParts(cfg){
@@ -335,48 +351,65 @@ const script = String.raw`(()=>{
     box.appendChild(notice);
   }
 
+  function integrationSurfaceActive(){
+    return Boolean(document.querySelector('#screen-integrations.active'));
+  }
+
   async function patch(){
     patchScheduled=false;
-    void finishManualOauthReturn();
-    const cfg=await config();
-    const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
-    document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureMetaResumeNotice);
-    document.querySelectorAll(CONNECT_SELECTOR).forEach(button=>{
-      if(!(button instanceof HTMLButtonElement)) return;
-      const box=button.closest('[data-dabbir-whatsapp-actions]');
-      if(box) ensureMetaResumeNotice(box);
-      const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
-      if(platformReady){
-        setDisabled(button,oauthReturnBusy||oauthLaunchBusy);
-        button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
-        setData(button,'platformReady','true');
-        button.dataset.dabbirEmbeddedSignupAuthority='official-message-flow-v1';
-        if(hint) hint.textContent=ar()
-          ? 'اضغط ربط. سيستخدم دبّر Embedded Signup الرسمي من Meta، وستُعاد معرفات WABA والرقم عبر رسالة Meta الآمنة.'
-          : 'Tap Connect. DABBIR will use Meta Embedded Signup, which returns the WABA and phone IDs through its secure message event.';
-        return;
-      }
-      if(button.closest('.dabbirWhatsAppBusy')) return;
-      const text=blockedText(missingParts(cfg));
-      setDisabled(button,false);
-      button.setAttribute('aria-disabled','false');
-      button.title=text;
-      if(hint&&hint.textContent!==text) hint.textContent=text;
-    });
+    if(patchRunning){patchQueued=true;return}
+    patchRunning=true;
+    try{
+      void finishManualOauthReturn();
+      const cfg=await config();
+      const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
+      document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureMetaResumeNotice);
+      document.querySelectorAll(CONNECT_SELECTOR).forEach(button=>{
+        if(!(button instanceof HTMLButtonElement)) return;
+        const box=button.closest('[data-dabbir-whatsapp-actions]');
+        if(box) ensureMetaResumeNotice(box);
+        const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
+        if(platformReady){
+          setDisabled(button,oauthReturnBusy||oauthLaunchBusy);
+          button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
+          setData(button,'platformReady','true');
+          button.dataset.dabbirEmbeddedSignupAuthority='official-message-flow-v1';
+          if(hint) hint.textContent=ar()
+            ? 'اضغط ربط. سيستخدم دبّر Embedded Signup الرسمي من Meta، وستُعاد معرفات WABA والرقم عبر رسالة Meta الآمنة.'
+            : 'Tap Connect. DABBIR will use Meta Embedded Signup, which returns the WABA and phone IDs through its secure message event.';
+          return;
+        }
+        if(button.closest('.dabbirWhatsAppBusy')) return;
+        const text=blockedText(missingParts(cfg));
+        setDisabled(button,false);
+        button.setAttribute('aria-disabled','false');
+        button.title=text;
+        if(hint&&hint.textContent!==text) hint.textContent=text;
+      });
+    }finally{
+      patchRunning=false;
+      if(patchQueued){patchQueued=false;schedulePatch()}
+    }
   }
 
   function schedulePatch(){
-    if(patchScheduled) return;
+    if(patchScheduled){patchQueued=true;return}
     patchScheduled=true;
     setTimeout(patch,0);
   }
 
   window.addEventListener('focus',()=>setTimeout(resumeOfficialWhatsAppSignup,250));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(resumeOfficialWhatsAppSignup,250)});
+  document.addEventListener('click',event=>{
+    const target=event.target instanceof Element?event.target:null;
+    if(target?.closest('[data-screen="integrations"]')) setTimeout(schedulePatch,0);
+  },true);
 
-  const observer=new MutationObserver(schedulePatch);
+  const observer=new MutationObserver(()=>{
+    if(integrationSurfaceActive()) schedulePatch();
+  });
   observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready']});
-  setTimeout(()=>{void finishManualOauthReturn();schedulePatch();resumeOfficialWhatsAppSignup()},200);
+  setTimeout(()=>{void finishManualOauthReturn();if(integrationSurfaceActive())schedulePatch();resumeOfficialWhatsAppSignup()},200);
 })();`;
 
 export default function handler(req,res){
