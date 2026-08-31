@@ -45,17 +45,11 @@ function requestPageRedirectUri(req) {
     const value = req?.headers?.[name] ?? req?.headers?.[name.toLowerCase()];
     return Array.isArray(value) ? String(value[0] || '').trim() : String(value || '').trim();
   };
-
   const originHeader = header('origin');
   let requestOrigin = '';
   if (originHeader) {
-    try {
-      requestOrigin = new URL(originHeader).origin;
-    } catch {
-      requestOrigin = '';
-    }
+    try { requestOrigin = new URL(originHeader).origin; } catch { requestOrigin = ''; }
   }
-
   const candidates = [header('referer'), requestOrigin ? `${requestOrigin}/` : ''];
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -67,11 +61,8 @@ function requestPageRedirectUri(req) {
       url.search = '';
       url.hash = '';
       return url.toString();
-    } catch {
-      // Try the next trusted request-derived candidate.
-    }
+    } catch {}
   }
-
   throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
 }
 
@@ -85,9 +76,7 @@ function normalizedHost(value) {
   try {
     const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
     return String(url.hostname || '').toLowerCase();
-  } catch {
-    return '';
-  }
+  } catch { return ''; }
 }
 
 function productionMetaRepairHost(redirectUri) {
@@ -119,31 +108,33 @@ function isRedirectMismatchError(error) {
     || message.includes('redirect_uri');
 }
 
+async function graphJson(platform, path, token, { params = {}, timeoutMs = 8000 } = {}) {
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw metaProviderError(payload, response, 'META_GRAPH_REQUEST_FAILED');
+    return payload;
+  } finally { clearTimeout(timeout); }
+}
+
 async function readMetaAppDomains(platform) {
   const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
   if (!platform?.appId || !platform?.appSecret) {
     throw Object.assign(new Error('META_APP_DOMAIN_REPAIR_CONFIGURATION_MISSING'), { status: 503 });
   }
-  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(platform.appId)}`);
-  url.searchParams.set('fields', 'app_domains');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${appAccessToken}`, accept: 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw metaProviderError(payload, response, 'META_APP_DOMAIN_READ_FAILED');
-    const domains = Array.isArray(payload?.app_domains)
-      ? payload.app_domains.map(normalizedHost).filter(Boolean)
-      : [];
-    return [...new Set(domains)];
-  } finally {
-    clearTimeout(timeout);
-  }
+  const payload = await graphJson(platform, encodeURIComponent(platform.appId), appAccessToken, { params: { fields: 'app_domains' } });
+  return [...new Set((Array.isArray(payload?.app_domains) ? payload.app_domains : []).map(normalizedHost).filter(Boolean))];
 }
 
 async function writeMetaAppDomains(platform, domains) {
@@ -166,13 +157,9 @@ async function writeMetaAppDomains(platform, domains) {
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.success === false) {
-      throw metaProviderError(payload, response, 'META_APP_DOMAIN_UPDATE_FAILED');
-    }
+    if (!response.ok || payload?.success === false) throw metaProviderError(payload, response, 'META_APP_DOMAIN_UPDATE_FAILED');
     return payload;
-  } finally {
-    clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
 }
 
 async function ensureMetaAppDomain(platform, redirectUri) {
@@ -189,58 +176,32 @@ async function ensureMetaAppDomain(platform, redirectUri) {
 }
 
 async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
-  if (!platform?.ready) {
-    throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
-  }
-  if (!redirectUri) {
-    throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
-  }
-
+  if (!platform?.ready) throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
+  if (!redirectUri) throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
   const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/oauth/access_token`);
   url.searchParams.set('client_id', platform.appId);
   url.searchParams.set('client_secret', platform.appSecret);
   url.searchParams.set('code', String(code));
   url.searchParams.set('grant_type', 'authorization_code');
   url.searchParams.set('redirect_uri', redirectUri);
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload?.access_token) {
-      throw metaProviderError(payload, response, 'META_CODE_EXCHANGE_FAILED');
-    }
-    return {
-      accessToken: String(payload.access_token),
-      expiresIn: Number(payload.expires_in || 0) || null,
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
+    if (!response.ok || !payload?.access_token) throw metaProviderError(payload, response, 'META_CODE_EXCHANGE_FAILED');
+    return { accessToken: String(payload.access_token), expiresIn: Number(payload.expires_in || 0) || null };
+  } finally { clearTimeout(timeout); }
 }
 
 function sdkRedirectCandidates(requestRedirectUri) {
   const values = [String(requestRedirectUri || '').trim()];
-  try {
-    const page = new URL(String(requestRedirectUri || ''));
-    values.push(`${page.origin}/`);
-  } catch {
-    // Ignore malformed optional fallback.
-  }
+  try { values.push(`${new URL(String(requestRedirectUri || '')).origin}/`); } catch {}
   values.push(
     'https://www.facebook.com/connect/login_success.html',
     'https://www.facebook.com/connect/login_success.html?display=popup',
   );
   return [...new Set(values.filter(Boolean))];
-}
-
-function safeCandidateHost(candidate) {
-  try {
-    return new URL(String(candidate || '')).hostname;
-  } catch {
-    return 'invalid';
-  }
 }
 
 async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri) {
@@ -249,9 +210,7 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
   let domainRepairChanged = false;
   let lastRedirectError = null;
   let lastAppDomainError = null;
-
   for (const candidate of sdkRedirectCandidates(redirectUri)) {
-    const candidateIsAppDomain = normalizedHost(candidate) === appHost;
     try {
       return {
         exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
@@ -260,17 +219,9 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
         redirectFallbackUsed: candidate !== redirectUri,
       };
     } catch (error) {
+      const candidateIsAppDomain = normalizedHost(candidate) === appHost;
       if (isMetaAppDomainError(error)) {
-        if (!candidateIsAppDomain) {
-          console.warn('dabbir_whatsapp_redirect_candidate_skipped', {
-            reason: 'provider_domain_rejection',
-            candidate_host: safeCandidateHost(candidate),
-            provider_code: error?.providerCode || null,
-          });
-          continue;
-        }
-
-        lastAppDomainError = error;
+        if (!candidateIsAppDomain) { lastAppDomainError = error; continue; }
         domainRepairAttempted = true;
         const repair = await ensureMetaAppDomain(platform, redirectUri);
         domainRepairChanged = domainRepairChanged || Boolean(repair.changed);
@@ -282,26 +233,15 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
             redirectFallbackUsed: candidate !== redirectUri,
           };
         } catch (retryError) {
-          if (isRedirectMismatchError(retryError)) {
-            lastRedirectError = retryError;
-            continue;
-          }
-          if (isMetaAppDomainError(retryError)) {
-            lastAppDomainError = retryError;
-            continue;
-          }
+          if (isRedirectMismatchError(retryError)) { lastRedirectError = retryError; continue; }
+          if (isMetaAppDomainError(retryError)) { lastAppDomainError = retryError; continue; }
           throw retryError;
         }
       }
-
-      if (isRedirectMismatchError(error)) {
-        lastRedirectError = error;
-        continue;
-      }
+      if (isRedirectMismatchError(error)) { lastRedirectError = error; continue; }
       throw error;
     }
   }
-
   try {
     return {
       exchange: await exchangeEmbeddedCode(platform, code),
@@ -316,6 +256,55 @@ async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri)
   }
 }
 
+function idsFromRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map(row => cleanId(row?.id)).filter(Boolean);
+}
+
+async function listBusinessWabas(platform, token) {
+  let businesses;
+  try {
+    const payload = await graphJson(platform, 'me/businesses', token, { params: { fields: 'id,name', limit: 100 } });
+    businesses = (Array.isArray(payload?.data) ? payload.data : []).map(row => cleanId(row?.id)).filter(Boolean);
+  } catch (error) {
+    console.warn('dabbir_whatsapp_business_discovery_failed', {
+      provider_status: error?.providerStatus || null,
+      provider_code: error?.providerCode || null,
+    });
+    return [];
+  }
+  const businessIds = [...new Set(businesses)].slice(0, 30);
+  const results = await Promise.allSettled(businessIds.flatMap(businessId => [
+    graphJson(platform, `${encodeURIComponent(businessId)}/owned_whatsapp_business_accounts`, token, { params: { fields: 'id,name', limit: 100 } }),
+    graphJson(platform, `${encodeURIComponent(businessId)}/client_whatsapp_business_accounts`, token, { params: { fields: 'id,name', limit: 100 } }),
+  ]));
+  const ids = [];
+  for (const result of results) {
+    if (result.status === 'fulfilled') ids.push(...idsFromRows(result.value?.data));
+  }
+  return [...new Set(ids)];
+}
+
+async function phoneRowsForWaba(platform, token, wabaId) {
+  const payload = await graphJson(platform, `${encodeURIComponent(wabaId)}/phone_numbers`, token, {
+    params: { fields: 'id,display_phone_number,verified_name,is_on_biz_app,platform_type', limit: 100 },
+  });
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+function isCoexistencePhone(row) {
+  return row?.is_on_biz_app === true && String(row?.platform_type || '').toUpperCase() === 'CLOUD_API';
+}
+
+async function narrowWabasByCoexistencePhone(platform, token, wabaIds) {
+  const results = await Promise.allSettled(wabaIds.map(async wabaId => ({
+    wabaId,
+    phones: await phoneRowsForWaba(platform, token, wabaId),
+  })));
+  return results
+    .filter(result => result.status === 'fulfilled' && result.value.phones.some(isCoexistencePhone))
+    .map(result => result.value.wabaId);
+}
+
 export async function discoverWabaIdFromAccessToken(platform, token, options = {}) {
   const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
   if (!platform?.appId || !platform?.appSecret || !token) {
@@ -325,73 +314,52 @@ export async function discoverWabaIdFromAccessToken(platform, token, options = {
   if (!authorizationToken) {
     throw Object.assign(new Error('META_WABA_DISCOVERY_CONFIGURATION_MISSING'), { status: 503 });
   }
-
-  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/debug_token`);
-  url.searchParams.set('input_token', String(token));
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${authorizationToken}`, accept: 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.data?.is_valid === false) {
-      throw metaProviderError(payload, response, 'META_WABA_DISCOVERY_FAILED');
-    }
-
-    const granularScopes = Array.isArray(payload?.data?.granular_scopes) ? payload.data.granular_scopes : [];
-    const targetIds = granularScopes
-      .filter(item => String(item?.scope || '') === 'whatsapp_business_management')
-      .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
-      .map(cleanId)
-      .filter(Boolean);
-    const uniqueWabas = [...new Set(targetIds)];
-
-    if (uniqueWabas.length === 1) return uniqueWabas[0];
-    if (uniqueWabas.length > 1) {
-      throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
-    }
-    throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
-  } finally {
-    clearTimeout(timeout);
+  const payload = await graphJson(platform, 'debug_token', authorizationToken, {
+    params: { input_token: String(token) },
+  });
+  if (payload?.data?.is_valid === false) {
+    throw Object.assign(new Error('META_WABA_DISCOVERY_FAILED'), { status: 502 });
   }
+  const granularScopes = Array.isArray(payload?.data?.granular_scopes) ? payload.data.granular_scopes : [];
+  const targetIds = granularScopes
+    .filter(item => String(item?.scope || '') === 'whatsapp_business_management')
+    .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
+    .map(cleanId)
+    .filter(Boolean);
+  const uniqueWabas = [...new Set(targetIds)];
+  if (uniqueWabas.length === 1) return uniqueWabas[0];
+  if (uniqueWabas.length > 1) {
+    throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
+  }
+
+  const scopes = new Set((Array.isArray(payload?.data?.scopes) ? payload.data.scopes : []).map(value => String(value || '')));
+  const granularNames = new Set(granularScopes.map(item => String(item?.scope || '')));
+  const regressionShape = scopes.has('whatsapp_business_management')
+    || scopes.has('business_management')
+    || granularNames.has('business_management');
+  if (!regressionShape) throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
+
+  const graphWabas = await listBusinessWabas(platform, token);
+  if (graphWabas.length === 1) return graphWabas[0];
+  if (graphWabas.length > 1 && options.onboardingMode === 'whatsapp_business_app_onboarding') {
+    const coexistenceWabas = await narrowWabasByCoexistencePhone(platform, token, graphWabas);
+    if (coexistenceWabas.length === 1) return coexistenceWabas[0];
+  }
+  if (graphWabas.length > 1) throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
+  throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
 }
 
 async function resolveCoexistencePhoneNumberId(platform, token, wabaId) {
-  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(wabaId)}/phone_numbers`);
-  url.searchParams.set('fields', 'id,display_phone_number,verified_name,is_on_biz_app,platform_type');
-  url.searchParams.set('limit', '100');
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw metaProviderError(payload, response, 'META_PHONE_RESOLUTION_FAILED');
-
-    const phones = Array.isArray(payload?.data) ? payload.data : [];
-    const coexistence = phones.filter(item => item?.is_on_biz_app === true && String(item?.platform_type || '').toUpperCase() === 'CLOUD_API');
-    if (coexistence.length === 1) return cleanId(coexistence[0]?.id);
-    if (phones.length === 1) return cleanId(phones[0]?.id);
-
-    throw Object.assign(new Error('META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED'), { status: 409 });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const phones = await phoneRowsForWaba(platform, token, wabaId);
+  const coexistence = phones.filter(isCoexistencePhone);
+  if (coexistence.length === 1) return cleanId(coexistence[0]?.id);
+  if (phones.length === 1) return cleanId(phones[0]?.id);
+  throw Object.assign(new Error('META_COEXISTENCE_PHONE_RESOLUTION_REQUIRED'), { status: 409 });
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'SAME_ORIGIN_REQUIRED' });
-
   try {
     const body = await readJsonBody(req, 16 * 1024);
     const businessId = String(body?.business_id || '').trim();
@@ -399,7 +367,6 @@ export default async function handler(req, res) {
     let wabaId = cleanId(body?.waba_id);
     let phoneNumberId = cleanId(body?.phone_number_id);
     const onboardingMode = String(body?.onboarding_mode || '').trim();
-
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     if (!code || code.length > 4096) return json(res, 400, { ok: false, error: 'META_AUTHORIZATION_CODE_REQUIRED' });
 
@@ -411,7 +378,7 @@ export default async function handler(req, res) {
     const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri);
     const exchanged = exchangeResult.exchange;
 
-    if (!wabaId) wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken);
+    if (!wabaId) wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken, { onboardingMode });
     if (!wabaId) return json(res, 400, { ok: false, error: 'META_EMBEDDED_SIGNUP_WABA_REQUIRED' });
 
     if (!phoneNumberId && onboardingMode === 'whatsapp_business_app_onboarding') {
@@ -425,7 +392,6 @@ export default async function handler(req, res) {
     const tokenExpiresAt = exchanged.expiresIn
       ? new Date(now.getTime() + exchanged.expiresIn * 1000).toISOString()
       : null;
-
     const stored = await upsertBusinessConnection(owner.accessToken, {
       business_id: businessId,
       provider: 'meta',
