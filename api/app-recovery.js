@@ -12,13 +12,14 @@ const SECURITY_HEADERS = {
 // Runtime delivery is now two static bundles: critical auth UI, then deferred workspace UI.
 // Change this release token whenever generated bundle behavior changes so browsers
 // can keep long-lived asset caching without serving a previous UI after deployment.
-const UI_BUNDLE_VERSION = '20260831-calendar-free-cancelled-v1';
+const UI_BUNDLE_VERSION = '20260831-activity-experience-v1';
 const UI_MODULE_ORDER = [
   '/api/brand-ui',
   '/api/dabbir-whatsapp-embedded-ui',
   '/api/dabbir-whatsapp-connect-guard-ui',
   '/api/timezone-ui',
   '/api/auth/recovery-ui',
+  '/api/dabbir-activity-experience-ui',
   '/api/chat-human-ui',
   '/api/translation-ui',
   '/api/owner-operations-ui',
