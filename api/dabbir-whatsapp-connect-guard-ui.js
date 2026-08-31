@@ -20,6 +20,18 @@ const script = String.raw`(()=>{
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
   function tell(text){try{if(typeof toast==='function')toast(text)}catch{}}
 
+  // This observer also watches these attributes. Writing the same value still
+  // queues an attribute mutation in WebKit, so every write must be idempotent
+  // or Safari can enter an unbounded patch loop and terminate the page.
+  function setDisabled(button,value){
+    const next=Boolean(value);
+    if(button.disabled!==next) button.disabled=next;
+  }
+
+  function setData(button,key,value){
+    if(button.dataset[key]!==value) button.dataset[key]=value;
+  }
+
   function report(event,extra={}){
     try{
       fetch('/api/dabbir-whatsapp-client-event',{
@@ -335,9 +347,9 @@ const script = String.raw`(()=>{
       if(box) ensureMetaResumeNotice(box);
       const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
       if(platformReady){
-        button.disabled=oauthReturnBusy||oauthLaunchBusy;
+        setDisabled(button,oauthReturnBusy||oauthLaunchBusy);
         button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
-        button.dataset.platformReady='true';
+        setData(button,'platformReady','true');
         button.dataset.dabbirEmbeddedSignupAuthority='official-message-flow-v1';
         if(hint) hint.textContent=ar()
           ? 'اضغط ربط. سيستخدم دبّر Embedded Signup الرسمي من Meta، وستُعاد معرفات WABA والرقم عبر رسالة Meta الآمنة.'
@@ -346,7 +358,7 @@ const script = String.raw`(()=>{
       }
       if(button.closest('.dabbirWhatsAppBusy')) return;
       const text=blockedText(missingParts(cfg));
-      button.disabled=false;
+      setDisabled(button,false);
       button.setAttribute('aria-disabled','false');
       button.title=text;
       if(hint&&hint.textContent!==text) hint.textContent=text;
