@@ -49,6 +49,9 @@ begin
   ) as v(tablename, old_policy, predicate)
   loop
     execute format('drop policy if exists %I on public.%I', r.old_policy, r.tablename);
+    execute format('drop policy if exists %I_insert on public.%I', r.old_policy, r.tablename);
+    execute format('drop policy if exists %I_update on public.%I', r.old_policy, r.tablename);
+    execute format('drop policy if exists %I_delete on public.%I', r.old_policy, r.tablename);
     execute format('create policy %I_insert on public.%I for insert to authenticated with check (%s)', r.old_policy, r.tablename, r.predicate);
     execute format('create policy %I_update on public.%I for update to authenticated using (%s) with check (%s)', r.old_policy, r.tablename, r.predicate, r.predicate);
     execute format('create policy %I_delete on public.%I for delete to authenticated using (%s)', r.old_policy, r.tablename, r.predicate);
