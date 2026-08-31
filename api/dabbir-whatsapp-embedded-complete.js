@@ -133,8 +133,26 @@ async function readMetaAppDomains(platform) {
   if (!platform?.appId || !platform?.appSecret) {
     throw Object.assign(new Error('META_APP_DOMAIN_REPAIR_CONFIGURATION_MISSING'), { status: 503 });
   }
-  const payload = await graphJson(platform, encodeURIComponent(platform.appId), appAccessToken, { params: { fields: 'app_domains' } });
-  return [...new Set((Array.isArray(payload?.app_domains) ? payload.app_domains : []).map(normalizedHost).filter(Boolean))];
+  const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(platform.appId)}`);
+  url.searchParams.set('fields', 'app_domains');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${appAccessToken}`, accept: 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw metaProviderError(payload, response, 'META_APP_DOMAIN_READ_FAILED');
+    const domains = Array.isArray(payload?.app_domains)
+      ? payload.app_domains.map(normalizedHost).filter(Boolean)
+      : [];
+    return [...new Set(domains)];
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function writeMetaAppDomains(platform, domains) {
