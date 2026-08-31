@@ -18,6 +18,17 @@ test('blocked WhatsApp connect control stays clickable and explains missing Meta
   assert.doesNotMatch(guard, /setInterval\(/);
 });
 
+test('direct OAuth owns every WhatsApp tap even when renderIntegrations recreates the button', async () => {
+  const guard = await read('api/dabbir-whatsapp-connect-guard-ui.js');
+  assert.match(guard, /CONNECT_SELECTOR/);
+  assert.match(guard, /document\.addEventListener\('click',delegatedManualOauthClick,true\)/);
+  assert.match(guard, /event\.preventDefault\(\)/);
+  assert.match(guard, /event\.stopPropagation\(\)/);
+  assert.match(guard, /event\.stopImmediatePropagation\(\)/);
+  assert.match(guard, /dabbirDirectOauthAuthority='document-capture-v1'/);
+  assert.match(guard, /will not use the old FB\.login path/);
+});
+
 test('authoritative shell mounts the WhatsApp truth guard immediately after Embedded Signup UI', async () => {
   const shell = await read('api/app-recovery.js');
   const embedded = shell.indexOf('/api/dabbir-whatsapp-embedded-ui');
