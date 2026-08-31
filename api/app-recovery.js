@@ -12,7 +12,7 @@ const SECURITY_HEADERS = {
 // Runtime delivery is now two static bundles: critical auth UI, then deferred workspace UI.
 // Change this release token whenever generated bundle behavior changes so browsers
 // can keep long-lived asset caching without serving a previous UI after deployment.
-const UI_BUNDLE_VERSION = '20260831-booking-time-v1';
+const UI_BUNDLE_VERSION = '20260831-appt-manage-v1';
 const UI_MODULE_ORDER = [
   '/api/brand-ui',
   '/api/dabbir-whatsapp-embedded-ui',
