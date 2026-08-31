@@ -20,20 +20,23 @@ test('activity experience is deferred and cache version is bumped',()=>{
   assert.match(recovery,/\/api\/dabbir-activity-experience-ui/);
 });
 
-test('onboarding covers laundry and contextual small-business labels',()=>{
-  assert.match(ui,/laundry:'مغسلة'/);
-  assert.match(ui,/بيع عبر Instagram \/ WhatsApp/);
-  assert.match(ui,/صالون \/ مركز تجميل/);
-  assert.match(ui,/خدمات \/ ورشة \/ مشروع منزلي/);
+test('onboarding covers laundry and contextual small-business labels without growing critical bundle',()=>{
+  assert.match(recovery,/laundry:'مغسلة'/);
+  assert.match(recovery,/بيع عبر Instagram \/ WhatsApp/);
+  assert.match(recovery,/صالون \/ مركز تجميل/);
+  assert.match(recovery,/خدمات \/ ورشة \/ مشروع منزلي/);
+  assert.match(recovery,/option\.value='laundry'/);
 });
 
-test('order-centric activities use distinct workflow templates',()=>{
+test('order-centric activities use distinct workflow templates and one navigation authority',()=>{
   assert.match(ui,/creator:\{/);
   assert.match(ui,/\['new','جديد'\],\['confirmed','مؤكد'\],\['preparing','قيد التجهيز'\],\['ready','جاهز'\],\['delivered','تم التسليم'\]/);
   assert.match(ui,/\['received','تم الاستلام'\],\['washing','قيد الغسيل'\],\['ready','جاهز'\],\['delivered','تم التسليم'\]/);
   assert.match(ui,/\['new','جديد'\],\['in_progress','تحت العمل'\],\['ready','جاهز'\],\['completed','مكتمل'\]/);
   assert.match(router,/isOrderBusiness/);
   assert.match(router,/setActivitySlot\(node,'workflow'/);
+  assert.doesNotMatch(ui,/\.dataset\.screen\s*=/);
+  assert.doesNotMatch(ui,/function\s+adaptActivitySlot/);
 });
 
 test('workflow progress is separated from financial order status',()=>{
