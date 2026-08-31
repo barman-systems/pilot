@@ -1,4 +1,4 @@
-const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+export const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
