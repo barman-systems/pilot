@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl git jq unzip unattended-upgrades
+
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+
+# AWS CLI v2 for encrypted UAE backup uploads.
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+cd /tmp && unzip -q awscliv2.zip && ./aws/install
+rm -rf /tmp/aws /tmp/awscliv2.zip
+
+install -d -m 0700 /opt/dabbir-supabase
+install -d -m 0700 /opt/dabbir-backups
+
+cat >/usr/local/sbin/dabbir-db-backup <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bucket="${backup_bucket}"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+out="/opt/dabbir-backups/dabbir-$${stamp}.sql.gz"
+if ! docker inspect supabase-db >/dev/null 2>&1; then
+  logger -t dabbir-db-backup "supabase-db is not running; backup skipped"
+  exit 0
+fi
+docker exec supabase-db pg_dumpall -U postgres | gzip -9 > "$out"
+aws s3 cp "$out" "s3://$${bucket}/postgres/$${stamp}.sql.gz" --only-show-errors
+sha256sum "$out" | aws s3 cp - "s3://$${bucket}/postgres/$${stamp}.sha256" --only-show-errors
+rm -f "$out"
+EOF
+chmod 0700 /usr/local/sbin/dabbir-db-backup
+
+cat >/etc/systemd/system/dabbir-db-backup.service <<'EOF'
+[Unit]
+Description=DABBIR PostgreSQL encrypted S3 backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dabbir-db-backup
+EOF
+
+cat >/etc/systemd/system/dabbir-db-backup.timer <<'EOF'
+[Unit]
+Description=Daily DABBIR PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 02:20:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now dabbir-db-backup.timer
+
+# SSH is not required; administration is via AWS Systems Manager Session Manager.
+systemctl disable --now ssh.service 2>/dev/null || true
+systemctl disable --now ssh.socket 2>/dev/null || true
+
+cat >/etc/motd <<'EOF'
+DABBIR UAE Supabase host
+Region: AWS me-central-1 (UAE)
+PostgreSQL must never be exposed through the security group.
+Use AWS SSM Session Manager for administration.
+EOF
