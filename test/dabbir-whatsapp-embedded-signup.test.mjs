@@ -136,9 +136,23 @@ test('Embedded completion exchanges v4 authorization code with the exact request
   assert.ok(handlerStart >= 0);
   const handler = endpoint.slice(handlerStart);
   assert.match(handler, /oauthRedirectUriFromRequest\(req\)/);
-  assert.match(handler, /exchangeEmbeddedCodeWithDomainRepair\(platform, code, redirectUri\)/);
+  assert.match(handler, /exchangeEmbeddedCodeWithDomainRepair\(platform, code, redirectUri, \{ exchangeMode \}\)/);
   assert.doesNotMatch(handler, /exchangeEmbeddedCode\(platform, code\)/);
   assert.match(endpoint, /providerSubcode/);
+});
+
+test('FB.login code exchange uses the JavaScript SDK xd_arbiter redirect and keeps manual OAuth isolated', async () => {
+  const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
+  const guard = await read('api/dabbir-whatsapp-connect-guard-ui.js');
+  const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
+
+  assert.match(ui, /exchange_mode:'facebook_js_sdk'/);
+  assert.match(guard, /exchange_mode:'redirect'/);
+  assert.match(endpoint, /https:\/\/staticxx\.facebook\.com\/x\/connect\/xd_arbiter\/\?version=\$\{version\}/);
+  assert.match(endpoint, /DABBIR_META_SDK_XD_VERSION/);
+  assert.match(endpoint, /exchangeMode === 'facebook_js_sdk'/);
+  assert.match(endpoint, /sdkRedirectCandidates\(redirectUri, exchangeMode\)/);
+  assert.match(endpoint, /providerSubcode \|\| 0\) === 36008/);
 });
 
 test('Embedded completion self-heals only the authoritative production Meta App Domain after provider error 191', async () => {

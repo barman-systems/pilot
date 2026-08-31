@@ -246,7 +246,8 @@
         code,
         waba_id:safeSession.waba_id||'',
         phone_number_id:safeSession.phone_number_id||'',
-        onboarding_mode:COEXISTENCE_FEATURE
+        onboarding_mode:COEXISTENCE_FEATURE,
+        exchange_mode:'facebook_js_sdk'
       })
     });
     const payload=await response.json().catch(()=>({}));
@@ -682,7 +683,8 @@
           code,
           waba_id:'',
           phone_number_id:'',
-          onboarding_mode:COEXISTENCE_FEATURE
+          onboarding_mode:COEXISTENCE_FEATURE,
+          exchange_mode:'redirect'
         })
       });
       const payload=await response.json().catch(()=>({}));

@@ -224,7 +224,8 @@ const script = String.raw`(()=>{
           code,
           waba_id:'',
           phone_number_id:'',
-          onboarding_mode:COEXISTENCE_FEATURE
+          onboarding_mode:COEXISTENCE_FEATURE,
+          exchange_mode:'redirect'
         })
       });
       const payload=await response.json().catch(()=>({}));

@@ -212,8 +212,18 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
   } finally { clearTimeout(timeout); }
 }
 
-function sdkRedirectCandidates(requestRedirectUri) {
-  const values = [String(requestRedirectUri || '').trim()];
+function sdkXdArbiterRedirectCandidates() {
+  const configuredVersion = Number(firstEnv('DABBIR_META_SDK_XD_VERSION') || '46');
+  const versions = [configuredVersion, 46, 47, 45, 44]
+    .filter(version => Number.isInteger(version) && version > 0 && version < 1000);
+  return [...new Set(versions)]
+    .map(version => `https://staticxx.facebook.com/x/connect/xd_arbiter/?version=${version}`);
+}
+
+function sdkRedirectCandidates(requestRedirectUri, exchangeMode = 'redirect') {
+  const values = [];
+  if (exchangeMode === 'facebook_js_sdk') values.push(...sdkXdArbiterRedirectCandidates());
+  values.push(String(requestRedirectUri || '').trim());
   try { values.push(`${new URL(String(requestRedirectUri || '')).origin}/`); } catch {}
   values.push(
     'https://www.facebook.com/connect/login_success.html',
@@ -222,13 +232,13 @@ function sdkRedirectCandidates(requestRedirectUri) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri) {
+async function exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri, { exchangeMode = 'redirect' } = {}) {
   const appHost = normalizedHost(redirectUri);
   let domainRepairAttempted = false;
   let domainRepairChanged = false;
   let lastRedirectError = null;
   let lastAppDomainError = null;
-  for (const candidate of sdkRedirectCandidates(redirectUri)) {
+  for (const candidate of sdkRedirectCandidates(redirectUri, exchangeMode)) {
     try {
       return {
         exchange: await exchangeEmbeddedCodeWithRedirect(platform, code, candidate),
@@ -433,6 +443,9 @@ export default async function handler(req, res) {
     let wabaId = cleanId(body?.waba_id);
     let phoneNumberId = cleanId(body?.phone_number_id);
     const onboardingMode = String(body?.onboarding_mode || '').trim();
+    const exchangeMode = String(body?.exchange_mode || '').trim() === 'facebook_js_sdk'
+      ? 'facebook_js_sdk'
+      : 'redirect';
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     if (!code || code.length > 4096) return json(res, 400, { ok: false, error: 'META_AUTHORIZATION_CODE_REQUIRED' });
 
@@ -441,7 +454,7 @@ export default async function handler(req, res) {
     if (!platform.ready) return json(res, 503, { ok: false, error: 'META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED' });
 
     const redirectUri = oauthRedirectUriFromRequest(req);
-    const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri);
+    const exchangeResult = await exchangeEmbeddedCodeWithDomainRepair(platform, code, redirectUri, { exchangeMode });
     const exchanged = exchangeResult.exchange;
 
     if (!wabaId) wabaId = await discoverWabaIdFromAccessToken(platform, exchanged.accessToken, { onboardingMode });
@@ -497,6 +510,7 @@ export default async function handler(req, res) {
       meta_app_domain_repair_attempted: Boolean(exchangeResult.domainRepairAttempted),
       meta_app_domain_repaired: Boolean(exchangeResult.domainRepairChanged),
       meta_sdk_redirect_fallback_used: Boolean(exchangeResult.redirectFallbackUsed),
+      meta_exchange_mode: exchangeMode,
       secrets_exposed: false,
     });
   } catch (error) {
