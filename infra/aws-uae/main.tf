@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.8.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -10,6 +11,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
   default_tags {
     tags = {
       Project     = "DABBIR"
@@ -23,10 +25,12 @@ provider "aws" {
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
+
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
   }
+
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
@@ -52,6 +56,7 @@ resource "aws_subnet" "public" {
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.dabbir.id
+
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.dabbir.id
@@ -69,20 +74,20 @@ resource "aws_security_group" "supabase" {
   vpc_id      = aws_vpc.dabbir.id
 
   ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description      = "HTTPS"
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
 
   ingress {
-    description = "HTTP redirect / ACME"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description      = "HTTP redirect / ACME"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
 
@@ -94,7 +99,9 @@ resource "aws_security_group" "supabase" {
     ipv6_cidr_blocks = ["::/0"]
   }
 
-  lifecycle { create_before_destroy = true }
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_s3_bucket" "backups" {
@@ -112,24 +119,38 @@ resource "aws_s3_bucket_public_access_block" "backups" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
+
   rule {
-    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
 resource "aws_s3_bucket_versioning" "backups" {
   bucket = aws_s3_bucket.backups.id
-  versioning_configuration { status = "Enabled" }
+
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
+
   rule {
     id     = "backup-retention"
     status = "Enabled"
+
     filter {}
-    noncurrent_version_expiration { noncurrent_days = 30 }
-    expiration { days = var.backup_retention_days }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    expiration {
+      days = var.backup_retention_days
+    }
   }
 }
 
@@ -139,7 +160,9 @@ resource "aws_iam_role" "instance" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
       Action = "sts:AssumeRole"
     }]
   })
@@ -155,12 +178,12 @@ resource "aws_iam_role_policy" "backup_access" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["s3:ListBucket"]
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket"]
       Resource = [aws_s3_bucket.backups.arn]
-    }, {
-      Effect = "Allow"
-      Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      }, {
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
       Resource = ["${aws_s3_bucket.backups.arn}/*"]
     }]
   })
@@ -196,11 +219,13 @@ resource "aws_instance" "supabase" {
     backup_bucket = aws_s3_bucket.backups.bucket
   })
 
-  lifecycle { ignore_changes = [ami] }
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "supabase" {
-  domain   = "vpc"
-  instance = aws_instance.supabase.id
+  domain     = "vpc"
+  instance   = aws_instance.supabase.id
   depends_on = [aws_internet_gateway.dabbir]
 }
