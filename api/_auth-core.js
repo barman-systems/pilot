@@ -1,6 +1,6 @@
-export const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+export const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
+const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const ACCESS_COOKIE = '__Host-dabbir_access';
@@ -196,7 +196,7 @@ export function readJsonBody(req, maxBytes = 8192) {
     req.on('data', chunk => {
       size += chunk.length;
       if (size > maxBytes) {
-        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 }));
+        reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'), { code: 413 });
         req.destroy();
         return;
       }
@@ -218,13 +218,7 @@ export async function readRpcJson(response) {
 }
 
 export function rpcErrorCode(payload, fallback = 'REQUEST_FAILED') {
-  const raw = String(payload?.message || payload?.error || '').toUpperCase();
-  const known = [
-    'AUTH_REQUIRED','BUSINESS_REQUIRED','INVALID_EMAIL','INVALID_ROLE','INVALID_TOKEN_HASH','INVALID_EXPIRY',
-    'TEAM_MANAGEMENT_REQUIRED','PERMISSION_GRANT_NOT_ALLOWED','INVITATION_ALREADY_PENDING','EMPLOYEE_ALREADY_MEMBER',
-    'INVALID_INVITATION','VERIFIED_EMAIL_REQUIRED','INVITATION_NOT_FOUND','INVITATION_NOT_PENDING','INVITATION_EXPIRED',
-    'INVITATION_EMAIL_MISMATCH','INVITER_NO_LONGER_AUTHORIZED','MEMBERSHIP_ALREADY_EXISTS','MEMBERSHIP_NOT_FOUND',
-    'OWNER_IMMUTABLE','INVALID_STATUS','NEW_INVITATION_REQUIRED','DABBIR_ACCOUNT_SUSPENDED'
-  ];
-  return known.find(code => raw.includes(code)) || fallback;
+  if (!payload || typeof payload !== 'object') return fallback;
+  const code = String(payload.code || payload.error || payload.message || fallback).trim();
+  return code || fallback;
 }
