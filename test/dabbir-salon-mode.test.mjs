@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { cronAuthMode } from '../api/salon-reminders-cron.js';
 
 const root=path.resolve(import.meta.dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
@@ -97,11 +98,17 @@ test('Salon API is authenticated, same-origin for writes, role-aware and date-bo
   assert.match(api,/limit=1000/);
 });
 
-test('Vercel Pro cron is configured every five minutes and endpoint fails closed',()=>{
+test('Vercel Pro cron is configured every five minutes with secret-first authentication',()=>{
   const vercel=JSON.parse(read('vercel.json'));
   assert.ok(vercel.crons.some(item=>item.path==='/api/salon-reminders-cron'&&item.schedule==='*/5 * * * *'));
   assert.equal(vercel.functions['api/salon-reminders-cron.js'].maxDuration,60);
-  assert.match(cron,/if\(!secret\|\|clean\(req\.headers\?\.authorization,8192\)!==`Bearer \$\{secret\}`\)return json\(res,401/);
+  const officialHeaders={'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'};
+  assert.equal(cronAuthMode({headers:{authorization:'Bearer strong-secret'}},{CRON_SECRET:'strong-secret',VERCEL_ENV:'production'}),'secret');
+  assert.equal(cronAuthMode({headers:officialHeaders},{CRON_SECRET:'strong-secret',VERCEL_ENV:'production'}),null,'configured secret must disable structural fallback');
+  assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'production'}),'vercel_schedule');
+  assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'preview'}),null);
+  assert.equal(cronAuthMode({headers:{...officialHeaders,'user-agent':'browser'}},{VERCEL_ENV:'production'}),null);
+  assert.equal(cronAuthMode({headers:{...officialHeaders,'x-vercel-cron-schedule':'0 * * * *'}},{VERCEL_ENV:'production'}),null);
 });
 
 test('legacy appointment writers remain compatible during the Salon Mode rollout',()=>{
