@@ -12,8 +12,10 @@ const migration=read('supabase/migrations/20260831110000_dabbir_activity_workflo
 const status=read('status.html');
 const recovery=read('api/app-recovery.js');
 
-test('activity experience loads during onboarding and cache version is bumped',()=>{
-  assert.ok(manifest.critical.includes('/api/dabbir-activity-experience-ui'));
+test('activity experience is deferred and cache version is bumped',()=>{
+  assert.ok(manifest.deferred.includes('/api/dabbir-activity-experience-ui'));
+  assert.equal(manifest.critical.length,3);
+  assert.equal(manifest.critical.at(-1),'/api/auth-session-stability-ui');
   assert.match(recovery,/20260831-activity-experience-v1/);
   assert.match(recovery,/\/api\/dabbir-activity-experience-ui/);
 });
@@ -39,7 +41,7 @@ test('workflow progress is separated from financial order status',()=>{
   assert.match(api,/workflow_status:workflowStatus/);
   const updateBlock=api.slice(api.indexOf('async function updateWorkflow'),api.indexOf('export default async function handler'));
   assert.match(updateBlock,/workflow_status:workflowStatus/);
-  assert.doesNotMatch(updateBlock,/status:workflowStatus/);
+  assert.doesNotMatch(updateBlock,/[{,]\s*status\s*:\s*workflowStatus/);
 });
 
 test('public status link is unguessable and privacy minimized',()=>{
