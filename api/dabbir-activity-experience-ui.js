@@ -8,17 +8,12 @@ const client=String.raw`
   if(window.__dabbirActivityExperience)return;
   window.__dabbirActivityExperience=true;
   const style=document.createElement('style');style.dataset.dabbirActivityExperience='v1';style.textContent=${JSON.stringify(css)};document.head.append(style);
-  const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
+  const q=s=>document.querySelector(s);
   const ar=()=>document.documentElement.lang!=='en';
   function ws(){try{if(typeof workspace!=='undefined'&&workspace)return workspace}catch{}return window.workspace||null}
   const type=()=>String(ws()?.business?.business_type||'').toLowerCase();
   const orderTypes=new Set(['creator','laundry','services']);
   const appointmentTypes=new Set(['clinic','salon','car_wash','real_estate']);
-
-  const onboardingLabels={
-    ar:{clinic:'عيادة / منشأة خدمية',store:'متجر',creator:'بيع عبر Instagram / WhatsApp',salon:'صالون / مركز تجميل',real_estate:'عقارات',services:'خدمات / ورشة / مشروع منزلي',car_wash:'غسيل سيارات',laundry:'مغسلة',other:'أخرى'},
-    en:{clinic:'Clinic / service facility',store:'Store',creator:'Instagram / WhatsApp seller',salon:'Salon / beauty center',real_estate:'Real estate',services:'Services / workshop / home business',car_wash:'Car wash',laundry:'Laundry',other:'Other'}
-  };
 
   const flows={
     creator:{
@@ -48,32 +43,6 @@ const client=String.raw`
   function localeFlow(){const f=flows[type()];return f?.[ar()?'ar':'en']||null}
   function initialState(){return type()==='laundry'?'received':'new'}
   function money(v){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:0,maximumFractionDigits:2}).format(Number(v||0))+' '+(ar()?'د.إ':'AED')}catch{return String(v||0)}}
-
-  function ensureOnboarding(){
-    const select=q('#businessType');if(!select)return;
-    if(!select.querySelector('option[value="laundry"]')){const option=document.createElement('option');option.value='laundry';select.insertBefore(option,select.querySelector('option[value="other"]'))}
-    const labels=onboardingLabels[ar()?'ar':'en'];
-    [...select.options].forEach(option=>{if(labels[option.value])option.textContent=labels[option.value]});
-    const label=q('#businessTypeLabel');if(label)label.textContent=ar()?'ما طبيعة عملك؟':'What kind of business do you run?';
-  }
-
-  function activitySlotNodes(){
-    qa('#nav [data-screen="appointments"],#bottomNav [data-screen="appointments"],#nav [data-screen="workflow"],#bottomNav [data-screen="workflow"],[data-dabbir-activity-slot="true"]').forEach(n=>n.dataset.dabbirActivitySlot='true');
-    return qa('[data-dabbir-activity-slot="true"]');
-  }
-
-  function adaptActivitySlot(){
-    const currentType=type();
-    if(!currentType)return;
-    if(orderTypes.has(currentType)){
-      const f=localeFlow();
-      activitySlotNodes().forEach(node=>{
-        node.dataset.screen='workflow';node.hidden=false;node.style.removeProperty('display');node.classList.remove('hidden');
-        const label=node.querySelector('[data-label]');if(label)label.textContent=f.nav;node.setAttribute('aria-label',f.nav);
-      });
-      try{if(typeof current!=='undefined'&&current==='appointments'&&typeof showScreen==='function')showScreen('workflow')}catch{}
-    }
-  }
 
   function ensureWorkflowScreen(){
     if(!orderTypes.has(type()))return null;
@@ -148,11 +117,11 @@ const client=String.raw`
     }else card.remove();
   }
 
-  function enforce(){ensureOnboarding();if(!ws()?.business?.id)return;adaptActivitySlot();ensureWorkflowScreen();applyWorkflowCopy();renderDashboardMode();if(orderTypes.has(type()))loadWorkflow(false)}
+  function enforce(){if(!ws()?.business?.id)return;ensureWorkflowScreen();applyWorkflowCopy();renderDashboardMode();if(orderTypes.has(type()))loadWorkflow(false)}
 
   try{const baseRenderAll=renderAll;renderAll=function(){const result=baseRenderAll.apply(this,arguments);setTimeout(enforce,0);return result}}catch{}
   try{const baseApplyLang=applyLang;applyLang=function(){const result=baseApplyLang.apply(this,arguments);setTimeout(enforce,0);return result}}catch{}
-  try{const baseShowScreen=showScreen;showScreen=function(name){if(name==='appointments'&&orderTypes.has(type()))name='workflow';const result=baseShowScreen.call(this,name);setTimeout(enforce,0);if(name==='workflow')loadWorkflow(false);return result}}catch{}
+  try{const baseShowScreen=showScreen;showScreen=function(name){const result=baseShowScreen.call(this,name);setTimeout(enforce,0);if(name==='workflow')loadWorkflow(false);return result}}catch{}
   setTimeout(enforce,0);setTimeout(enforce,500);setTimeout(enforce,1500);
   window.__dabbirActivityExperienceApi={refresh:()=>{workflowData=null;enforce()},version:'activity-experience-v1'};
 })();
