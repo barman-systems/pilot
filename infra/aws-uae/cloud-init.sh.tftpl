@@ -26,14 +26,14 @@ cat >/usr/local/sbin/dabbir-db-backup <<'EOF'
 set -euo pipefail
 bucket="${backup_bucket}"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
-out="/opt/dabbir-backups/dabbir-${stamp}.sql.gz"
+out="/opt/dabbir-backups/dabbir-$${stamp}.sql.gz"
 if ! docker inspect supabase-db >/dev/null 2>&1; then
   logger -t dabbir-db-backup "supabase-db is not running; backup skipped"
   exit 0
 fi
 docker exec supabase-db pg_dumpall -U postgres | gzip -9 > "$out"
-aws s3 cp "$out" "s3://${bucket}/postgres/${stamp}.sql.gz" --only-show-errors
-sha256sum "$out" | aws s3 cp - "s3://${bucket}/postgres/${stamp}.sha256" --only-show-errors
+aws s3 cp "$out" "s3://$${bucket}/postgres/$${stamp}.sql.gz" --only-show-errors
+sha256sum "$out" | aws s3 cp - "s3://$${bucket}/postgres/$${stamp}.sha256" --only-show-errors
 rm -f "$out"
 EOF
 chmod 0700 /usr/local/sbin/dabbir-db-backup
