@@ -1,3 +1,5 @@
+import customerCrmHandler from './customer-crm-ui.js';
+
 const script=String.raw`(()=>{
   if(window.__dabbirCustomerNumberUi)return;
   window.__dabbirCustomerNumberUi=true;
@@ -77,16 +79,39 @@ const script=String.raw`(()=>{
   document.documentElement.dataset.dabbirCustomerNumber='enabled';
 })();`;
 
-export default function handler(req,res){
+function captureResponse(){
+  return {
+    statusCode:200,
+    headers:{},
+    body:'',
+    setHeader(key,value){this.headers[String(key).toLowerCase()]=value;return this},
+    end(body=''){this.body=String(body);return this},
+    status(code){this.statusCode=Number(code||200);return this},
+    send(body=''){this.body=String(body);return this}
+  };
+}
+
+export default async function handler(req,res){
   if(req.method!=='GET'){
     res.statusCode=405;
     res.setHeader('allow','GET');
     return res.end('Method Not Allowed');
   }
+
+  const crmResponse=captureResponse();
+  await customerCrmHandler({method:'GET'},crmResponse);
+  if(crmResponse.statusCode!==200||!crmResponse.body){
+    res.statusCode=500;
+    res.setHeader('content-type','application/javascript; charset=utf-8');
+    res.setHeader('cache-control','no-store');
+    return res.end(script);
+  }
+
   res.statusCode=200;
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-customer-number-ui','v1');
-  return res.end(script);
+  res.setHeader('x-dabbir-customer-number-ui','v2');
+  res.setHeader('x-dabbir-customer-crm-ui','v1');
+  return res.end(script+'\n'+crmResponse.body);
 }
