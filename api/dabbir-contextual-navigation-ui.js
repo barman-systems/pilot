@@ -20,7 +20,7 @@ const script=String.raw`(()=>{
   const businessType=()=>String(currentWorkspace()?.business?.business_type||'').toLowerCase();
   const isStore=()=>businessType()==='store';
   const isOrderBusiness=()=>['creator','laundry','services'].includes(businessType());
-  const isServiceBusiness=()=>['clinic','salon','car_wash','services'].includes(businessType());
+  const isServiceBusiness=()=>Boolean(businessType())&&!isStore();
   const isOwner=()=>String(currentWorkspace()?.membership?.role||'').toLowerCase()==='owner';
   const hasBusiness=()=>Boolean(currentWorkspace()?.business?.id);
   const copy=()=>ar()?{
