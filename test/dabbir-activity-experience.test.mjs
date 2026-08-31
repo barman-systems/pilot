@@ -40,6 +40,13 @@ test('order-centric activities use distinct workflow templates and one navigatio
   assert.doesNotMatch(ui,/function\s+adaptActivitySlot/);
 });
 
+test('quick order reuses an existing customer by exact phone before creating another customer',()=>{
+  assert.match(api,/async function findOrCreateCustomer/);
+  assert.match(api,/channel_handle=eq\.\$\{encodeURIComponent\(phone\)\}/);
+  assert.match(api,/channel_handle:phone\|\|null/);
+  assert.match(api,/const customer=await findOrCreateCustomer/);
+});
+
 test('workflow progress is separated from financial order status',()=>{
   assert.match(migration,/add column if not exists workflow_status text not null default 'new'/);
   assert.match(api,/workflow_status:workflowStatus/);
