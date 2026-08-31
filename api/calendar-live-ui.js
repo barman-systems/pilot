@@ -1,4 +1,5 @@
 import activityProfileHandler from './activity-profile-ui.js';
+import appointmentManagementUiHandler from './appointment-management-ui.js';
 
 const liveScript=String.raw`(()=>{
   if(window.__dabbirCalendarLiveUi)return;
@@ -68,7 +69,7 @@ const liveScript=String.raw`(()=>{
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   setInterval(()=>{if(screenActive()&&businessId())sync(false)},60000);
   setTimeout(()=>{if(screenActive()&&businessId())sync(false)},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v2-composite'};
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v3-composite-management'};
 })();`;
 
 function captureResponse(){
@@ -83,11 +84,14 @@ function captureResponse(){
 
 export default async function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
-  const captured=captureResponse();
-  await activityProfileHandler(req,captured);
-  if(captured.statusCode!==200||!captured.body) return res.status(500).end('Activity profile UI unavailable');
+  const activityCaptured=captureResponse();
+  const managementCaptured=captureResponse();
+  await activityProfileHandler(req,activityCaptured);
+  await appointmentManagementUiHandler(req,managementCaptured);
+  if(activityCaptured.statusCode!==200||!activityCaptured.body) return res.status(500).end('Activity profile UI unavailable');
+  if(managementCaptured.statusCode!==200||!managementCaptured.body) return res.status(500).end('Appointment management UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v2-composite');
-  return res.status(200).send(captured.body+'\n'+liveScript);
+  res.setHeader('x-dabbir-calendar-live-ui','v3-composite-management');
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body);
 }
