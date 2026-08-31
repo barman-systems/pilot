@@ -8,11 +8,13 @@ const script = String.raw`(()=>{
   let patchScheduled=false;
   let metaSignupStartedAt=0;
   let oauthReturnBusy=false;
+  let oauthLaunchBusy=false;
   const CACHE_MS=5000;
   const META_SIGNUP_RESUME_KEY='dabbir_meta_signup_resume_v2';
   const META_OAUTH_PENDING_KEY='dabbir_whatsapp_manual_oauth_v1';
   const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
   const OAUTH_TTL_MS=15*60*1000;
+  const CONNECT_SELECTOR='.dabbirWhatsAppConnect,.dabbirWhatsAppChange';
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
   function businessId(){try{return String(workspace?.business?.id||'')}catch{return ''}}
@@ -29,7 +31,7 @@ const script = String.raw`(()=>{
   }
 
   const style=document.createElement('style');
-  style.dataset.dabbirWhatsAppMetaResume='v3';
+  style.dataset.dabbirWhatsAppMetaResume='v4';
   style.textContent=[
     '.dabbirWhatsAppMetaResume{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.55}',
     '.dabbirWhatsAppMetaResume strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
@@ -38,10 +40,10 @@ const script = String.raw`(()=>{
   ].join('');
   document.head.appendChild(style);
 
-  async function config(){
+  async function config(force=false){
     const bid=businessId();
     if(!bid) return null;
-    if(cachedConfig&&cachedBusinessId===bid&&Date.now()-cachedAt<CACHE_MS) return cachedConfig;
+    if(!force&&cachedConfig&&cachedBusinessId===bid&&Date.now()-cachedAt<CACHE_MS) return cachedConfig;
     try{
       const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{
         cache:'no-store',headers:{accept:'application/json'}
@@ -125,25 +127,54 @@ const script = String.raw`(()=>{
     return url.toString();
   }
 
-  function beginManualOauth(event,button,cfg){
+  async function beginManualOauth(event,button,cfgOverride=null){
     if(event){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation()}
-    if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
-      tell(blockedText(missingParts(cfg)));
-      return;
-    }
-    const bid=businessId();
-    if(!bid){tell(ar()?'لم يتم تحديد النشاط بعد':'Business is not ready yet');return}
-    const state=randomState();
-    const redirectUri=authoritativeRedirectUri();
-    const pending={state,business_id:bid,redirect_uri:redirectUri,started_at:Date.now(),onboarding_mode:COEXISTENCE_FEATURE};
-    if(!saveOauthPending(pending)){
-      tell(ar()?'تعذر بدء الربط الآمن. أعد تحميل الصفحة.':'Could not start secure onboarding. Reload the page.');
-      return;
-    }
-    report('manual_oauth_start',{stage:'meta_login'});
+    if(oauthLaunchBusy||oauthReturnBusy)return;
+    oauthLaunchBusy=true;
     if(button){button.disabled=true;button.textContent=ar()?'جارٍ فتح Meta…':'Opening Meta…'}
-    window.location.assign(buildManualOauthUrl(cfg,state));
+    try{
+      const cfg=cfgOverride||await config(true);
+      if(!cfg?.platform_ready||!cfg.app_id||!cfg.config_id){
+        tell(blockedText(missingParts(cfg)));
+        if(button)button.disabled=false;
+        return;
+      }
+      const bid=businessId();
+      if(!bid){
+        tell(ar()?'لم يتم تحديد النشاط بعد':'Business is not ready yet');
+        if(button)button.disabled=false;
+        return;
+      }
+      const state=randomState();
+      const redirectUri=authoritativeRedirectUri();
+      const pending={state,business_id:bid,redirect_uri:redirectUri,started_at:Date.now(),onboarding_mode:COEXISTENCE_FEATURE};
+      if(!saveOauthPending(pending)){
+        tell(ar()?'تعذر بدء الربط الآمن. أعد تحميل الصفحة.':'Could not start secure onboarding. Reload the page.');
+        if(button)button.disabled=false;
+        return;
+      }
+      report('manual_oauth_start',{stage:'meta_login'});
+      window.location.assign(buildManualOauthUrl(cfg,state));
+    }finally{
+      setTimeout(()=>{oauthLaunchBusy=false},1000);
+    }
   }
+
+  function delegatedManualOauthClick(event){
+    const target=event.target instanceof Element?event.target:null;
+    const button=target?.closest(CONNECT_SELECTOR);
+    if(!(button instanceof HTMLButtonElement))return;
+
+    // This listener runs on document capture. It is the sole click authority for
+    // WhatsApp onboarding and stops the older FB.login target handler even when
+    // renderIntegrations recreates the button immediately before a tap.
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    if(oauthLaunchBusy||oauthReturnBusy)return;
+    void beginManualOauth(null,button,null);
+  }
+  document.addEventListener('click',delegatedManualOauthClick,true);
 
   async function finishManualOauthReturn(){
     if(oauthReturnBusy)return;
@@ -206,13 +237,17 @@ const script = String.raw`(()=>{
     }catch(error){
       const key=String(error?.message||'WHATSAPP_EMBEDDED_SIGNUP_FAILED');
       cleanOauthLocation();
+      report('manual_oauth_complete_error',{stage:'server_complete',error:key.slice(0,160),has_code:true});
       if(key.toLowerCase().includes('redirect_uri')){
-        tell(ar()?'تعذر تأكيد رمز Meta بسبب عنوان الرجوع. تم التحويل للمسار المباشر؛ أعد الضغط على ربط واتساب مرة واحدة.':'Meta could not confirm the code because of the callback URL. The direct flow is now active; tap Connect WhatsApp once more.');
+        tell(ar()?'رفضت Meta عنوان الرجوع المستخدم في هذه المحاولة. لم يتم حفظ أي ربط ناقص.':'Meta rejected the callback URL used for this attempt. No incomplete connection was saved.');
       }else{
         tell(ar()?'تعذر إكمال ربط WhatsApp Business من Meta. لم يتم حفظ أي ربط ناقص.':'Meta could not complete WhatsApp Business setup. No incomplete connection was saved.');
       }
       clearOauthPending();
-    }finally{oauthReturnBusy=false}
+    }finally{
+      oauthReturnBusy=false;
+      schedulePatch();
+    }
   }
 
   function markMetaSignupResume(){
@@ -241,10 +276,11 @@ const script = String.raw`(()=>{
   function resumeOfficialWhatsAppSignup(){
     if(!pendingMetaSignup())return;
     if(Date.now()-metaSignupStartedAt<1500)return;
-    const primary=document.querySelector('.dabbirWhatsAppConnect,.dabbirWhatsAppChange');
-    if(!(primary instanceof HTMLButtonElement)||primary.disabled)return;
+    const primary=document.querySelector(CONNECT_SELECTOR);
+    if(!(primary instanceof HTMLButtonElement))return;
     clearMetaSignupResume();
     tell(ar()?'جاري إكمال ربط واتساب…':'Continuing WhatsApp connection…');
+    primary.disabled=false;
     setTimeout(()=>primary.click(),150);
   }
 
@@ -281,31 +317,25 @@ const script = String.raw`(()=>{
     box.appendChild(notice);
   }
 
-  function bindManualOauth(button,cfg){
-    if(!(button instanceof HTMLButtonElement)||button.dataset.dabbirManualOauthBound==='true')return;
-    button.dataset.dabbirManualOauthBound='true';
-    button.addEventListener('click',event=>beginManualOauth(event,button,cfg),true);
-  }
-
   async function patch(){
     patchScheduled=false;
-    finishManualOauthReturn();
+    void finishManualOauthReturn();
     const cfg=await config();
     const platformReady=Boolean(cfg?.platform_ready&&cfg?.app_id&&cfg?.config_id);
     document.querySelectorAll('[data-dabbir-whatsapp-actions]').forEach(ensureMetaResumeNotice);
-    document.querySelectorAll('.dabbirWhatsAppConnect,.dabbirWhatsAppChange').forEach(button=>{
+    document.querySelectorAll(CONNECT_SELECTOR).forEach(button=>{
       if(!(button instanceof HTMLButtonElement)) return;
       const box=button.closest('[data-dabbir-whatsapp-actions]');
       if(box) ensureMetaResumeNotice(box);
       const hint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
       if(platformReady){
-        button.disabled=oauthReturnBusy;
-        button.setAttribute('aria-disabled',oauthReturnBusy?'true':'false');
+        button.disabled=oauthReturnBusy||oauthLaunchBusy;
+        button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
         button.dataset.platformReady='true';
-        bindManualOauth(button,cfg);
+        button.dataset.dabbirDirectOauthAuthority='document-capture-v1';
         if(hint) hint.textContent=ar()
-          ? 'اضغط ربط. سيستخدم دبّر مسار Meta المباشر بعنوان رجوع ثابت لتفادي خطأ redirect_uri، ثم يكمل الربط تلقائيًا.'
-          : 'Tap Connect. DABBIR now uses Meta’s direct OAuth flow with one fixed callback URL, then completes the connection automatically.';
+          ? 'اضغط ربط. سيستخدم دبّر مسار Meta المباشر بعنوان رجوع ثابت، ولن يستخدم مسار FB.login القديم.'
+          : 'Tap Connect. DABBIR will use the direct Meta OAuth path with one fixed callback and will not use the old FB.login path.';
         return;
       }
       if(button.closest('.dabbirWhatsAppBusy')) return;
@@ -314,13 +344,6 @@ const script = String.raw`(()=>{
       button.setAttribute('aria-disabled','false');
       button.title=text;
       if(hint&&hint.textContent!==text) hint.textContent=text;
-      if(button.dataset.dabbirWhatsAppGuardBound!=='true'){
-        button.dataset.dabbirWhatsAppGuardBound='true';
-        button.addEventListener('click',()=>{
-          const currentHint=button.parentElement?.querySelector('.dabbirWhatsAppHint');
-          if(currentHint&&currentHint.textContent!==text) currentHint.textContent=text;
-        },true);
-      }
     });
   }
 
@@ -335,7 +358,7 @@ const script = String.raw`(()=>{
 
   const observer=new MutationObserver(schedulePatch);
   observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled','data-platform-ready']});
-  setTimeout(()=>{finishManualOauthReturn();patch();resumeOfficialWhatsAppSignup()},350);
+  setTimeout(()=>{void finishManualOauthReturn();schedulePatch();resumeOfficialWhatsAppSignup()},200);
 })();`;
 
 export default function handler(req,res){
@@ -348,6 +371,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-whatsapp-onboarding','meta-direct-oauth-v1');
+  res.setHeader('x-dabbir-whatsapp-onboarding','meta-direct-oauth-v1-document-capture');
   return res.end(script);
 }
