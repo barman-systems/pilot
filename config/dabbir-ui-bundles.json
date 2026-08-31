@@ -3,7 +3,8 @@
   "critical": [
     "/api/brand-ui",
     "/api/auth/recovery-ui",
-    "/api/auth-session-stability-ui"
+    "/api/auth-session-stability-ui",
+    "/api/dabbir-activity-experience-ui"
   ],
   "deferred": [
     "/api/dabbir-whatsapp-embedded-ui",
