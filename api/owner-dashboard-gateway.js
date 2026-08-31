@@ -1,7 +1,7 @@
 import dashboard from './owner-command-center-v21.js';
 import { parseCookies } from './_auth-core.js';
 
-const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
+const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-owner-broker';
 const SESSION_COOKIE = '__Host-dabbir_owner_session';
 
 function redirectToOwner(res, clear = false) {

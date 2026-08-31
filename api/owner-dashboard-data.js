@@ -1,7 +1,7 @@
 import { json, parseCookies } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
 
-const BROKER_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
+const BROKER_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-owner-broker';
 const SESSION_COOKIE='__Host-dabbir_owner_session';
 
 async function broker(body){

@@ -4,12 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('owner authentication is username + brokered Resend OTP with a signed owner session', async () => {
+test('owner authentication is username + brokered Resend OTP with an isolated owner session', async () => {
   const source = await read('api/auth/owner-otp.js');
   assert.match(source, /OWNER_USERNAME\s*=\s*'barmanadmin'/);
   assert.match(source, /requireSameOrigin\(req\)/);
   assert.match(source, /RESEND_API_KEY/);
-  assert.match(source, /bm-secret-broker/);
+  assert.match(source, /dabbir-owner-broker/);
   assert.match(source, /owner_otp_request/);
   assert.match(source, /owner_otp_verify/);
   assert.match(source, /challenge_id/);
@@ -41,8 +41,9 @@ test('canonical owner routes use the OTP gate and authenticated dashboard gatewa
   assert.equal(dashboardRoute?.dest, '/api/owner-dashboard-gateway');
 });
 
-test('dashboard gateway validates the signed owner session fail-closed through the broker', async () => {
+test('dashboard gateway validates the owner session fail-closed through the DABBIR broker', async () => {
   const source = await read('api/owner-dashboard-gateway.js');
+  assert.match(source, /dabbir-owner-broker/);
   assert.match(source, /__Host-dabbir_owner_session/);
   assert.match(source, /owner_session_verify/);
   assert.match(source, /payload\?\.authenticated === true/);
