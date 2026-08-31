@@ -4,7 +4,16 @@
   "env": {
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com"
   },
+  "crons": [
+    {
+      "path": "/api/salon-reminders-cron",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "functions": {
+    "api/salon-reminders-cron.js": {
+      "maxDuration": 60
+    },
     "api/app.js": {
       "includeFiles": "index.html"
     },
