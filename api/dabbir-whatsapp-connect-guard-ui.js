@@ -337,10 +337,10 @@ const script = String.raw`(()=>{
         button.disabled=oauthReturnBusy||oauthLaunchBusy;
         button.setAttribute('aria-disabled',(oauthReturnBusy||oauthLaunchBusy)?'true':'false');
         button.dataset.platformReady='true';
-        button.dataset.dabbirDirectOauthAuthority='document-capture-v1';
+        button.dataset.dabbirEmbeddedSignupAuthority='official-message-flow-v1';
         if(hint) hint.textContent=ar()
-          ? 'اضغط ربط. سيستخدم دبّر مسار Meta المباشر بعنوان رجوع ثابت، ولن يستخدم مسار FB.login القديم.'
-          : 'Tap Connect. DABBIR will use the direct Meta OAuth path with one fixed callback and will not use the old FB.login path.';
+          ? 'اضغط ربط. سيستخدم دبّر Embedded Signup الرسمي من Meta، وستُعاد معرفات WABA والرقم عبر رسالة Meta الآمنة.'
+          : 'Tap Connect. DABBIR will use Meta Embedded Signup, which returns the WABA and phone IDs through its secure message event.';
         return;
       }
       if(button.closest('.dabbirWhatsAppBusy')) return;
@@ -376,6 +376,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-whatsapp-onboarding','meta-direct-oauth-v1-document-capture');
+  res.setHeader('x-dabbir-whatsapp-onboarding','meta-embedded-signup-v4-official-message-flow');
   return res.end(script);
 }
