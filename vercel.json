@@ -22,6 +22,9 @@
     },
     "api/car-wash-booking.js": {
       "includeFiles": "booking.html"
+    },
+    "api/team-page.js": {
+      "includeFiles": "team.html"
     }
   },
   "routes": [
@@ -39,10 +42,11 @@
     },
     {
       "src": "^/team/?$",
-      "dest": "/team.html"
+      "dest": "/api/team-page"
     },
     {
-      "handle": "filesystem"
+      "src": "^/team\\.html/?$",
+      "dest": "/api/team-page"
     },
     {
       "src": "^/owner/?$",
@@ -76,7 +80,7 @@
     },
     {
       "source": "/team",
-      "destination": "/team.html"
+      "destination": "/api/team-page"
     },
     {
       "source": "/owner",
