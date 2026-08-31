@@ -7,7 +7,7 @@ import {
 
 const OWNER_USERNAME = 'barmanadmin';
 const OWNER_EMAIL = process.env.DABBIR_OWNER_LOGIN_EMAIL || 'barman2013@icloud.com';
-const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
+const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-owner-broker';
 const OTP_RE = /^\d{6}$/;
 const CHALLENGE_COOKIE = '__Host-dabbir_owner_otp_challenge';
 const SESSION_COOKIE = '__Host-dabbir_owner_session';
@@ -45,7 +45,7 @@ async function broker(body) {
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store, max-age=0');
   res.setHeader('pragma', 'no-cache');
-  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v6');
+  res.setHeader('x-dabbir-owner-auth', 'brokered-resend-otp-v7');
 
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
