@@ -59,10 +59,13 @@ test('booking migration has owner RLS, public functions, collision checks, and b
   assert.match(source,/location_lng numeric\(9,6\)/);
 });
 
-test('Vercel exposes the shareable booking route and deferred UI bundle',()=>{
+test('Vercel exposes the shareable booking route and activity-scoped car wash UI loader',()=>{
   const vercel=JSON.parse(read('vercel.json'));
   const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
+  const loader=read('api/car-wash-loader-ui.js');
   assert.ok(vercel.routes.some(route=>route.src==='^/book/?$'&&route.dest==='/api/car-wash-booking'));
   assert.ok(vercel.rewrites.some(route=>route.source==='/book'&&route.destination==='/api/car-wash-booking'));
-  assert.ok(manifest.deferred.includes('/api/car-wash-booking-ui'));
+  assert.ok(manifest.deferred.includes('/api/car-wash-loader-ui'));
+  assert.ok(!manifest.deferred.includes('/api/car-wash-booking-ui'));
+  assert.match(loader,/\/api\/car-wash-booking-ui/);
 });
