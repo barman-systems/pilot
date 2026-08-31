@@ -8,6 +8,7 @@ const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
 const ui=read('api/dabbir-activity-experience-ui.js');
 const router=read('api/dabbir-contextual-navigation-ui.js');
 const api=read('api/activity-workflow.js');
+const publicStatusApi=read('api/public-order-status.js');
 const migration=read('supabase/migrations/20260831110000_dabbir_activity_workflows_v1.sql');
 const status=read('status.html');
 const recovery=read('api/app-recovery.js');
@@ -47,12 +48,14 @@ test('workflow progress is separated from financial order status',()=>{
   assert.doesNotMatch(updateBlock,/[{,]\s*status\s*:\s*workflowStatus/);
 });
 
-test('public status link is unguessable and privacy minimized',()=>{
+test('public status link is unguessable, same-origin, and privacy minimized',()=>{
   assert.match(migration,/public_status_token uuid not null default gen_random_uuid\(\)/);
   assert.match(migration,/revoke all on function public\.dabbir_public_order_status\(uuid\) from public/i);
   assert.match(migration,/revoke execute on function public\.dabbir_public_order_status\(uuid\) from authenticated, service_role/i);
   assert.match(migration,/grant execute on function public\.dabbir_public_order_status\(uuid\) to anon/i);
-  assert.match(status,/dabbir_public_order_status/);
+  assert.match(publicStatusApi,/dabbir_public_order_status/);
+  assert.match(status,/fetch\('\/api\/public-order-status\?token='/);
+  assert.doesNotMatch(status,/supabase\.co|sb_publishable_/i);
   assert.doesNotMatch(status,/customer_name/);
   assert.doesNotMatch(status,/phone/);
 });
