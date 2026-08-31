@@ -45,7 +45,8 @@ test('workflow progress is separated from financial order status',()=>{
 test('public status link is unguessable and privacy minimized',()=>{
   assert.match(migration,/public_status_token uuid not null default gen_random_uuid\(\)/);
   assert.match(migration,/revoke all on function public\.dabbir_public_order_status\(uuid\) from public/i);
-  assert.match(migration,/grant execute on function public\.dabbir_public_order_status\(uuid\) to anon, authenticated, service_role/i);
+  assert.match(migration,/revoke execute on function public\.dabbir_public_order_status\(uuid\) from authenticated, service_role/i);
+  assert.match(migration,/grant execute on function public\.dabbir_public_order_status\(uuid\) to anon/i);
   assert.match(status,/dabbir_public_order_status/);
   assert.doesNotMatch(status,/customer_name/);
   assert.doesNotMatch(status,/phone/);
