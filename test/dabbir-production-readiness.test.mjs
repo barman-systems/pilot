@@ -51,12 +51,13 @@ test('performance bundles are present and shell delivery is split by lifecycle',
   const app = read('api/app.js');
   const vercel = JSON.parse(read('vercel.json'));
   const manifest = JSON.parse(read('config/dabbir-ui-bundles.json'));
+  const ownership = JSON.parse(read('config/dabbir-architecture-ownership.json'));
   for (const bundle of ['critical', 'deferred']) {
     const bundlePath = path.join(root, `public/dabbir-ui-${bundle}.js`);
     assert.ok(fs.statSync(bundlePath).size > 0);
   }
   assert.equal(manifest.critical.length, 3);
-  assert.equal(manifest.deferred.length, 23);
+  assert.equal(manifest.critical.length + manifest.deferred.length, ownership.shell.maximum_injected_api_modules);
   assert.match(shell, /dabbir-ui-critical\.js/);
   assert.match(shell, /dabbir-ui-deferred\.js/);
   assert.match(shell, /__dabbirLoadDeferredUi/);
