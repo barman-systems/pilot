@@ -15,13 +15,22 @@ const liveScript=String.raw`(()=>{
   style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}';
   document.head.append(style);
 
+  function removeCancelledFromActiveCalendar(){
+    const screen=q('#screen-appointments');if(!screen)return;
+    screen.querySelectorAll('.dabbirCalEvent.cancelled').forEach(node=>node.remove());
+    screen.querySelectorAll('.dabbirAgendaEvent').forEach(node=>{
+      const text=String(node.textContent||'').toLowerCase();
+      if(text.includes('ملغي')||text.includes('cancelled')||text.includes('canceled'))node.remove();
+    });
+  }
+
   function ensureUi(){
     const head=q('.dabbirCalendarConnectionsHead'),host=q('#dabbirCalendarConnections');if(!head||!host)return false;
     let btn=q('#dabbirCalendarSyncNow');
     if(!btn){btn=document.createElement('button');btn.id='dabbirCalendarSyncNow';btn.type='button';btn.className='dabbirSyncBtn';btn.onclick=()=>sync(true);head.append(btn)}
     btn.textContent=busy?(ar()?'جارٍ المزامنة…':'Syncing…'):(ar()?'مزامنة الآن':'Sync now');btn.disabled=busy;
     let panel=q('#dabbirExternalBusy');if(!panel){panel=document.createElement('div');panel.id='dabbirExternalBusy';panel.className='dabbirExternalBusy';host.append(panel)}
-    renderBusy();return true;
+    renderBusy();removeCancelledFromActiveCalendar();return true;
   }
 
   function renderBusy(){
@@ -39,7 +48,7 @@ const liveScript=String.raw`(()=>{
   async function loadBusy(id){
     const response=await fetch('/api/calendar-sync?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
     const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_BUSY_FAILED');
-    lastBusy=Array.isArray(body.busy_blocks)?body.busy_blocks:[];renderBusy();
+    lastBusy=Array.isArray(body.busy_blocks)?body.busy_blocks:[];renderBusy();removeCancelledFromActiveCalendar();
   }
 
   async function sync(force=false){
@@ -48,7 +57,7 @@ const liveScript=String.raw`(()=>{
     if(id!==lastBusiness){lastBusiness=id;lastSyncAt=0;lastBusy=[]}
     try{
       const connections=await connectionState(id),active=(connections.connections||[]).filter(c=>c.status==='active'&&c.sync_enabled!==false);
-      if(!active.length){lastBusy=[];renderBusy();return}
+      if(!active.length){lastBusy=[];renderBusy();removeCancelledFromActiveCalendar();return}
       const due=force||Date.now()-lastSyncAt>5*60*1000;
       if(due){
         busy=true;ensureUi();
@@ -58,18 +67,24 @@ const liveScript=String.raw`(()=>{
         try{window.__dabbirActivityProfile?.refresh?.()}catch{}
       }
       await loadBusy(id);
+      removeCancelledFromActiveCalendar();
       if(force)try{toast(ar()?'تمت مزامنة التقويم':'Calendar synced')}catch{}
     }catch(error){
       console.error('dabbir_calendar_live_ui_failed',String(error?.message||error).slice(0,120));
       if(force)try{toast(ar()?'تعذرت مزامنة التقويم':'Calendar sync failed')}catch{}
-    }finally{busy=false;ensureUi()}
+    }finally{busy=false;ensureUi();removeCancelledFromActiveCalendar()}
   }
 
   const observer=new MutationObserver(()=>{if(screenActive()&&businessId()){ensureUi();sync(false)}});
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-  setInterval(()=>{if(screenActive()&&businessId())sync(false)},60000);
-  setTimeout(()=>{if(screenActive()&&businessId())sync(false)},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),version:'calendar-live-v3-composite-management'};
+  const calendarScreen=q('#screen-appointments');
+  if(calendarScreen){
+    const calendarObserver=new MutationObserver(()=>setTimeout(removeCancelledFromActiveCalendar,0));
+    calendarObserver.observe(calendarScreen,{subtree:true,childList:true});
+  }
+  setInterval(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();sync(false)}},60000);
+  setTimeout(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();sync(false)}},1200);
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId()):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,version:'calendar-live-v4-free-cancelled'};
 })();`;
 
 function captureResponse(){
@@ -92,6 +107,6 @@ export default async function handler(req,res){
   if(managementCaptured.statusCode!==200||!managementCaptured.body) return res.status(500).end('Appointment management UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v3-composite-management');
+  res.setHeader('x-dabbir-calendar-live-ui','v4-free-cancelled');
   return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body);
 }
