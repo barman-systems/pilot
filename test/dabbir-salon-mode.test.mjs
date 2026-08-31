@@ -12,6 +12,7 @@ const api=read('api/salon-operations.js');
 const ui=read('api/salon-mode-ui.js');
 const cron=read('api/salon-reminders-cron.js');
 const whatsapp=read('api/_whatsapp-live-core.js');
+const edgeWorker=read('supabase/functions/dabbir-salon-reminder-worker/index.ts');
 
 function hasAll(source,markers){for(const marker of markers)assert.match(source,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))}
 
@@ -73,8 +74,11 @@ test('scenario 7: tenant isolation is enforced with business-scoped foreign keys
 
 test('scenario 8: WhatsApp reminders are claimed concurrently and never automatically duplicated',()=>{
   hasAll(migration,['unique (business_id,idempotency_key)','for update skip locked',"status='processing'","status='ambiguous'",'STALE_PROCESSING_REQUIRES_RECONCILIATION','dabbir_claim_workflow_notifications','dabbir_finalize_workflow_notification']);
-  hasAll(cron,['CRON_SECRET','dabbir_claim_workflow_notifications','sendMetaTemplate',"error?.ambiguous===true?'ambiguous':'failed'",'dabbir_finalize_workflow_notification']);
+  hasAll(cron,['CRON_SECRET','dabbir_claim_workflow_notifications','sendMetaTemplate',"error?.ambiguous===true?'ambiguous':'failed'",'dabbir_finalize_workflow_notification','x-vercel-oidc-token','dabbir-salon-reminder-worker']);
   hasAll(whatsapp,["type: 'template'",'providerMessageId','META_WHATSAPP_TEMPLATE_TIMEOUT_AMBIGUOUS']);
+  hasAll(edgeWorker,['createRemoteJWKSet','jwtVerify','EXPECTED_AUDIENCE','EXPECTED_SUBJECT','owner_id !== OWNER_ID','project_id !== PROJECT_ID','environment !== "production"','dabbir_claim_workflow_notifications','dabbir_finalize_workflow_notification','CONNECTION_COLUMNS']);
+  assert.doesNotMatch(edgeWorker,/dabbir_(salon_quick_book|salon_transition_appointment|salon_rebook)/);
+  assert.doesNotMatch(whatsapp.slice(whatsapp.indexOf('export async function sendMetaTemplate')),/WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED/);
 });
 
 test('calendar UI provides day, week, month, employee columns, drag/drop and duration changes',()=>{

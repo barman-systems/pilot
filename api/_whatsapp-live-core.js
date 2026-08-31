@@ -250,12 +250,9 @@ export async function sendMetaText({ connection, businessId, recipient, body }) 
 }
 
 export async function sendMetaTemplate({ connection, businessId, recipient, templateName, language = 'ar', parameters = [] }) {
-  const capability = whatsappLiveServerCapability();
-  if (!capability.service_data_access) {
-    const error = new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED');
-    error.status = 503;
-    throw error;
-  }
+  // The caller may load the encrypted connection through the local service key
+  // or through the OIDC-authenticated Supabase worker. Sending only needs the
+  // explicit tenant-scoped connection plus the platform decryption secret.
   const platform = applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
   if (!platform.appSecret || !platform.encryptionSecret) {
     const error = new Error('WHATSAPP_PLATFORM_SECRET_NOT_CONFIGURED');
