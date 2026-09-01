@@ -18,19 +18,30 @@ jobs:
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
     steps:
-      - name: Diagnose Vercel deployment gate
+      - name: Diagnose deployment-scoped ignored-build override
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || { echo 'BLOCKED: VERCEL_TOKEN_NOT_CONFIGURED'; exit 10; }
           echo "::add-mask::$VERCEL_TOKEN"
 
-          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,target:"staging",gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
+          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"},projectSettings:{commandForIgnoringBuildStep:"exit 1"}}')"
           status="$(curl -sS -o "$RUNNER_TEMP/vercel.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body")"
           echo "Vercel deployment HTTP status: $status"
           jq -r 'if .error then "error.code="+(.error.code//"UNKNOWN")+"\nerror.message="+(.error.message//"UNKNOWN") else "deployment.id="+(.id//"UNKNOWN")+"\nstate="+(.readyState//.status//"UNKNOWN") end' "$RUNNER_TEMP/vercel.json"
-          if [[ "$status" == 200 || "$status" == 201 ]]; then
-            echo 'PASS: direct Vercel deployment API is available.'
-          else
-            exit 20
-          fi
+          [[ "$status" == 200 || "$status" == 201 ]] || exit 20
+
+          id="$(jq -r '.id // empty' "$RUNNER_TEMP/vercel.json")"
+          test -n "$id" || exit 21
+          for _ in $(seq 1 30); do
+            d="$(curl -fsS "https://api.vercel.com/v13/deployments/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+            state="$(jq -r '.readyState // .status // empty' <<<"$d")"
+            echo "state=$state"
+            case "$state" in
+              READY) echo 'PASS: deployment-scoped ignore override builds successfully.'; exit 0 ;;
+              CANCELED|ERROR) jq -r '"errorCode="+(.errorCode//"UNKNOWN")+"\nerrorMessage="+(.errorMessage//"UNKNOWN")+"\nerrorLink="+(.errorLink//"UNKNOWN")' <<<"$d"; exit 22 ;;
+            esac
+            sleep 3
+          done
+          echo 'ERROR: deployment did not settle in diagnostic window'
+          exit 23
