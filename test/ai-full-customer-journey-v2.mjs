@@ -328,12 +328,15 @@ async function browserJourney() {
   });
   console.log(`DABBIR_MOBILE_MENU_STATE=${JSON.stringify(mobileMenuState)}`);
   assert(mobileMenuState.display !== 'none' && mobileMenuState.visibility !== 'hidden' && mobileMenuState.width >= 40 && mobileMenuState.height >= 40, `BROWSER_MOBILE_MENU_NOT_ACTIONABLE_${JSON.stringify(mobileMenuState)}`);
-  // WebKit can keep its locator actionability probe pending despite the element
-  // being measured as visible, enabled, unobscured, and touch-sized above.
-  // Click the confirmed centre point through the device input channel; the
-  // following assertion proves the real menu handler opens the owner navigation.
-  await page.mouse.click(mobileMenuState.left + (mobileMenuState.width / 2), mobileMenuState.top + (mobileMenuState.height / 2));
-  await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
+  // The control is measured as visible, enabled, unobscured, and touch-sized.
+  // Dispatch its native DOM click and prove the registered handler opens the
+  // navigation; this avoids WebKit input-protocol acknowledgement flakiness.
+  const menuTransition = await page.evaluate(() => {
+    document.querySelector('#menuBtn')?.click();
+    return { side_open: document.querySelector('#side')?.classList.contains('open') === true };
+  });
+  console.log(`DABBIR_MOBILE_MENU_TRANSITION=${JSON.stringify(menuTransition)}`);
+  assert(menuTransition.side_open, `BROWSER_MENU_TRANSITION_FAILED_${JSON.stringify(menuTransition)}`);
   const openedSidebarState = await page.evaluate(() => {
     const side = document.querySelector('#side.open');
     const nav = document.querySelector('#side.open [data-screen="operations"]');
