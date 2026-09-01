@@ -60,7 +60,7 @@ const script = String.raw`(()=>{
       'button,input,select,textarea,a{min-height:48px}',
       '.top{height:calc(64px + env(safe-area-inset-top))!important;padding:env(safe-area-inset-top) 12px 0!important;align-items:center!important}',
       '.top>.row{flex:1!important;gap:9px!important}.d4-header-mark{display:block!important;width:36px!important;height:36px!important;flex-basis:36px!important}',
-      '.mobileMenu{width:44px!important;height:44px!important;flex:0 0 44px!important;border-radius:13px!important;background:#ffffff08!important;border:1px solid var(--d4-line)!important;color:white!important;font-size:16px!important}',
+      '.mobileMenu{display:inline-flex!important;align-items:center!important;justify-content:center!important;visibility:visible!important;width:44px!important;height:44px!important;min-height:44px!important;flex:0 0 44px!important;border-radius:13px!important;background:#ffffff08!important;border:1px solid var(--d4-line)!important;color:white!important;font-size:16px!important}',
       '.pageTitle{max-width:36vw!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;font-size:14px!important}.statusChip{font-size:7px!important;padding:3px 6px!important}',
       '.topActions{gap:4px!important}.lang{padding:2px!important}.lang button{min-height:36px!important;padding:4px 8px!important;font-size:10px!important}',
       '.content{padding:14px 11px calc(104px + env(safe-area-inset-bottom))!important;max-width:none!important}',
