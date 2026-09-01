@@ -18,6 +18,15 @@ function calendarStorageConfigured(){
   return Boolean(key&&!key.startsWith('sb_publishable_'));
 }
 
+function logCalendarFailure(error,status){
+  const payload={
+    error:String(error?.message||'CALENDAR_CONNECTIONS_FAILED').slice(0,160),
+    code:status,
+  };
+  if(status>=500) console.error('dabbir_calendar_connections_failed',payload);
+  else if(status===429) console.warn('dabbir_calendar_connections_rate_limited',payload);
+}
+
 export default async function handler(req,res){
   try{
     if(req.method==='GET'){
@@ -50,7 +59,8 @@ export default async function handler(req,res){
     }
     return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
   }catch(error){
-    console.error('dabbir_calendar_connections_failed',{error:String(error?.message||'CALENDAR_CONNECTIONS_FAILED').slice(0,160),code:statusCode(error)});
-    return json(res,statusCode(error),{ok:false,error:String(error?.message||'CALENDAR_CONNECTIONS_FAILED').slice(0,160),detail:error?.detail||undefined});
+    const status=statusCode(error);
+    logCalendarFailure(error,status);
+    return json(res,status,{ok:false,error:String(error?.message||'CALENDAR_CONNECTIONS_FAILED').slice(0,160),detail:error?.detail||undefined});
   }
 }

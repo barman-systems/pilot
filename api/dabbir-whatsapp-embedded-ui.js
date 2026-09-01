@@ -4,6 +4,8 @@ const script = String.raw`(()=>{
 
   const SESSION_TIMEOUT_MS=15*60*1000;
   const POST_LOGIN_SESSION_GRACE_MS=5000;
+  const CONFIG_CACHE_MS=60*1000;
+  const CONFIG_FAILURE_CACHE_MS=10*1000;
   const EMBEDDED_SIGNUP_VERSION='v4';
   const COEXISTENCE_FEATURE='whatsapp_business_app_onboarding';
   const META_FINISH_EVENTS=new Set([
@@ -31,6 +33,11 @@ const script = String.raw`(()=>{
   let sessionWaiters=[];
   let configCache=null;
   let configBusinessId=null;
+  let configFetchedAt=0;
+  let configFailureBusinessId='';
+  let configFailureAt=0;
+  let configInFlight=null;
+  let configInFlightBusinessId='';
   let busy=false;
 
   function ar(){return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')}
@@ -194,16 +201,52 @@ const script = String.raw`(()=>{
     return sdkPreparePromise;
   }
 
+  function resetConfigCache(){
+    configCache=null;
+    configBusinessId=null;
+    configFetchedAt=0;
+    configFailureBusinessId='';
+    configFailureAt=0;
+  }
+
   async function loadConfig(force=false){
     const bid=businessId();
     if(!bid) return null;
-    if(!force&&configCache&&configBusinessId===bid) return configCache;
-    const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{cache:'no-store',headers:{accept:'application/json'}});
-    const payload=await response.json().catch(()=>({}));
-    if(!response.ok||!payload.ok) return null;
-    configBusinessId=bid;
-    configCache=payload;
-    return payload;
+    const now=Date.now();
+    if(!force&&configCache&&configBusinessId===bid&&now-configFetchedAt<CONFIG_CACHE_MS) return configCache;
+    if(!force&&configFailureBusinessId===bid&&now-configFailureAt<CONFIG_FAILURE_CACHE_MS) return null;
+    if(configInFlight&&configInFlightBusinessId===bid) return configInFlight;
+
+    configInFlightBusinessId=bid;
+    const request=(async()=>{
+      try{
+        const response=await fetch('/api/dabbir-whatsapp-embedded-config?business_id='+encodeURIComponent(bid),{cache:'no-store',headers:{accept:'application/json'}});
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok||!payload.ok){
+          configFailureBusinessId=bid;
+          configFailureAt=Date.now();
+          return null;
+        }
+        configBusinessId=bid;
+        configCache=payload;
+        configFetchedAt=Date.now();
+        configFailureBusinessId='';
+        configFailureAt=0;
+        return payload;
+      }catch{
+        configFailureBusinessId=bid;
+        configFailureAt=Date.now();
+        return null;
+      }
+    })();
+    configInFlight=request;
+    try{return await request}
+    finally{
+      if(configInFlight===request){
+        configInFlight=null;
+        configInFlightBusinessId='';
+      }
+    }
   }
 
   async function refreshTenantStatus(){
@@ -258,7 +301,7 @@ const script = String.raw`(()=>{
     }
     report('complete_ok',{stage:'server_complete',onboarding_mode:COEXISTENCE_FEATURE,has_waba:true,has_phone:true});
     if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={...(workspace.whatsapp||{}),...payload};
-    configCache=null;
+    resetConfigCache();
     await loadConfig(true).catch(()=>null);
     await refreshTenantStatus();
     tell(ar()?'تم ربط رقم WhatsApp Business بنجاح':'WhatsApp Business number connected successfully');
@@ -368,7 +411,7 @@ const script = String.raw`(()=>{
       });
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.ok) throw new Error(payload.error||'WHATSAPP_DISCONNECT_FAILED');
-      configCache=null;
+      resetConfigCache();
       sdkReadyAppId=null;
       if(typeof workspace!=='undefined'&&workspace) workspace.whatsapp={connected:false,state:'NOT_CONFIGURED',phone:null,operational:false};
       try{if(typeof renderIntegrations==='function')renderIntegrations()}catch{}
