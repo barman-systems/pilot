@@ -1,0 +1,41 @@
+name: DABBIR AWS Stack Diagnose
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-stack-diagnose.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      AWS_REGION: me-central-1
+      ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+      STACK_NAME: dabbir-managed-foundation
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: dabbir-diagnose-${{ github.run_id }}
+
+      - name: Show failed stack evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== STACK ==='
+          aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' --output json || true
+          echo '=== FAILED EVENTS ==='
+          aws cloudformation describe-stack-events --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackEvents[?contains(ResourceStatus, `FAILED`)].{Time:Timestamp,Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
+          echo '=== RECENT EVENTS ==='
+          aws cloudformation describe-stack-events --region "$AWS_REGION" --stack-name "$STACK_NAME" --max-items 40 --query 'StackEvents[].{Time:Timestamp,Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
+          echo '=== RESOURCES ==='
+          aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[].{Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Physical:PhysicalResourceId}' --output json || true
