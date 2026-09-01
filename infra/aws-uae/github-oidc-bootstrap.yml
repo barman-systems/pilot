@@ -42,7 +42,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: repo:barman-systems/pilot:environment:production
+                token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:environment:production
       Policies:
         - PolicyName: DabbirManagedInfrastructureDeployment
           PolicyDocument:
@@ -266,7 +266,7 @@ Resources:
 
 Outputs:
   DeployRoleArn:
-    Description: Store this ARN in GitHub Actions secret AWS_DABBIR_DEPLOY_ROLE_ARN.
+    Description: GitHub Actions OIDC deploy role ARN for DABBIR.
     Value: !GetAtt DabbirGithubDeployRole.Arn
   GitHubOidcProviderArn:
     Value: !If
@@ -274,4 +274,4 @@ Outputs:
       - !Ref GitHubOidcProvider
       - !Ref ExistingGitHubOidcProviderArn
   AllowedGitHubSubject:
-    Value: repo:barman-systems/pilot:environment:production
+    Value: repo:barman-systems@319497139/pilot@1346817686:environment:production
