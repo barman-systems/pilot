@@ -1,0 +1,78 @@
+name: DABBIR AWS UAE Foundation Bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-uae-foundation-bootstrap.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: dabbir-aws-uae-foundation-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      AWS_REGION: me-central-1
+      ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+      STACK_NAME: dabbir-managed-foundation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: dabbir-foundation-${{ github.run_id }}
+
+      - name: Verify identity and AWS UAE availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity
+          aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[?State==`available`].ZoneName' --output json
+          aws rds describe-orderable-db-instance-options --region "$AWS_REGION" --engine postgres --engine-version 17.11 --db-instance-class db.t4g.small --query 'length(OrderableDBInstanceOptions)' --output text
+
+      - name: Validate CloudFormation template
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation validate-template --region "$AWS_REGION" --template-body file://infra/aws-uae/dabbir-managed-foundation.yml >/tmp/template.json
+          jq -e '.Parameters' /tmp/template.json >/dev/null
+
+      - name: Deploy managed foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --region "$AWS_REGION" \
+            --stack-name "$STACK_NAME" \
+            --template-file infra/aws-uae/dabbir-managed-foundation.yml \
+            --parameter-overrides \
+              EnvironmentName=dabbir-prod \
+              DatabaseInstanceClass=db.t4g.small \
+              MultiAZ=false \
+            --no-fail-on-empty-changeset \
+            --tags App=DABBIR Environment=production ManagedBy=GitHubOIDC Region=me-central-1
+
+      - name: Capture deployment evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation describe-stacks \
+            --region "$AWS_REGION" \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output json | tee /tmp/dabbir-foundation-evidence.json
+          jq -e '.Status == "CREATE_COMPLETE" or .Status == "UPDATE_COMPLETE"' /tmp/dabbir-foundation-evidence.json >/dev/null
