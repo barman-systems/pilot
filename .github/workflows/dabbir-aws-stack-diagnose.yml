@@ -33,9 +33,14 @@ jobs:
           set -euo pipefail
           echo '=== STACK ==='
           aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' --output json || true
+          echo '=== CHANGE SETS ==='
+          aws cloudformation list-change-sets --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'Summaries[].{Name:ChangeSetName,Status:Status,Reason:StatusReason,Execution:ExecutionStatus}' --output json || true
           echo '=== FAILED EVENTS ==='
           aws cloudformation describe-stack-events --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackEvents[?contains(ResourceStatus, `FAILED`)].{Time:Timestamp,Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
-          echo '=== RECENT EVENTS ==='
-          aws cloudformation describe-stack-events --region "$AWS_REGION" --stack-name "$STACK_NAME" --max-items 40 --query 'StackEvents[].{Time:Timestamp,Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
+          echo '=== KNOWN FIXED-NAME RESOURCES ==='
+          aws ecr describe-repositories --region "$AWS_REGION" --repository-names dabbir-prod/api dabbir-prod/supabase-runtime --query 'repositories[].repositoryName' --output json || true
+          aws logs describe-log-groups --region "$AWS_REGION" --log-group-name-prefix '/dabbir/dabbir-prod/runtime' --query 'logGroups[].logGroupName' --output json || true
+          aws ecs describe-clusters --region "$AWS_REGION" --clusters dabbir-prod-cluster --query 'clusters[].{Name:clusterName,Status:status}' --output json || true
+          aws rds describe-db-instances --region "$AWS_REGION" --db-instance-identifier dabbir-prod-postgres --query 'DBInstances[].{Id:DBInstanceIdentifier,Status:DBInstanceStatus}' --output json || true
           echo '=== RESOURCES ==='
           aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[].{Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Physical:PhysicalResourceId}' --output json || true
