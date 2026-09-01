@@ -1,13 +1,16 @@
 name: DABBIR UAE Deploy Now
+
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/dabbir-uae-deploy-now.yml'
   workflow_dispatch:
+
 permissions:
   id-token: write
   contents: read
+
 jobs:
   deploy:
     environment: production
@@ -30,3 +33,5 @@ jobs:
             --no-fail-on-empty-changeset
       - name: Evidence
         run: aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' --output json
+
+# Triggered after AWS OIDC trust verification on 2026-09-01.
