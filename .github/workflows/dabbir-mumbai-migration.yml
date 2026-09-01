@@ -15,57 +15,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  stripe-sandbox-secrets:
+  stripe-sandbox-runtime:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
-      SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
       BROKER_SLUG: dabbir-migration-oidc-broker
       OIDC_AUDIENCE: dabbir-mumbai-migration
     steps:
-      - name: Migrate DABBIR Stripe sandbox secrets to Mumbai Vault
+      - name: Verify Mumbai Stripe sandbox runtime without creating payments
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update >/dev/null
-          sudo apt-get install -y jq postgresql-client >/dev/null
-
           oidc_json="$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
           test -n "$OIDC_TOKEN" || { echo 'ERROR: OIDC token missing'; exit 20; }
           echo "::add-mask::$OIDC_TOKEN"
 
-          broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
-          SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
-          TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || { echo 'ERROR: source broker denied'; exit 21; }
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || { echo 'ERROR: target broker denied'; exit 22; }
+          TARGET_BROKER="$(curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "${TARGET_SUPABASE_URL}/functions/v1/${BROKER_SLUG}")"
+          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || { echo 'ERROR: target broker denied'; exit 21; }
+          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
+          test -n "$TARGET_SERVICE_ROLE_KEY" || { echo 'ERROR: target service role missing'; exit 22; }
+          echo "::add-mask::$TARGET_SERVICE_ROLE_KEY"
 
-          STRIPE_SECRET_KEY="$(jq -r '.stripe_sandbox_secret_key // empty' <<<"$SOURCE_BROKER")"
-          STRIPE_WEBHOOK_SECRET="$(jq -r '.stripe_webhook_secret // empty' <<<"$SOURCE_BROKER")"
-          [[ "$STRIPE_SECRET_KEY" == sk_test_* ]] || { echo 'ERROR: source sandbox key unavailable or not test-mode'; exit 23; }
-          [[ "$STRIPE_WEBHOOK_SECRET" == whsec_* ]] || { echo 'ERROR: source webhook signing secret unavailable'; exit 24; }
-          echo "::add-mask::$STRIPE_SECRET_KEY"
-          echo "::add-mask::$STRIPE_WEBHOOK_SECRET"
+          vault_json="$(curl -fsS -X POST "${TARGET_SUPABASE_URL}/rest/v1/rpc/dabbir_stripe_sandbox_runtime_secrets_v1" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}" -H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H 'Content-Type: application/json' --data '{}')"
+          jq -e 'type=="array" and length==1 and .[0].secret_key|startswith("sk_test_")' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox API key is not available from Mumbai Vault'; exit 30; }
+          jq -e 'type=="array" and length==1 and .[0].webhook_secret|startswith("whsec_")' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox webhook secret is not available from Mumbai Vault'; exit 31; }
+          echo 'PASS: Mumbai Vault exposes test-only Stripe secrets to service_role.'
 
-          thost="$(jq -r '.credential.db_host // empty' <<<"$TARGET_BROKER")"
-          tuser="$(jq -r '.credential.db_user // empty' <<<"$TARGET_BROKER")"
-          tpass="$(jq -r '.credential.db_password // empty' <<<"$TARGET_BROKER")"
-          for x in "$thost" "$tuser" "$tpass"; do test -n "$x" || { echo 'ERROR: target DB credential missing'; exit 25; }; echo "::add-mask::$x"; done
-          enc(){ python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
-          TARGET_DATABASE_URL="postgresql://${tuser}:$(enc "$tpass")@${thost}:5432/postgres?sslmode=require"
-          echo "::add-mask::$TARGET_DATABASE_URL"
+          checkout_payload='{"action":"dabbir_portal","business_id":"00000000-0000-4000-8000-000000000001","return_origin":"https://dabbir.bmalman.com","stripe_customer_id":"cus_DABBIRNonexistent"}'
+          checkout_status="$(curl -sS -o "$RUNNER_TEMP/checkout.json" -w '%{http_code}' -X POST "${TARGET_SUPABASE_URL}/functions/v1/barman-stripe-checkout" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}" -H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H 'x-dabbir-billing-bridge: v1' -H 'Content-Type: application/json' --data-binary "$checkout_payload")"
+          [[ "$checkout_status" == 502 ]] || { echo "ERROR: checkout self-test status=$checkout_status"; cat "$RUNNER_TEMP/checkout.json" | jq '{ok,error,livemode}' || true; exit 40; }
+          checkout_error="$(jq -r '.error // empty' "$RUNNER_TEMP/checkout.json")"
+          [[ "$checkout_error" == resource_missing ]] || { echo "ERROR: checkout did not reach Stripe sandbox; error=$checkout_error"; exit 41; }
+          [[ "$(jq -r '.livemode // true' "$RUNNER_TEMP/checkout.json")" == false ]] || { echo 'ERROR: checkout self-test was not sandbox'; exit 42; }
+          echo 'PASS: Mumbai checkout reached Stripe sandbox; no object was created.'
 
-          cat > "$RUNNER_TEMP/migrate-stripe-sandbox.sql" <<'SQL'
-          select public.dabbir_migrate_stripe_sandbox_secrets_v1(:'stripe_key', :'webhook_key');
-          SQL
-          result="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -v stripe_key="$STRIPE_SECRET_KEY" -v webhook_key="$STRIPE_WEBHOOK_SECRET" -f "$RUNNER_TEMP/migrate-stripe-sandbox.sql" | tr -d '\r\n')"
-          [[ "$result" == t ]] || { echo 'ERROR: Mumbai Vault secret migration did not confirm'; exit 30; }
+          ts="$(date +%s)"
+          webhook_status="$(curl -sS -o "$RUNNER_TEMP/webhook.txt" -w '%{http_code}' -X POST "${TARGET_SUPABASE_URL}/functions/v1/barman-stripe-webhook" -H 'Content-Type: application/json' -H "stripe-signature: t=${ts},v1=0000000000000000000000000000000000000000000000000000000000000000" --data '{}')"
+          [[ "$webhook_status" == 401 ]] || { echo "ERROR: webhook self-test status=$webhook_status"; cat "$RUNNER_TEMP/webhook.txt" || true; exit 50; }
+          grep -q 'invalid signature' "$RUNNER_TEMP/webhook.txt" || { echo 'ERROR: webhook did not load signing secret before rejecting signature'; exit 51; }
+          echo 'PASS: Mumbai webhook loaded signing secret and rejected an invalid signature.'
 
-          verify="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "select (secret_key like 'sk_test_%') and (webhook_secret like 'whsec_%') from public.dabbir_stripe_sandbox_runtime_secrets_v1();" | tr -d '\r\n')"
-          [[ "$verify" == t ]] || { echo 'ERROR: Mumbai Vault runtime secret verification failed'; exit 31; }
-
-          count="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "select count(*) from vault.secrets where name in ('dabbir_stripe_secret_key_sandbox','dabbir_stripe_webhook_secret_sandbox');" | tr -d '\r\n')"
-          [[ "$count" == 2 ]] || { echo "ERROR: expected 2 Mumbai Vault secrets, got $count"; exit 32; }
-          echo 'PASS DABBIR_STRIPE_SANDBOX_SECRET_MIGRATION target=mumbai vault_secrets=2 live_key=not_touched values=masked'
+          echo 'PASS DABBIR_STRIPE_SANDBOX_RUNTIME target=mumbai checkout=stripe_test_reached webhook=signature_verified live=untouched side_effects=none'
