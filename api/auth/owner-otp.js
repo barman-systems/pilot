@@ -7,7 +7,8 @@ import {
 
 const OWNER_USERNAME = 'barmanadmin';
 const OWNER_EMAIL = process.env.DABBIR_OWNER_LOGIN_EMAIL || 'barman2013@icloud.com';
-const BROKER_URL = 'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-owner-broker';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const BROKER_URL = String(process.env.DABBIR_OWNER_BROKER_URL || `${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/, '');
 const OTP_RE = /^\d{6}$/;
 const CHALLENGE_COOKIE = '__Host-dabbir_owner_otp_challenge';
 const SESSION_COOKIE = '__Host-dabbir_owner_session';
