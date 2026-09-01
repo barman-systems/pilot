@@ -1,0 +1,34 @@
+name: DABBIR Vercel State Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dabbir-vercel-state-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+    steps:
+      - name: Check safe Vercel state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || exit 10
+          echo "::add-mask::$VERCEL_TOKEN"
+          p="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          e="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "project_ignore=$(jq -r '.commandForIgnoringBuildStep // "<null>"' <<<"$p")"
+          for key in SUPABASE_URL SUPABASE_AUTH_URL SUPABASE_PUBLISHABLE_KEY SUPABASE_SERVICE_ROLE_KEY DABBIR_OWNER_BROKER_URL; do
+            count="$(jq --arg k "$key" '[.envs[] | select(.key==$k)] | length' <<<"$e")"
+            targets="$(jq -r --arg k "$key" '[.envs[] | select(.key==$k) | ((.target // [])|join(","))] | unique | join(";")' <<<"$e")"
+            echo "$key count=$count targets=${targets:-none}"
+          done
