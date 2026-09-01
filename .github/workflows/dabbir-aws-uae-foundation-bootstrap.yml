@@ -81,11 +81,7 @@ jobs:
           set -euo pipefail
           aws sts get-caller-identity
           aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[?State==`available`].ZoneName' --output json
-          versions="$(aws rds describe-db-engine-versions \
-            --region "$AWS_REGION" \
-            --engine postgres \
-            --query 'DBEngineVersions[].EngineVersion' \
-            --output text)"
+          versions="$(aws rds describe-db-engine-versions --region "$AWS_REGION" --engine postgres --query 'DBEngineVersions[].EngineVersion' --output text)"
           latest="$(printf '%s\n' $versions | tr '\t' '\n' | awk '/^17\./' | sort -V | tail -1)"
           test -n "$latest"
           echo "Selected PostgreSQL engine: $latest"
@@ -98,37 +94,37 @@ jobs:
           aws cloudformation validate-template --region "$AWS_REGION" --template-body file://infra/aws-uae/dabbir-managed-foundation.yml >/tmp/template.json
           jq -e '.Parameters' /tmp/template.json >/dev/null
 
-      - name: Recover safely from an earlier rolled-back bootstrap
+      - name: Recover safely from incomplete bootstrap states
         shell: bash
         run: |
           set -euo pipefail
           status="$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
-          if [ "$status" != 'ROLLBACK_COMPLETE' ]; then
-            echo "No rollback cleanup required (status=${status:-absent})."
-            exit 0
+
+          if [ "$status" = 'ROLLBACK_COMPLETE' ]; then
+            echo 'Cleaning retained empty resources from the rolled-back bootstrap.'
+            mapfile -t repos < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::ECR::Repository`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+            for repo in "${repos[@]}"; do aws ecr delete-repository --region "$AWS_REGION" --repository-name "$repo" --force >/dev/null 2>&1 || true; done
+            mapfile -t log_groups < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+            for group in "${log_groups[@]}"; do aws logs delete-log-group --region "$AWS_REGION" --log-group-name "$group" >/dev/null 2>&1 || true; done
+            mapfile -t buckets < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+            for bucket in "${buckets[@]}"; do
+              aws s3 rm "s3://$bucket" --recursive >/dev/null 2>&1 || true
+              aws s3api delete-bucket --region "$AWS_REGION" --bucket "$bucket" >/dev/null 2>&1 || true
+            done
+            aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$STACK_NAME"
+            aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$STACK_NAME"
+            sleep 35
+          elif [ "$status" = 'REVIEW_IN_PROGRESS' ]; then
+            echo 'Removing failed early-validation review stack.'
+            aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$STACK_NAME"
+            aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$STACK_NAME"
+          else
+            echo "No stack recovery required (status=${status:-absent})."
           fi
 
-          echo 'Cleaning retained empty bootstrap resources from the failed stack.'
-          mapfile -t repos < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::ECR::Repository`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
-          for repo in "${repos[@]}"; do
-            aws ecr delete-repository --region "$AWS_REGION" --repository-name "$repo" --force >/dev/null 2>&1 || true
-          done
-
-          mapfile -t log_groups < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
-          for group in "${log_groups[@]}"; do
-            aws logs delete-log-group --region "$AWS_REGION" --log-group-name "$group" >/dev/null 2>&1 || true
-          done
-
-          mapfile -t buckets < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
-          for bucket in "${buckets[@]}"; do
-            aws s3 rm "s3://$bucket" --recursive >/dev/null 2>&1 || true
-            aws s3api delete-bucket --region "$AWS_REGION" --bucket "$bucket" >/dev/null 2>&1 || true
-          done
-
-          aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$STACK_NAME"
-          aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$STACK_NAME"
-          echo 'Rollback stack removed. Waiting to avoid a repeat ECS control-plane throttle.'
-          sleep 35
+          # Historical retained log group from the first bootstrap attempt. The
+          # current template uses a CloudFormation-generated unique name.
+          aws logs delete-log-group --region "$AWS_REGION" --log-group-name '/dabbir/dabbir-prod/runtime' >/dev/null 2>&1 || true
 
       - name: Deploy managed foundation
         shell: bash
