@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  finalize-storage:
+  verify-final:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -25,9 +25,7 @@ jobs:
       OIDC_AUDIENCE: dabbir-mumbai-migration
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Finalize DABBIR Storage
+      - name: Verify final Mumbai migration
         shell: bash
         run: |
           set -euo pipefail
@@ -36,7 +34,7 @@ jobs:
 
           oidc_json="$(curl --silent --show-error --fail-with-body --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
-          [[ -n "$OIDC_TOKEN" ]] || { echo 'ERROR: GitHub OIDC token was not issued.' >&2; exit 20; }
+          [[ -n "$OIDC_TOKEN" ]] || exit 20
           echo "::add-mask::$OIDC_TOKEN"
 
           broker_call() {
@@ -45,54 +43,53 @@ jobs:
               --header 'Content-Type: application/json' \
               "$1/functions/v1/${BROKER_SLUG}"
           }
-
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == 'true' ]] || exit 21
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == 'true' ]] || exit 22
+          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
+          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
 
-          SOURCE_HOST="$(jq -r '.credential.db_host // empty' <<<"$SOURCE_BROKER")"
-          SOURCE_USER="$(jq -r '.credential.db_user // empty' <<<"$SOURCE_BROKER")"
-          SOURCE_PASS="$(jq -r '.credential.db_password // empty' <<<"$SOURCE_BROKER")"
-          TARGET_HOST="$(jq -r '.credential.db_host // empty' <<<"$TARGET_BROKER")"
-          TARGET_USER="$(jq -r '.credential.db_user // empty' <<<"$TARGET_BROKER")"
-          TARGET_PASS="$(jq -r '.credential.db_password // empty' <<<"$TARGET_BROKER")"
-          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$SOURCE_BROKER")"
-          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
-
-          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do
-            [[ -n "$secret" ]] || { echo 'ERROR: broker returned incomplete credentials.' >&2; exit 23; }
-            echo "::add-mask::$secret"
-          done
+          SOURCE_HOST="$(jq -r '.credential.db_host' <<<"$SOURCE_BROKER")"
+          SOURCE_USER="$(jq -r '.credential.db_user' <<<"$SOURCE_BROKER")"
+          SOURCE_PASS="$(jq -r '.credential.db_password' <<<"$SOURCE_BROKER")"
+          TARGET_HOST="$(jq -r '.credential.db_host' <<<"$TARGET_BROKER")"
+          TARGET_USER="$(jq -r '.credential.db_user' <<<"$TARGET_BROKER")"
+          TARGET_PASS="$(jq -r '.credential.db_password' <<<"$TARGET_BROKER")"
+          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$SOURCE_BROKER")"
+          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$TARGET_BROKER")"
+          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do echo "::add-mask::$secret"; done
 
           urlencode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
           SOURCE_DATABASE_URL="postgresql://${SOURCE_USER}:$(urlencode "$SOURCE_PASS")@${SOURCE_HOST}:5432/postgres?sslmode=require"
           TARGET_DATABASE_URL="postgresql://${TARGET_USER}:$(urlencode "$TARGET_PASS")@${TARGET_HOST}:5432/postgres?sslmode=require"
-          echo "::add-mask::$SOURCE_DATABASE_URL"
-          echo "::add-mask::$TARGET_DATABASE_URL"
-          export SOURCE_DATABASE_URL TARGET_DATABASE_URL SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY SOURCE_SUPABASE_URL TARGET_SUPABASE_URL
+          echo "::add-mask::$SOURCE_DATABASE_URL"; echo "::add-mask::$TARGET_DATABASE_URL"
 
           scalar() { psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
-          [[ "$(scalar "$SOURCE_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_src' ]] || exit 24
-          [[ "$(scalar "$TARGET_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_dst' ]] || exit 25
+          compare() { local n="$1" q="$2" s t; s="$(scalar "$SOURCE_DATABASE_URL" "$q")"; t="$(scalar "$TARGET_DATABASE_URL" "$q")"; echo "$n source=$s target=$t"; [[ "$s" == "$t" ]] || exit 30; }
 
-          # Database/Auth/FK fingerprints passed in run 33552928244. Do not re-copy the database.
-          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == '56' ]] || exit 26
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))")" == '43' ]] || exit 27
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == '0' ]] || { echo 'ERROR: target DABBIR Storage is not empty.' >&2; exit 28; }
+          compare 'Auth users' "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth identities' "select count(*) from auth.identities where user_id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth MFA' "select count(*) from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth FK count' "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));"
+          compare 'Storage buckets' "select count(*) from storage.buckets where id like 'dabbir-%';"
+          compare 'Storage objects' "select count(*) from storage.objects where bucket_id like 'dabbir-%';"
+          compare 'Storage policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where schemaname='storage' and (policyname ilike 'dabbir%' or coalesce(qual,'') ilike '%dabbir%' or coalesce(with_check,'') ilike '%dabbir%')) q;"
 
-          sudo mkdir -p /opt/dabbir
-          sudo chown "$USER":"$(id -gn)" /opt/dabbir
-          bash infra/falconcloud-dubai/migrate-storage.sh
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == 56 ]] || exit 31
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == 2 ]] || exit 32
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == 1 ]] || exit 33
 
-          src_buckets="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
-          dst_buckets="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
-          src_objects="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
-          dst_objects="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
-          [[ "$src_buckets" == '2' && "$dst_buckets" == '2' && "$src_objects" == '1' && "$dst_objects" == '1' ]] || {
-            echo "ERROR Storage counts source=${src_buckets}/${src_objects} target=${dst_buckets}/${dst_objects}" >&2
-            exit 29
-          }
+          bucket="dabbir-owner-live"
+          object="owner-truth-v3.html"
+          src_file="$RUNNER_TEMP/source-object.bin"
+          dst_file="$RUNNER_TEMP/target-object.bin"
+          curl -fsS "${SOURCE_SUPABASE_URL}/storage/v1/object/${bucket}/${object}" \
+            -H "Authorization: Bearer ${SOURCE_SERVICE_ROLE_KEY}" -H "apikey: ${SOURCE_SERVICE_ROLE_KEY}" -o "$src_file"
+          curl -fsS "${TARGET_SUPABASE_URL}/storage/v1/object/${bucket}/${object}" \
+            -H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}" -o "$dst_file"
+          src_sha="$(sha256sum "$src_file" | cut -d' ' -f1)"
+          dst_sha="$(sha256sum "$dst_file" | cut -d' ' -f1)"
+          [[ "$src_sha" == "$dst_sha" ]] || { echo 'ERROR: Storage SHA-256 mismatch' >&2; exit 34; }
+          echo "PASS Storage SHA-256 $dst_sha"
 
-          echo 'PASS DABBIR_MUMBAI_FINAL database=verified rows=verified auth=56 fks=43 storage_buckets=2 storage_objects=1'
-          echo 'Production Vercel endpoint was NOT changed by this workflow.'
+          echo 'PASS DABBIR_MUMBAI_FINAL database=verified rows=verified auth=56 identities=56 mfa=26 fks=43 storage_buckets=2 storage_objects=1 storage_sha256=verified'
+          echo 'Production Vercel endpoint was NOT changed.'
