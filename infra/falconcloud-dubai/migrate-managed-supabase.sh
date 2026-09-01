@@ -10,6 +10,7 @@ import sys
 
 path = Path(sys.argv[1])
 text = path.read_text()
+
 old_auth = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
 set session_replication_role = replica;
 \\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
@@ -40,6 +41,57 @@ tgt -f "$WORKDIR/public-functions.sql"'''
 if old_functions not in text:
     raise SystemExit('ERROR: expected public function restore command was not found in migrate-db.sh')
 text = text.replace(old_functions, new_functions, 1)
+
+old_post = r'''pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+tgt -f "$WORKDIR/public-function-acl.sql"
+'''
+new_post = r'''tgt -X -A -t -c "select constraint_name from public.migration_auth_fk_specs order by constraint_name" > "$WORKDIR/auth-fk-names.txt"
+auth_fk_spec_count="$(wc -l < "$WORKDIR/auth-fk-names.txt" | tr -d '[:space:]')"
+[[ "$auth_fk_spec_count" == "43" ]] || { echo "Expected 43 managed Auth FK specs, found $auth_fk_spec_count" >&2; exit 10; }
+
+filter_postdata_toc(){
+  local dump="$1" filtered="$2" count_file="$3"
+  pg_restore --list "$dump" > "${filtered}.all"
+  python3 - "${filtered}.all" "$filtered" "$WORKDIR/auth-fk-names.txt" "$count_file" <<'PYFILTER'
+from pathlib import Path
+import sys
+src, dst, names_path, count_path = map(Path, sys.argv[1:])
+names = [x.strip() for x in names_path.read_text().splitlines() if x.strip()]
+kept = []
+matched = set()
+for line in src.read_text().splitlines(True):
+    hits = [name for name in names if name in line]
+    if hits:
+        matched.update(hits)
+        continue
+    kept.append(line)
+dst.write_text(''.join(kept))
+count_path.write_text(str(len(matched)))
+PYFILTER
+}
+
+filter_postdata_toc "$WORKDIR/private-schema.dump" "$WORKDIR/private-post.filtered.list" "$WORKDIR/private-post.skipped"
+filter_postdata_toc "$WORKDIR/public-relations.dump" "$WORKDIR/public-post.filtered.list" "$WORKDIR/public-post.skipped"
+private_skipped="$(cat "$WORKDIR/private-post.skipped")"
+public_skipped="$(cat "$WORKDIR/public-post.skipped")"
+total_skipped="$((private_skipped + public_skipped))"
+[[ "$total_skipped" == "43" ]] || { echo "Expected to exclude exactly 43 managed Auth FKs from pg_restore, excluded $total_skipped" >&2; exit 11; }
+echo "PASS: excluded exactly 43 managed Auth FKs from pg_restore post-data."
+
+pg_restore --exit-on-error --no-owner --section=post-data --use-list="$WORKDIR/private-post.filtered.list" --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --section=post-data --use-list="$WORKDIR/public-post.filtered.list" --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+
+tgt -X -A -t -c "select public.migration_apply_auth_fks_v1();"
+target_auth_fks="$(tgt -X -A -t -c "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))" | tr -d '[:space:]')"
+[[ "$target_auth_fks" == "43" ]] || { echo "Expected 43 managed Auth FKs after replay, found $target_auth_fks" >&2; exit 12; }
+echo "PASS: all 43 managed Auth FKs replayed on Mumbai."
+
+tgt -f "$WORKDIR/public-function-acl.sql"
+'''
+if old_post not in text:
+    raise SystemExit('ERROR: expected post-data restore block was not found in migrate-db.sh')
+text = text.replace(old_post, new_post, 1)
 
 path.write_text(text)
 PY
