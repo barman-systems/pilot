@@ -356,13 +356,27 @@ async function browserJourney() {
   });
   console.log(`DABBIR_MOBILE_OPERATIONS_NAV_STATE=${JSON.stringify(operationsNavState)}`);
   assert(operationsNavState && operationsNavState.display !== 'none' && operationsNavState.visibility !== 'hidden' && operationsNavState.width >= 40 && operationsNavState.height >= 40 && operationsNavState.centre_hits_target, `BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_${JSON.stringify(operationsNavState)}`);
-  // The target is verified visible and unobscured above. WebKit's low-level
-  // mouse protocol can delay acknowledgement for this transformed sidebar;
-  // invoke the same DOM click handler and require the real screen transition.
-  await page.evaluate(() => document.querySelector('#side.open [data-screen="operations"]')?.click());
-  await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
-  await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
-  assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
+  // Verify the DOM event and immediate state transition atomically. This avoids
+  // a WebKit locator round-trip observing a transiently replaced sidebar node.
+  const operationsTransition = await page.evaluate(() => {
+    const target = document.querySelector('#side.open [data-screen="operations"]');
+    target?.click();
+    const screen = document.querySelector('#screen-operations');
+    return {
+      target_found: Boolean(target),
+      active: screen?.classList.contains('active') === true,
+      side_open: document.querySelector('#side')?.classList.contains('open') === true,
+    };
+  });
+  console.log(`DABBIR_MOBILE_OPERATIONS_TRANSITION=${JSON.stringify(operationsTransition)}`);
+  assert(operationsTransition.target_found && operationsTransition.active && !operationsTransition.side_open, `BROWSER_OPERATIONS_TRANSITION_FAILED_${JSON.stringify(operationsTransition)}`);
+  let operationsText = '';
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    operationsText = await page.evaluate(() => String(document.querySelector('#opsBody')?.textContent || ''));
+    if (operationsText.includes('AI Journey Product')) break;
+    await page.waitForTimeout(500);
+  }
+  assert(operationsText.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
   await page.screenshot({ path: 'dabbir-ai-customer-journey-screenshot.png', fullPage: true });
   report.artifacts.screenshot = 'dabbir-ai-customer-journey-screenshot.png';
