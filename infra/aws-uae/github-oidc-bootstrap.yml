@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: One-time AWS trust bootstrap for DABBIR GitHub Actions deployments
+Description: One-time AWS trust bootstrap for DABBIR managed UAE deployments
 
 Parameters:
   ExistingGitHubOidcProviderArn:
@@ -44,7 +44,7 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub: repo:barman-systems/pilot:environment:production
       Policies:
-        - PolicyName: DabbirInfrastructureDeployment
+        - PolicyName: DabbirManagedInfrastructureDeployment
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -60,7 +60,8 @@ Resources:
                   - cloudformation:GetTemplate
                   - cloudformation:ValidateTemplate
                 Resource: '*'
-              - Sid: DabbirEc2Network
+
+              - Sid: DabbirNetwork
                 Effect: Allow
                 Action:
                   - ec2:CreateVpc
@@ -86,19 +87,69 @@ Resources:
                   - ec2:AuthorizeSecurityGroupEgress
                   - ec2:RevokeSecurityGroupIngress
                   - ec2:RevokeSecurityGroupEgress
-                  - ec2:RunInstances
-                  - ec2:TerminateInstances
                   - ec2:CreateTags
                   - ec2:DeleteTags
-                  - ec2:AllocateAddress
-                  - ec2:ReleaseAddress
-                  - ec2:AssociateAddress
-                  - ec2:DisassociateAddress
-                  - ec2:CreateVolume
-                  - ec2:DeleteVolume
-                  - ec2:AttachVolume
-                  - ec2:DetachVolume
                 Resource: '*'
+
+              - Sid: DabbirRds
+                Effect: Allow
+                Action:
+                  - rds:CreateDBInstance
+                  - rds:ModifyDBInstance
+                  - rds:DeleteDBInstance
+                  - rds:DescribeDBInstances
+                  - rds:CreateDBSubnetGroup
+                  - rds:ModifyDBSubnetGroup
+                  - rds:DeleteDBSubnetGroup
+                  - rds:DescribeDBSubnetGroups
+                  - rds:CreateDBSnapshot
+                  - rds:DeleteDBSnapshot
+                  - rds:DescribeDBSnapshots
+                  - rds:AddTagsToResource
+                  - rds:RemoveTagsFromResource
+                  - rds:ListTagsForResource
+                Resource: '*'
+
+              - Sid: DabbirEcs
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:DeleteCluster
+                  - ecs:DescribeClusters
+                  - ecs:PutClusterCapacityProviders
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeTaskDefinition
+                  - ecs:CreateService
+                  - ecs:UpdateService
+                  - ecs:DeleteService
+                  - ecs:DescribeServices
+                  - ecs:ListTasks
+                  - ecs:DescribeTasks
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource: '*'
+
+              - Sid: DabbirEcr
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:CreateRepository
+                  - ecr:DeleteRepository
+                  - ecr:DescribeRepositories
+                  - ecr:PutLifecyclePolicy
+                  - ecr:GetLifecyclePolicy
+                  - ecr:TagResource
+                  - ecr:UntagResource
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: '*'
+
               - Sid: DabbirS3
                 Effect: Allow
                 Action:
@@ -111,7 +162,71 @@ Resources:
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource: '*'
-              - Sid: DabbirIamResources
+
+              - Sid: DabbirSecrets
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:DeleteSecret
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:UpdateSecret
+                  - secretsmanager:TagResource
+                  - secretsmanager:UntagResource
+                Resource: '*'
+
+              - Sid: DabbirLogsAndMonitoring
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:PutRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutDashboard
+                  - cloudwatch:DeleteDashboards
+                Resource: '*'
+
+              - Sid: DabbirLoadBalancing
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:ModifyRule
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:RemoveTags
+                Resource: '*'
+
+              - Sid: DabbirAutoscaling
+                Effect: Allow
+                Action:
+                  - application-autoscaling:RegisterScalableTarget
+                  - application-autoscaling:DeregisterScalableTarget
+                  - application-autoscaling:PutScalingPolicy
+                  - application-autoscaling:DeleteScalingPolicy
+                  - application-autoscaling:DescribeScalableTargets
+                  - application-autoscaling:DescribeScalingPolicies
+                Resource: '*'
+
+              - Sid: DabbirIamRuntimeRoles
                 Effect: Allow
                 Action:
                   - iam:CreateRole
@@ -123,39 +238,7 @@ Resources:
                   - iam:AttachRolePolicy
                   - iam:DetachRolePolicy
                   - iam:ListAttachedRolePolicies
-                  - iam:CreateInstanceProfile
-                  - iam:DeleteInstanceProfile
-                  - iam:GetInstanceProfile
-                  - iam:AddRoleToInstanceProfile
-                  - iam:RemoveRoleFromInstanceProfile
                   - iam:PassRole
-                Resource: '*'
-              - Sid: DabbirBackup
-                Effect: Allow
-                Action:
-                  - backup:CreateBackupVault
-                  - backup:DeleteBackupVault
-                  - backup:DescribeBackupVault
-                  - backup:CreateBackupPlan
-                  - backup:DeleteBackupPlan
-                  - backup:GetBackupPlan
-                  - backup:CreateBackupSelection
-                  - backup:DeleteBackupSelection
-                  - backup:GetBackupSelection
-                  - backup:ListTags
-                  - backup:TagResource
-                  - backup:UntagResource
-                Resource: '*'
-              - Sid: DabbirSsmOperations
-                Effect: Allow
-                Action:
-                  - ssm:DescribeInstanceInformation
-                  - ssm:SendCommand
-                  - ssm:GetCommandInvocation
-                  - ssm:ListCommandInvocations
-                  - ssm:StartSession
-                  - ssm:TerminateSession
-                  - ssm:ResumeSession
                 Resource: '*'
       Tags:
         - Key: App
