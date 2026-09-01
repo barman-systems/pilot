@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 VERIFY_SCRIPT="${REPO_ROOT}/infra/aws-uae/verify-dabbir-migration.sh"
-[[ -x "$VERIFY_SCRIPT" ]] || { echo "Missing executable verifier: $VERIFY_SCRIPT" >&2; exit 1; }
+[[ -f "$VERIFY_SCRIPT" ]] || { echo "Missing verifier: $VERIFY_SCRIPT" >&2; exit 1; }
 
 WORKDIR="${DUMP_DIR:-/opt/dabbir/migration/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$WORKDIR"
@@ -131,7 +131,7 @@ pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATA
 pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
 tgt -f "$WORKDIR/public-function-acl.sql"
 
-SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" TARGET_DATABASE_URL="$TARGET_DATABASE_URL" "$VERIFY_SCRIPT"
+SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" TARGET_DATABASE_URL="$TARGET_DATABASE_URL" bash "$VERIFY_SCRIPT"
 
 auth_fp(){
   local url="$1" table="$2" predicate="$3"
