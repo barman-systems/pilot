@@ -111,15 +111,42 @@ jobs:
           [[ "$target_existing" == '0' ]] || { echo "ERROR: Mumbai already contains $target_existing DABBIR tables." >&2; exit 26; }
 
           noninternal_auth_triggers="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and c.relname in ('users','identities','mfa_factors') and not t.tgisinternal" | tr -d '[:space:]')"
-          [[ "$noninternal_auth_triggers" == '0' ]] || { echo 'ERROR: custom Auth triggers exist on Mumbai; refusing direct Auth copy.' >&2; exit 27; }
+          [[ "$noninternal_auth_triggers" == '0' ]] || { echo 'ERROR: custom Auth triggers exist on Mumbai; refusing staged Auth copy.' >&2; exit 27; }
 
-          auth_insert_ok="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select (has_table_privilege(current_user,'auth.users','INSERT') and has_table_privilege(current_user,'auth.identities','INSERT') and has_table_privilege(current_user,'auth.mfa_factors','INSERT'))::int" | tr -d '[:space:]')"
-          [[ "$auth_insert_ok" == '1' ]] || { echo 'ERROR: Mumbai migration role lacks Auth INSERT grants.' >&2; exit 28; }
+          target_auth_users="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select count(*) from auth.users' | tr -d '[:space:]')"
+          [[ "$target_auth_users" == '0' ]] || { echo 'ERROR: Mumbai Auth is not empty.' >&2; exit 28; }
 
-          # Managed Supabase does not allow this temporary role to SET session_replication_role.
-          # Mumbai has no custom Auth triggers, so preserve normal FK enforcement and copy users first.
-          sed -i '/^[[:space:]]*set session_replication_role = replica;$/d' infra/falconcloud-dubai/migrate-db.sh
-          sed -i '/^[[:space:]]*set session_replication_role = origin;$/d' infra/falconcloud-dubai/migrate-db.sh
+          stage_ok="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select (has_table_privilege(current_user,'public.migration_auth_users_stage','INSERT,TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_identities_stage','INSERT,TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_mfa_factors_stage','INSERT,TRUNCATE') and has_function_privilege(current_user,'public.dabbir_mumbai_commit_auth_stage_v1()','EXECUTE'))::int" | tr -d '[:space:]')"
+          [[ "$stage_ok" == '1' ]] || { echo 'ERROR: Mumbai Auth staging permissions are incomplete.' >&2; exit 29; }
+
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('infra/falconcloud-dubai/migrate-db.sh')
+          text = path.read_text()
+          old = '''cat >"$WORKDIR/restore-auth.psql" <<EOF
+set session_replication_role = replica;
+\\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
+\\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
+\\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
+set session_replication_role = origin;
+EOF
+chmod 600 "$WORKDIR/restore-auth.psql"
+tgt -f "$WORKDIR/restore-auth.psql"
+'''
+          new = '''cat >"$WORKDIR/restore-auth.psql" <<EOF
+truncate table public.migration_auth_users_stage, public.migration_auth_identities_stage, public.migration_auth_mfa_factors_stage;
+\\copy public.migration_auth_users_stage(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
+\\copy public.migration_auth_identities_stage(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
+\\copy public.migration_auth_mfa_factors_stage(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
+select public.dabbir_mumbai_commit_auth_stage_v1();
+EOF
+chmod 600 "$WORKDIR/restore-auth.psql"
+tgt -f "$WORKDIR/restore-auth.psql"
+'''
+          if old not in text:
+              raise SystemExit('ERROR: expected Auth restore block was not found in migrate-db.sh')
+          path.write_text(text.replace(old, new))
+          PY
 
           DUMP_DIR="$RUNNER_TEMP/dabbir-migration" bash infra/falconcloud-dubai/migrate-db.sh
           bash infra/falconcloud-dubai/migrate-storage.sh
@@ -133,7 +160,7 @@ jobs:
 
           [[ "$src_users" == "$dst_users" && "$src_tables" == "$dst_tables" && "$src_objects" == "$dst_objects" ]] || {
             echo 'ERROR: final compact count verification failed.' >&2
-            exit 29
+            exit 30
           }
           echo "PASS DABBIR_MUMBAI_DATABASE_AUTH_STORAGE users=$dst_users tables=$dst_tables storage_objects=$dst_objects"
           echo 'Production Vercel endpoint was NOT changed by this workflow.'
