@@ -1,0 +1,32 @@
+name: DABBIR AWS OIDC Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-oidc-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  verify-oidc:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: dabbir-oidc-smoke-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity
+          test "$AWS_REGION" = 'me-central-1'
