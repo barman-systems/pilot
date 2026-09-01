@@ -1,0 +1,56 @@
+name: DABBIR UAE Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: CloudFormation action
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - validate
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DABBIR_DEPLOY_ROLE_ARN }}
+          aws-region: me-central-1
+
+      - name: Validate template
+        run: |
+          aws cloudformation validate-template \
+            --region me-central-1 \
+            --template-body file://infra/aws-uae/dabbir-uae.yml
+
+      - name: Deploy DABBIR UAE stack
+        if: ${{ inputs.action == 'deploy' }}
+        run: |
+          aws cloudformation deploy \
+            --region me-central-1 \
+            --stack-name dabbir-prod-uae \
+            --template-file infra/aws-uae/dabbir-uae.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Show infrastructure outputs
+        if: ${{ inputs.action == 'deploy' }}
+        run: |
+          aws cloudformation describe-stacks \
+            --region me-central-1 \
+            --stack-name dabbir-prod-uae \
+            --query 'Stacks[0].Outputs' \
+            --output table
