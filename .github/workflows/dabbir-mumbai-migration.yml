@@ -31,7 +31,7 @@ jobs:
       PRODUCTION_HOST: dabbir.bmalman.com
 
     steps:
-      - name: Build Mumbai preview, verify, and promote
+      - name: Verify, build Mumbai preview, and promote
         shell: bash
         run: |
           set -euo pipefail
@@ -44,20 +44,27 @@ jobs:
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
           test -n "$OIDC_TOKEN" || exit 20
           echo "::add-mask::$OIDC_TOKEN"
+
           broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
+          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || { echo 'ERROR: source broker denied'; exit 21; }
+          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || { echo 'ERROR: target broker denied'; exit 22; }
 
           shost="$(jq -r '.credential.db_host // empty' <<<"$SOURCE_BROKER")"; suser="$(jq -r '.credential.db_user // empty' <<<"$SOURCE_BROKER")"; spass="$(jq -r '.credential.db_password // empty' <<<"$SOURCE_BROKER")"
           thost="$(jq -r '.credential.db_host // empty' <<<"$TARGET_BROKER")"; tuser="$(jq -r '.credential.db_user // empty' <<<"$TARGET_BROKER")"; tpass="$(jq -r '.credential.db_password // empty' <<<"$TARGET_BROKER")"
+          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$SOURCE_BROKER")"
           TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
-          for x in "$shost" "$suser" "$spass" "$thost" "$tuser" "$tpass" "$TARGET_SERVICE_ROLE_KEY"; do test -n "$x" || exit 23; echo "::add-mask::$x"; done
+          for x in "$shost" "$suser" "$spass" "$thost" "$tuser" "$tpass" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do
+            test -n "$x" || { echo 'ERROR: migration credential missing'; exit 23; }
+            echo "::add-mask::$x"
+          done
+
           enc(){ python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
           SOURCE_DATABASE_URL="postgresql://${suser}:$(enc "$spass")@${shost}:5432/postgres?sslmode=require"
           TARGET_DATABASE_URL="postgresql://${tuser}:$(enc "$tpass")@${thost}:5432/postgres?sslmode=require"
           echo "::add-mask::$SOURCE_DATABASE_URL"; echo "::add-mask::$TARGET_DATABASE_URL"
+          scalar(){ psql "$1" -X -A -t -q -v ON_ERROR_STOP=1 -c "$2" | tr -d '\r\n'; }
 
           cat > "$RUNNER_TEMP/fingerprint.sql" <<'SQL'
           create or replace function pg_temp.dabbir_table_fingerprints()
@@ -78,6 +85,7 @@ jobs:
           end $$;
           select * from pg_temp.dabbir_table_fingerprints() order by k;
           SQL
+
           zero_drift(){
             psql "$SOURCE_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/source.fp"
             psql "$TARGET_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/target.fp"
@@ -87,54 +95,52 @@ jobs:
           zero_drift || { echo 'ERROR: drift detected before Vercel changes'; exit 30; }
           echo 'PASS: pre-cutover 123-table zero-drift check.'
 
-          # Wait for the automatic Git deployment of this commit to finish under the existing ignore rule.
-          for _ in $(seq 1 24); do
-            auto="$(curl -fsS "https://api.vercel.com/v7/deployments?projectId=${VERCEL_PROJECT_ID}&target=production&sha=${GITHUB_SHA}&limit=5&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-            n="$(jq '.deployments | length' <<<"$auto")"
-            if (( n == 0 )); then sleep 3; continue; fi
-            state="$(jq -r '.deployments[0].state // .deployments[0].readyState // empty' <<<"$auto")"
-            case "$state" in READY|CANCELED|ERROR) break ;; *) sleep 3 ;; esac
-          done
+          compare(){ local label="$1" sql="$2" s t; s="$(scalar "$SOURCE_DATABASE_URL" "$sql")"; t="$(scalar "$TARGET_DATABASE_URL" "$sql")"; echo "$label source=$s target=$t"; [[ "$s" == "$t" ]] || exit 31; }
+          compare 'Auth users' "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)"
+          compare 'Auth identities' "select count(*) from auth.identities where user_id in (select user_id from public.dabbir_user_accounts)"
+          compare 'Auth MFA' "select count(*) from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts)"
+          compare 'Auth FK count' "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))"
+
+          curl -fsS "$SOURCE_SUPABASE_URL/storage/v1/object/dabbir-owner-live/owner-truth-v3.html" -H "apikey: $SOURCE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SOURCE_SERVICE_ROLE_KEY" -o "$RUNNER_TEMP/source-object.bin"
+          curl -fsS "$TARGET_SUPABASE_URL/storage/v1/object/dabbir-owner-live/owner-truth-v3.html" -H "apikey: $TARGET_SERVICE_ROLE_KEY" -H "Authorization: Bearer $TARGET_SERVICE_ROLE_KEY" -o "$RUNNER_TEMP/target-object.bin"
+          [[ "$(sha256sum "$RUNNER_TEMP/source-object.bin" | cut -d' ' -f1)" == "$(sha256sum "$RUNNER_TEMP/target-object.bin" | cut -d' ' -f1)" ]] || { echo 'ERROR: Storage SHA-256 mismatch'; exit 32; }
+          echo 'PASS: Auth + Storage verified.'
 
           alias_json="$(curl -fsS "https://api.vercel.com/v4/aliases/${PRODUCTION_HOST}?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           PREVIOUS_DEPLOYMENT="$(jq -r '.deploymentId // .deployment.id // empty' <<<"$alias_json")"
           test -n "$PREVIOUS_DEPLOYMENT" || { echo 'ERROR: production alias unresolved'; exit 40; }
           echo "Rollback deployment captured: $PREVIOUS_DEPLOYMENT"
 
-          project_json="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          ORIGINAL_IGNORE="$(jq -r '.commandForIgnoringBuildStep // empty' <<<"$project_json")"
           env_json="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           while IFS= read -r value; do test -z "$value" || echo "::add-mask::$value"; done < <(jq -r '.envs[] | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY" or .key=="DABBIR_OWNER_BROKER_URL") | .value // empty' <<<"$env_json")
           jq '[.envs[] | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY" or .key=="DABBIR_OWNER_BROKER_URL") | {id,key,value,type,target,gitBranch,customEnvironmentIds,comment}]' <<<"$env_json" > "$RUNNER_TEMP/original-env.json"
           jq '[.[].id]' "$RUNNER_TEMP/original-env.json" > "$RUNNER_TEMP/original-ids.json"
 
-          IGNORE_CHANGED=0; ENV_CHANGED=0; PROMOTED=0
-          restore_ignore(){
-            [[ "$IGNORE_CHANGED" == 1 ]] || return 0
-            if [[ -n "$ORIGINAL_IGNORE" ]]; then body="$(jq -nc --arg v "$ORIGINAL_IGNORE" '{commandForIgnoringBuildStep:$v}')"; else body='{"commandForIgnoringBuildStep":null}'; fi
-            curl -sS -X PATCH "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body" >/dev/null || true
-          }
+          ENV_CHANGED=0; PROMOTED=0
           restore_env(){
             [[ "$ENV_CHANGED" == 1 ]] || return 0
             current_env="$(curl -sS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
             jq -r --slurpfile orig "$RUNNER_TEMP/original-ids.json" '.envs[] | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY" or .key=="DABBIR_OWNER_BROKER_URL") | . as $e | select(($orig[0] | index($e.id)) == null) | $e.id' <<<"$current_env" > "$RUNNER_TEMP/new-env-ids.txt"
-            while IFS= read -r id; do [[ -n "$id" ]] || continue; curl -sS -X DELETE "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null || true; done < "$RUNNER_TEMP/new-env-ids.txt"
+            while IFS= read -r id; do
+              [[ -n "$id" ]] || continue
+              curl -sS -X DELETE "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null || true
+            done < "$RUNNER_TEMP/new-env-ids.txt"
             while IFS= read -r entry; do
-              id="$(jq -r '.id' <<<"$entry")"; body="$(jq 'del(.id) | with_entries(select(.value != null))' <<<"$entry")"
+              id="$(jq -r '.id' <<<"$entry")"
+              body="$(jq 'del(.id) | with_entries(select(.value != null))' <<<"$entry")"
               curl -sS -X PATCH "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body" >/dev/null || true
             done < <(jq -c '.[]' "$RUNNER_TEMP/original-env.json")
           }
           rollback(){
             code=$?; trap - ERR; set +e
             echo "ROLLBACK: Mumbai cutover aborted (exit=$code)."
-            if [[ "$PROMOTED" == 1 ]]; then curl -sS -X POST "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/rollback/${PREVIOUS_DEPLOYMENT}?teamId=${VERCEL_TEAM_ID}&description=DABBIR%20Mumbai%20cutover%20rollback" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null || true; fi
-            restore_env; restore_ignore; exit "$code"
+            if [[ "$PROMOTED" == 1 ]]; then
+              curl -sS -X POST "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/rollback/${PREVIOUS_DEPLOYMENT}?teamId=${VERCEL_TEAM_ID}&description=DABBIR%20Mumbai%20cutover%20rollback" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null || true
+            fi
+            restore_env
+            exit "$code"
           }
           trap rollback ERR
-
-          patch_http="$(curl -sS -o "$RUNNER_TEMP/project-patch.json" -w '%{http_code}' -X PATCH "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data '{"commandForIgnoringBuildStep":"exit 1"}')"
-          [[ "$patch_http" =~ ^2 ]] || { echo "ERROR: could not temporarily enable builds status=$patch_http"; exit 41; }
-          IGNORE_CHANGED=1
 
           OWNER_BROKER_URL="${TARGET_SUPABASE_URL}/functions/v1/dabbir-owner-broker"
           jq -n --arg url "$TARGET_SUPABASE_URL" --arg pub "$TARGET_PUBLISHABLE_KEY" --arg srv "$TARGET_SERVICE_ROLE_KEY" --arg broker "$OWNER_BROKER_URL" '[
@@ -154,7 +160,7 @@ jobs:
           [[ "$prod_url" == "$TARGET_SUPABASE_URL" && "$preview_url" == "$TARGET_SUPABASE_URL" ]] || { echo 'ERROR: Mumbai env binding failed'; exit 43; }
           echo 'PASS: Mumbai environment bound to preview + production.'
 
-          deploy_body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
+          deploy_body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,withLatestCommit:true,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"},projectSettings:{commandForIgnoringBuildStep:"exit 1"}}')"
           deploy_http="$(curl -sS -o "$RUNNER_TEMP/deploy.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$deploy_body")"
           [[ "$deploy_http" =~ ^2 ]] || { echo "ERROR: preview deployment create status=$deploy_http"; jq -r '.error.code // .code // empty' "$RUNNER_TEMP/deploy.json"; exit 50; }
           NEW_DEPLOYMENT="$(jq -r '.id // empty' "$RUNNER_TEMP/deploy.json")"; NEW_URL="$(jq -r '.url // empty' "$RUNNER_TEMP/deploy.json")"
@@ -165,7 +171,7 @@ jobs:
           for _ in $(seq 1 120); do
             d="$(curl -fsS "https://api.vercel.com/v13/deployments/${NEW_DEPLOYMENT}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
             state="$(jq -r '.readyState // .status // empty' <<<"$d")"
-            case "$state" in READY) ready=1; break ;; ERROR|CANCELED) echo "ERROR: preview state=$state"; exit 52 ;; esac
+            case "$state" in READY) ready=1; break ;; ERROR|CANCELED) echo "ERROR: preview state=$state"; jq -r '.errorCode // .errorMessage // .errorLink // empty' <<<"$d"; exit 52 ;; esac
             sleep 5
           done
           [[ "$ready" == 1 ]] || { echo 'ERROR: preview readiness timeout'; exit 53; }
@@ -199,7 +205,6 @@ jobs:
           admin_status="$(curl -sS -o "$RUNNER_TEMP/admin.json" -w '%{http_code}' "https://${PRODUCTION_HOST}/api/platform-customers?action=overview")"
           [[ "$admin_status" == 401 ]] || { echo "ERROR: production admin fail-closed status=$admin_status"; exit 65; }
 
-          restore_ignore; IGNORE_CHANGED=0
           trap - ERR
           echo "PASS DABBIR_MUMBAI_CUTOVER deployment=$NEW_DEPLOYMENT tables=123 auth=56 storage=verified preview=passed production=passed rollback_source=$PREVIOUS_DEPLOYMENT"
           echo 'Sydney remains online only as rollback source; it was not paused or deleted.'
