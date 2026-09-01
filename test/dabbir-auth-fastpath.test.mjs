@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { getBusinessMemberships, userClaimsFromValidatedAccessToken } from '../api/_auth-core.js';
+import { SUPABASE_AUTH_URL, getBusinessMemberships, userClaimsFromValidatedAccessToken } from '../api/_auth-core.js';
 
 const root = new URL('../', import.meta.url);
 const runtimeSource = await readFile(new URL('api/dabbir-runtime-fast.js', root), 'utf8');
@@ -9,6 +9,7 @@ const authSource = await readFile(new URL('api/_auth-core.js', root), 'utf8');
 
 const now = 1_800_000_000;
 const userId = '11111111-1111-4111-8111-111111111111';
+const expectedIssuer = `${SUPABASE_AUTH_URL}/auth/v1`;
 
 function token(payload) {
   const header = Buffer.from(JSON.stringify({ alg: 'ES256', typ: 'JWT' })).toString('base64url');
@@ -18,7 +19,7 @@ function token(payload) {
 
 function validPayload(overrides = {}) {
   return {
-    iss: 'https://spohjzrsymsmzsseygtw.supabase.co/auth/v1',
+    iss: expectedIssuer,
     sub: userId,
     role: 'authenticated',
     aud: 'authenticated',
