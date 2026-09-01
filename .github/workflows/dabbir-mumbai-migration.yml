@@ -39,8 +39,8 @@ jobs:
           echo "::add-mask::$TARGET_SERVICE_ROLE_KEY"
 
           vault_json="$(curl -fsS -X POST "${TARGET_SUPABASE_URL}/rest/v1/rpc/dabbir_stripe_sandbox_runtime_secrets_v1" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}" -H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H 'Content-Type: application/json' --data '{}')"
-          jq -e 'type=="array" and length==1 and .[0].secret_key|startswith("sk_test_")' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox API key is not available from Mumbai Vault'; exit 30; }
-          jq -e 'type=="array" and length==1 and .[0].webhook_secret|startswith("whsec_")' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox webhook secret is not available from Mumbai Vault'; exit 31; }
+          jq -e 'type=="array" and length==1 and (((.[0].secret_key // "")|tostring)|startswith("sk_test_"))' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox API key is not available from Mumbai Vault'; exit 30; }
+          jq -e 'type=="array" and length==1 and (((.[0].webhook_secret // "")|tostring)|startswith("whsec_"))' <<<"$vault_json" >/dev/null || { echo 'ERROR: sandbox webhook secret is not available from Mumbai Vault'; exit 31; }
           echo 'PASS: Mumbai Vault exposes test-only Stripe secrets to service_role.'
 
           checkout_payload='{"action":"dabbir_portal","business_id":"00000000-0000-4000-8000-000000000001","return_origin":"https://dabbir.bmalman.com","stripe_customer_id":"cus_DABBIRNonexistent"}'
