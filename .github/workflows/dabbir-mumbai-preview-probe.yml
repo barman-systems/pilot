@@ -26,9 +26,9 @@ jobs:
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || exit 10
           echo "::add-mask::$VERCEL_TOKEN"
-          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" --arg ref "$CUTOVER_BRANCH" '{name:"dabbir",project:$project,withLatestCommit:true,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:$ref},projectSettings:{commandForIgnoringBuildStep:"exit 1"}}')"
+          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" --arg ref "$CUTOVER_BRANCH" '{name:"dabbir",project:$project,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:$ref},projectSettings:{commandForIgnoringBuildStep:"exit 1"}}')"
           status="$(curl -sS -o "$RUNNER_TEMP/deploy.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body")"
-          [[ "$status" =~ ^2 ]] || { echo "create_status=$status"; jq -r '.error.code // .code // empty' "$RUNNER_TEMP/deploy.json"; exit 20; }
+          [[ "$status" =~ ^2 ]] || { echo "create_status=$status"; jq -r '.error.code // .code // empty, .error.message // .message // empty' "$RUNNER_TEMP/deploy.json"; exit 20; }
           id="$(jq -r '.id // empty' "$RUNNER_TEMP/deploy.json")"
           url="$(jq -r '.url // empty' "$RUNNER_TEMP/deploy.json")"
           echo "preview_id=$id"
