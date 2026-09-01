@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "fluid": true,
-  "regions": ["syd1"],
+  "regions": ["dub1"],
+  "functionFailoverRegions": ["fra1"],
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com"
