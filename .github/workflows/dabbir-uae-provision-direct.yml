@@ -1,0 +1,64 @@
+name: DABBIR UAE Provision Direct
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-uae-provision-direct.yml'
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  provision:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: dabbir-direct-${{ github.run_id }}
+      - name: Add provisioning expansion policy directly
+        run: |
+          set -euo pipefail
+          cat >/tmp/expansion.json <<'JSON'
+          {
+            "Version":"2012-10-17",
+            "Statement":[
+              {"Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:GetParametersByPath"],"Resource":"*"},
+              {"Effect":"Allow","Action":["ec2:Describe*","ec2:RunInstances","ec2:TerminateInstances","ec2:StartInstances","ec2:StopInstances","ec2:ModifyInstanceAttribute","ec2:CreateVolume","ec2:DeleteVolume","ec2:AttachVolume","ec2:DetachVolume","ec2:ModifyVolume","ec2:AllocateAddress","ec2:ReleaseAddress","ec2:AssociateAddress","ec2:DisassociateAddress","ec2:CreateVpc","ec2:DeleteVpc","ec2:ModifyVpcAttribute","ec2:CreateSubnet","ec2:DeleteSubnet","ec2:ModifySubnetAttribute","ec2:CreateInternetGateway","ec2:DeleteInternetGateway","ec2:AttachInternetGateway","ec2:DetachInternetGateway","ec2:CreateRouteTable","ec2:DeleteRouteTable","ec2:AssociateRouteTable","ec2:DisassociateRouteTable","ec2:CreateRoute","ec2:DeleteRoute","ec2:CreateSecurityGroup","ec2:DeleteSecurityGroup","ec2:AuthorizeSecurityGroupIngress","ec2:AuthorizeSecurityGroupEgress","ec2:RevokeSecurityGroupIngress","ec2:RevokeSecurityGroupEgress","ec2:CreateTags","ec2:DeleteTags"],"Resource":"*"},
+              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:PutRolePolicy","iam:DeleteRolePolicy","iam:GetRolePolicy","iam:ListRolePolicies","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:CreateInstanceProfile","iam:DeleteInstanceProfile","iam:GetInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:PassRole"],"Resource":"*"},
+              {"Effect":"Allow","Action":["backup:CreateBackupVault","backup:DeleteBackupVault","backup:DescribeBackupVault","backup:ListBackupVaults","backup:CreateBackupPlan","backup:UpdateBackupPlan","backup:DeleteBackupPlan","backup:GetBackupPlan","backup:ListBackupPlans","backup:CreateBackupSelection","backup:UpdateBackupSelection","backup:DeleteBackupSelection","backup:GetBackupSelection","backup:ListBackupSelections","backup:ListTags","backup:TagResource","backup:UntagResource"],"Resource":"*"}
+            ]
+          }
+          JSON
+          aws iam put-role-policy \
+            --role-name DabbirGithubDeployRole \
+            --policy-name DabbirProvisioningBootstrapExpansion \
+            --policy-document file:///tmp/expansion.json
+          sleep 5
+          aws iam get-role-policy \
+            --role-name DabbirGithubDeployRole \
+            --policy-name DabbirProvisioningBootstrapExpansion >/dev/null
+      - name: Validate infrastructure template
+        run: aws cloudformation validate-template --template-body file://infra/aws-uae/dabbir-uae.yml >/tmp/validation.json
+      - name: Deploy DABBIR UAE infrastructure
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name dabbir-prod-uae \
+            --template-file infra/aws-uae/dabbir-uae.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+      - name: Capture evidence
+        run: |
+          set -euo pipefail
+          aws cloudformation describe-stacks \
+            --stack-name dabbir-prod-uae \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output json | tee /tmp/evidence.json
+          jq -e '.Status == "CREATE_COMPLETE" or .Status == "UPDATE_COMPLETE"' /tmp/evidence.json >/dev/null
