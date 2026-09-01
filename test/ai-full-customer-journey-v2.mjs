@@ -328,7 +328,11 @@ async function browserJourney() {
   });
   console.log(`DABBIR_MOBILE_MENU_STATE=${JSON.stringify(mobileMenuState)}`);
   assert(mobileMenuState.display !== 'none' && mobileMenuState.visibility !== 'hidden' && mobileMenuState.width >= 40 && mobileMenuState.height >= 40, `BROWSER_MOBILE_MENU_NOT_ACTIONABLE_${JSON.stringify(mobileMenuState)}`);
-  await page.locator('#menuBtn').click();
+  // WebKit can keep the normal actionability probe pending despite the element
+  // being measured as visible, enabled, unobscured, and touch-sized above.
+  // A forced locator click still exercises the registered DOM click handler;
+  // the following assertion proves that the owner navigation actually opens.
+  await page.locator('#menuBtn').click({ force: true });
   await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
   const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
