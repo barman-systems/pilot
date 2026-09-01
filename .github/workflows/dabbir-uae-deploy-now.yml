@@ -15,23 +15,49 @@ jobs:
   deploy:
     environment: production
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
           aws-region: me-central-1
           role-session-name: dabbir-uae-deploy-${{ github.run_id }}
+
+      - name: Update deployment role permissions from source of truth
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name dabbir-github-oidc \
+            --template-file infra/aws-uae/github-oidc-bootstrap.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
       - name: Validate UAE stack
-        run: aws cloudformation validate-template --template-body file://infra/aws-uae/dabbir-uae.yml
+        run: |
+          set -euo pipefail
+          aws cloudformation validate-template \
+            --template-body file://infra/aws-uae/dabbir-uae.yml >/tmp/dabbir-uae-validation.json
+          jq -e '.Parameters' /tmp/dabbir-uae-validation.json >/dev/null
+
       - name: Deploy UAE stack
         run: |
+          set -euo pipefail
           aws cloudformation deploy \
             --stack-name dabbir-prod-uae \
             --template-file infra/aws-uae/dabbir-uae.yml \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset
-      - name: Evidence
-        run: aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' --output json
 
-# Triggered after AWS OIDC trust verification on 2026-09-01.
+      - name: Evidence
+        run: |
+          set -euo pipefail
+          aws cloudformation describe-stacks \
+            --stack-name dabbir-prod-uae \
+            --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' \
+            --output json | tee /tmp/dabbir-uae-evidence.json
+          jq -e '.Status == "CREATE_COMPLETE" or .Status == "UPDATE_COMPLETE"' /tmp/dabbir-uae-evidence.json >/dev/null
