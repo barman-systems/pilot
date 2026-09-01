@@ -32,7 +32,9 @@ jobs:
               {"Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters","ssm:GetParametersByPath"],"Resource":"*"},
               {"Effect":"Allow","Action":["ec2:Describe*","ec2:RunInstances","ec2:TerminateInstances","ec2:StartInstances","ec2:StopInstances","ec2:ModifyInstanceAttribute","ec2:CreateVolume","ec2:DeleteVolume","ec2:AttachVolume","ec2:DetachVolume","ec2:ModifyVolume","ec2:AllocateAddress","ec2:ReleaseAddress","ec2:AssociateAddress","ec2:DisassociateAddress","ec2:CreateVpc","ec2:DeleteVpc","ec2:ModifyVpcAttribute","ec2:CreateSubnet","ec2:DeleteSubnet","ec2:ModifySubnetAttribute","ec2:CreateInternetGateway","ec2:DeleteInternetGateway","ec2:AttachInternetGateway","ec2:DetachInternetGateway","ec2:CreateRouteTable","ec2:DeleteRouteTable","ec2:AssociateRouteTable","ec2:DisassociateRouteTable","ec2:CreateRoute","ec2:DeleteRoute","ec2:CreateSecurityGroup","ec2:DeleteSecurityGroup","ec2:AuthorizeSecurityGroupIngress","ec2:AuthorizeSecurityGroupEgress","ec2:RevokeSecurityGroupIngress","ec2:RevokeSecurityGroupEgress","ec2:CreateTags","ec2:DeleteTags"],"Resource":"*"},
               {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:PutRolePolicy","iam:DeleteRolePolicy","iam:GetRolePolicy","iam:ListRolePolicies","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:CreateInstanceProfile","iam:DeleteInstanceProfile","iam:GetInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:PassRole"],"Resource":"*"},
-              {"Effect":"Allow","Action":["backup:CreateBackupVault","backup:DeleteBackupVault","backup:DescribeBackupVault","backup:ListBackupVaults","backup:CreateBackupPlan","backup:UpdateBackupPlan","backup:DeleteBackupPlan","backup:GetBackupPlan","backup:ListBackupPlans","backup:CreateBackupSelection","backup:UpdateBackupSelection","backup:DeleteBackupSelection","backup:GetBackupSelection","backup:ListBackupSelections","backup:ListTags","backup:TagResource","backup:UntagResource"],"Resource":"*"}
+              {"Effect":"Allow","Action":["backup:CreateBackupVault","backup:DeleteBackupVault","backup:DescribeBackupVault","backup:ListBackupVaults","backup:CreateBackupPlan","backup:UpdateBackupPlan","backup:DeleteBackupPlan","backup:GetBackupPlan","backup:ListBackupPlans","backup:CreateBackupSelection","backup:UpdateBackupSelection","backup:DeleteBackupSelection","backup:GetBackupSelection","backup:ListBackupSelections","backup:ListTags","backup:TagResource","backup:UntagResource"],"Resource":"*"},
+              {"Effect":"Allow","Action":["backup-storage:MountCapsule"],"Resource":"*"},
+              {"Effect":"Allow","Action":["kms:CreateGrant","kms:DescribeKey","kms:RetireGrant","kms:Decrypt","kms:GenerateDataKey"],"Resource":"*"}
             ]
           }
           JSON
@@ -44,6 +46,45 @@ jobs:
           aws iam get-role-policy \
             --role-name DabbirGithubDeployRole \
             --policy-name DabbirProvisioningBootstrapExpansion >/dev/null
+      - name: Recover failed or incomplete stack automatically
+        run: |
+          set -euo pipefail
+          stack_status() {
+            aws cloudformation describe-stacks \
+              --stack-name dabbir-prod-uae \
+              --query 'Stacks[0].StackStatus' \
+              --output text 2>/dev/null || echo MISSING
+          }
+          status="$(stack_status)"
+          for _ in $(seq 1 60); do
+            case "$status" in
+              *_IN_PROGRESS|REVIEW_IN_PROGRESS)
+                echo "Waiting for existing stack operation: $status"
+                sleep 10
+                status="$(stack_status)"
+                ;;
+              *) break ;;
+            esac
+          done
+          case "$status" in
+            ROLLBACK_COMPLETE|ROLLBACK_FAILED|CREATE_FAILED|UPDATE_ROLLBACK_COMPLETE|UPDATE_ROLLBACK_FAILED)
+              echo "Deleting failed stack in state $status"
+              aws cloudformation delete-stack --stack-name dabbir-prod-uae
+              aws cloudformation wait stack-delete-complete --stack-name dabbir-prod-uae
+              ;;
+            DELETE_FAILED)
+              echo "Retrying deletion of stack in DELETE_FAILED"
+              aws cloudformation delete-stack --stack-name dabbir-prod-uae
+              aws cloudformation wait stack-delete-complete --stack-name dabbir-prod-uae
+              ;;
+            MISSING|CREATE_COMPLETE|UPDATE_COMPLETE)
+              echo "Stack preflight state: $status"
+              ;;
+            *)
+              echo "Unexpected stack state after wait: $status" >&2
+              exit 3
+              ;;
+          esac
       - name: Validate infrastructure template
         run: aws cloudformation validate-template --template-body file://infra/aws-uae/dabbir-uae.yml >/tmp/validation.json
       - name: Deploy DABBIR UAE infrastructure
