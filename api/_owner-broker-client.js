@@ -1,6 +1,7 @@
 import { parseCookies } from './_auth-core.js';
-const SHARED_BROKER_FALLBACK='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/bm-secret-broker';
-const BROKER_URL=String(process.env.DABBIR_SECRET_BROKER_URL||SHARED_BROKER_FALLBACK).replace(/\/$/,'');
+const LEGACY_SUPABASE_URL='https://spohjzrsymsmzsseygtw.supabase.co';
+const SUPABASE_URL=String(process.env.SUPABASE_URL||LEGACY_SUPABASE_URL).replace(/\/$/,'');
+const BROKER_URL=String(process.env.DABBIR_OWNER_BROKER_URL||`${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/,'');
 const SESSION_COOKIE='__Host-dabbir_owner_session';
 export function ownerSessionToken(req){return parseCookies(req.headers.cookie||'')[SESSION_COOKIE]||null}
 export async function ownerBroker(req,data_action,extra={}){
