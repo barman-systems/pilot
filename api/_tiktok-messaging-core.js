@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { tiktokPilotConfig } from './_tiktok-pilot-core.js';
 
-const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const TIKTOK_BASE = 'https://business-api.tiktok.com/open_api/v1.3';
 
 function clean(value, max = 6000) {
