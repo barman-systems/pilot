@@ -1,0 +1,45 @@
+name: DABBIR AWS Infrastructure CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/aws-uae/**'
+      - '.github/workflows/dabbir-aws-infra-ci.yml'
+  pull_request:
+    paths:
+      - 'infra/aws-uae/**'
+      - '.github/workflows/dabbir-aws-infra-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/aws-uae/db/migrate-dabbir-to-rds.sh
+          bash -n infra/aws-uae/verify-dabbir-migration.sh
+          bash -n infra/aws-uae/verify-rds-runtime.sh
+
+      - name: Node runtime syntax
+        run: node --check infra/aws-uae/runtime/server.mjs
+
+      - name: CloudFormation lint
+        run: |
+          python -m pip install --quiet cfn-lint
+          cfn-lint infra/aws-uae/dabbir-managed-foundation.yml infra/aws-uae/github-oidc-bootstrap.yml
+
+      - name: Build API runtime image
+        run: docker build --pull -f infra/aws-uae/runtime/Dockerfile -t dabbir-api:ci .
+
+      - name: Build migration image
+        run: docker build --pull -f infra/aws-uae/migration/Dockerfile -t dabbir-migration:ci .
