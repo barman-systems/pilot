@@ -57,7 +57,10 @@ jobs:
           TARGET_DATABASE_URL="postgresql://${tuser}:$(enc "$tpass")@${thost}:5432/postgres?sslmode=require"
           echo "::add-mask::$TARGET_DATABASE_URL"
 
-          result="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -v stripe_key="$STRIPE_SECRET_KEY" -v webhook_key="$STRIPE_WEBHOOK_SECRET" -c "select public.dabbir_migrate_stripe_sandbox_secrets_v1(:'stripe_key',:'webhook_key');" | tr -d '\r\n')"
+          cat > "$RUNNER_TEMP/migrate-stripe-sandbox.sql" <<'SQL'
+          select public.dabbir_migrate_stripe_sandbox_secrets_v1(:'stripe_key', :'webhook_key');
+          SQL
+          result="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -v stripe_key="$STRIPE_SECRET_KEY" -v webhook_key="$STRIPE_WEBHOOK_SECRET" -f "$RUNNER_TEMP/migrate-stripe-sandbox.sql" | tr -d '\r\n')"
           [[ "$result" == t ]] || { echo 'ERROR: Mumbai Vault secret migration did not confirm'; exit 30; }
 
           verify="$(psql "$TARGET_DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "select (secret_key like 'sk_test_%') and (webhook_secret like 'whsec_%') from public.dabbir_stripe_sandbox_runtime_secrets_v1();" | tr -d '\r\n')"
