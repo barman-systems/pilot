@@ -265,23 +265,37 @@ jobs:
             test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
             auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
           fi
-          body="$(curl --fail-with-body --silent --show-error \
-            "${auth_args[@]}" \
-            -H 'accept: application/json' \
-            "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)")"
-          sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty')"
-          deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty')"
-          environment="$(printf '%s' "$body" | jq -r '.environment // empty')"
-          project_id="$(printf '%s' "$body" | jq -r '.project_id // empty')"
-          git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty')"
-          repository="$(printf '%s' "$body" | jq -r '.repository // empty')"
-          test "$sha" = "$GITHUB_SHA"
-          test "$sha" = "${{ steps.release-before.outputs.sha }}"
-          test "$deployment" = "${{ steps.release-before.outputs.deployment }}"
-          test "$environment" = 'production'
-          test "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID"
-          test "$git_provider" = "$EXPECTED_GIT_PROVIDER"
-          test "$repository" = "$EXPECTED_GIT_REPOSITORY"
+          body=''
+          sha=''
+          deployment=''
+          for attempt in $(seq 1 12); do
+            body="$(curl --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
+            deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
+            environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
+            project_id="$(printf '%s' "$body" | jq -r '.project_id // empty' 2>/dev/null || true)"
+            git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty' 2>/dev/null || true)"
+            repository="$(printf '%s' "$body" | jq -r '.repository // empty' 2>/dev/null || true)"
+            if [ "$sha" = "$GITHUB_SHA" ] \
+              && [ "$sha" = "${{ steps.release-before.outputs.sha }}" ] \
+              && [ "$deployment" = "${{ steps.release-before.outputs.deployment }}" ] \
+              && [ "$environment" = 'production' ] \
+              && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] \
+              && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] \
+              && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ]; then
+              break
+            fi
+            sha=''
+            deployment=''
+            sleep 5
+          done
+          if [ -z "$sha" ]; then
+            echo "EXACT_PRODUCTION_RELEASE_DRIFT_OR_UNAVAILABLE expected_sha=$GITHUB_SHA body=${body:0:500}"
+            exit 3
+          fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
           echo "STABLE_EXACT_PRODUCTION_SHA=$sha deployment=$deployment"

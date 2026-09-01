@@ -39,8 +39,10 @@ test('privileged journey is main-only and cannot accept a stale Production artif
   assert.match(workflow, /EXPECTED_GIT_REPOSITORY: barman-systems\/pilot/);
   assert.match(workflow, /\[ "\$project_id" = "\$EXPECTED_VERCEL_PROJECT_ID" \]/);
   assert.match(workflow, /\[ "\$repository" = "\$EXPECTED_GIT_REPOSITORY" \]/);
-  assert.match(workflow, /test "\$sha" = "\$GITHUB_SHA"/);
-  assert.match(workflow, /test "\$deployment" = "\$\{\{ steps\.release-before\.outputs\.deployment \}\}"/);
+  assert.match(workflow, /for attempt in \$\(seq 1 12\); do/);
+  assert.match(workflow, /\[ "\$sha" = "\$GITHUB_SHA" \]/);
+  assert.match(workflow, /\[ "\$deployment" = "\$\{\{ steps\.release-before\.outputs\.deployment \}\}" \]/);
+  assert.match(workflow, /EXACT_PRODUCTION_RELEASE_DRIFT_OR_UNAVAILABLE/);
 });
 
 test('canonical release journey permanently gates tenant and WhatsApp cross-tenant isolation', () => {
