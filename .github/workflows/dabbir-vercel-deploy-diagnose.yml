@@ -25,7 +25,7 @@ jobs:
           test -n "${VERCEL_TOKEN:-}" || { echo 'BLOCKED: VERCEL_TOKEN_NOT_CONFIGURED'; exit 10; }
           echo "::add-mask::$VERCEL_TOKEN"
 
-          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,target:"preview",gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
+          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,target:"staging",gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
           status="$(curl -sS -o "$RUNNER_TEMP/vercel.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body")"
           echo "Vercel deployment HTTP status: $status"
           jq -r 'if .error then "error.code="+(.error.code//"UNKNOWN")+"\nerror.message="+(.error.message//"UNKNOWN") else "deployment.id="+(.id//"UNKNOWN")+"\nstate="+(.readyState//.status//"UNKNOWN") end' "$RUNNER_TEMP/vercel.json"
