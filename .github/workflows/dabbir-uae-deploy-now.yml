@@ -1,0 +1,32 @@
+name: DABBIR UAE Deploy Now
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-uae-deploy-now.yml'
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: dabbir-uae-deploy-${{ github.run_id }}
+      - name: Validate UAE stack
+        run: aws cloudformation validate-template --template-body file://infra/aws-uae/dabbir-uae.yml
+      - name: Deploy UAE stack
+        run: |
+          aws cloudformation deploy \
+            --stack-name dabbir-prod-uae \
+            --template-file infra/aws-uae/dabbir-uae.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+      - name: Evidence
+        run: aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query 'Stacks[0].{Status:StackStatus,Outputs:Outputs}' --output json
