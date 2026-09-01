@@ -1,0 +1,103 @@
+name: DABBIR AWS UAE Managed Foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      database_instance_class:
+        description: RDS PostgreSQL instance class
+        required: true
+        default: db.t4g.small
+        type: string
+      multi_az:
+        description: Enable RDS Multi-AZ
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: dabbir-aws-uae-foundation-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-foundation:
+    name: Deploy managed UAE foundation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Require AWS OIDC role
+        shell: bash
+        env:
+          ROLE_ARN: ${{ secrets.AWS_DABBIR_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test -n "$ROLE_ARN" || {
+            echo 'AWS_DABBIR_DEPLOY_ROLE_ARN is not configured in the production environment.'
+            exit 2
+          }
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DABBIR_DEPLOY_ROLE_ARN }}
+          aws-region: me-central-1
+          role-session-name: dabbir-foundation-${{ github.run_id }}
+
+      - name: Verify AWS identity and UAE region
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity
+          test "${AWS_REGION}" = 'me-central-1'
+
+      - name: Validate CloudFormation template
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation validate-template \
+            --template-body file://infra/aws-uae/dabbir-managed-foundation.yml >/tmp/dabbir-template-validation.json
+          jq -e '.Parameters' /tmp/dabbir-template-validation.json >/dev/null
+
+      - name: Deploy managed foundation
+        shell: bash
+        env:
+          DB_INSTANCE_CLASS: ${{ inputs.database_instance_class }}
+          MULTI_AZ: ${{ inputs.multi_az }}
+        run: |
+          set -euo pipefail
+          if [ "$MULTI_AZ" = 'true' ]; then
+            multi_az_value=true
+          else
+            multi_az_value=false
+          fi
+
+          aws cloudformation deploy \
+            --region me-central-1 \
+            --stack-name dabbir-managed-foundation \
+            --template-file infra/aws-uae/dabbir-managed-foundation.yml \
+            --parameter-overrides \
+              EnvironmentName=dabbir-prod \
+              DatabaseInstanceClass="$DB_INSTANCE_CLASS" \
+              MultiAZ="$multi_az_value" \
+            --no-fail-on-empty-changeset \
+            --tags App=DABBIR Environment=production ManagedBy=GitHubOIDC
+
+      - name: Capture deployment evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation describe-stacks \
+            --region me-central-1 \
+            --stack-name dabbir-managed-foundation \
+            --query 'Stacks[0].{Status:StackStatus,Created:CreationTime,Updated:LastUpdatedTime,Outputs:Outputs}' \
+            --output json | tee /tmp/dabbir-foundation-evidence.json
+          jq -e '.Status == "CREATE_COMPLETE" or .Status == "UPDATE_COMPLETE"' /tmp/dabbir-foundation-evidence.json >/dev/null
