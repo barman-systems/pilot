@@ -22,8 +22,6 @@ urlpath(){ python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.arg
 api_headers_source=(-H "Authorization: Bearer ${SOURCE_SERVICE_ROLE_KEY}" -H "apikey: ${SOURCE_SERVICE_ROLE_KEY}")
 api_headers_target=(-H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}")
 
-# Only buckets owned by DABBIR naming are transferred. Current audited set is
-# dabbir-owner-live and dabbir-car-wash-evidence; the query re-discovers at cutover.
 src -c "select json_build_object('id',id,'name',name,'public',public,'file_size_limit',file_size_limit,'allowed_mime_types',allowed_mime_types)::text from storage.buckets where id like 'dabbir-%' order by id" > "$WORKDIR/buckets.jsonl"
 
 bucket_count=$(grep -c . "$WORKDIR/buckets.jsonl" || true)
@@ -33,17 +31,16 @@ while IFS= read -r bucket_json; do
   [[ -n "$bucket_json" ]] || continue
   bucket="$(jq -r '.id' <<<"$bucket_json")"
   [[ "$bucket" =~ ^dabbir-[a-z0-9-]+$ ]] || { echo "Unsafe bucket id: $bucket" >&2; exit 3; }
-  # Fresh target is expected. A pre-existing bucket is treated as a failed clean-room migration.
-  if curl -sS -o /dev/null -w '%{http_code}' "${TARGET_SUPABASE_URL}/storage/v1/bucket/${bucket}" "${api_headers_target[@]}" | grep -q '^200$'; then
-    echo "Target bucket already exists: $bucket" >&2; exit 4
-  fi
+
+  target_bucket_exists="$(tgt -c "select count(*) from storage.buckets where id='${bucket}'" | tr -d '[:space:]')"
+  [[ "$target_bucket_exists" == "0" ]] || { echo "Target bucket already exists: $bucket" >&2; exit 4; }
+
   curl -fsS -X POST "${TARGET_SUPABASE_URL}/storage/v1/bucket" \
     "${api_headers_target[@]}" -H 'content-type: application/json' \
     --data-binary "$bucket_json" >/dev/null
   echo "CREATED bucket $bucket"
 done < "$WORKDIR/buckets.jsonl"
 
-# Copy each DABBIR object and prove byte-for-byte equality by SHA-256 after re-download.
 src -c "select json_build_object('bucket_id',bucket_id,'name',name,'mimetype',coalesce(metadata->>'mimetype','application/octet-stream'),'cache_control',coalesce(metadata->>'cacheControl','3600'),'size',coalesce((metadata->>'size')::bigint,0))::text from storage.objects where bucket_id like 'dabbir-%' order by bucket_id,name" > "$WORKDIR/objects.jsonl"
 
 object_count=0
@@ -54,12 +51,14 @@ while IFS= read -r object_json; do
   name="$(jq -r '.name' <<<"$object_json")"
   mimetype="$(jq -r '.mimetype' <<<"$object_json")"
   cache_control="$(jq -r '.cache_control' <<<"$object_json")"
+  expected_size="$(jq -r '.size' <<<"$object_json")"
   encoded="$(urlpath "$name")"
   src_file="$WORKDIR/source-${object_count}.bin"
   dst_file="$WORKDIR/target-${object_count}.bin"
 
   curl -fsS "${SOURCE_SUPABASE_URL}/storage/v1/object/${bucket}/${encoded}" \
     "${api_headers_source[@]}" -o "$src_file"
+  [[ "$(stat -c '%s' "$src_file")" == "$expected_size" ]] || { echo "Source object size mismatch: $bucket/$name" >&2; exit 5; }
 
   curl -fsS -X POST "${TARGET_SUPABASE_URL}/storage/v1/object/${bucket}/${encoded}" \
     "${api_headers_target[@]}" \
@@ -70,12 +69,11 @@ while IFS= read -r object_json; do
     "${api_headers_target[@]}" -o "$dst_file"
 
   [[ "$(sha256sum "$src_file" | cut -d' ' -f1)" == "$(sha256sum "$dst_file" | cut -d' ' -f1)" ]] || {
-    echo "Storage byte mismatch: $bucket/$name" >&2; exit 5;
+    echo "Storage byte mismatch: $bucket/$name" >&2; exit 6;
   }
   echo "PASS object $bucket/$name"
 done < "$WORKDIR/objects.jsonl"
 
-# Recreate only DABBIR-specific policies on storage objects/buckets; unrelated project policies stay behind.
 src > "$WORKDIR/storage-policies.sql" <<'SQL'
 select format(
   'create policy %I on %I.%I as %s for %s to %s%s%s;',
@@ -98,7 +96,7 @@ target_buckets="$(tgt -c "select count(*) from storage.buckets where id like 'da
 source_objects="$(src -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
 target_objects="$(tgt -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
 [[ "$source_buckets" == "$target_buckets" && "$source_objects" == "$target_objects" ]] || {
-  echo "Storage count mismatch source buckets/objects=${source_buckets}/${source_objects} target=${target_buckets}/${target_objects}" >&2; exit 6;
+  echo "Storage count mismatch source buckets/objects=${source_buckets}/${source_objects} target=${target_buckets}/${target_objects}" >&2; exit 7;
 }
 
 echo "PASS: DABBIR Storage migrated: buckets=$target_buckets objects=$target_objects"
