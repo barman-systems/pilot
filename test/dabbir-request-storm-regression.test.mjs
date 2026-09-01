@@ -17,3 +17,13 @@ test('calendar connection endpoint only logs server failures as errors', async (
   assert.match(source, /if\(status>=500\) console\.error\('dabbir_calendar_connections_failed'/);
   assert.doesNotMatch(source, /catch\(error\)\{\s*console\.error\('dabbir_calendar_connections_failed'/);
 });
+
+test('calendar live UI coalesces passive sync and backs off expected auth failures', async () => {
+  const source = await read('api/calendar-live-ui.js');
+  assert.match(source, /AUTH_BACKOFF_MS=60\*1000/);
+  assert.match(source, /let syncInFlight=null,forceQueued=false,passiveSyncTimer=null;/);
+  assert.match(source, /if\(syncInFlight\)\{if\(force\)forceQueued=true;return syncInFlight\}/);
+  assert.match(source, /connectionBlockedUntil=Date\.now\(\)\+AUTH_BACKOFF_MS/);
+  assert.match(source, /const observer=new MutationObserver\(schedulePassiveSync\)/);
+  assert.match(source, /lastBusyLoadAt<PASSIVE_CACHE_MS/);
+});
