@@ -37,7 +37,7 @@
     },
     {
       "src": "^/terms/?$",
-      "dest": "/privacy.html"
+      "dest": "/terms.html"
     },
     {
       "src": "^/support/?$",
