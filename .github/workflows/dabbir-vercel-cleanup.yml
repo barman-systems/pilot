@@ -1,0 +1,48 @@
+name: DABBIR Vercel Cutover Cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dabbir-vercel-cleanup.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      EXPECTED_PRODUCTION_DEPLOYMENT: dpl_DznyZWkcRnMZo7GZRhvUjek2CWrK
+    steps:
+      - name: Restore pre-cutover Vercel state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo 'BLOCKED: VERCEL_TOKEN_NOT_CONFIGURED'; exit 10; }
+          echo "::add-mask::$VERCEL_TOKEN"
+
+          env_json="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          printf '%s\n' "$env_json" | jq -r '.envs[] | select((.target // []) | index("production")) | select(.key=="SUPABASE_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY") | [.id,.key] | @tsv' > "$RUNNER_TEMP/to-delete.tsv"
+
+          while IFS=$'\t' read -r id key; do
+            [[ -z "${id:-}" ]] && continue
+            echo "Deleting cutover-created Production env: $key"
+            curl -fsS -X DELETE "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env/${id}?teamId=${VERCEL_TEAM_ID}" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null
+          done < "$RUNNER_TEMP/to-delete.tsv"
+
+          verify_env="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          remaining="$(printf '%s\n' "$verify_env" | jq '[.envs[] | select((.target // []) | index("production")) | select(.key=="SUPABASE_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY")] | length')"
+          [[ "$remaining" == 0 ]] || { echo "ERROR: $remaining cutover-created Production Supabase env(s) still remain"; exit 20; }
+
+          project_json="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          current="$(printf '%s\n' "$project_json" | jq -r '.latestDeployments[0].id // .latestDeployment.id // empty')"
+          echo "Current production deployment: $current"
+          [[ "$current" == "$EXPECTED_PRODUCTION_DEPLOYMENT" ]] || { echo 'ERROR: production deployment changed unexpectedly'; exit 21; }
+
+          echo 'PASS DABBIR_VERCEL_PRECUTOVER_STATE_RESTORED envs=clean production_deployment=unchanged'
