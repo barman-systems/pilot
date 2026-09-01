@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Managed Supabase migration wrapper: preserves DABBIR Auth and replays only the
+# 43 DABBIR foreign keys that reference the managed auth.users table.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATE_SCRIPT="${SCRIPT_DIR}/migrate-db.sh"
 
