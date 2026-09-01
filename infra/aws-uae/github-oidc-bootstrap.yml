@@ -66,7 +66,15 @@ Resources:
                   - cloudformation:DeleteChangeSet
                 Resource: '*'
 
-              - Sid: DabbirNetwork
+              - Sid: ReadAmiParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: '*'
+
+              - Sid: DabbirEc2AndNetwork
                 Effect: Allow
                 Action:
                   - ec2:CreateVpc
@@ -92,8 +100,78 @@ Resources:
                   - ec2:AuthorizeSecurityGroupEgress
                   - ec2:RevokeSecurityGroupIngress
                   - ec2:RevokeSecurityGroupEgress
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                  - ec2:ModifyInstanceAttribute
+                  - ec2:CreateVolume
+                  - ec2:DeleteVolume
+                  - ec2:AttachVolume
+                  - ec2:DetachVolume
+                  - ec2:ModifyVolume
+                  - ec2:AllocateAddress
+                  - ec2:ReleaseAddress
+                  - ec2:AssociateAddress
+                  - ec2:DisassociateAddress
                   - ec2:CreateTags
                   - ec2:DeleteTags
+                Resource: '*'
+
+              - Sid: DabbirS3
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:GetBucket*
+                  - s3:PutBucket*
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: '*'
+
+              - Sid: DabbirIamRuntimeRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:PassRole
+                Resource: '*'
+
+              - Sid: DabbirBackup
+                Effect: Allow
+                Action:
+                  - backup:CreateBackupVault
+                  - backup:DeleteBackupVault
+                  - backup:DescribeBackupVault
+                  - backup:ListBackupVaults
+                  - backup:CreateBackupPlan
+                  - backup:UpdateBackupPlan
+                  - backup:DeleteBackupPlan
+                  - backup:GetBackupPlan
+                  - backup:ListBackupPlans
+                  - backup:CreateBackupSelection
+                  - backup:UpdateBackupSelection
+                  - backup:DeleteBackupSelection
+                  - backup:GetBackupSelection
+                  - backup:ListBackupSelections
+                  - backup:ListTags
+                  - backup:TagResource
+                  - backup:UntagResource
                 Resource: '*'
 
               - Sid: DabbirRds
@@ -153,19 +231,6 @@ Resources:
                   - ecr:UploadLayerPart
                   - ecr:CompleteLayerUpload
                   - ecr:PutImage
-                Resource: '*'
-
-              - Sid: DabbirS3
-                Effect: Allow
-                Action:
-                  - s3:CreateBucket
-                  - s3:DeleteBucket
-                  - s3:GetBucket*
-                  - s3:PutBucket*
-                  - s3:ListBucket
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
                 Resource: '*'
 
               - Sid: DabbirSecrets
@@ -229,21 +294,6 @@ Resources:
                   - application-autoscaling:DeleteScalingPolicy
                   - application-autoscaling:DescribeScalableTargets
                   - application-autoscaling:DescribeScalingPolicies
-                Resource: '*'
-
-              - Sid: DabbirIamRuntimeRoles
-                Effect: Allow
-                Action:
-                  - iam:CreateRole
-                  - iam:DeleteRole
-                  - iam:GetRole
-                  - iam:PutRolePolicy
-                  - iam:DeleteRolePolicy
-                  - iam:GetRolePolicy
-                  - iam:AttachRolePolicy
-                  - iam:DetachRolePolicy
-                  - iam:ListAttachedRolePolicies
-                  - iam:PassRole
                 Resource: '*'
 
               - Sid: DabbirServiceLinkedRoles
