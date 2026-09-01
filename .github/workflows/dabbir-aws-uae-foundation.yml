@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       target_region:
-        description: AWS production region (UAE me-central-1 is blocked while AWS reports it unreliable)
+        description: AWS production region selected by owner
         required: true
-        default: me-south-1
+        default: me-central-1
         type: choice
         options:
+          - me-central-1
           - me-south-1
-          - ap-south-1
           - eu-central-1
       database_instance_class:
         description: RDS PostgreSQL instance class
@@ -54,16 +54,16 @@ jobs:
             exit 2
           }
 
-      - name: Reject unsafe UAE deployment
+      - name: Record selected production region
         shell: bash
         env:
           TARGET_REGION: ${{ inputs.target_region }}
         run: |
           set -euo pipefail
-          test "$TARGET_REGION" != 'me-central-1' || {
-            echo 'me-central-1 is blocked while AWS reports the UAE Region cannot reliably support customer applications.'
-            exit 3
-          }
+          echo "DABBIR production region selected: $TARGET_REGION"
+          if [ "$TARGET_REGION" = 'me-central-1' ]; then
+            echo 'UAE me-central-1 selected by owner. Continue only with off-region backup and rollback protection before data cutover.'
+          fi
 
       - name: Configure AWS credentials using GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v6
