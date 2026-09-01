@@ -2,7 +2,7 @@ import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-co
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
 
-const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const WHATSAPP_DATA_TIMEOUT_MS = 10_000;
 
 function clean(value, max = 4000) {
