@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - .github/workflows/dabbir-mumbai-migration.yml
-      - infra/falconcloud-dubai/migrate-managed-supabase.sh
 
 permissions:
   contents: read
@@ -17,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  migrate:
+  finalize:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -43,10 +42,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
-          /usr/lib/postgresql/17/bin/psql --version
-          /usr/lib/postgresql/17/bin/pg_dump --version
 
-      - name: Migrate DABBIR database Auth and Storage
+      - name: Verify current Mumbai copy and migrate Storage
         shell: bash
         run: |
           set -euo pipefail
@@ -79,11 +76,7 @@ jobs:
           for value in "$SOURCE_HOST" "$SOURCE_USER" "$SOURCE_PASS" "$TARGET_HOST" "$TARGET_USER" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do
             [[ -n "$value" ]] || { echo 'ERROR: Broker returned incomplete credentials.' >&2; exit 23; }
           done
-
-          echo "::add-mask::$SOURCE_PASS"
-          echo "::add-mask::$TARGET_PASS"
-          echo "::add-mask::$SOURCE_SERVICE_ROLE_KEY"
-          echo "::add-mask::$TARGET_SERVICE_ROLE_KEY"
+          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do echo "::add-mask::$secret"; done
 
           urlencode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
           SOURCE_DATABASE_URL="postgresql://${SOURCE_USER}:$(urlencode "$SOURCE_PASS")@${SOURCE_HOST}:5432/postgres?sslmode=require"
@@ -92,34 +85,73 @@ jobs:
           echo "::add-mask::$TARGET_DATABASE_URL"
           export SOURCE_DATABASE_URL TARGET_DATABASE_URL SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY SOURCE_SUPABASE_URL TARGET_SUPABASE_URL
 
-          source_role="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user' | tr -d '[:space:]')"
-          target_role="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user' | tr -d '[:space:]')"
-          [[ "$source_role" == 'dabbir_mumbai_migrator_src' ]] || { echo "ERROR: unexpected Sydney role: $source_role" >&2; exit 24; }
-          [[ "$target_role" == 'dabbir_mumbai_migrator_dst' ]] || { echo "ERROR: unexpected Mumbai role: $target_role" >&2; exit 25; }
+          scalar() { PGOPTIONS='-c timezone=UTC' psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
+          lines() { PGOPTIONS='-c timezone=UTC' psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2"; }
+          compare() {
+            local name="$1" sql="$2" src dst
+            src="$(scalar "$SOURCE_DATABASE_URL" "$sql")"
+            dst="$(scalar "$TARGET_DATABASE_URL" "$sql")"
+            echo "$name source=$src target=$dst"
+            [[ "$src" == "$dst" ]] || { echo "ERROR: $name mismatch" >&2; exit 31; }
+          }
+
+          [[ "$(scalar "$SOURCE_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_src' ]] || exit 24
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_dst' ]] || exit 25
           echo 'PASS: OIDC database access verified.'
 
-          target_existing="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state'))" | tr -d '[:space:]')"
-          [[ "$target_existing" == '0' ]] || { echo "ERROR: Mumbai already contains $target_existing DABBIR tables." >&2; exit 26; }
+          OBJECTS_SQL="with t as (select table_schema,table_name from information_schema.tables where table_type='BASE TABLE' and ((table_schema='dabbir_private' and table_name not like 'executive\\_%' escape '\\') or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))), f as (select n.nspname,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p') and ((n.nspname='dabbir_private' and p.proname not like 'executive\\_%' escape '\\') or (n.nspname='public' and p.proname like 'dabbir%'))), pol as (select schemaname,tablename,policyname from pg_policies where ((schemaname='dabbir_private' and tablename not like 'executive\\_%' escape '\\') or (schemaname='public' and (tablename like 'dabbir%' or tablename='account_access_state')))), trg as (select n.nspname,c.relname,g.tgname from pg_trigger g join pg_class c on c.oid=g.tgrelid join pg_namespace n on n.oid=c.relnamespace where not g.tgisinternal and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))) select concat((select count(*) from t),'|',(select count(*) from f),'|',(select count(*) from pol),'|',(select count(*) from trg));"
+          compare 'schema objects T/F/P/R' "$OBJECTS_SQL"
+          [[ "$(scalar "$SOURCE_DATABASE_URL" "$OBJECTS_SQL")" == '123|184|205|90' ]] || { echo 'ERROR: audited schema baseline changed.' >&2; exit 32; }
 
-          target_auth_users="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select count(*) from auth.users' | tr -d '[:space:]')"
-          [[ "$target_auth_users" == '0' ]] || { echo 'ERROR: Mumbai Auth is not empty.' >&2; exit 27; }
+          compare 'column fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(table_schema,'.',table_name,':',column_name,':',data_type,':',is_nullable,':',coalesce(column_default,'')) x from information_schema.columns where ((table_schema='dabbir_private' and table_name not like 'executive\\_%' escape '\\') or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))) q;"
+          compare 'view fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(n.nspname,'.',c.relname,':',pg_get_viewdef(c.oid,true)) x from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('v','m') and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and c.relname like 'dabbir%'))) q;"
+          compare 'function fingerprint' "select md5(coalesce(string_agg(def,E'\\n' order by schema_name,function_name,args),'')) from (select n.nspname schema_name,p.proname function_name,pg_get_function_identity_arguments(p.oid) args,pg_get_functiondef(p.oid) def from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p') and ((n.nspname='dabbir_private' and p.proname not like 'executive\\_%' escape '\\') or (n.nspname='public' and p.proname like 'dabbir%'))) q;"
+          compare 'policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',schemaname,tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where ((schemaname='dabbir_private' and tablename not like 'executive\\_%' escape '\\') or (schemaname='public' and (tablename like 'dabbir%' or tablename='account_access_state')))) q;"
+          compare 'trigger fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(n.nspname,'.',c.relname,':',g.tgname,':',pg_get_triggerdef(g.oid,true)) x from pg_trigger g join pg_class c on c.oid=g.tgrelid join pg_namespace n on n.oid=c.relnamespace where not g.tgisinternal and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))) q;"
 
-          auth_triggers="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and c.relname in ('users','identities','mfa_factors') and not t.tgisinternal" | tr -d '[:space:]')"
-          [[ "$auth_triggers" == '0' ]] || { echo 'ERROR: custom Auth triggers exist on Mumbai.' >&2; exit 28; }
+          compare 'relation ACL fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',n.nspname,c.relname,case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,a.privilege_type,a.is_grantable::text) x from pg_class c join pg_namespace n on n.oid=c.relnamespace cross join lateral unnest(coalesce(c.relacl,acldefault(case when c.relkind='S' then 'S'::\"char\" else 'r'::\"char\" end,c.relowner))) ai cross join lateral aclexplode(array[ai]) a where c.relkind in ('r','p','v','m','S') and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state'))) and a.grantee<>c.relowner) q;"
+          compare 'function ACL fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,a.privilege_type,a.is_grantable::text) x from pg_proc p join pg_namespace n on n.oid=p.pronamespace cross join lateral unnest(coalesce(p.proacl,acldefault('f'::\"char\",p.proowner))) ai cross join lateral aclexplode(array[ai]) a where p.prokind in ('f','p') and ((n.nspname='dabbir_private' and p.proname not like 'executive\\_%' escape '\\') or (n.nspname='public' and p.proname like 'dabbir%')) and a.grantee<>p.proowner) q;"
 
-          stage_ok="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select (has_table_privilege(current_user,'public.migration_auth_users_stage','INSERT') and has_table_privilege(current_user,'public.migration_auth_users_stage','TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_identities_stage','INSERT') and has_table_privilege(current_user,'public.migration_auth_mfa_factors_stage','INSERT') and has_function_privilege(current_user,'public.migration_commit_auth_stage_v1()','EXECUTE'))::int" | tr -d '[:space:]')"
-          [[ "$stage_ok" == '1' ]] || { echo 'ERROR: Mumbai Auth staging permissions are incomplete.' >&2; exit 29; }
+          compare 'Auth users full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.users where id in (select user_id from public.dabbir_user_accounts)) x;"
+          compare 'Auth identities full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.identities where user_id in (select user_id from public.dabbir_user_accounts)) x;"
+          compare 'Auth MFA full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts)) x;"
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == '56' ]] || { echo 'ERROR: unexpected Mumbai Auth users.' >&2; exit 33; }
 
-          DUMP_DIR="$RUNNER_TEMP/dabbir-migration" bash infra/falconcloud-dubai/migrate-managed-supabase.sh
+          compare 'managed Auth FKs' "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));"
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));")" == '43' ]] || exit 34
+
+          echo 'Comparing all 123 DABBIR table rows exactly...'
+          TABLE_LIST_SQL="select table_schema||'|'||table_name from information_schema.tables where table_type='BASE TABLE' and ((table_schema='dabbir_private' and table_name not like 'executive\\_%' escape '\\') or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state'))) order by table_schema,table_name;"
+          table_count=0
+          while IFS='|' read -r schema table; do
+            [[ -n "$schema" && -n "$table" ]] || continue
+            table_count=$((table_count+1))
+            sql="select count(*)::text||'|'||md5(coalesce(string_agg(row_json,E'\\n' order by row_json),'')) from (select to_jsonb(t)::text row_json from \"${schema}\".\"${table}\" t) q;"
+            src="$(scalar "$SOURCE_DATABASE_URL" "$sql")"
+            dst="$(scalar "$TARGET_DATABASE_URL" "$sql")"
+            [[ "$src" == "$dst" ]] || { echo "ERROR table-data ${schema}.${table} source=$src target=$dst" >&2; exit 35; }
+          done < <(lines "$SOURCE_DATABASE_URL" "$TABLE_LIST_SQL")
+          [[ "$table_count" == '123' ]] || { echo "ERROR: expected 123 source tables, checked $table_count" >&2; exit 36; }
+          echo 'PASS: all 123 DABBIR tables match row-for-row.'
+
+          echo 'Comparing DABBIR sequences...'
+          SEQ_LIST_SQL="select n.nspname||'|'||c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind='S' and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and c.relname like 'dabbir%')) order by n.nspname,c.relname;"
+          while IFS='|' read -r schema seq; do
+            [[ -n "$schema" && -n "$seq" ]] || continue
+            sql="select last_value::text||'|'||is_called::text from \"${schema}\".\"${seq}\";"
+            [[ "$(scalar "$SOURCE_DATABASE_URL" "$sql")" == "$(scalar "$TARGET_DATABASE_URL" "$sql")" ]] || { echo "ERROR sequence ${schema}.${seq}" >&2; exit 37; }
+          done < <(lines "$SOURCE_DATABASE_URL" "$SEQ_LIST_SQL")
+          echo 'PASS: sequence states match.'
+
+          target_buckets_before="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
+          [[ "$target_buckets_before" == '0' ]] || { echo "ERROR: Mumbai DABBIR Storage is not empty ($target_buckets_before buckets)." >&2; exit 38; }
           bash infra/falconcloud-dubai/migrate-storage.sh
 
-          src_users="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)" | tr -d '[:space:]')"
-          dst_users="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select count(*) from auth.users' | tr -d '[:space:]')"
-          src_tables="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_type='BASE TABLE' and (table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))" | tr -d '[:space:]')"
-          dst_tables="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_type='BASE TABLE' and (table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))" | tr -d '[:space:]')"
-          src_objects="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
-          dst_objects="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
+          compare 'Storage bucket count' "select count(*) from storage.buckets where id like 'dabbir-%';"
+          compare 'Storage object count' "select count(*) from storage.objects where bucket_id like 'dabbir-%';"
+          compare 'Storage policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where schemaname='storage' and (policyname ilike 'dabbir%' or coalesce(qual,'') ilike '%dabbir%' or coalesce(with_check,'') ilike '%dabbir%')) q;"
 
-          [[ "$src_users" == "$dst_users" && "$src_tables" == "$dst_tables" && "$src_objects" == "$dst_objects" ]] || { echo 'ERROR: final count verification failed.' >&2; exit 30; }
-          echo "PASS DABBIR_MUMBAI_DATABASE_AUTH_STORAGE users=$dst_users tables=$dst_tables storage_objects=$dst_objects"
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == '2' ]] || exit 39
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == '1' ]] || exit 40
+          echo 'PASS DABBIR_MUMBAI_FINAL database=verified auth=verified fks=43 storage_buckets=2 storage_objects=1'
           echo 'Production Vercel endpoint was NOT changed by this workflow.'
