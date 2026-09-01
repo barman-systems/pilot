@@ -5,7 +5,7 @@ import {
   getVerifiedUser,
 } from './_auth-core.js';
 
-const SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const DEFAULT_SCOPES = ['message.list.read', 'message.list.send', 'message.list.manage'];
 
 function clean(value, max = 4000) {
