@@ -12,8 +12,8 @@ Parameters:
     Description: RDS instance class. Can be increased without changing application code.
   DatabaseEngineVersion:
     Type: String
-    Default: '17.11'
-    Description: PostgreSQL 17 minor version. Source DABBIR database is PostgreSQL 17.
+    Default: '17.8'
+    Description: PostgreSQL 17 minor version selected from AWS UAE availability at deployment time.
   DatabaseAllocatedStorage:
     Type: Number
     Default: 50
@@ -284,7 +284,7 @@ Resources:
                   "countType": "imageCountMoreThan",
                   "countNumber": 30
                 },
-                "action": {"type": "expire"}
+                "action": {"type":"expire"}
               }
             ]
           }
@@ -315,7 +315,7 @@ Resources:
                   "countType": "imageCountMoreThan",
                   "countNumber": 20
                 },
-                "action": {"type": "expire"}
+                "action": {"type":"expire"}
               }
             ]
           }
@@ -341,11 +341,12 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      LogGroupName: !Sub '/dabbir/${EnvironmentName}/runtime'
       RetentionInDays: 30
       Tags:
         - Key: App
           Value: DABBIR
+        - Key: Environment
+          Value: production
 
 Outputs:
   Region:
