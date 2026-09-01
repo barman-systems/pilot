@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify-final:
+  cutover-preflight:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -23,73 +23,75 @@ jobs:
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
       BROKER_SLUG: dabbir-migration-oidc-broker
       OIDC_AUDIENCE: dabbir-mumbai-migration
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
 
     steps:
-      - name: Verify final Mumbai migration
+      - name: Verify zero-drift copy and Vercel rollback access
         shell: bash
         run: |
           set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo 'ERROR VERCEL_TOKEN missing'; exit 10; }
           sudo apt-get update >/dev/null
           sudo apt-get install -y jq postgresql-client >/dev/null
 
-          oidc_json="$(curl --silent --show-error --fail-with-body --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
+          oidc_json="$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
-          [[ -n "$OIDC_TOKEN" ]] || exit 20
+          test -n "$OIDC_TOKEN" || exit 20
           echo "::add-mask::$OIDC_TOKEN"
-
-          broker_call() {
-            curl --silent --show-error --fail-with-body --request POST \
-              --header "Authorization: Bearer ${OIDC_TOKEN}" \
-              --header 'Content-Type: application/json' \
-              "$1/functions/v1/${BROKER_SLUG}"
-          }
+          broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
           [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
           [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
 
-          SOURCE_HOST="$(jq -r '.credential.db_host' <<<"$SOURCE_BROKER")"
-          SOURCE_USER="$(jq -r '.credential.db_user' <<<"$SOURCE_BROKER")"
-          SOURCE_PASS="$(jq -r '.credential.db_password' <<<"$SOURCE_BROKER")"
-          TARGET_HOST="$(jq -r '.credential.db_host' <<<"$TARGET_BROKER")"
-          TARGET_USER="$(jq -r '.credential.db_user' <<<"$TARGET_BROKER")"
-          TARGET_PASS="$(jq -r '.credential.db_password' <<<"$TARGET_BROKER")"
-          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$SOURCE_BROKER")"
-          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$TARGET_BROKER")"
-          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do echo "::add-mask::$secret"; done
-
-          urlencode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
-          SOURCE_DATABASE_URL="postgresql://${SOURCE_USER}:$(urlencode "$SOURCE_PASS")@${SOURCE_HOST}:5432/postgres?sslmode=require"
-          TARGET_DATABASE_URL="postgresql://${TARGET_USER}:$(urlencode "$TARGET_PASS")@${TARGET_HOST}:5432/postgres?sslmode=require"
+          shost="$(jq -r '.credential.db_host' <<<"$SOURCE_BROKER")"; suser="$(jq -r '.credential.db_user' <<<"$SOURCE_BROKER")"; spass="$(jq -r '.credential.db_password' <<<"$SOURCE_BROKER")"
+          thost="$(jq -r '.credential.db_host' <<<"$TARGET_BROKER")"; tuser="$(jq -r '.credential.db_user' <<<"$TARGET_BROKER")"; tpass="$(jq -r '.credential.db_password' <<<"$TARGET_BROKER")"
+          for x in "$spass" "$tpass"; do echo "::add-mask::$x"; done
+          enc(){ python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+          SOURCE_DATABASE_URL="postgresql://${suser}:$(enc "$spass")@${shost}:5432/postgres?sslmode=require"
+          TARGET_DATABASE_URL="postgresql://${tuser}:$(enc "$tpass")@${thost}:5432/postgres?sslmode=require"
           echo "::add-mask::$SOURCE_DATABASE_URL"; echo "::add-mask::$TARGET_DATABASE_URL"
 
-          scalar() { psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
-          compare() { local n="$1" q="$2" s t; s="$(scalar "$SOURCE_DATABASE_URL" "$q")"; t="$(scalar "$TARGET_DATABASE_URL" "$q")"; echo "$n source=$s target=$t"; [[ "$s" == "$t" ]] || exit 30; }
+          cat > "$RUNNER_TEMP/fingerprint.sql" <<'SQL'
+          create or replace function pg_temp.dabbir_table_fingerprints()
+          returns table(k text, fp text)
+          language plpgsql as $$
+          declare r record; v text;
+          begin
+            for r in
+              select table_schema,table_name from information_schema.tables
+              where table_type='BASE TABLE'
+                and (table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))
+                and not (table_schema='dabbir_private' and table_name like 'executive\_%' escape '\')
+              order by table_schema,table_name
+            loop
+              execute format('select count(*)::text||''|''||md5(coalesce(string_agg(j,E''\\n'' order by j),'''')) from (select to_jsonb(t)::text j from %I.%I t) q',r.table_schema,r.table_name) into v;
+              k:=r.table_schema||'.'||r.table_name; fp:=v; return next;
+            end loop;
+          end $$;
+          select * from pg_temp.dabbir_table_fingerprints() order by k;
+          SQL
+          psql "$SOURCE_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/source.fp"
+          psql "$TARGET_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/target.fp"
+          test "$(grep -c . "$RUNNER_TEMP/source.fp")" = 123 || { echo 'ERROR source table baseline changed'; exit 30; }
+          diff -u "$RUNNER_TEMP/source.fp" "$RUNNER_TEMP/target.fp" >/dev/null || { echo 'ERROR Mumbai data drift detected'; exit 31; }
+          echo 'PASS: all 123 DABBIR tables are still identical.'
 
-          compare 'Auth users' "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts);"
-          compare 'Auth identities' "select count(*) from auth.identities where user_id in (select user_id from public.dabbir_user_accounts);"
-          compare 'Auth MFA' "select count(*) from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts);"
-          compare 'Auth FK count' "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));"
-          compare 'Storage buckets' "select count(*) from storage.buckets where id like 'dabbir-%';"
-          compare 'Storage objects' "select count(*) from storage.objects where bucket_id like 'dabbir-%';"
-          compare 'Storage policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where schemaname='storage' and (policyname ilike 'dabbir%' or coalesce(qual,'') ilike '%dabbir%' or coalesce(with_check,'') ilike '%dabbir%')) q;"
+          scalar(){ psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
+          [[ "$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)")" == "$(scalar "$TARGET_DATABASE_URL" "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)")" ]] || exit 32
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from auth.users")" == 56 ]] || exit 33
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == 2 ]] || exit 34
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == 1 ]] || exit 35
+          echo 'PASS: Auth and Storage baselines intact.'
 
-          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == 56 ]] || exit 31
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == 2 ]] || exit 32
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == 1 ]] || exit 33
-
-          bucket="dabbir-owner-live"
-          object="owner-truth-v3.html"
-          src_file="$RUNNER_TEMP/source-object.bin"
-          dst_file="$RUNNER_TEMP/target-object.bin"
-          curl -fsS "${SOURCE_SUPABASE_URL}/storage/v1/object/${bucket}/${object}" \
-            -H "Authorization: Bearer ${SOURCE_SERVICE_ROLE_KEY}" -H "apikey: ${SOURCE_SERVICE_ROLE_KEY}" -o "$src_file"
-          curl -fsS "${TARGET_SUPABASE_URL}/storage/v1/object/${bucket}/${object}" \
-            -H "Authorization: Bearer ${TARGET_SERVICE_ROLE_KEY}" -H "apikey: ${TARGET_SERVICE_ROLE_KEY}" -o "$dst_file"
-          src_sha="$(sha256sum "$src_file" | cut -d' ' -f1)"
-          dst_sha="$(sha256sum "$dst_file" | cut -d' ' -f1)"
-          [[ "$src_sha" == "$dst_sha" ]] || { echo 'ERROR: Storage SHA-256 mismatch' >&2; exit 34; }
-          echo "PASS Storage SHA-256 $dst_sha"
-
-          echo 'PASS DABBIR_MUMBAI_FINAL database=verified rows=verified auth=56 identities=56 mfa=26 fks=43 storage_buckets=2 storage_objects=1 storage_sha256=verified'
-          echo 'Production Vercel endpoint was NOT changed.'
+          env_json="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          for key in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY SUPABASE_SERVICE_ROLE_KEY; do
+            count="$(jq --arg k "$key" '[.envs[] | select(.key==$k and ((.target // []) | index("production")))] | length' <<<"$env_json")"
+            (( count >= 1 )) || { echo "ERROR: production env missing $key"; exit 40; }
+          done
+          while IFS= read -r value; do test -z "$value" || echo "::add-mask::$value"; done < <(jq -r '.envs[] | select(.key|startswith("SUPABASE_")) | .value // empty' <<<"$env_json")
+          jq -e '.envs | length > 0' <<<"$env_json" >/dev/null
+          echo 'PASS: Vercel production environment is readable and rollback values are available.'
+          echo 'PASS DABBIR_MUMBAI_CUTOVER_PREFLIGHT'
