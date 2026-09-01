@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Compare a source DABBIR database with its UAE target before cutover.
+# Compare the source DABBIR database with the managed UAE RDS target before cutover.
 # Usage:
 #   SOURCE_DATABASE_URL=postgresql://... TARGET_DATABASE_URL=postgresql://... ./verify-dabbir-migration.sh
 # Credentials are supplied at runtime only; never commit them.
@@ -62,11 +62,11 @@ select concat(
 SQL
 }
 
-extension_sql() {
+runtime_extension_sql() {
   cat <<'SQL'
 select coalesce(string_agg(extname, ',' order by extname),'')
 from pg_extension
-where extname in ('pg_cron','pg_net','pg_stat_statements','pgcrypto','pgmq','supabase_vault','uuid-ossp');
+where extname in ('pg_stat_statements','pgcrypto');
 SQL
 }
 
@@ -88,7 +88,8 @@ with dabbir_funcs as (
   select p.oid,p.prosrc
   from pg_proc p
   join pg_namespace n on n.oid=p.pronamespace
-  where n.nspname='dabbir_private' or (n.nspname='public' and p.proname like 'dabbir%')
+  where p.prokind in ('f','p')
+    and (n.nspname='dabbir_private' or (n.nspname='public' and p.proname like 'dabbir%'))
 ), candidates as (
   select c.relname
   from pg_class c
@@ -103,6 +104,37 @@ from (
     on f.prosrc ~ ('(^|[^a-zA-Z0-9_])' || c.relname || '([^a-zA-Z0-9_]|$)')
   group by c.relname
 ) c;
+SQL
+}
+
+managed_incompatible_dependency_sql() {
+  cat <<'SQL'
+with funcs as (
+  select p.oid,p.proname,pg_get_functiondef(p.oid) definition
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where p.prokind in ('f','p')
+    and (n.nspname='dabbir_private' or (n.nspname='public' and p.proname like 'dabbir%'))
+)
+select concat(
+  count(*) filter (where definition ilike '%vault.%'), '|',
+  count(*) filter (where definition ilike '%pg_net%' or definition ilike '%net.http_%'), '|',
+  count(*) filter (where definition ilike '%pgmq%')
+)
+from funcs;
+SQL
+}
+
+qa_share_function_sql() {
+  cat <<'SQL'
+select case when exists (
+  select 1
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public'
+    and p.proname='dabbir_qa_consume_protected_share'
+    and p.prokind in ('f','p')
+) then 'present' else 'missing' end;
 SQL
 }
 
@@ -124,9 +156,10 @@ main() {
 
   compare_exact "schema objects T/F/P/R" "$(object_count_sql)" || failed=1
   compare_exact "auth users/identities/MFA" "$(auth_count_sql)" || failed=1
-  compare_exact "required extensions" "$(extension_sql)" || failed=1
+  compare_exact "RDS runtime extensions" "$(runtime_extension_sql)" || failed=1
   compare_exact "column fingerprint" "$(relation_fingerprint_sql)" || failed=1
   compare_exact "hidden dependencies" "$(hidden_dependency_sql)" || failed=1
+  compare_exact "QA share function presence" "$(qa_share_function_sql)" || failed=1
 
   # Minimum audited baseline recorded 2026-09-01. Source may grow, but must never fall below this unexpectedly.
   local source_objects tables functions policies triggers
@@ -152,12 +185,28 @@ main() {
     failed=1
   fi
 
+  # The old Supabase project has exactly one DABBIR QA helper that reads Supabase Vault.
+  # Managed RDS must replace that helper while preserving its function name; runtime DABBIR code
+  # must not depend on Supabase-only vault/pg_net/pgmq extensions after migration.
+  local source_incompatible target_incompatible
+  source_incompatible="$(sql_scalar "${SOURCE_DATABASE_URL}" "$(managed_incompatible_dependency_sql)")"
+  target_incompatible="$(sql_scalar "${TARGET_DATABASE_URL}" "$(managed_incompatible_dependency_sql)")"
+  printf '%-30s source=%s target=%s\n' "managed-only dependencies V/N/Q" "$source_incompatible" "$target_incompatible"
+  if [[ "$source_incompatible" != '1|0|0' ]]; then
+    echo "FAIL: source managed-incompatible dependency baseline changed; re-audit before migration." >&2
+    failed=1
+  fi
+  if [[ "$target_incompatible" != '0|0|0' ]]; then
+    echo "FAIL: target still depends on Supabase-only Vault/pg_net/pgmq runtime features." >&2
+    failed=1
+  fi
+
   if (( failed != 0 )); then
-    echo "DABBIR UAE migration gate: FAILED" >&2
+    echo "DABBIR managed UAE migration gate: FAILED" >&2
     exit 1
   fi
 
-  echo "DABBIR UAE migration gate: PASSED"
+  echo "DABBIR managed UAE migration gate: PASSED"
 }
 
 main "$@"
