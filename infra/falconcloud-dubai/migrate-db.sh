@@ -1,73 +1,155 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DABBIR | دبّر — platform Supabase -> self-hosted Supabase migration.
-# This follows Supabase's official restore-to-self-hosted procedure.
-# Required env vars:
-#   SOURCE_DB_URL  current managed Supabase session/direct Postgres URL
-#   TARGET_DB_URL  self-hosted Postgres/Supavisor URL on the Dubai VM
-# Optional:
-#   DUMP_DIR=/opt/dabbir/migration
+# DABBIR | دبّر — selective managed-Supabase -> self-hosted-Supabase migration.
+# Moves DABBIR state only; unrelated ZAJEL / R&A / Barman project data is excluded.
+# Run on the Dubai VM after bootstrap.sh and verify.sh.
 
-: "${SOURCE_DB_URL:?SOURCE_DB_URL is required}"
-: "${TARGET_DB_URL:?TARGET_DB_URL is required}"
-[[ "$SOURCE_DB_URL" != "$TARGET_DB_URL" ]] || { echo "Source and target URLs must differ" >&2; exit 2; }
+: "${SOURCE_DATABASE_URL:?SOURCE_DATABASE_URL is required}"
+: "${TARGET_DATABASE_URL:?TARGET_DATABASE_URL is required}"
+[[ "$SOURCE_DATABASE_URL" != "$TARGET_DATABASE_URL" ]] || { echo "Source and target URLs must differ" >&2; exit 2; }
 
-DUMP_DIR="${DUMP_DIR:-/opt/dabbir/migration}"
-mkdir -p "$DUMP_DIR"
-chmod 700 "$DUMP_DIR"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+VERIFY_SCRIPT="${REPO_ROOT}/infra/aws-uae/verify-dabbir-migration.sh"
+[[ -x "$VERIFY_SCRIPT" ]] || { echo "Missing executable verifier: $VERIFY_SCRIPT" >&2; exit 1; }
 
-for cmd in supabase psql sha256sum diff; do
+WORKDIR="${DUMP_DIR:-/opt/dabbir/migration/$(date -u +%Y%m%dT%H%M%SZ)}"
+mkdir -p "$WORKDIR"
+chmod 700 "$WORKDIR"
+
+for cmd in psql pg_dump pg_restore sha256sum diff; do
   command -v "$cmd" >/dev/null || { echo "Missing required command: $cmd" >&2; exit 1; }
 done
-command -v docker >/dev/null || { echo "Docker is required by supabase db dump" >&2; exit 1; }
 
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-roles="$DUMP_DIR/roles-$stamp.sql"
-schema="$DUMP_DIR/schema-$stamp.sql"
-data="$DUMP_DIR/data-$stamp.sql"
+src(){ PGOPTIONS='-c timezone=UTC' psql "$SOURCE_DATABASE_URL" -X -v ON_ERROR_STOP=1 "$@"; }
+tgt(){ PGOPTIONS='-c timezone=UTC' psql "$TARGET_DATABASE_URL" -X -v ON_ERROR_STOP=1 "$@"; }
+scalar(){ local url="$1" sql="$2"; PGOPTIONS='-c timezone=UTC' psql "$url" -X -A -t -v ON_ERROR_STOP=1 -c "$sql" | tr -d '[:space:]'; }
 
-# Supabase CLI intentionally filters managed-platform internals and reserved roles.
-supabase db dump --db-url "$SOURCE_DB_URL" -f "$roles" --role-only
-supabase db dump --db-url "$SOURCE_DB_URL" -f "$schema"
-supabase db dump --db-url "$SOURCE_DB_URL" -f "$data" --use-copy --data-only
+source_major="$(scalar "$SOURCE_DATABASE_URL" 'show server_version_num')"
+target_major="$(scalar "$TARGET_DATABASE_URL" 'show server_version_num')"
+[[ "${source_major:0:2}" == "17" && "${target_major:0:2}" == "17" ]] || {
+  echo "PostgreSQL 17 required on both sides: source=$source_major target=$target_major" >&2; exit 3;
+}
 
-sha256sum "$roles" "$schema" "$data" | tee "$DUMP_DIR/sha256-$stamp.txt"
+# Fresh-target gate.
+target_existing="$(scalar "$TARGET_DATABASE_URL" "select count(*) from information_schema.tables where table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state'))")"
+[[ "$target_existing" == "0" ]] || { echo "Target already has $target_existing DABBIR tables; refusing destructive overwrite." >&2; exit 4; }
 
-# The source is PostgreSQL 17.6 and fresh self-hosted Supabase is PostgreSQL 17 by default.
-source_major="$(psql "$SOURCE_DB_URL" -Atc "show server_version_num" | cut -c1-2)"
-target_major="$(psql "$TARGET_DB_URL" -Atc "show server_version_num" | cut -c1-2)"
-[[ "$source_major" == "17" ]] || { echo "Unexpected source PG major: $source_major" >&2; exit 3; }
-[[ "$target_major" == "17" ]] || { echo "Target must run PostgreSQL 17, got: $target_major" >&2; exit 3; }
+# Only extensions actually required by DABBIR runtime are enabled on the dedicated target.
+for ext in pgcrypto uuid-ossp supabase_vault; do
+  available="$(scalar "$TARGET_DATABASE_URL" "select count(*) from pg_available_extensions where name='${ext}'")"
+  [[ "$available" == "1" ]] || { echo "Required extension unavailable on target: $ext" >&2; exit 5; }
+  tgt -c "create extension if not exists \"$ext\";"
+done
 
-# Confirm required source extensions are available on target before restore.
-required_exts="$(psql "$SOURCE_DB_URL" -Atc "select extname from pg_extension where extname not in ('plpgsql') order by 1")"
-while IFS= read -r ext; do
-  [[ -z "$ext" ]] && continue
-  if ! psql "$TARGET_DB_URL" -Atc "select 1 from pg_available_extensions where name='${ext//\'/\'\'}'" | grep -q '^1$'; then
-    echo "Target does not provide required extension: $ext" >&2
-    exit 4
-  fi
-done <<< "$required_exts"
+# Export DABBIR-owned relations only.
+pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges \
+  --table='public.dabbir*' --table='public.account_access_state' \
+  --file="$WORKDIR/public-relations.dump"
+pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges \
+  --schema=dabbir_private --file="$WORKDIR/private-schema.dump"
 
-# Official restore sequence. session_replication_role=replica prevents trigger side-effects
-# (for example double encryption) while loading data.
-psql \
-  --single-transaction \
-  --variable ON_ERROR_STOP=1 \
-  --file "$roles" \
-  --file "$schema" \
-  --command 'SET session_replication_role = replica' \
-  --file "$data" \
-  --dbname "$TARGET_DB_URL"
+# Public DABBIR functions are not guaranteed to follow a selected table dump, export definitions + ACL explicitly.
+src -A -t >"$WORKDIR/public-functions.sql" <<'SQL'
+select pg_get_functiondef(p.oid) || E';\n'
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where p.prokind in ('f','p') and n.nspname='public' and p.proname like 'dabbir%'
+order by p.proname,pg_get_function_identity_arguments(p.oid);
+SQL
+src -A -t >"$WORKDIR/public-function-acl.sql" <<'SQL'
+with funcs as (
+  select p.oid,p.proname,p.proowner,p.proacl,pg_get_function_identity_arguments(p.oid) args
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where p.prokind in ('f','p') and n.nspname='public' and p.proname like 'dabbir%'
+), revoked as (
+  select oid,0 ord,format('REVOKE ALL ON FUNCTION public.%I(%s) FROM PUBLIC;',proname,args) stmt from funcs
+), grants as (
+  select f.oid,1 ord,format('GRANT %s ON FUNCTION public.%I(%s) TO %s%s;',x.privilege_type,f.proname,f.args,
+    case when x.grantee=0 then 'PUBLIC' else quote_ident(pg_get_userbyid(x.grantee)) end,
+    case when x.is_grantable then ' WITH GRANT OPTION' else '' end) stmt
+  from funcs f cross join lateral aclexplode(coalesce(f.proacl,acldefault('f',f.proowner))) x
+  where x.privilege_type='EXECUTE' and x.grantee<>f.proowner
+)
+select stmt from (select * from revoked union all select * from grants) q order by oid,ord,stmt;
+SQL
 
-# Evidence pack. Exact verification is intentionally limited to stable counts plus extensions;
-# business-level smoke tests run after this step.
-verify_sql="$(dirname "$0")/verify-migration.sql"
-psql "$SOURCE_DB_URL" -v ON_ERROR_STOP=1 -Atf "$verify_sql" > "$DUMP_DIR/source-$stamp.verify"
-psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atf "$verify_sql" > "$DUMP_DIR/target-$stamp.verify"
+# DABBIR has 56 Auth users at the audited source snapshot. Use the DABBIR account table as the identity boundary.
+DABBIR_USER_FILTER="id in (select user_id from public.dabbir_user_accounts)"
+DABBIR_IDENTITY_FILTER="user_id in (select user_id from public.dabbir_user_accounts)"
 
-diff -u "$DUMP_DIR/source-$stamp.verify" "$DUMP_DIR/target-$stamp.verify"
+insertable_columns(){
+  local url="$1" table="$2"
+  scalar "$url" "select string_agg(quote_ident(column_name),',' order by ordinal_position) from information_schema.columns where table_schema='auth' and table_name='${table}' and is_generated='NEVER' and identity_generation is null"
+}
+column_signature(){
+  local url="$1" table="$2"
+  scalar "$url" "select md5(string_agg(column_name||':'||data_type||':'||is_nullable||':'||is_generated,',' order by ordinal_position)) from information_schema.columns where table_schema='auth' and table_name='${table}'"
+}
 
-echo "PASS: database/auth/storage-metadata restore verified."
-echo "Storage object bytes, Edge Functions, Auth provider config, SMTP and production keys still require separate cutover steps."
+for table in users identities mfa_factors; do
+  s_sig="$(column_signature "$SOURCE_DATABASE_URL" "$table")"
+  t_sig="$(column_signature "$TARGET_DATABASE_URL" "$table")"
+  [[ "$s_sig" == "$t_sig" ]] || { echo "Auth schema mismatch for auth.$table" >&2; exit 6; }
+done
+
+users_cols="$(insertable_columns "$SOURCE_DATABASE_URL" users)"
+identities_cols="$(insertable_columns "$SOURCE_DATABASE_URL" identities)"
+mfa_cols="$(insertable_columns "$SOURCE_DATABASE_URL" mfa_factors)"
+
+src -c "\\copy (select ${users_cols} from auth.users where ${DABBIR_USER_FILTER} order by id) to '${WORKDIR}/auth-users.csv' with (format csv)"
+src -c "\\copy (select ${identities_cols} from auth.identities where ${DABBIR_IDENTITY_FILTER} order by id) to '${WORKDIR}/auth-identities.csv' with (format csv)"
+src -c "\\copy (select ${mfa_cols} from auth.mfa_factors where ${DABBIR_IDENTITY_FILTER} order by id) to '${WORKDIR}/auth-mfa-factors.csv' with (format csv)"
+
+# Evidence before restore.
+sha256sum "$WORKDIR"/* | sort | tee "$WORKDIR/SHA256SUMS"
+source_users="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.users where $DABBIR_USER_FILTER")"
+source_identities="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.identities where $DABBIR_IDENTITY_FILTER")"
+source_mfa="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.mfa_factors where $DABBIR_IDENTITY_FILTER")"
+[[ "$source_users" == "56" ]] || { echo "DABBIR Auth baseline changed: expected 56, found $source_users. Re-audit before cutover." >&2; exit 7; }
+echo "SOURCE auth users=$source_users identities=$source_identities mfa_factors=$source_mfa"
+
+# Restore relation definitions and private-schema functions first.
+pg_restore --exit-on-error --no-owner --no-privileges --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --no-privileges --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+tgt -f "$WORKDIR/public-functions.sql"
+
+# Insert Auth records with generated columns omitted. Sessions/refresh tokens are deliberately not copied;
+# users re-login once after cutover, while password hashes, identities and enrolled MFA factors are preserved.
+cat >"$WORKDIR/restore-auth.psql" <<EOF
+set session_replication_role = replica;
+\\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
+\\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
+\\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
+set session_replication_role = origin;
+EOF
+tgt -f "$WORKDIR/restore-auth.psql"
+
+# Restore all DABBIR data and then constraints/indexes/RLS/triggers/ACLs.
+pg_restore --exit-on-error --no-owner --no-privileges --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --no-privileges --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+pg_restore --exit-on-error --no-owner --no-privileges --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --no-privileges --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+tgt -f "$WORKDIR/public-function-acl.sql"
+
+# Strict DABBIR schema/data verifier already maintained by the repository.
+SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" TARGET_DATABASE_URL="$TARGET_DATABASE_URL" "$VERIFY_SCRIPT"
+
+auth_fp(){
+  local url="$1" table="$2" predicate="$3"
+  scalar "$url" "select md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.${table} where ${predicate}) x"
+}
+for spec in "users|$DABBIR_USER_FILTER" "identities|$DABBIR_IDENTITY_FILTER" "mfa_factors|$DABBIR_IDENTITY_FILTER"; do
+  IFS='|' read -r table predicate <<<"$spec"
+  s="$(auth_fp "$SOURCE_DATABASE_URL" "$table" "$predicate")"
+  t="$(auth_fp "$TARGET_DATABASE_URL" "$table" "$predicate")"
+  [[ "$s" == "$t" ]] || { echo "Auth fingerprint mismatch: auth.$table" >&2; exit 8; }
+  echo "PASS auth.$table fingerprint"
+done
+
+# Prove no unrelated Auth users were imported.
+target_auth_total="$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')"
+[[ "$target_auth_total" == "$source_users" ]] || { echo "Target contains unexpected Auth users: $target_auth_total" >&2; exit 9; }
+
+echo "PASS: DABBIR-only database + Auth migration verified."
+echo "No production endpoint has been changed. Run migrate-storage.sh and deploy-functions.sh next."
