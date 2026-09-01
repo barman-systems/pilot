@@ -1,7 +1,8 @@
 import { json, parseCookies } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
 
-const BROKER_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/dabbir-owner-broker';
+const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/,'');
+const BROKER_URL=String(process.env.DABBIR_OWNER_BROKER_URL||`${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/,'');
 const SESSION_COOKIE='__Host-dabbir_owner_session';
 
 async function broker(body){
