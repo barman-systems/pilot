@@ -334,6 +334,12 @@ async function browserJourney() {
   // following assertion proves the real menu handler opens the owner navigation.
   await page.mouse.click(mobileMenuState.left + (mobileMenuState.width / 2), mobileMenuState.top + (mobileMenuState.height / 2));
   await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForFunction(() => {
+    const nav = document.querySelector('#side.open [data-screen="operations"]');
+    if (!nav) return false;
+    const rect = nav.getBoundingClientRect();
+    return rect.width >= 40 && rect.height >= 40 && rect.left >= 0 && rect.right <= window.innerWidth;
+  }, null, { timeout: 2_000 });
   const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
   assert(visibleOperationsCount === 1, `BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_${visibleOperationsCount}`);
