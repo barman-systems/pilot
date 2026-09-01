@@ -75,15 +75,22 @@ jobs:
             --policy-name DabbirBootstrapReadAccess \
             --policy-document file:///tmp/dabbir-bootstrap-read-policy.json
 
-      - name: Verify identity and AWS UAE availability
+      - name: Verify identity and select AWS UAE PostgreSQL engine
         shell: bash
         run: |
           set -euo pipefail
           aws sts get-caller-identity
           aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[?State==`available`].ZoneName' --output json
-          options="$(aws rds describe-orderable-db-instance-options --region "$AWS_REGION" --engine postgres --engine-version 17.11 --db-instance-class db.t4g.small --query 'length(OrderableDBInstanceOptions)' --output text)"
-          echo "RDS PostgreSQL 17.11 db.t4g.small orderable options: $options"
-          test "$options" -gt 0
+          versions="$(aws rds describe-orderable-db-instance-options \
+            --region "$AWS_REGION" \
+            --engine postgres \
+            --db-instance-class db.t4g.small \
+            --query 'OrderableDBInstanceOptions[].EngineVersion' \
+            --output text)"
+          latest="$(printf '%s\n' $versions | tr '\t' '\n' | awk '/^17\./' | sort -V | tail -1)"
+          test -n "$latest"
+          echo "Selected PostgreSQL engine: $latest"
+          echo "DB_ENGINE_VERSION=$latest" >> "$GITHUB_ENV"
 
       - name: Validate CloudFormation template
         shell: bash
@@ -103,6 +110,7 @@ jobs:
             --parameter-overrides \
               EnvironmentName=dabbir-prod \
               DatabaseInstanceClass=db.t4g.small \
+              DatabaseEngineVersion="$DB_ENGINE_VERSION" \
               MultiAZ=false \
             --no-fail-on-empty-changeset \
             --tags App=DABBIR Environment=production ManagedBy=GitHubOIDC Region=me-central-1
