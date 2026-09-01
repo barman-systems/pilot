@@ -1,0 +1,162 @@
+name: DABBIR UAE Bootstrap Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-uae-bootstrap-supabase.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  bootstrap:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: dabbir-bootstrap-${{ github.run_id }}
+
+      - name: Grant SSM administration permissions
+        run: |
+          set -euo pipefail
+          cat >/tmp/ssm-policy.json <<'JSON'
+          {
+            "Version":"2012-10-17",
+            "Statement":[
+              {
+                "Effect":"Allow",
+                "Action":[
+                  "ssm:SendCommand",
+                  "ssm:GetCommandInvocation",
+                  "ssm:ListCommandInvocations",
+                  "ssm:DescribeInstanceInformation",
+                  "ssm:DescribeInstanceProperties",
+                  "ec2:DescribeInstances"
+                ],
+                "Resource":"*"
+              }
+            ]
+          }
+          JSON
+          aws iam put-role-policy \
+            --role-name DabbirGithubDeployRole \
+            --policy-name DabbirSsmAdministration \
+            --policy-document file:///tmp/ssm-policy.json
+          sleep 5
+
+      - name: Wait for UAE infrastructure
+        id: infra
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 180); do
+            status="$(aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo MISSING)"
+            echo "Infrastructure state: $status"
+            case "$status" in
+              CREATE_COMPLETE|UPDATE_COMPLETE)
+                instance_id="$(aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query "Stacks[0].Outputs[?OutputKey=='ServerInstanceId'].OutputValue | [0]" --output text)"
+                public_ip="$(aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query "Stacks[0].Outputs[?OutputKey=='ServerPublicIp'].OutputValue | [0]" --output text)"
+                test -n "$instance_id" && test "$instance_id" != "None"
+                echo "instance_id=$instance_id" >> "$GITHUB_OUTPUT"
+                echo "public_ip=$public_ip" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              ROLLBACK_*|CREATE_FAILED|DELETE_*|UPDATE_ROLLBACK_*)
+                echo "Infrastructure failed with state $status" >&2
+                exit 3
+                ;;
+            esac
+            sleep 10
+          done
+          echo 'Timed out waiting for DABBIR UAE infrastructure.' >&2
+          exit 4
+
+      - name: Wait for SSM managed instance
+        env:
+          INSTANCE_ID: ${{ steps.infra.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            ping_status="$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || true)"
+            echo "SSM status: ${ping_status:-not-registered}"
+            if [ "$ping_status" = "Online" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'EC2 did not become online in SSM.' >&2
+          exit 5
+
+      - name: Bootstrap pinned self-hosted Supabase through SSM
+        id: bootstrap
+        env:
+          INSTANCE_ID: ${{ steps.infra.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          RAW_URL="https://raw.githubusercontent.com/barman-systems/pilot/${GITHUB_SHA}/infra/aws-uae/bootstrap-dabbir-supabase.sh"
+          params="$(jq -cn --arg url "$RAW_URL" '{commands:["set -euo pipefail",("curl -fsSL " + $url + " -o /tmp/bootstrap-dabbir-supabase.sh"),"chmod 0700 /tmp/bootstrap-dabbir-supabase.sh","bash /tmp/bootstrap-dabbir-supabase.sh"]}')"
+          command_id="$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment 'DABBIR Supabase bootstrap from pinned GitHub commit' \
+            --parameters "$params" \
+            --query 'Command.CommandId' \
+            --output text)"
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "SSM command: $command_id"
+
+          for i in $(seq 1 180); do
+            status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)"
+            echo "Bootstrap state: $status"
+            case "$status" in
+              Success) exit 0 ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --output json || true
+                exit 6
+                ;;
+            esac
+            sleep 10
+          done
+          echo 'Supabase bootstrap timed out.' >&2
+          exit 7
+
+      - name: Verify local Supabase services through SSM
+        env:
+          INSTANCE_ID: ${{ steps.infra.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          params='{"commands":["set -euo pipefail","curl -fsS --max-time 5 http://127.0.0.1:8000/rest/v1/ >/dev/null","cd /opt/dabbir/supabase/docker && docker compose ps","test -f /opt/dabbir/ops/README"]}'
+          command_id="$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript --comment 'DABBIR local Supabase verification' --parameters "$params" --query 'Command.CommandId' --output text)"
+          for i in $(seq 1 60); do
+            status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)"
+            case "$status" in
+              Success)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --query '{Status:Status,Output:StandardOutputContent}' --output json
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --output json || true
+                exit 8
+                ;;
+            esac
+            sleep 5
+          done
+          exit 9
+
+      - name: Evidence
+        env:
+          INSTANCE_ID: ${{ steps.infra.outputs.instance_id }}
+          PUBLIC_IP: ${{ steps.infra.outputs.public_ip }}
+          COMMAND_ID: ${{ steps.bootstrap.outputs.command_id }}
+        run: |
+          printf 'DABBIR UAE EC2=%s\nElasticIP=%s\nBootstrapCommand=%s\nLocalSupabaseHealth=PASS\n' "$INSTANCE_ID" "$PUBLIC_IP" "$COMMAND_ID"
