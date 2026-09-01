@@ -337,7 +337,24 @@ async function browserJourney() {
   const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
   assert(visibleOperationsCount === 1, `BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_${visibleOperationsCount}`);
-  await visibleOperationsNav.click();
+  const operationsNavState = await visibleOperationsNav.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    const hit = document.elementFromPoint(centerX, centerY);
+    return {
+      display: getComputedStyle(element).display,
+      visibility: getComputedStyle(element).visibility,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      centre_hits_target: hit === element || element.contains(hit),
+    };
+  });
+  console.log(`DABBIR_MOBILE_OPERATIONS_NAV_STATE=${JSON.stringify(operationsNavState)}`);
+  assert(operationsNavState.display !== 'none' && operationsNavState.visibility !== 'hidden' && operationsNavState.width >= 40 && operationsNavState.height >= 40 && operationsNavState.centre_hits_target, `BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_${JSON.stringify(operationsNavState)}`);
+  await page.mouse.click(operationsNavState.left + (operationsNavState.width / 2), operationsNavState.top + (operationsNavState.height / 2));
   await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
   assert((await page.locator('#opsBody').textContent())?.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
