@@ -1,0 +1,279 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DABBIR managed core in AWS Middle East UAE. ECS runtime is provisioned separately so ECS control-plane throttling cannot block the database foundation.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dabbir-prod
+    AllowedPattern: '^[a-z0-9-]+$'
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t4g.small
+  DatabaseEngineVersion:
+    Type: String
+    Default: '17.8'
+  DatabaseAllocatedStorage:
+    Type: Number
+    Default: 50
+    MinValue: 20
+    MaxValue: 1000
+  DatabaseMaxAllocatedStorage:
+    Type: Number
+    Default: 200
+    MinValue: 50
+    MaxValue: 5000
+  MultiAZ:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+Conditions:
+  UseMultiAZ: !Equals [!Ref MultiAZ, 'true']
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-vpc'}
+        - {Key: App, Value: DABBIR}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-igw'}
+        - {Key: App, Value: DABBIR}
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.42.10.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-public-a'}
+        - {Key: App, Value: DABBIR}
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.42.11.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-public-b'}
+        - {Key: App, Value: DABBIR}
+
+  DatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.42.20.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-db-a'}
+        - {Key: App, Value: DABBIR}
+
+  DatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.42.21.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-db-b'}
+        - {Key: App, Value: DABBIR}
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-public-rt'}
+        - {Key: App, Value: DABBIR}
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: DABBIR managed runtime tasks
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-app-sg'}
+        - {Key: App, Value: DABBIR}
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: DABBIR PostgreSQL accepts only DABBIR runtime tasks
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ApplicationSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-db-sg'}
+        - {Key: App, Value: DABBIR}
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private UAE subnets for DABBIR PostgreSQL
+      SubnetIds: [!Ref DatabaseSubnetA, !Ref DatabaseSubnetB]
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-db-subnets'}
+        - {Key: App, Value: DABBIR}
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-postgres'
+      Engine: postgres
+      EngineVersion: !Ref DatabaseEngineVersion
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBName: dabbir
+      MasterUsername: dabbir_admin
+      ManageMasterUserPassword: true
+      AllocatedStorage: !Ref DatabaseAllocatedStorage
+      MaxAllocatedStorage: !Ref DatabaseMaxAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: !If [UseMultiAZ, true, false]
+      BackupRetentionPeriod: 14
+      PreferredBackupWindow: 00:30-01:00
+      PreferredMaintenanceWindow: sun:01:30-sun:02:30
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      EnableCloudwatchLogsExports: [postgresql, upgrade]
+      Tags:
+        - {Key: Name, Value: !Sub '${EnvironmentName}-postgres'}
+        - {Key: App, Value: DABBIR}
+        - {Key: Environment, Value: production}
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration: {Status: Enabled}
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration: {NoncurrentDays: 30}
+          - Id: abort-incomplete-multipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload: {DaysAfterInitiation: 7}
+      Tags:
+        - {Key: App, Value: DABBIR}
+        - {Key: Environment, Value: production}
+
+  ApiImageRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}/api'
+      ImageScanningConfiguration: {ScanOnPush: true}
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration: {EncryptionType: AES256}
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Keep newest 30 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":30},"action":{"type":"expire"}}]}'
+      Tags:
+        - {Key: App, Value: DABBIR}
+
+  SupabaseRuntimeImageRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}/supabase-runtime'
+      ImageScanningConfiguration: {ScanOnPush: true}
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration: {EncryptionType: AES256}
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Keep newest 20 runtime images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}'
+      Tags:
+        - {Key: App, Value: DABBIR}
+
+  RuntimeLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RetentionInDays: 30
+      Tags:
+        - {Key: App, Value: DABBIR}
+        - {Key: Environment, Value: production}
+
+Outputs:
+  Region: {Value: !Ref AWS::Region}
+  VpcId: {Value: !Ref Vpc}
+  PublicSubnetAId: {Value: !Ref PublicSubnetA}
+  PublicSubnetBId: {Value: !Ref PublicSubnetB}
+  DatabaseSubnetAId: {Value: !Ref DatabaseSubnetA}
+  DatabaseSubnetBId: {Value: !Ref DatabaseSubnetB}
+  ApplicationSecurityGroupId: {Value: !Ref ApplicationSecurityGroup}
+  DatabaseEndpoint: {Value: !GetAtt Database.Endpoint.Address}
+  DatabasePort: {Value: !GetAtt Database.Endpoint.Port}
+  DatabaseMasterSecretArn: {Value: !GetAtt Database.MasterUserSecret.SecretArn}
+  DataBucketName: {Value: !Ref DataBucket}
+  ApiImageRepositoryUri: {Value: !GetAtt ApiImageRepository.RepositoryUri}
+  SupabaseRuntimeImageRepositoryUri: {Value: !GetAtt SupabaseRuntimeImageRepository.RepositoryUri}
+  RuntimeLogGroupName: {Value: !Ref RuntimeLogGroup}
