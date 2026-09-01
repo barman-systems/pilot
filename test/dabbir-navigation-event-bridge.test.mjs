@@ -13,7 +13,7 @@ test('navigation bridge delegates existing primary nav without owning destinatio
   assert.match(bridge, /document\.addEventListener\('touchend'/);
   assert.match(bridge, /typeof showScreen==='function'/);
   assert.match(bridge, /safeFallback/);
-  assert.doesNotMatch(bridge, /dataset\.screen\s*=/);
+  assert.doesNotMatch(bridge, /dataset\.screen\s*=(?!=)/);
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
 });
 
