@@ -1,0 +1,5 @@
+# This function authenticates GitHub Actions OIDC tokens in its handler.
+# Supabase JWT gateway validation must stay disabled because those tokens are
+# signed by GitHub rather than the Supabase Auth issuer.
+[functions.barman-qa-suite-runner]
+verify_jwt = false

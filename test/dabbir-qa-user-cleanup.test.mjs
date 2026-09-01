@@ -23,3 +23,11 @@ test('QA auth deletion follows scope check -> tombstone -> product row -> auth i
 test('QA cleanup never bulk-deletes DABBIR product accounts', () => {
   assert.doesNotMatch(source, /from\('dabbir_user_accounts'\)\.delete\(\)(?!\.eq\('user_id',userId\))/);
 });
+
+const functionConfig = await readFile(new URL('../supabase/config.toml', import.meta.url), 'utf8');
+
+test('QA runner disables gateway JWT validation because it verifies GitHub OIDC itself', () => {
+  assert.match(source, /async function verifyGitHubOidc/);
+  assert.match(source, /OIDC_SIGNATURE_INVALID/);
+  assert.match(functionConfig, /\[functions\.barman-qa-suite-runner\][\s\S]*verify_jwt\s*=\s*false/);
+});

@@ -1,3 +1,4 @@
+import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
@@ -11,23 +12,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const config = getDABBIRAiConfig();
     if (String(singleQueryValue(req, 'synthetic') || '') === '1') {
-      const result = await generateDABBIRAiReply({
-        project: 'dabbir_clinics',
-        message: 'هلا، ابا موعد باجر العصر',
-        language: 'ar',
-      });
-      const status = result.ok ? 200
-        : result.state === 'UNCONFIGURED' ? 503
-        : result.state === 'RATE_LIMITED' ? 429
-        : 502;
-      return json(res, status, {
-        ...result,
-        service: 'dabbir-ai',
-        environment,
-        data_mode: 'SYNTHETIC_ONLY',
-        external_side_effects: false,
-        synthetic_probe: true,
-      });
+      // Synthetic probes call the real provider. Keep them on the same protected
+      // write path as production AI so a public query cannot consume capacity.
+      return json(res, 405, { ok: false, error: 'SYNTHETIC_POST_AUTH_REQUIRED' });
     }
 
     return json(res, 200, {
@@ -46,6 +33,15 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'method_not_allowed' });
+  }
+
+  if (!requireSameOrigin(req)) {
+    return json(res, 403, { ok: false, error: 'ORIGIN_REQUIRED' });
+  }
+
+  const user = await getVerifiedUser(accessTokenFromRequest(req));
+  if (!user) {
+    return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
   }
 
   if (req.body?.synthetic !== true) {
@@ -70,6 +66,8 @@ export default async function handler(req, res) {
     environment,
     data_mode: 'SYNTHETIC_ONLY',
     external_side_effects: false,
+    synthetic_probe: true,
+    requested_by: user.id,
     timestamp: new Date().toISOString(),
   });
 }

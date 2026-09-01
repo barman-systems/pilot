@@ -41,6 +41,11 @@ const UI_MODULE_ORDER = [
   '/api/auth-session-stability-ui',
 ];
 
+// The auth gate is visible before #appShell. Its owner-first presentation layer must
+// therefore load independently of the workspace-only deferred bundle; otherwise
+// mobile WebKit can observe an uninitialised authority during first paint.
+const OWNER_FIRST_UI_BOOTSTRAP = `<script src="/api/dabbir-owner-first-ui?v=${UI_BUNDLE_VERSION}"></script>`;
+
 const UI_BUNDLE_LOADER = `<script>
 (()=>{
   window.__dabbirCriticalUiReady=true;
@@ -365,7 +370,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n' + SETTINGS_MOBILE_REDESIGN + '\n</body>')
+        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + OWNER_FIRST_UI_BOOTSTRAP + '\n' + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n' + SETTINGS_MOBILE_REDESIGN + '\n</body>')
         : body;
       return res.end(html);
     },

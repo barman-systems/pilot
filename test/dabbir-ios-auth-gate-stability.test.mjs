@@ -54,3 +54,12 @@ test('auth stability handler is no-store JavaScript and rejects non-GET requests
   assert.match(authUi, /cache-control','no-store/);
   assert.match(authUi, /req\.method!==\'GET\'/);
 });
+
+test('owner-first authority loads synchronously for the visible auth gate before deferred workspace UI', () => {
+  const bootstrapIndex = appRecovery.indexOf('const OWNER_FIRST_UI_BOOTSTRAP');
+  const loaderIndex = appRecovery.indexOf('const UI_BUNDLE_LOADER');
+  const injectionIndex = appRecovery.indexOf('OWNER_FIRST_UI_BOOTSTRAP +');
+  assert.ok(bootstrapIndex >= 0 && loaderIndex > bootstrapIndex);
+  assert.ok(injectionIndex >= 0, 'owner-first bootstrap must be injected into the document');
+  assert.match(appRecovery, /<script src="\/api\/dabbir-owner-first-ui\?v=\$\{UI_BUNDLE_VERSION\}"><\/script>/);
+});
