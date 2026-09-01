@@ -1,0 +1,45 @@
+name: DABBIR Vercel Emergency Guard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dabbir-vercel-emergency-guard.yml
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      PRODUCTION_HOST: dabbir.bmalman.com
+    steps:
+      - name: Restore build guard and cancel unintended production builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || exit 10
+          echo "::add-mask::$VERCEL_TOKEN"
+
+          # Restore project-level default; vercel.json remains the authoritative ignore policy.
+          status="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -X PATCH "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data '{"commandForIgnoringBuildStep":null}')"
+          [[ "$status" =~ ^2 ]] || { echo "project_patch_status=$status"; exit 20; }
+
+          d="$(curl -fsS "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&target=production&limit=50&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          jq -r '.deployments[] | select((.state=="BUILDING") or (.state=="QUEUED") or (.state=="INITIALIZING")) | .uid // .id' <<<"$d" > "$RUNNER_TEMP/cancel.txt"
+          while IFS= read -r id; do
+            [[ -n "$id" ]] || continue
+            echo "Canceling unintended production build: $id"
+            curl -sS -X PATCH "https://api.vercel.com/v12/deployments/${id}/cancel?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data '{}' >/dev/null || true
+          done < "$RUNNER_TEMP/cancel.txt"
+
+          p="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "project_ignore=$(jq -r '.commandForIgnoringBuildStep // "<null>"' <<<"$p")"
+          a="$(curl -fsS "https://api.vercel.com/v4/aliases/${PRODUCTION_HOST}?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "production_alias_deployment=$(jq -r '.deploymentId // .deployment.id // empty' <<<"$a")"
+          echo 'PASS DABBIR_VERCEL_GUARD_RESTORED'
