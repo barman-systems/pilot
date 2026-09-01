@@ -20,6 +20,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticator') THEN
     CREATE ROLE authenticator LOGIN NOINHERIT;
   END IF;
+  -- Supabase-owned ACL entries reference postgres. On RDS this compatibility
+  -- role is deliberately NOLOGIN and is never granted to the app runtime.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='postgres') THEN
+    CREATE ROLE postgres NOLOGIN NOINHERIT;
+  END IF;
 END
 $$;
 
