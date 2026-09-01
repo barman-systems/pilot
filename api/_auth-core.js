@@ -1,8 +1,12 @@
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
 const LEGACY_SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
 export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
 // Backward-compatible export. New code should choose AUTH or DATA explicitly.
 export const SUPABASE_URL = SUPABASE_DATA_URL;
+const SUPABASE_AUTH_ISSUER = `${SUPABASE_AUTH_URL}/auth/v1`;
+const SUPABASE_AUTH_JWKS = createRemoteJWKSet(new URL(`${SUPABASE_AUTH_ISSUER}/.well-known/jwks.json`));
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
 const DEFAULT_SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.DABBIR_SUPABASE_TIMEOUT_MS || 15000));
@@ -129,8 +133,33 @@ export async function supabaseRpc(name, accessToken, params = {}) {
   });
 }
 
+async function verifiedUserViaJwks(accessToken) {
+  try {
+    const { payload } = await jwtVerify(accessToken, SUPABASE_AUTH_JWKS, {
+      issuer: SUPABASE_AUTH_ISSUER,
+      audience: 'authenticated',
+    });
+    if (!UUID_RE.test(String(payload?.sub || ''))) return null;
+    return {
+      id: String(payload.sub),
+      email: payload.email == null ? null : String(payload.email),
+      aud: payload.aud ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function verifiedUserBase(accessToken, options = {}) {
   if (!accessToken) return null;
+
+  // Normal path: verify the ES256 Supabase session locally using the public JWKS.
+  // This keeps Sydney Auth out of the hot request path once DABBIR data is in UAE.
+  const localUser = await verifiedUserViaJwks(accessToken);
+  if (localUser) return localUser;
+
+  // Compatibility/failover path for a legacy HS256 session or a temporary JWKS
+  // rotation/network issue. Supabase Auth remains managed and authoritative.
   const headers = new Headers(options.headers || {});
   headers.set('authorization', `Bearer ${accessToken}`);
   const response = await supabaseAuth('/auth/v1/user', { ...options, headers });
@@ -185,13 +214,11 @@ function decodeJwtPayload(accessToken) {
 }
 
 // IMPORTANT: this helper does not verify the JWT signature itself. Call it only
-// after the same access token has already been accepted by a Supabase API that
-// verifies JWTs (for example the Data API membership lookup). RLS still enforces
-// the DABBIR account-access gate for fast-path membership/data reads.
+// after the same access token has already been accepted by a verified path.
 export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const payload = decodeJwtPayload(accessToken);
   if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
-  if (String(payload.iss || '') !== `${SUPABASE_AUTH_URL}/auth/v1`) return null;
+  if (String(payload.iss || '') !== SUPABASE_AUTH_ISSUER) return null;
   if (String(payload.role || '') !== 'authenticated') return null;
   const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
   if (!audiences.includes('authenticated')) return null;
@@ -239,7 +266,7 @@ export function readJsonBody(req, maxBytes = 8192) {
     });
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
-      catch { reject(Object.assign(new Error('INVALID_JSON'), { code: 400 })); }
+      catch { reject(Object.assign(new Error('INVALID_JSON'), { code: 400 }));
     });
     req.on('error', reject);
   });
