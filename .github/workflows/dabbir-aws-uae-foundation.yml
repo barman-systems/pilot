@@ -1,8 +1,17 @@
-name: DABBIR AWS UAE Managed Foundation
+name: DABBIR AWS Managed Foundation
 
 on:
   workflow_dispatch:
     inputs:
+      target_region:
+        description: AWS production region (UAE me-central-1 is blocked while AWS reports it unreliable)
+        required: true
+        default: me-south-1
+        type: choice
+        options:
+          - me-south-1
+          - ap-south-1
+          - eu-central-1
       database_instance_class:
         description: RDS PostgreSQL instance class
         required: true
@@ -19,12 +28,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: dabbir-aws-uae-foundation-production
+  group: dabbir-aws-managed-foundation-production
   cancel-in-progress: false
 
 jobs:
   deploy-foundation:
-    name: Deploy managed UAE foundation
+    name: Deploy managed foundation
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
@@ -45,19 +54,32 @@ jobs:
             exit 2
           }
 
+      - name: Reject unsafe UAE deployment
+        shell: bash
+        env:
+          TARGET_REGION: ${{ inputs.target_region }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_REGION" != 'me-central-1' || {
+            echo 'me-central-1 is blocked while AWS reports the UAE Region cannot reliably support customer applications.'
+            exit 3
+          }
+
       - name: Configure AWS credentials using GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DABBIR_DEPLOY_ROLE_ARN }}
-          aws-region: me-central-1
+          aws-region: ${{ inputs.target_region }}
           role-session-name: dabbir-foundation-${{ github.run_id }}
 
-      - name: Verify AWS identity and UAE region
+      - name: Verify AWS identity and selected region
         shell: bash
+        env:
+          TARGET_REGION: ${{ inputs.target_region }}
         run: |
           set -euo pipefail
           aws sts get-caller-identity
-          test "${AWS_REGION}" = 'me-central-1'
+          test "${AWS_REGION}" = "$TARGET_REGION"
 
       - name: Validate CloudFormation template
         shell: bash
@@ -70,6 +92,7 @@ jobs:
       - name: Deploy managed foundation
         shell: bash
         env:
+          TARGET_REGION: ${{ inputs.target_region }}
           DB_INSTANCE_CLASS: ${{ inputs.database_instance_class }}
           MULTI_AZ: ${{ inputs.multi_az }}
         run: |
@@ -81,7 +104,7 @@ jobs:
           fi
 
           aws cloudformation deploy \
-            --region me-central-1 \
+            --region "$TARGET_REGION" \
             --stack-name dabbir-managed-foundation \
             --template-file infra/aws-uae/dabbir-managed-foundation.yml \
             --parameter-overrides \
@@ -89,14 +112,16 @@ jobs:
               DatabaseInstanceClass="$DB_INSTANCE_CLASS" \
               MultiAZ="$multi_az_value" \
             --no-fail-on-empty-changeset \
-            --tags App=DABBIR Environment=production ManagedBy=GitHubOIDC
+            --tags App=DABBIR Environment=production ManagedBy=GitHubOIDC Region="$TARGET_REGION"
 
       - name: Capture deployment evidence
         shell: bash
+        env:
+          TARGET_REGION: ${{ inputs.target_region }}
         run: |
           set -euo pipefail
           aws cloudformation describe-stacks \
-            --region me-central-1 \
+            --region "$TARGET_REGION" \
             --stack-name dabbir-managed-foundation \
             --query 'Stacks[0].{Status:StackStatus,Created:CreationTime,Updated:LastUpdatedTime,Outputs:Outputs}' \
             --output json | tee /tmp/dabbir-foundation-evidence.json
