@@ -307,6 +307,27 @@ async function browserJourney() {
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
   assert((await page.locator('#chatList').textContent())?.includes('AI Journey Customer'), 'BROWSER_CONVERSATION_MISSING');
 
+  const mobileMenuState = await page.locator('#menuBtn').evaluate(element => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return {
+      display: style.display,
+      visibility: style.visibility,
+      pointer_events: style.pointerEvents,
+      position: style.position,
+      opacity: style.opacity,
+      disabled: element.disabled,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      top: Math.round(rect.top),
+      left: Math.round(rect.left),
+      viewport_width: window.innerWidth,
+      viewport_height: window.innerHeight,
+      top_visible: document.elementFromPoint(Math.max(0, rect.left + 4), Math.max(0, rect.top + 4))?.id || null,
+    };
+  });
+  console.log(`DABBIR_MOBILE_MENU_STATE=${JSON.stringify(mobileMenuState)}`);
+  assert(mobileMenuState.display !== 'none' && mobileMenuState.visibility !== 'hidden' && mobileMenuState.width >= 40 && mobileMenuState.height >= 40, `BROWSER_MOBILE_MENU_NOT_ACTIONABLE_${JSON.stringify(mobileMenuState)}`);
   await page.locator('#menuBtn').click();
   await page.locator('#side.open').waitFor({ state: 'visible', timeout: 10_000 });
   const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
