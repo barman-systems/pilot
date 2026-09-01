@@ -1,0 +1,60 @@
+name: DABBIR AWS S3 Permission Hotfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-s3-permission-hotfix.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  hotfix:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: dabbir-s3-hotfix-${{ github.run_id }}
+      - name: Grant explicit S3 provisioning permissions
+        run: |
+          set -euo pipefail
+          cat >/tmp/s3-hotfix.json <<'JSON'
+          {
+            "Version":"2012-10-17",
+            "Statement":[
+              {
+                "Effect":"Allow",
+                "Action":[
+                  "s3:CreateBucket",
+                  "s3:DeleteBucket",
+                  "s3:GetBucket*",
+                  "s3:PutBucket*",
+                  "s3:ListBucket",
+                  "s3:GetObject",
+                  "s3:PutObject",
+                  "s3:DeleteObject",
+                  "s3:PutEncryptionConfiguration",
+                  "s3:GetEncryptionConfiguration",
+                  "s3:PutLifecycleConfiguration",
+                  "s3:GetLifecycleConfiguration"
+                ],
+                "Resource":"*"
+              }
+            ]
+          }
+          JSON
+          aws iam put-role-policy \
+            --role-name DabbirGithubDeployRole \
+            --policy-name DabbirS3ProvisioningHotfix \
+            --policy-document file:///tmp/s3-hotfix.json
+          sleep 5
+          aws iam get-role-policy \
+            --role-name DabbirGithubDeployRole \
+            --policy-name DabbirS3ProvisioningHotfix >/dev/null
+          echo 'S3 provisioning permissions active.'
