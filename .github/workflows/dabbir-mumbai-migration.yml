@@ -1,0 +1,171 @@
+name: DABBIR Sydney to Mumbai Migration
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/dabbir-mumbai-migration.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-mumbai-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_REF: spohjzrsymsmzsseygtw
+      TARGET_REF: fphpoysqdsceniwduxjq
+      SOURCE_REGION: ap-southeast-2
+      TARGET_REGION: ap-south-1
+      SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
+      TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+    steps:
+      - name: Checkout authoritative DABBIR source
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates jq python3
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          psql --version
+          pg_dump --version
+          sudo mkdir -p /opt/dabbir
+          sudo chown "$(id -u):$(id -g)" /opt/dabbir
+
+      - name: Migrate DABBIR database, Auth and Storage with strict verification
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MGMT_TOKEN="${SUPABASE_MANAGEMENT_TOKEN:-${SUPABASE_ACCESS_TOKEN:-}}"
+          if [[ -z "$MGMT_TOKEN" ]]; then
+            echo "ERROR: Supabase Management token is not configured in GitHub secrets." >&2
+            exit 20
+          fi
+          echo "::add-mask::$MGMT_TOKEN"
+
+          api="https://api.supabase.com/v1/projects"
+          auth_header="Authorization: Bearer ${MGMT_TOKEN}"
+
+          cleanup() {
+            set +e
+            curl -sS -X DELETE "$api/$SOURCE_REF/cli/login-role" -H "$auth_header" >/dev/null 2>&1 || true
+            curl -sS -X DELETE "$api/$TARGET_REF/cli/login-role" -H "$auth_header" >/dev/null 2>&1 || true
+            unset SOURCE_DATABASE_URL TARGET_DATABASE_URL SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY
+          }
+          trap cleanup EXIT
+
+          # Clear only temporary CLI login roles left by an interrupted migration.
+          curl -sS -X DELETE "$api/$SOURCE_REF/cli/login-role" -H "$auth_header" >/dev/null 2>&1 || true
+          curl -sS -X DELETE "$api/$TARGET_REF/cli/login-role" -H "$auth_header" >/dev/null 2>&1 || true
+
+          create_login() {
+            local ref="$1" readonly="$2" outfile="$3"
+            curl -fsS -X POST "$api/$ref/cli/login-role" \
+              -H "$auth_header" -H 'content-type: application/json' \
+              --data "{\"read_only\":${readonly}}" > "$outfile"
+          }
+
+          create_login "$SOURCE_REF" true  "$RUNNER_TEMP/source-login.json"
+          create_login "$TARGET_REF" false "$RUNNER_TEMP/target-login.json"
+
+          read_login() {
+            local file="$1" field="$2"
+            jq -r --arg f "$field" '.[$f] // empty' "$file"
+          }
+
+          SOURCE_ROLE="$(read_login "$RUNNER_TEMP/source-login.json" role)"
+          SOURCE_PASS="$(read_login "$RUNNER_TEMP/source-login.json" password)"
+          SOURCE_TTL="$(read_login "$RUNNER_TEMP/source-login.json" ttl_seconds)"
+          TARGET_ROLE="$(read_login "$RUNNER_TEMP/target-login.json" role)"
+          TARGET_PASS="$(read_login "$RUNNER_TEMP/target-login.json" password)"
+          TARGET_TTL="$(read_login "$RUNNER_TEMP/target-login.json" ttl_seconds)"
+
+          [[ -n "$SOURCE_ROLE" && -n "$SOURCE_PASS" && -n "$TARGET_ROLE" && -n "$TARGET_PASS" ]] || {
+            echo "ERROR: Supabase did not return temporary CLI login credentials." >&2
+            exit 21
+          }
+          echo "::add-mask::$SOURCE_PASS"
+          echo "::add-mask::$TARGET_PASS"
+          echo "Temporary source login TTL: ${SOURCE_TTL:-unknown}s"
+          echo "Temporary target login TTL: ${TARGET_TTL:-unknown}s"
+
+          pool_user() {
+            local role="$1" ref="$2"
+            if [[ "$role" == *".$ref" ]]; then printf '%s' "$role"; else printf '%s.%s' "$role" "$ref"; fi
+          }
+          urlencode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+
+          SOURCE_USER="$(pool_user "$SOURCE_ROLE" "$SOURCE_REF")"
+          TARGET_USER="$(pool_user "$TARGET_ROLE" "$TARGET_REF")"
+          SOURCE_DATABASE_URL="postgresql://${SOURCE_USER}:$(urlencode "$SOURCE_PASS")@aws-0-${SOURCE_REGION}.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20role%3Dpostgres"
+          TARGET_DATABASE_URL="postgresql://${TARGET_USER}:$(urlencode "$TARGET_PASS")@aws-0-${TARGET_REGION}.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20role%3Dpostgres"
+          echo "::add-mask::$SOURCE_DATABASE_URL"
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          export SOURCE_DATABASE_URL TARGET_DATABASE_URL
+
+          # Prove both temporary connections can assume the managed postgres role.
+          source_identity="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select current_user||'|'||session_user||'|'||current_setting('server_version_num')")"
+          target_identity="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select current_user||'|'||session_user||'|'||current_setting('server_version_num')")"
+          [[ "$source_identity" == postgres\|* ]] || { echo "ERROR: source temporary role cannot assume postgres." >&2; exit 22; }
+          [[ "$target_identity" == postgres\|* ]] || { echo "ERROR: target temporary role cannot assume postgres." >&2; exit 23; }
+          echo "PASS: temporary database access verified on Sydney and Mumbai."
+
+          # Retrieve service-role keys in-memory for the one DABBIR Storage object migration.
+          get_service_key() {
+            local ref="$1" file="$2"
+            curl -fsS "$api/$ref/api-keys?reveal=true" -H "$auth_header" > "$file"
+            jq -r '
+              [ .[] | select(
+                  (.name? == "service_role") or
+                  (.role? == "service_role") or
+                  ((.type? == "legacy") and (.name? == "service_role"))
+                ) ][0] |
+              (.api_key // .key // .value // .secret // empty)
+            ' "$file"
+          }
+          SOURCE_SERVICE_ROLE_KEY="$(get_service_key "$SOURCE_REF" "$RUNNER_TEMP/source-keys.json")"
+          TARGET_SERVICE_ROLE_KEY="$(get_service_key "$TARGET_REF" "$RUNNER_TEMP/target-keys.json")"
+          [[ -n "$SOURCE_SERVICE_ROLE_KEY" && -n "$TARGET_SERVICE_ROLE_KEY" ]] || {
+            echo "ERROR: legacy service_role keys were not available from the Management API." >&2
+            exit 24
+          }
+          echo "::add-mask::$SOURCE_SERVICE_ROLE_KEY"
+          echo "::add-mask::$TARGET_SERVICE_ROLE_KEY"
+          export SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY SOURCE_SUPABASE_URL TARGET_SUPABASE_URL
+
+          # The repo script is fail-closed: target must be empty and all schema/data/Auth fingerprints must match.
+          DUMP_DIR="$RUNNER_TEMP/dabbir-migration" bash infra/falconcloud-dubai/migrate-db.sh
+          bash infra/falconcloud-dubai/migrate-storage.sh
+
+          # Final compact proof, with no secrets or customer content in logs.
+          src_users="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)")"
+          dst_users="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from auth.users")"
+          src_tables="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_type='BASE TABLE' and (table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))")"
+          dst_tables="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_type='BASE TABLE' and (table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))")"
+          src_objects="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
+          dst_objects="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
+
+          [[ "$src_users" == "$dst_users" && "$src_tables" == "$dst_tables" && "$src_objects" == "$dst_objects" ]] || {
+            echo "ERROR: final compact count verification failed." >&2
+            exit 25
+          }
+          echo "PASS DABBIR_MUMBAI_DATABASE_AUTH_STORAGE users=$dst_users tables=$dst_tables storage_objects=$dst_objects"
+          echo "Production Vercel endpoint was NOT changed by this workflow."
