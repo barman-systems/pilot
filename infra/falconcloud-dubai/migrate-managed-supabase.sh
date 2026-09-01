@@ -12,9 +12,9 @@ path = Path(sys.argv[1])
 text = path.read_text()
 old = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
 set session_replication_role = replica;
-\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
-\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
-\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
+\\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
+\\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
+\\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
 set session_replication_role = origin;
 EOF
 chmod 600 "$WORKDIR/restore-auth.psql"
@@ -22,9 +22,9 @@ tgt -f "$WORKDIR/restore-auth.psql"
 '''
 new = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
 truncate table public.migration_auth_users_stage, public.migration_auth_identities_stage, public.migration_auth_mfa_factors_stage;
-\copy public.migration_auth_users_stage(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
-\copy public.migration_auth_identities_stage(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
-\copy public.migration_auth_mfa_factors_stage(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
+\\copy public.migration_auth_users_stage(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
+\\copy public.migration_auth_identities_stage(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
+\\copy public.migration_auth_mfa_factors_stage(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
 select public.migration_commit_auth_stage_v1();
 EOF
 chmod 600 "$WORKDIR/restore-auth.psql"
