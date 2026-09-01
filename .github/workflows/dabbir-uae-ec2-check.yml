@@ -1,0 +1,28 @@
+name: DABBIR UAE EC2 Check
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-uae-ec2-check.yml'
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  check:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+      - name: Stack resources
+        run: |
+          aws cloudformation list-stack-resources --stack-name dabbir-prod-uae --query 'StackResourceSummaries[].{Logical:LogicalResourceId,Type:ResourceType,Status:ResourceStatus,Physical:PhysicalResourceId}' --output json
+      - name: EC2 instances
+        run: |
+          aws ec2 describe-instances --filters 'Name=tag:aws:cloudformation:stack-name,Values=dabbir-prod-uae' --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType,AZ:Placement.AvailabilityZone,PublicIp:PublicIpAddress,PrivateIp:PrivateIpAddress,LaunchTime:LaunchTime,Reason:StateTransitionReason}' --output json
+      - name: EC2 status
+        run: |
+          aws ec2 describe-instance-status --include-all-instances --query 'InstanceStatuses[].{Id:InstanceId,State:InstanceState.Name,System:SystemStatus.Status,Instance:InstanceStatus.Status,AZ:AvailabilityZone}' --output json
