@@ -8,21 +8,30 @@ const script = String.raw`(()=>{
   let touchStart=null;
   let suppressClickNode=null;
   let suppressClickUntil=0;
+  let navigationEpoch=0;
 
   function itemFrom(target){
     return target?.closest?.(NAV_ITEM_SELECTOR)||null;
   }
 
+  function normalizeName(name){
+    try{
+      if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') return 'dashboard';
+    }catch{}
+    return name;
+  }
+
   function resolve(node){
     if(!node) return null;
-    const name=String(node.dataset?.screen||'').trim();
-    if(!name) return null;
+    const rawName=String(node.dataset?.screen||'').trim();
+    if(!rawName) return null;
+    const name=normalizeName(rawName);
     const screen=document.getElementById('screen-'+name);
     if(!screen) return null;
     return {node,name,screen};
   }
 
-  function safeFallback(hit,source,error=null){
+  function paint(hit){
     try{current=hit.name}catch{}
     document.querySelectorAll('.screen').forEach(screen=>screen.classList.toggle('active',screen===hit.screen));
     document.querySelectorAll('[data-screen]').forEach(item=>item.classList.toggle('active',item.dataset.screen===hit.name));
@@ -31,6 +40,10 @@ const script = String.raw`(()=>{
       try{page.textContent=(typeof T==='function'&&T()[hit.name])||hit.name}catch{page.textContent=hit.name}
     }
     document.querySelector('#side')?.classList.remove('open');
+  }
+
+  function safeFallback(hit,source,error=null){
+    paint(hit);
     window.__dabbirLastNavigationRecovery={
       target:hit.name,
       source,
@@ -40,15 +53,42 @@ const script = String.raw`(()=>{
     };
   }
 
-  function activate(hit,source){
-    let error=null;
-    try{
-      if(typeof showScreen==='function') showScreen(hit.name);
-    }catch(caught){
-      error=caught;
+  function afterPaint(callback){
+    if(typeof requestAnimationFrame==='function'){
+      requestAnimationFrame(()=>requestAnimationFrame(callback));
+      return;
     }
-    if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
-    else if(error) safeFallback(hit,source,error);
+    setTimeout(callback,0);
+  }
+
+  function activate(hit,source){
+    const epoch=++navigationEpoch;
+    const started=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+
+    // Navigation feedback must never wait for screen rendering, data work, or wrapper modules.
+    paint(hit);
+
+    afterPaint(()=>{
+      if(epoch!==navigationEpoch) return;
+      let error=null;
+      try{
+        if(typeof showScreen==='function') showScreen(hit.name);
+      }catch(caught){
+        error=caught;
+      }
+      if(epoch!==navigationEpoch) return;
+      if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
+      else if(error) safeFallback(hit,source,error);
+      const finished=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+      window.__dabbirLastNavigationTiming={
+        target:hit.name,
+        source,
+        visual_first:true,
+        deferred_render:true,
+        total_ms:Math.max(0,Math.round((finished-started)*10)/10),
+        at:new Date().toISOString(),
+      };
+    });
   }
 
   document.addEventListener('touchstart',event=>{
@@ -96,16 +136,19 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
 
   window.__dabbirNavigationEventBridge={
-    version:'navigation-event-bridge-v1',
+    version:'navigation-event-bridge-v2-instant-paint',
     delegated_click:true,
     webkit_touch_fallback:true,
     safe_screen_fallback:true,
+    visual_first:true,
+    deferred_render:true,
   };
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET') return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
-  res.setHeader('cache-control','public, max-age=300, s-maxage=300');
+  res.setHeader('cache-control','public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+  res.setHeader('x-dabbir-navigation-event-bridge','v2-instant-paint');
   return res.status(200).send(script);
 }
