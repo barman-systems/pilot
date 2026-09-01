@@ -337,7 +337,9 @@ async function browserJourney() {
   const visibleOperationsNav = page.locator('#side.open [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
   assert(visibleOperationsCount === 1, `BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_${visibleOperationsCount}`);
-  const operationsNavState = await visibleOperationsNav.evaluate(element => {
+  const operationsNavState = await page.evaluate(() => {
+    const element = document.querySelector('#side.open [data-screen="operations"]');
+    if (!element) return null;
     const rect = element.getBoundingClientRect();
     const centerX = rect.left + (rect.width / 2);
     const centerY = rect.top + (rect.height / 2);
@@ -353,7 +355,7 @@ async function browserJourney() {
     };
   });
   console.log(`DABBIR_MOBILE_OPERATIONS_NAV_STATE=${JSON.stringify(operationsNavState)}`);
-  assert(operationsNavState.display !== 'none' && operationsNavState.visibility !== 'hidden' && operationsNavState.width >= 40 && operationsNavState.height >= 40 && operationsNavState.centre_hits_target, `BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_${JSON.stringify(operationsNavState)}`);
+  assert(operationsNavState && operationsNavState.display !== 'none' && operationsNavState.visibility !== 'hidden' && operationsNavState.width >= 40 && operationsNavState.height >= 40 && operationsNavState.centre_hits_target, `BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_${JSON.stringify(operationsNavState)}`);
   await page.mouse.click(operationsNavState.left + (operationsNavState.width / 2), operationsNavState.top + (operationsNavState.height / 2));
   await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#opsBody').filter({ hasText: 'AI Journey Product' }).waitFor({ state: 'visible', timeout: 15_000 });
