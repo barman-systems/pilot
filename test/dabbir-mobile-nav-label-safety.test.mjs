@@ -31,3 +31,7 @@ const ownerUiSource = fs.readFileSync(new URL('api/dabbir-owner-first-ui.js', ro
 test('owner-first mobile navigation forces a visible, touch-sized menu button', () => {
   assert.match(ownerUiSource, /\.mobileMenu\{display:inline-flex!important;align-items:center!important;justify-content:center!important;visibility:visible!important;width:44px!important;height:44px!important;min-height:44px!important/);
 });
+
+test('owner-first mobile navigation makes an opened sidebar immediately reachable', () => {
+  assert.match(ownerUiSource, /\.side\.open\{transform:translateX\(0\)!important;transition:none!important\}/);
+});
