@@ -23,11 +23,11 @@
     "/api/platform-customers-ui",
     "/api/platform-customer-support-ui",
     "/api/platform-recovery-reconciliation-ui",
-    "/api/dabbir-owner-first-ui",
     "/api/verified-metrics-ui",
     "/api/customer-activation-ui",
     "/api/owner-copilot-ui",
     "/api/dabbir-contextual-navigation-ui",
+    "/api/dabbir-navigation-event-bridge-ui",
     "/api/car-wash-loader-ui"
   ]
 }
