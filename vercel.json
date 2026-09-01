@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "fluid": true,
-  "regions": ["dub1"],
+  "regions": ["dxb1"],
   "functionFailoverRegions": ["fra1"],
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
@@ -37,7 +37,7 @@
     },
     {
       "src": "^/terms/?$",
-      "dest": "/terms.html"
+      "dest": "/privacy.html"
     },
     {
       "src": "^/support/?$",
