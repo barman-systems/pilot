@@ -25,3 +25,6 @@ jobs:
       - name: Recent bootstrap events
         run: |
           aws cloudformation describe-stack-events --stack-name dabbir-github-oidc --max-items 20 --query 'StackEvents[].{Time:Timestamp,Logical:LogicalResourceId,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
+      - name: Recent production events
+        run: |
+          aws cloudformation describe-stack-events --stack-name dabbir-prod-uae --max-items 40 --query 'StackEvents[].{Time:Timestamp,Logical:LogicalResourceId,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
