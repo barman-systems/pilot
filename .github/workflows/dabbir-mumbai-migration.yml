@@ -15,11 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cutover:
+  cleanup-diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
-      SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
       TARGET_PUBLISHABLE_KEY: sb_publishable_gVq1bg_2DCnG-QFd6UAE9Q_Gx4w5JD3
       BROKER_SLUG: dabbir-migration-oidc-broker
@@ -27,144 +26,60 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
-      PRODUCTION_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      EXPECTED_PRODUCTION_DEPLOYMENT: dpl_DznyZWkcRnMZo7GZRhvUjek2CWrK
 
     steps:
-      - name: Cut over DABBIR to Mumbai with rollback
+      - name: Clean failed cutover state and diagnose deployment API
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${VERCEL_TOKEN:-}" || { echo 'BLOCKED: VERCEL_TOKEN_NOT_CONFIGURED'; exit 10; }
+          test -n "${VERCEL_TOKEN:-}" || exit 10
           echo "::add-mask::$VERCEL_TOKEN"
 
           oidc_json="$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
           test -n "$OIDC_TOKEN" || exit 20
           echo "::add-mask::$OIDC_TOKEN"
-
-          broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
-          SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
-          TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
-          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$SOURCE_BROKER")"
-          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
-          for x in "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do test -n "$x" || exit 23; echo "::add-mask::$x"; done
-
-          list_tables(){
-            local base="$1" key="$2"
-            curl -fsS "$base/rest/v1/" -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Accept: application/openapi+json' \
-              | jq -r '((.definitions // .components.schemas // {}) | keys[])' \
-              | grep -E '^(dabbir|account_access_state$)' | sort -u
-          }
-          list_tables "$SOURCE_SUPABASE_URL" "$SOURCE_SERVICE_ROLE_KEY" > "$RUNNER_TEMP/source.tables"
-          list_tables "$TARGET_SUPABASE_URL" "$TARGET_SERVICE_ROLE_KEY" > "$RUNNER_TEMP/target.tables"
-          diff -u "$RUNNER_TEMP/source.tables" "$RUNNER_TEMP/target.tables" >/dev/null || { echo 'ERROR: public DABBIR schema list differs'; exit 30; }
-          table_count="$(grep -c . "$RUNNER_TEMP/source.tables")"
-          (( table_count >= 100 )) || { echo "ERROR: public DABBIR table baseline too small: $table_count"; exit 31; }
-
-          fetch_table(){
-            local base="$1" key="$2" table="$3" out="$4" start=0 page=1000 n
-            : > "$out"
-            while true; do
-              curl -fsS "$base/rest/v1/${table}?select=*" -H "apikey: $key" -H "Authorization: Bearer $key" -H "Range: ${start}-$((start+page-1))" -H 'Range-Unit: items' -o "$RUNNER_TEMP/page.json"
-              jq -e 'type=="array"' "$RUNNER_TEMP/page.json" >/dev/null
-              n="$(jq 'length' "$RUNNER_TEMP/page.json")"
-              jq -cS '.[]' "$RUNNER_TEMP/page.json" >> "$out"
-              (( n < page )) && break
-              start=$((start+n))
-              (( start < 200000 )) || { echo "ERROR: pagination guard for $table"; exit 32; }
-            done
-          }
-
-          while IFS= read -r table; do
-            fetch_table "$SOURCE_SUPABASE_URL" "$SOURCE_SERVICE_ROLE_KEY" "$table" "$RUNNER_TEMP/source.rows"
-            fetch_table "$TARGET_SUPABASE_URL" "$TARGET_SERVICE_ROLE_KEY" "$table" "$RUNNER_TEMP/target.rows"
-            LC_ALL=C sort "$RUNNER_TEMP/source.rows" > "$RUNNER_TEMP/source.sorted"
-            LC_ALL=C sort "$RUNNER_TEMP/target.rows" > "$RUNNER_TEMP/target.sorted"
-            s_count="$(wc -l < "$RUNNER_TEMP/source.sorted" | tr -d ' ')"
-            t_count="$(wc -l < "$RUNNER_TEMP/target.sorted" | tr -d ' ')"
-            s_sha="$(sha256sum "$RUNNER_TEMP/source.sorted" | cut -d' ' -f1)"
-            t_sha="$(sha256sum "$RUNNER_TEMP/target.sorted" | cut -d' ' -f1)"
-            [[ "$s_count" == "$t_count" && "$s_sha" == "$t_sha" ]] || { echo "ERROR: data drift $table source=$s_count target=$t_count"; exit 33; }
-          done < "$RUNNER_TEMP/source.tables"
-          echo "PASS: exact public DABBIR data match tables=$table_count"
-
-          target_auth="$(curl -fsS "$TARGET_SUPABASE_URL/auth/v1/admin/users?page=1&per_page=1000" -H "apikey: $TARGET_SERVICE_ROLE_KEY" -H "Authorization: Bearer $TARGET_SERVICE_ROLE_KEY")"
-          [[ "$(jq '.users | length' <<<"$target_auth")" == 56 ]] || { echo 'ERROR: Mumbai Auth user baseline changed'; exit 34; }
-          curl -fsS "$SOURCE_SUPABASE_URL/storage/v1/object/dabbir-owner-live/owner-truth-v3.html" -H "apikey: $SOURCE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SOURCE_SERVICE_ROLE_KEY" -o "$RUNNER_TEMP/source-object.bin"
-          curl -fsS "$TARGET_SUPABASE_URL/storage/v1/object/dabbir-owner-live/owner-truth-v3.html" -H "apikey: $TARGET_SERVICE_ROLE_KEY" -H "Authorization: Bearer $TARGET_SERVICE_ROLE_KEY" -o "$RUNNER_TEMP/target-object.bin"
-          [[ "$(sha256sum "$RUNNER_TEMP/source-object.bin" | cut -d' ' -f1)" == "$(sha256sum "$RUNNER_TEMP/target-object.bin" | cut -d' ' -f1)" ]] || { echo 'ERROR: Storage SHA mismatch'; exit 35; }
-          echo 'PASS: pre-cutover data/Auth/Storage verification complete.'
-
-          project_json="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          PREVIOUS_DEPLOYMENT="$(jq -r '.latestDeployments[0].id // .latestDeployment.id // empty' <<<"$project_json")"
-          test -n "$PREVIOUS_DEPLOYMENT" || { echo 'ERROR: previous Vercel production deployment not found'; exit 40; }
+          target_broker="$(curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$TARGET_SUPABASE_URL/functions/v1/${BROKER_SLUG}")"
+          [[ "$(jq -r '.ok // false' <<<"$target_broker")" == true ]] || exit 21
+          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$target_broker")"
+          test -n "$TARGET_SERVICE_ROLE_KEY" || exit 22
+          echo "::add-mask::$TARGET_SERVICE_ROLE_KEY"
 
           env_json="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           while IFS= read -r value; do test -z "$value" || echo "::add-mask::$value"; done < <(jq -r '.envs[] | select(.key|startswith("SUPABASE_")) | .value // empty' <<<"$env_json")
-          jq '[.envs[] | select((.target // []) | index("production")) | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY") | {key,value,type,target}]' <<<"$env_json" > "$RUNNER_TEMP/rollback-env.json"
-          jq '[.envs[] | select((.target // []) | index("production")) | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY") | .key]' <<<"$env_json" > "$RUNNER_TEMP/original-keys.json"
-          auth_url_present="$(jq '[.envs[] | select(.key=="SUPABASE_AUTH_URL" and ((.target // []) | index("production")))] | length > 0' <<<"$env_json")"
-          jq -n --arg url "$TARGET_SUPABASE_URL" --arg pub "$TARGET_PUBLISHABLE_KEY" --arg srv "$TARGET_SERVICE_ROLE_KEY" --argjson auth "$auth_url_present" '[{key:"SUPABASE_URL",value:$url,type:"plain",target:["production"]},{key:"SUPABASE_PUBLISHABLE_KEY",value:$pub,type:"plain",target:["production"]},{key:"SUPABASE_SERVICE_ROLE_KEY",value:$srv,type:"encrypted",target:["production"]}] + (if $auth then [{key:"SUPABASE_AUTH_URL",value:$url,type:"plain",target:["production"]}] else [] end)' > "$RUNNER_TEMP/mumbai-env.json"
 
-          ENV_CHANGED=0
-          rollback(){
-            code=$?
-            trap - ERR
-            set +e
-            echo "ROLLBACK: restoring Vercel environment and deployment (exit=$code)."
-            if [[ "$ENV_CHANGED" == 1 ]]; then
-              if jq -e 'length>0' "$RUNNER_TEMP/rollback-env.json" >/dev/null; then
-                curl -fsS -X POST "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?upsert=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary @"$RUNNER_TEMP/rollback-env.json" >/dev/null
-              fi
-              current_env="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-              jq --slurpfile orig "$RUNNER_TEMP/original-keys.json" '[.envs[] | select((.target // []) | index("production")) | select(.key=="SUPABASE_URL" or .key=="SUPABASE_AUTH_URL" or .key=="SUPABASE_PUBLISHABLE_KEY" or .key=="SUPABASE_SERVICE_ROLE_KEY") | . as $e | select(($orig[0] | index($e.key)) == null) | .id]' <<<"$current_env" > "$RUNNER_TEMP/delete-ids.json"
-              if jq -e 'length>0' "$RUNNER_TEMP/delete-ids.json" >/dev/null; then
-                jq -n --slurpfile ids "$RUNNER_TEMP/delete-ids.json" '{ids:$ids[0]}' > "$RUNNER_TEMP/delete-body.json"
-                curl -fsS -X DELETE "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary @"$RUNNER_TEMP/delete-body.json" >/dev/null
-              fi
-              curl -fsS -X POST "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/rollback/${PREVIOUS_DEPLOYMENT}?teamId=${VERCEL_TEAM_ID}&description=DABBIR%20Mumbai%20cutover%20rollback" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null || true
-            fi
-            exit "$code"
-          }
-          trap rollback ERR
+          jq -r --arg url "$TARGET_SUPABASE_URL" --arg pub "$TARGET_PUBLISHABLE_KEY" --arg srv "$TARGET_SERVICE_ROLE_KEY" '
+            .envs[]
+            | select((.target // []) | index("production"))
+            | select((.key=="SUPABASE_URL" and .value==$url) or (.key=="SUPABASE_PUBLISHABLE_KEY" and .value==$pub) or (.key=="SUPABASE_SERVICE_ROLE_KEY" and .value==$srv))
+            | [.id,.key] | @tsv
+          ' <<<"$env_json" > "$RUNNER_TEMP/remove.tsv"
 
-          curl -fsS -X POST "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?upsert=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary @"$RUNNER_TEMP/mumbai-env.json" >/dev/null
-          ENV_CHANGED=1
+          while IFS=$'\t' read -r id key; do
+            [[ -n "$id" ]] || continue
+            curl -fsS -X DELETE "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" >/dev/null
+            echo "Removed failed-cutover env: $key"
+          done < "$RUNNER_TEMP/remove.tsv"
 
           verify_env="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          actual_url="$(jq -r '[.envs[] | select(.key=="SUPABASE_URL" and ((.target // []) | index("production")))][0].value // empty' <<<"$verify_env")"
-          [[ "$actual_url" == "$TARGET_SUPABASE_URL" ]] || { echo 'ERROR: Vercel Production SUPABASE_URL did not switch'; exit 42; }
-          echo 'PASS: Vercel Production environment points to Mumbai.'
+          leftovers="$(jq --arg url "$TARGET_SUPABASE_URL" --arg pub "$TARGET_PUBLISHABLE_KEY" --arg srv "$TARGET_SERVICE_ROLE_KEY" '[.envs[] | select((.target // []) | index("production")) | select((.key=="SUPABASE_URL" and .value==$url) or (.key=="SUPABASE_PUBLISHABLE_KEY" and .value==$pub) or (.key=="SUPABASE_SERVICE_ROLE_KEY" and .value==$srv))] | length' <<<"$verify_env")"
+          [[ "$leftovers" == 0 ]] || { echo 'ERROR: failed-cutover Mumbai env still present'; exit 30; }
+          echo 'PASS: failed-cutover Vercel env cleaned.'
 
-          deploy_body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,target:"production",gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
-          deploy_json="$(curl -fsS -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$deploy_body")"
-          NEW_DEPLOYMENT="$(jq -r '.id // empty' <<<"$deploy_json")"
-          NEW_URL="$(jq -r '.url // empty' <<<"$deploy_json")"
-          test -n "$NEW_DEPLOYMENT" || { echo 'ERROR: Vercel deployment was not created'; exit 50; }
+          project_json="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          current_prod="$(jq -r '.latestDeployments[0].id // .latestDeployment.id // empty' <<<"$project_json")"
+          [[ "$current_prod" == "$EXPECTED_PRODUCTION_DEPLOYMENT" ]] || { echo "ERROR: production deployment changed unexpectedly: $current_prod"; exit 31; }
+          echo 'PASS: production deployment remained unchanged.'
 
-          ready=0
-          for _ in $(seq 1 120); do
-            d="$(curl -fsS "https://api.vercel.com/v13/deployments/${NEW_DEPLOYMENT}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-            state="$(jq -r '.readyState // .status // empty' <<<"$d")"
-            case "$state" in READY) ready=1; break ;; ERROR|CANCELED) echo "ERROR: deployment state=$state"; exit 51 ;; esac
-            sleep 5
-          done
-          [[ "$ready" == 1 ]] || { echo 'ERROR: deployment readiness timeout'; exit 52; }
-          echo "PASS: Vercel deployment READY https://${NEW_URL}"
-
-          sleep 8
-          status="$(curl -sS -o "$RUNNER_TEMP/session.json" -w '%{http_code}' "${PRODUCTION_ORIGIN}/api/auth/session")"
-          [[ "$status" == 200 ]] || { echo "ERROR: auth session smoke status=$status"; exit 60; }
-          jq -e '.authenticated == false' "$RUNNER_TEMP/session.json" >/dev/null
-          status="$(curl -sS -o "$RUNNER_TEMP/capability.json" -w '%{http_code}' "${PRODUCTION_ORIGIN}/api/qa-capability")"
-          [[ "$status" == 200 ]] || { echo "ERROR: capability smoke status=$status"; exit 61; }
-          jq -e '.ok == true and .server_admin_configured == true and .calendar_storage_configured == true' "$RUNNER_TEMP/capability.json" >/dev/null
-          status="$(curl -sS -o "$RUNNER_TEMP/admin.json" -w '%{http_code}' "${PRODUCTION_ORIGIN}/api/platform-customers?action=overview")"
-          [[ "$status" == 401 ]] || { echo "ERROR: admin fail-closed smoke status=$status"; exit 62; }
-          jq -e '.error == "AUTH_REQUIRED"' "$RUNNER_TEMP/admin.json" >/dev/null
-
-          trap - ERR
-          echo 'PASS DABBIR_MUMBAI_CUTOVER public_data=verified auth=56 storage=verified vercel=production smoke=passed rollback=armed'
-          echo 'Sydney remains online as rollback source; it was not paused or deleted.'
+          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:"main"}}')"
+          http="$(curl -sS -o "$RUNNER_TEMP/deploy.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body")"
+          if [[ "$http" =~ ^2 ]]; then
+            id="$(jq -r '.id // empty' "$RUNNER_TEMP/deploy.json")"
+            echo "DIAG: preview deployment API works id=$id status=$http"
+          else
+            code="$(jq -r '.error.code // .code // "UNKNOWN"' "$RUNNER_TEMP/deploy.json" 2>/dev/null || echo UNKNOWN)"
+            message="$(jq -r '.error.message // .message // "no message"' "$RUNNER_TEMP/deploy.json" 2>/dev/null || echo 'no message')"
+            echo "DIAG: deployment API status=$http code=$code message=$message"
+          fi
+          echo 'PASS DABBIR_FAILED_CUTOVER_CLEANED'
