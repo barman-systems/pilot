@@ -1,0 +1,27 @@
+name: DABBIR AWS Diagnose
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-diagnose.yml'
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  diagnose:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+      - name: Show stacks
+        run: |
+          set -euo pipefail
+          aws cloudformation describe-stacks --stack-name dabbir-github-oidc --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason,Updated:LastUpdatedTime}' --output json || true
+          aws cloudformation describe-stacks --stack-name dabbir-prod-uae --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason,Updated:LastUpdatedTime}' --output json || true
+      - name: Recent bootstrap events
+        run: |
+          aws cloudformation describe-stack-events --stack-name dabbir-github-oidc --max-items 20 --query 'StackEvents[].{Time:Timestamp,Logical:LogicalResourceId,Status:ResourceStatus,Reason:ResourceStatusReason}' --output json || true
