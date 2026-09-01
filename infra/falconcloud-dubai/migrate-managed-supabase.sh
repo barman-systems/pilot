@@ -10,7 +10,7 @@ import sys
 
 path = Path(sys.argv[1])
 text = path.read_text()
-old = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
+old_auth = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
 set session_replication_role = replica;
 \\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
 \\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
@@ -20,7 +20,7 @@ EOF
 chmod 600 "$WORKDIR/restore-auth.psql"
 tgt -f "$WORKDIR/restore-auth.psql"
 '''
-new = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
+new_auth = r'''cat >"$WORKDIR/restore-auth.psql" <<EOF
 truncate table public.migration_auth_users_stage, public.migration_auth_identities_stage, public.migration_auth_mfa_factors_stage;
 \\copy public.migration_auth_users_stage(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
 \\copy public.migration_auth_identities_stage(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
@@ -30,9 +30,18 @@ EOF
 chmod 600 "$WORKDIR/restore-auth.psql"
 tgt -f "$WORKDIR/restore-auth.psql"
 '''
-if old not in text:
+if old_auth not in text:
     raise SystemExit('ERROR: expected Auth restore block was not found in migrate-db.sh')
-path.write_text(text.replace(old, new, 1))
+text = text.replace(old_auth, new_auth, 1)
+
+old_functions = 'tgt -f "$WORKDIR/public-functions.sql"'
+new_functions = '''sed -i '1i set check_function_bodies=off;' "$WORKDIR/public-functions.sql"
+tgt -f "$WORKDIR/public-functions.sql"'''
+if old_functions not in text:
+    raise SystemExit('ERROR: expected public function restore command was not found in migrate-db.sh')
+text = text.replace(old_functions, new_functions, 1)
+
+path.write_text(text)
 PY
 
 exec bash "$MIGRATE_SCRIPT"
