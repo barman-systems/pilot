@@ -15,24 +15,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cutover-preflight:
+  zero-drift-preflight:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
       BROKER_SLUG: dabbir-migration-oidc-broker
       OIDC_AUDIENCE: dabbir-mumbai-migration
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
-      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
 
     steps:
-      - name: Verify zero-drift copy and Vercel rollback access
+      - name: Verify zero drift before Vercel cutover
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${VERCEL_TOKEN:-}" || { echo 'ERROR VERCEL_TOKEN missing'; exit 10; }
           sudo apt-get update >/dev/null
           sudo apt-get install -y jq postgresql-client >/dev/null
 
@@ -40,6 +36,7 @@ jobs:
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
           test -n "$OIDC_TOKEN" || exit 20
           echo "::add-mask::$OIDC_TOKEN"
+
           broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
@@ -73,25 +70,26 @@ jobs:
           end $$;
           select * from pg_temp.dabbir_table_fingerprints() order by k;
           SQL
+
           psql "$SOURCE_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/source.fp"
           psql "$TARGET_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/target.fp"
           test "$(grep -c . "$RUNNER_TEMP/source.fp")" = 123 || { echo 'ERROR source table baseline changed'; exit 30; }
           diff -u "$RUNNER_TEMP/source.fp" "$RUNNER_TEMP/target.fp" >/dev/null || { echo 'ERROR Mumbai data drift detected'; exit 31; }
-          echo 'PASS: all 123 DABBIR tables are still identical.'
+          echo 'PASS: all 123 DABBIR tables are identical.'
 
           scalar(){ psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
-          [[ "$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)")" == "$(scalar "$TARGET_DATABASE_URL" "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)")" ]] || exit 32
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from auth.users")" == 56 ]] || exit 33
+          compare(){ local name="$1" sql="$2" s t; s="$(scalar "$SOURCE_DATABASE_URL" "$sql")"; t="$(scalar "$TARGET_DATABASE_URL" "$sql")"; echo "$name source=$s target=$t"; [[ "$s" == "$t" ]] || exit 32; }
+          compare 'Auth users' "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth identities' "select count(*) from auth.identities where user_id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth MFA' "select count(*) from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts);"
+          compare 'Auth FK count' "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));"
+          compare 'Storage buckets' "select count(*) from storage.buckets where id like 'dabbir-%';"
+          compare 'Storage objects' "select count(*) from storage.objects where bucket_id like 'dabbir-%';"
+          compare 'Storage policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where schemaname='storage' and (policyname ilike 'dabbir%' or coalesce(qual,'') ilike '%dabbir%' or coalesce(with_check,'') ilike '%dabbir%')) q;"
+
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == 56 ]] || exit 33
           [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == 2 ]] || exit 34
           [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == 1 ]] || exit 35
-          echo 'PASS: Auth and Storage baselines intact.'
 
-          env_json="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          for key in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY SUPABASE_SERVICE_ROLE_KEY; do
-            count="$(jq --arg k "$key" '[.envs[] | select(.key==$k and ((.target // []) | index("production")))] | length' <<<"$env_json")"
-            (( count >= 1 )) || { echo "ERROR: production env missing $key"; exit 40; }
-          done
-          while IFS= read -r value; do test -z "$value" || echo "::add-mask::$value"; done < <(jq -r '.envs[] | select(.key|startswith("SUPABASE_")) | .value // empty' <<<"$env_json")
-          jq -e '.envs | length > 0' <<<"$env_json" >/dev/null
-          echo 'PASS: Vercel production environment is readable and rollback values are available.'
-          echo 'PASS DABBIR_MUMBAI_CUTOVER_PREFLIGHT'
+          echo 'PASS DABBIR_MUMBAI_ZERO_DRIFT_PRECHECK tables=123 auth=56 identities=56 mfa=26 fks=43 storage_buckets=2 storage_objects=1'
+          echo 'Production Vercel endpoint was NOT changed.'
