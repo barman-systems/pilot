@@ -17,6 +17,17 @@ test('navigation bridge delegates existing primary nav without owning destinatio
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
 });
 
+test('tab feedback paints before deferred screen rendering', () => {
+  const activate = bridge.match(/function activate\(hit,source\)\{([\s\S]*?)\n  \}/)?.[1] || '';
+  assert.match(activate, /paint\(hit\)/);
+  assert.match(activate, /afterPaint\(\(\)=>\{/);
+  assert.ok(activate.indexOf('paint(hit)') < activate.indexOf("showScreen(hit.name)"));
+  assert.match(bridge, /requestAnimationFrame\(\(\)=>requestAnimationFrame\(callback\)\)/);
+  assert.match(bridge, /navigationEpoch/);
+  assert.match(bridge, /visual_first:true/);
+  assert.match(bridge, /deferred_render:true/);
+});
+
 test('navigation bridge is deferred after contextual routing and shell module count stays frozen', () => {
   const modules=[...bundles.critical,...bundles.deferred];
   const routerIndex=bundles.deferred.indexOf('/api/dabbir-contextual-navigation-ui');
