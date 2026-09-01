@@ -48,7 +48,7 @@ jobs:
           [[ "$checkout_status" == 502 ]] || { echo "ERROR: checkout self-test status=$checkout_status"; cat "$RUNNER_TEMP/checkout.json" | jq '{ok,error,livemode}' || true; exit 40; }
           checkout_error="$(jq -r '.error // empty' "$RUNNER_TEMP/checkout.json")"
           [[ "$checkout_error" == resource_missing ]] || { echo "ERROR: checkout did not reach Stripe sandbox; error=$checkout_error"; exit 41; }
-          [[ "$(jq -r '.livemode // true' "$RUNNER_TEMP/checkout.json")" == false ]] || { echo 'ERROR: checkout self-test was not sandbox'; exit 42; }
+          jq -e '.livemode == false' "$RUNNER_TEMP/checkout.json" >/dev/null || { echo 'ERROR: checkout self-test was not sandbox'; exit 42; }
           echo 'PASS: Mumbai checkout reached Stripe sandbox; no object was created.'
 
           ts="$(date +%s)"
