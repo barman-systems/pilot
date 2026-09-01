@@ -1,4 +1,8 @@
-export const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const LEGACY_SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
+export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
+export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
+// Backward-compatible export. New code should choose AUTH or DATA explicitly.
+export const SUPABASE_URL = SUPABASE_DATA_URL;
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
 const DEFAULT_SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.DABBIR_SUPABASE_TIMEOUT_MS || 15000));
@@ -77,7 +81,7 @@ export async function supabaseAuth(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
   headers.set('content-type', 'application/json');
-  return fetch(`${SUPABASE_URL}${path}`, {
+  return fetch(`${SUPABASE_AUTH_URL}${path}`, {
     ...options,
     headers,
     redirect: 'manual',
@@ -92,7 +96,7 @@ export async function supabaseRest(path, accessToken, options = {}) {
   headers.set('authorization', `Bearer ${accessToken}`);
   headers.set('accept', 'application/json');
   if (options.body !== undefined) headers.set('content-type', 'application/json');
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  return fetch(`${SUPABASE_DATA_URL}/rest/v1/${path}`, {
     ...options,
     headers,
     cache: 'no-store',
@@ -105,7 +109,7 @@ export async function supabaseStorage(path, accessToken, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
   headers.set('authorization', `Bearer ${accessToken}`);
-  return fetch(`${SUPABASE_URL}/storage/v1/${String(path || '').replace(/^\/+/, '')}`, {
+  return fetch(`${SUPABASE_DATA_URL}/storage/v1/${String(path || '').replace(/^\/+/, '')}`, {
     ...options,
     headers,
     cache: 'no-store',
@@ -187,7 +191,7 @@ function decodeJwtPayload(accessToken) {
 export function userClaimsFromValidatedAccessToken(accessToken, nowSeconds = Math.floor(Date.now() / 1000)) {
   const payload = decodeJwtPayload(accessToken);
   if (!payload || !UUID_RE.test(String(payload.sub || ''))) return null;
-  if (String(payload.iss || '') !== `${SUPABASE_URL}/auth/v1`) return null;
+  if (String(payload.iss || '') !== `${SUPABASE_AUTH_URL}/auth/v1`) return null;
   if (String(payload.role || '') !== 'authenticated') return null;
   const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
   if (!audiences.includes('authenticated')) return null;
