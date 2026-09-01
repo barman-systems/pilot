@@ -98,6 +98,38 @@ jobs:
           aws cloudformation validate-template --region "$AWS_REGION" --template-body file://infra/aws-uae/dabbir-managed-foundation.yml >/tmp/template.json
           jq -e '.Parameters' /tmp/template.json >/dev/null
 
+      - name: Recover safely from an earlier rolled-back bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          if [ "$status" != 'ROLLBACK_COMPLETE' ]; then
+            echo "No rollback cleanup required (status=${status:-absent})."
+            exit 0
+          fi
+
+          echo 'Cleaning retained empty bootstrap resources from the failed stack.'
+          mapfile -t repos < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::ECR::Repository`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+          for repo in "${repos[@]}"; do
+            aws ecr delete-repository --region "$AWS_REGION" --repository-name "$repo" --force >/dev/null 2>&1 || true
+          done
+
+          mapfile -t log_groups < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::Logs::LogGroup`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+          for group in "${log_groups[@]}"; do
+            aws logs delete-log-group --region "$AWS_REGION" --log-group-name "$group" >/dev/null 2>&1 || true
+          done
+
+          mapfile -t buckets < <(aws cloudformation list-stack-resources --region "$AWS_REGION" --stack-name "$STACK_NAME" --query 'StackResourceSummaries[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' --output text | tr '\t' '\n' | sed '/^None$/d;/^$/d')
+          for bucket in "${buckets[@]}"; do
+            aws s3 rm "s3://$bucket" --recursive >/dev/null 2>&1 || true
+            aws s3api delete-bucket --region "$AWS_REGION" --bucket "$bucket" >/dev/null 2>&1 || true
+          done
+
+          aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$STACK_NAME"
+          aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$STACK_NAME"
+          echo 'Rollback stack removed. Waiting to avoid a repeat ECS control-plane throttle.'
+          sleep 35
+
       - name: Deploy managed foundation
         shell: bash
         run: |
