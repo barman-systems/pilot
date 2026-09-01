@@ -398,7 +398,9 @@ async function browserJourney() {
   }
   assert(operationsText.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
-  await page.screenshot({ path: 'dabbir-ai-customer-journey-screenshot.png', fullPage: true });
+  // Preserve visual evidence without asking WebKit to rasterize the full,
+  // dynamic operational page after functional acceptance already completed.
+  await page.screenshot({ path: 'dabbir-ai-customer-journey-screenshot.png', fullPage: false });
   report.artifacts.screenshot = 'dabbir-ai-customer-journey-screenshot.png';
   assert(pageErrors.length === 0, `BROWSER_PAGE_ERRORS:${pageErrors.join(' | ')}`);
   assert(consoleErrors.length === 0, `BROWSER_CONSOLE_ERRORS:${consoleErrors.slice(0, 5).join(' | ')}`);
