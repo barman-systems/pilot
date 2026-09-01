@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || exit 10
           echo "::add-mask::$VERCEL_TOKEN"
-          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" --arg ref "$CUTOVER_BRANCH" '{name:"dabbir",project:$project,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:$ref}}')"
+          body="$(jq -nc --arg project "$VERCEL_PROJECT_ID" --arg ref "$CUTOVER_BRANCH" '{name:"dabbir",project:$project,withLatestCommit:true,gitSource:{type:"github",org:"barman-systems",repo:"pilot",ref:$ref},projectSettings:{commandForIgnoringBuildStep:"exit 1"}}')"
           status="$(curl -sS -o "$RUNNER_TEMP/deploy.json" -w '%{http_code}' -X POST "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}" -H 'Content-Type: application/json' --data-binary "$body")"
           [[ "$status" =~ ^2 ]] || { echo "create_status=$status"; jq -r '.error.code // .code // empty' "$RUNNER_TEMP/deploy.json"; exit 20; }
           id="$(jq -r '.id // empty' "$RUNNER_TEMP/deploy.json")"
@@ -36,7 +36,7 @@ jobs:
           for _ in $(seq 1 120); do
             d="$(curl -fsS "https://api.vercel.com/v13/deployments/${id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
             state="$(jq -r '.readyState // .status // empty' <<<"$d")"
-            case "$state" in READY) ready=1; break ;; ERROR|CANCELED) echo "preview_state=$state"; jq -r '.errorCode // empty' <<<"$d"; exit 21 ;; esac
+            case "$state" in READY) ready=1; break ;; ERROR|CANCELED) echo "preview_state=$state"; jq -r '.errorCode // .errorMessage // .errorLink // empty' <<<"$d"; exit 21 ;; esac
             sleep 3
           done
           [[ "$ready" == 1 ]] || exit 22
