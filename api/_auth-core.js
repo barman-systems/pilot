@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
 const LEGACY_SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
 export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
@@ -6,11 +6,13 @@ export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process
 // Backward-compatible export. New code should choose AUTH or DATA explicitly.
 export const SUPABASE_URL = SUPABASE_DATA_URL;
 const SUPABASE_AUTH_ISSUER = `${SUPABASE_AUTH_URL}/auth/v1`;
-const SUPABASE_AUTH_JWKS = createRemoteJWKSet(new URL(`${SUPABASE_AUTH_ISSUER}/.well-known/jwks.json`));
+const SUPABASE_AUTH_JWKS_URL = `${SUPABASE_AUTH_ISSUER}/.well-known/jwks.json`;
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
 const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
 const DEFAULT_SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.DABBIR_SUPABASE_TIMEOUT_MS || 15000));
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const JWKS_CACHE_MS = 10 * 60 * 1000;
+let jwksCache = { expiresAt: 0, keys: [] };
 
 export const ACCESS_COOKIE = '__Host-dabbir_access';
 export const REFRESH_COOKIE = '__Host-dabbir_refresh';
@@ -133,13 +135,64 @@ export async function supabaseRpc(name, accessToken, params = {}) {
   });
 }
 
+function decodeJwtJson(part) {
+  try { return JSON.parse(Buffer.from(String(part || ''), 'base64url').toString('utf8')); }
+  catch { return null; }
+}
+
+async function getAuthJwks(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && jwksCache.expiresAt > now && jwksCache.keys.length) return jwksCache.keys;
+  try {
+    const response = await fetch(SUPABASE_AUTH_JWKS_URL, {
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(Math.min(DEFAULT_SUPABASE_TIMEOUT_MS, 5000)),
+    });
+    if (!response.ok) return [];
+    const body = await response.json();
+    const keys = Array.isArray(body?.keys) ? body.keys.filter(key => key && typeof key === 'object') : [];
+    if (!keys.length) return [];
+    jwksCache = { expiresAt: now + JWKS_CACHE_MS, keys };
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
 async function verifiedUserViaJwks(accessToken) {
   try {
-    const { payload } = await jwtVerify(accessToken, SUPABASE_AUTH_JWKS, {
-      issuer: SUPABASE_AUTH_ISSUER,
-      audience: 'authenticated',
-    });
-    if (!UUID_RE.test(String(payload?.sub || ''))) return null;
+    const parts = String(accessToken || '').split('.');
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    const header = decodeJwtJson(parts[0]);
+    const payload = decodeJwtJson(parts[1]);
+    if (!header || !payload || header.alg !== 'ES256' || !header.kid) return null;
+
+    let keys = await getAuthJwks(false);
+    let jwk = keys.find(key => key.kid === header.kid && key.alg === 'ES256');
+    if (!jwk) {
+      keys = await getAuthJwks(true);
+      jwk = keys.find(key => key.kid === header.kid && key.alg === 'ES256');
+    }
+    if (!jwk) return null;
+
+    const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
+    const signingInput = Buffer.from(`${parts[0]}.${parts[1]}`);
+    const signature = Buffer.from(parts[2], 'base64url');
+    const valid = verifySignature('sha256', signingInput, { key: publicKey, dsaEncoding: 'ieee-p1363' }, signature);
+    if (!valid) return null;
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (String(payload.iss || '') !== SUPABASE_AUTH_ISSUER) return null;
+    const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
+    if (!audiences.includes('authenticated')) return null;
+    if (String(payload.role || '') !== 'authenticated') return null;
+    if (!UUID_RE.test(String(payload.sub || ''))) return null;
+    const exp = Number(payload.exp || 0);
+    if (!Number.isFinite(exp) || exp <= nowSeconds) return null;
+    const nbf = payload.nbf == null ? null : Number(payload.nbf);
+    if (nbf != null && (!Number.isFinite(nbf) || nbf > nowSeconds)) return null;
+
     return {
       id: String(payload.sub),
       email: payload.email == null ? null : String(payload.email),
@@ -153,13 +206,13 @@ async function verifiedUserViaJwks(accessToken) {
 async function verifiedUserBase(accessToken, options = {}) {
   if (!accessToken) return null;
 
-  // Normal path: verify the ES256 Supabase session locally using the public JWKS.
-  // This keeps Sydney Auth out of the hot request path once DABBIR data is in UAE.
+  // Normal path: verify the current ES256 Supabase session locally using the
+  // public JWKS. This keeps Sydney Auth out of the hot request path.
   const localUser = await verifiedUserViaJwks(accessToken);
   if (localUser) return localUser;
 
-  // Compatibility/failover path for a legacy HS256 session or a temporary JWKS
-  // rotation/network issue. Supabase Auth remains managed and authoritative.
+  // Compatibility/failover path for a legacy session or temporary JWKS issue.
+  // Supabase Auth remains managed and authoritative for login/refresh.
   const headers = new Headers(options.headers || {});
   headers.set('authorization', `Bearer ${accessToken}`);
   const response = await supabaseAuth('/auth/v1/user', { ...options, headers });
@@ -207,7 +260,7 @@ function decodeJwtPayload(accessToken) {
   try {
     const parts = String(accessToken || '').split('.');
     if (parts.length !== 3 || !parts[1]) return null;
-    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return decodeJwtJson(parts[1]);
   } catch {
     return null;
   }
