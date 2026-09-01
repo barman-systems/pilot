@@ -46,13 +46,42 @@ jobs:
           broker_call(){ curl -fsS -X POST -H "Authorization: Bearer ${OIDC_TOKEN}" -H 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
+
+          validate_broker(){
+            local label="$1" json="$2" code="$3" host user pass expiry expiry_epoch now_epoch
+            [[ "$(jq -r '.ok // false' <<<"$json")" == true ]] || { echo "BLOCKED: ${label}_BROKER_FAILED"; exit "$code"; }
+            host="$(jq -r '.credential.db_host // empty' <<<"$json")"
+            user="$(jq -r '.credential.db_user // empty' <<<"$json")"
+            pass="$(jq -r '.credential.db_password // empty' <<<"$json")"
+            expiry="$(jq -r '.credential.expires_at // empty' <<<"$json")"
+            for value in "$host" "$user" "$pass" "$expiry"; do
+              test -n "$value" || { echo "BLOCKED: ${label}_MIGRATION_CREDENTIAL_MISSING"; exit 23; }
+            done
+            expiry_epoch="$(date -u -d "$expiry" +%s 2>/dev/null || echo 0)"
+            now_epoch="$(date -u +%s)"
+            (( expiry_epoch > now_epoch + 300 )) || { echo "BLOCKED: ${label}_MIGRATION_CREDENTIAL_EXPIRED"; exit 24; }
+          }
+          validate_broker SOURCE "$SOURCE_BROKER" 21
+          validate_broker TARGET "$TARGET_BROKER" 22
 
           shost="$(jq -r '.credential.db_host' <<<"$SOURCE_BROKER")"; suser="$(jq -r '.credential.db_user' <<<"$SOURCE_BROKER")"; spass="$(jq -r '.credential.db_password' <<<"$SOURCE_BROKER")"
           thost="$(jq -r '.credential.db_host' <<<"$TARGET_BROKER")"; tuser="$(jq -r '.credential.db_user' <<<"$TARGET_BROKER")"; tpass="$(jq -r '.credential.db_password' <<<"$TARGET_BROKER")"
           TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
           for x in "$spass" "$tpass" "$TARGET_SERVICE_ROLE_KEY"; do test -n "$x" || exit 23; echo "::add-mask::$x"; done
+
+          resolve_host(){
+            local label="$1" host="$2"
+            for attempt in 1 2 3 4 5 6; do
+              getent ahosts "$host" >/dev/null 2>&1 && return 0
+              echo "WARN: ${label}_DB_DNS_RETRY attempt=${attempt}"
+              sleep $((attempt * 5))
+            done
+            echo "BLOCKED: ${label}_DB_HOST_UNRESOLVABLE"
+            exit 25
+          }
+          resolve_host SOURCE "$shost"
+          resolve_host TARGET "$thost"
+
           enc(){ python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
           SOURCE_DATABASE_URL="postgresql://${suser}:$(enc "$spass")@${shost}:5432/postgres?sslmode=require"
           TARGET_DATABASE_URL="postgresql://${tuser}:$(enc "$tpass")@${thost}:5432/postgres?sslmode=require"
@@ -77,8 +106,20 @@ jobs:
           end $$;
           select * from pg_temp.dabbir_table_fingerprints() order by k;
           SQL
-          psql "$SOURCE_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/source.fp"
-          psql "$TARGET_DATABASE_URL" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$RUNNER_TEMP/target.fp"
+          run_fingerprint(){
+            local label="$1" url="$2" output="$3"
+            for attempt in 1 2 3 4; do
+              if psql "$url" -X -A -t -q -F '|' -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/fingerprint.sql" > "$output"; then
+                return 0
+              fi
+              echo "WARN: ${label}_DB_CONNECT_RETRY attempt=${attempt}"
+              sleep $((attempt * 5))
+            done
+            echo "BLOCKED: ${label}_DB_CONNECTIVITY_FAILED"
+            exit 26
+          }
+          run_fingerprint SOURCE "$SOURCE_DATABASE_URL" "$RUNNER_TEMP/source.fp"
+          run_fingerprint TARGET "$TARGET_DATABASE_URL" "$RUNNER_TEMP/target.fp"
           test "$(grep -c . "$RUNNER_TEMP/source.fp")" = 123 || { echo 'ERROR source table baseline changed'; exit 30; }
           diff -u "$RUNNER_TEMP/source.fp" "$RUNNER_TEMP/target.fp" >/dev/null || { echo 'ERROR Mumbai data drift detected; cutover aborted'; exit 31; }
 
