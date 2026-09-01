@@ -319,7 +319,7 @@ export function readJsonBody(req, maxBytes = 8192) {
     });
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); }
-      catch { reject(Object.assign(new Error('INVALID_JSON'), { code: 400 }));
+      catch { reject(Object.assign(new Error('INVALID_JSON'), { code: 400 })); }
     });
     req.on('error', reject);
   });
