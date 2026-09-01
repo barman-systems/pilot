@@ -398,10 +398,9 @@ async function browserJourney() {
   }
   assert(operationsText.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
-  // Preserve visual evidence without asking WebKit to rasterize the full,
-  // dynamic operational page after functional acceptance already completed.
-  await page.screenshot({ path: 'dabbir-ai-customer-journey-screenshot.png', fullPage: false });
-  report.artifacts.screenshot = 'dabbir-ai-customer-journey-screenshot.png';
+  // The functional report is sufficient evidence here. In protected WebKit,
+  // screenshot rasterization can block the browser channel long after every
+  // interaction has already passed, so it must not determine journey success.
   assert(pageErrors.length === 0, `BROWSER_PAGE_ERRORS:${pageErrors.join(' | ')}`);
   assert(consoleErrors.length === 0, `BROWSER_CONSOLE_ERRORS:${consoleErrors.slice(0, 5).join(' | ')}`);
   return { detail: 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.' };
