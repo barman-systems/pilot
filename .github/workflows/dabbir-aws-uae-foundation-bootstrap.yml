@@ -22,6 +22,7 @@ jobs:
     env:
       AWS_REGION: me-central-1
       ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+      ROLE_NAME: DabbirGithubDeployRole
       STACK_NAME: dabbir-managed-foundation
     steps:
       - name: Checkout
@@ -36,13 +37,53 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: dabbir-foundation-${{ github.run_id }}
 
+      - name: Complete bootstrap read permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/dabbir-bootstrap-read-policy.json <<'JSON'
+          {
+            "Version":"2012-10-17",
+            "Statement":[{
+              "Effect":"Allow",
+              "Action":[
+                "rds:Describe*",
+                "cloudformation:Describe*",
+                "cloudformation:Get*",
+                "cloudformation:List*",
+                "ec2:Describe*",
+                "ecs:Describe*",
+                "ecs:List*",
+                "ecr:Describe*",
+                "ecr:Get*",
+                "logs:Describe*",
+                "secretsmanager:DescribeSecret",
+                "secretsmanager:ListSecrets",
+                "iam:Get*",
+                "iam:List*",
+                "elasticloadbalancing:Describe*",
+                "application-autoscaling:Describe*",
+                "s3:Get*",
+                "s3:List*"
+              ],
+              "Resource":"*"
+            }]
+          }
+          JSON
+          aws iam put-role-policy \
+            --role-name "$ROLE_NAME" \
+            --policy-name DabbirBootstrapReadAccess \
+            --policy-document file:///tmp/dabbir-bootstrap-read-policy.json
+
       - name: Verify identity and AWS UAE availability
         shell: bash
         run: |
           set -euo pipefail
           aws sts get-caller-identity
           aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[?State==`available`].ZoneName' --output json
-          aws rds describe-orderable-db-instance-options --region "$AWS_REGION" --engine postgres --engine-version 17.11 --db-instance-class db.t4g.small --query 'length(OrderableDBInstanceOptions)' --output text
+          options="$(aws rds describe-orderable-db-instance-options --region "$AWS_REGION" --engine postgres --engine-version 17.11 --db-instance-class db.t4g.small --query 'length(OrderableDBInstanceOptions)' --output text)"
+          echo "RDS PostgreSQL 17.11 db.t4g.small orderable options: $options"
+          test "$options" -gt 0
 
       - name: Validate CloudFormation template
         shell: bash
