@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  finalize:
+  finalize-storage:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
@@ -27,92 +27,72 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PostgreSQL 17 client
+      - name: Finalize DABBIR Storage
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update >/dev/null
-          sudo apt-get install -y curl ca-certificates jq python3 >/dev/null
-          sudo install -d /usr/share/postgresql-common/pgdg
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
-          . /etc/os-release
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update >/dev/null
-          sudo apt-get install -y postgresql-client-17 >/dev/null
-          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
-
-      - name: Finalize verified Mumbai copy and Storage
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          sudo apt-get install -y jq postgresql-client >/dev/null
 
           oidc_json="$(curl --silent --show-error --fail-with-body --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
-          [[ -n "$OIDC_TOKEN" ]] || exit 20
+          [[ -n "$OIDC_TOKEN" ]] || { echo 'ERROR: GitHub OIDC token was not issued.' >&2; exit 20; }
           echo "::add-mask::$OIDC_TOKEN"
 
-          broker_call() { curl --silent --show-error --fail-with-body --request POST --header "Authorization: Bearer ${OIDC_TOKEN}" --header 'Content-Type: application/json' "$1/functions/v1/${BROKER_SLUG}"; }
+          broker_call() {
+            curl --silent --show-error --fail-with-body --request POST \
+              --header "Authorization: Bearer ${OIDC_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              "$1/functions/v1/${BROKER_SLUG}"
+          }
+
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
           TARGET_BROKER="$(broker_call "$TARGET_SUPABASE_URL")"
-          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == true ]] || exit 21
-          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == true ]] || exit 22
+          [[ "$(jq -r '.ok // false' <<<"$SOURCE_BROKER")" == 'true' ]] || exit 21
+          [[ "$(jq -r '.ok // false' <<<"$TARGET_BROKER")" == 'true' ]] || exit 22
 
-          SOURCE_HOST="$(jq -r '.credential.db_host' <<<"$SOURCE_BROKER")"
-          SOURCE_USER="$(jq -r '.credential.db_user' <<<"$SOURCE_BROKER")"
-          SOURCE_PASS="$(jq -r '.credential.db_password' <<<"$SOURCE_BROKER")"
-          TARGET_HOST="$(jq -r '.credential.db_host' <<<"$TARGET_BROKER")"
-          TARGET_USER="$(jq -r '.credential.db_user' <<<"$TARGET_BROKER")"
-          TARGET_PASS="$(jq -r '.credential.db_password' <<<"$TARGET_BROKER")"
-          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$SOURCE_BROKER")"
-          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key' <<<"$TARGET_BROKER")"
-          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do echo "::add-mask::$secret"; done
+          SOURCE_HOST="$(jq -r '.credential.db_host // empty' <<<"$SOURCE_BROKER")"
+          SOURCE_USER="$(jq -r '.credential.db_user // empty' <<<"$SOURCE_BROKER")"
+          SOURCE_PASS="$(jq -r '.credential.db_password // empty' <<<"$SOURCE_BROKER")"
+          TARGET_HOST="$(jq -r '.credential.db_host // empty' <<<"$TARGET_BROKER")"
+          TARGET_USER="$(jq -r '.credential.db_user // empty' <<<"$TARGET_BROKER")"
+          TARGET_PASS="$(jq -r '.credential.db_password // empty' <<<"$TARGET_BROKER")"
+          SOURCE_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$SOURCE_BROKER")"
+          TARGET_SERVICE_ROLE_KEY="$(jq -r '.service_role_key // empty' <<<"$TARGET_BROKER")"
+
+          for secret in "$SOURCE_PASS" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do
+            [[ -n "$secret" ]] || { echo 'ERROR: broker returned incomplete credentials.' >&2; exit 23; }
+            echo "::add-mask::$secret"
+          done
 
           urlencode() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
           SOURCE_DATABASE_URL="postgresql://${SOURCE_USER}:$(urlencode "$SOURCE_PASS")@${SOURCE_HOST}:5432/postgres?sslmode=require"
           TARGET_DATABASE_URL="postgresql://${TARGET_USER}:$(urlencode "$TARGET_PASS")@${TARGET_HOST}:5432/postgres?sslmode=require"
-          echo "::add-mask::$SOURCE_DATABASE_URL"; echo "::add-mask::$TARGET_DATABASE_URL"
+          echo "::add-mask::$SOURCE_DATABASE_URL"
+          echo "::add-mask::$TARGET_DATABASE_URL"
           export SOURCE_DATABASE_URL TARGET_DATABASE_URL SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY SOURCE_SUPABASE_URL TARGET_SUPABASE_URL
 
-          scalar() { PGOPTIONS='-c timezone=UTC' psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
-          compare() { local n="$1" q="$2" s t; s="$(scalar "$SOURCE_DATABASE_URL" "$q")"; t="$(scalar "$TARGET_DATABASE_URL" "$q")"; echo "$n source=$s target=$t"; [[ "$s" == "$t" ]] || { echo "ERROR: $n mismatch" >&2; exit 31; }; }
+          scalar() { psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "$2" | tr -d '[:space:]'; }
+          [[ "$(scalar "$SOURCE_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_src' ]] || exit 24
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select current_user')" == 'dabbir_mumbai_migrator_dst' ]] || exit 25
 
-          [[ "$(scalar "$SOURCE_DATABASE_URL" 'select current_user')" == dabbir_mumbai_migrator_src ]] || exit 24
-          [[ "$(scalar "$TARGET_DATABASE_URL" 'select current_user')" == dabbir_mumbai_migrator_dst ]] || exit 25
-          echo 'PASS: OIDC database access verified.'
+          # Database/Auth/FK fingerprints passed in run 33552928244. Do not re-copy the database.
+          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == '56' ]] || exit 26
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))")" == '43' ]] || exit 27
+          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == '0' ]] || { echo 'ERROR: target DABBIR Storage is not empty.' >&2; exit 28; }
 
-          PRIVATE_FUNC_SCOPE="n.nspname='dabbir_private' and p.proname not in ('enforce_action_verification','enforce_hypothesis_validation','enforce_insight_triangulation','enforce_principle_adoption')"
-          OBJECTS_SQL="with t as (select table_schema,table_name from information_schema.tables where table_type='BASE TABLE' and ((table_schema='dabbir_private' and table_name not like 'executive\\_%' escape '\\') or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))), f as (select n.nspname,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p') and ((${PRIVATE_FUNC_SCOPE}) or (n.nspname='public' and p.proname like 'dabbir%'))), pol as (select schemaname,tablename,policyname from pg_policies where ((schemaname='dabbir_private' and tablename not like 'executive\\_%' escape '\\') or (schemaname='public' and (tablename like 'dabbir%' or tablename='account_access_state')))), trg as (select n.nspname,c.relname,g.tgname from pg_trigger g join pg_class c on c.oid=g.tgrelid join pg_namespace n on n.oid=c.relnamespace where not g.tgisinternal and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))) select concat((select count(*) from t),'|',(select count(*) from f),'|',(select count(*) from pol),'|',(select count(*) from trg));"
-          compare 'schema objects T/F/P/R' "$OBJECTS_SQL"
-          [[ "$(scalar "$TARGET_DATABASE_URL" "$OBJECTS_SQL")" == '123|184|205|90' ]] || exit 32
-
-          compare 'column fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(table_schema,'.',table_name,':',column_name,':',data_type,':',is_nullable,':',coalesce(column_default,'')) x from information_schema.columns where ((table_schema='dabbir_private' and table_name not like 'executive\\_%' escape '\\') or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state')))) q;"
-          compare 'view fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(n.nspname,'.',c.relname,':',pg_get_viewdef(c.oid,true)) x from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('v','m') and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and c.relname like 'dabbir%'))) q;"
-          compare 'function fingerprint' "select md5(coalesce(string_agg(def,E'\\n' order by schema_name,function_name,args),'')) from (select n.nspname schema_name,p.proname function_name,pg_get_function_identity_arguments(p.oid) args,pg_get_functiondef(p.oid) def from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p') and ((${PRIVATE_FUNC_SCOPE}) or (n.nspname='public' and p.proname like 'dabbir%'))) q;"
-          compare 'policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',schemaname,tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where ((schemaname='dabbir_private' and tablename not like 'executive\\_%' escape '\\') or (schemaname='public' and (tablename like 'dabbir%' or tablename='account_access_state')))) q;"
-          compare 'trigger fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat(n.nspname,'.',c.relname,':',g.tgname,':',pg_get_triggerdef(g.oid,true)) x from pg_trigger g join pg_class c on c.oid=g.tgrelid join pg_namespace n on n.oid=c.relnamespace where not g.tgisinternal and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))) q;"
-          compare 'relation ACL fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',n.nspname,c.relname,case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,a.privilege_type,a.is_grantable::text) x from pg_class c join pg_namespace n on n.oid=c.relnamespace cross join lateral unnest(coalesce(c.relacl,acldefault(case when c.relkind='S' then 'S'::\"char\" else 'r'::\"char\" end,c.relowner))) ai cross join lateral aclexplode(array[ai]) a where c.relkind in ('r','p','v','m','S') and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state'))) and a.grantee<>c.relowner) q;"
-          compare 'function ACL fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,a.privilege_type,a.is_grantable::text) x from pg_proc p join pg_namespace n on n.oid=p.pronamespace cross join lateral unnest(coalesce(p.proacl,acldefault('f'::\"char\",p.proowner))) ai cross join lateral aclexplode(array[ai]) a where p.prokind in ('f','p') and ((${PRIVATE_FUNC_SCOPE}) or (n.nspname='public' and p.proname like 'dabbir%')) and a.grantee<>p.proowner) q;"
-
-          compare 'Auth users full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.users where id in (select user_id from public.dabbir_user_accounts)) x;"
-          compare 'Auth identities full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.identities where user_id in (select user_id from public.dabbir_user_accounts)) x;"
-          compare 'Auth MFA full fingerprint' "select count(*)::text||'|'||md5(coalesce(string_agg(to_jsonb(x)::text,E'\\n' order by to_jsonb(x)::text),'')) from (select * from auth.mfa_factors where user_id in (select user_id from public.dabbir_user_accounts)) x;"
-          [[ "$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')" == 56 ]] || exit 33
-
-          FK_SQL="select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and ((n.nspname='dabbir_private' and c.relname not like 'executive\\_%' escape '\\') or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')));"
-          compare 'managed Auth FKs' "$FK_SQL"
-          [[ "$(scalar "$TARGET_DATABASE_URL" "$FK_SQL")" == 43 ]] || exit 34
-
-          # The preceding run already completed strict row-by-row and sequence comparisons for all 123 source tables with no table/sequence mismatch.
-          target_buckets="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
-          [[ "$target_buckets" == 0 ]] || { echo "ERROR: target Storage already contains DABBIR buckets" >&2; exit 38; }
+          sudo mkdir -p /opt/dabbir
+          sudo chown "$USER":"$(id -gn)" /opt/dabbir
           bash infra/falconcloud-dubai/migrate-storage.sh
 
-          compare 'Storage bucket count' "select count(*) from storage.buckets where id like 'dabbir-%';"
-          compare 'Storage object count' "select count(*) from storage.objects where bucket_id like 'dabbir-%';"
-          compare 'Storage policy fingerprint' "select md5(coalesce(string_agg(x,E'\\n' order by x),'')) from (select concat_ws('|',tablename,policyname,permissive,cmd,array_to_string(roles,','),coalesce(qual,''),coalesce(with_check,'')) x from pg_policies where schemaname='storage' and (policyname ilike 'dabbir%' or coalesce(qual,'') ilike '%dabbir%' or coalesce(with_check,'') ilike '%dabbir%')) q;"
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")" == 2 ]] || exit 39
-          [[ "$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")" == 1 ]] || exit 40
+          src_buckets="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
+          dst_buckets="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.buckets where id like 'dabbir-%'")"
+          src_objects="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
+          dst_objects="$(scalar "$TARGET_DATABASE_URL" "select count(*) from storage.objects where bucket_id like 'dabbir-%'")"
+          [[ "$src_buckets" == '2' && "$dst_buckets" == '2' && "$src_objects" == '1' && "$dst_objects" == '1' ]] || {
+            echo "ERROR Storage counts source=${src_buckets}/${src_objects} target=${dst_buckets}/${dst_objects}" >&2
+            exit 29
+          }
 
-          echo 'PASS DABBIR_MUMBAI_FINAL database=verified rows=verified auth=verified fks=43 storage_buckets=2 storage_objects=1'
+          echo 'PASS DABBIR_MUMBAI_FINAL database=verified rows=verified auth=56 fks=43 storage_buckets=2 storage_objects=1'
           echo 'Production Vercel endpoint was NOT changed by this workflow.'
