@@ -81,8 +81,10 @@ total_skipped="$((private_skipped + public_skipped))"
 [[ "$total_skipped" == "43" ]] || { echo "Expected to exclude exactly 43 managed Auth FKs from pg_restore, excluded $total_skipped" >&2; exit 11; }
 echo "PASS: excluded exactly 43 managed Auth FKs from pg_restore post-data."
 
-pg_restore --exit-on-error --no-owner --section=post-data --use-list="$WORKDIR/private-post.filtered.list" --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+# public has the referenced unique/primary keys; restore it before the sole
+# dabbir_private -> public cross-schema FK.
 pg_restore --exit-on-error --no-owner --section=post-data --use-list="$WORKDIR/public-post.filtered.list" --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+pg_restore --exit-on-error --no-owner --section=post-data --use-list="$WORKDIR/private-post.filtered.list" --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
 
 tgt -X -A -t -c "select public.migration_apply_auth_fks_v1();"
 target_auth_fks="$(tgt -X -A -t -c "select count(*) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where con.contype='f' and con.confrelid='auth.users'::regclass and (n.nspname='dabbir_private' or (n.nspname='public' and (c.relname like 'dabbir%' or c.relname='account_access_state')))" | tr -d '[:space:]')"
