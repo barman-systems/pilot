@@ -57,8 +57,13 @@ Resources:
                   - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:DescribeStackResources
+                  - cloudformation:ListStackResources
                   - cloudformation:GetTemplate
                   - cloudformation:ValidateTemplate
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
                 Resource: '*'
 
               - Sid: DabbirNetwork
@@ -240,6 +245,19 @@ Resources:
                   - iam:ListAttachedRolePolicies
                   - iam:PassRole
                 Resource: '*'
+
+              - Sid: DabbirServiceLinkedRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateServiceLinkedRole
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName:
+                      - rds.amazonaws.com
+                      - ecs.amazonaws.com
+                      - elasticloadbalancing.amazonaws.com
+                      - ecs.application-autoscaling.amazonaws.com
       Tags:
         - Key: App
           Value: DABBIR
