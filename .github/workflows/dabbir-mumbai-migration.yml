@@ -2,9 +2,11 @@ name: DABBIR Sydney to Mumbai Migration
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - .github/workflows/dabbir-mumbai-migration.yml
+      - infra/falconcloud-dubai/migrate-managed-supabase.sh
 
 permissions:
   contents: read
@@ -19,8 +21,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      SOURCE_REF: spohjzrsymsmzsseygtw
-      TARGET_REF: fphpoysqdsceniwduxjq
       SOURCE_SUPABASE_URL: https://spohjzrsymsmzsseygtw.supabase.co
       TARGET_SUPABASE_URL: https://fphpoysqdsceniwduxjq.supabase.co
       BROKER_SLUG: dabbir-migration-oidc-broker
@@ -37,39 +37,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl ca-certificates jq python3
           sudo install -d /usr/share/postgresql-common/pgdg
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
           . /etc/os-release
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/psql --version
           /usr/lib/postgresql/17/bin/pg_dump --version
-          sudo mkdir -p /opt/dabbir
-          sudo chown "$(id -u):$(id -g)" /opt/dabbir
 
-      - name: Migrate DABBIR database, Auth and Storage with strict verification
+      - name: Migrate DABBIR database Auth and Storage
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/usr/lib/postgresql/17/bin:$PATH"
 
-          oidc_json="$(curl --silent --show-error --fail-with-body \
-            --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
+          oidc_json="$(curl --silent --show-error --fail-with-body --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
           OIDC_TOKEN="$(jq -r '.value // empty' <<<"$oidc_json")"
           [[ -n "$OIDC_TOKEN" ]] || { echo 'ERROR: GitHub OIDC token was not issued.' >&2; exit 20; }
           echo "::add-mask::$OIDC_TOKEN"
 
           broker_call() {
             local base="$1"
-            curl --silent --show-error --fail-with-body \
-              --request POST \
-              --header "Authorization: Bearer ${OIDC_TOKEN}" \
-              --header 'Content-Type: application/json' \
-              "${base}/functions/v1/${BROKER_SLUG}"
+            curl --silent --show-error --fail-with-body --request POST --header "Authorization: Bearer ${OIDC_TOKEN}" --header 'Content-Type: application/json' "${base}/functions/v1/${BROKER_SLUG}"
           }
 
           SOURCE_BROKER="$(broker_call "$SOURCE_SUPABASE_URL")"
@@ -89,6 +79,7 @@ jobs:
           for value in "$SOURCE_HOST" "$SOURCE_USER" "$SOURCE_PASS" "$TARGET_HOST" "$TARGET_USER" "$TARGET_PASS" "$SOURCE_SERVICE_ROLE_KEY" "$TARGET_SERVICE_ROLE_KEY"; do
             [[ -n "$value" ]] || { echo 'ERROR: Broker returned incomplete credentials.' >&2; exit 23; }
           done
+
           echo "::add-mask::$SOURCE_PASS"
           echo "::add-mask::$TARGET_PASS"
           echo "::add-mask::$SOURCE_SERVICE_ROLE_KEY"
@@ -101,54 +92,25 @@ jobs:
           echo "::add-mask::$TARGET_DATABASE_URL"
           export SOURCE_DATABASE_URL TARGET_DATABASE_URL SOURCE_SERVICE_ROLE_KEY TARGET_SERVICE_ROLE_KEY SOURCE_SUPABASE_URL TARGET_SUPABASE_URL
 
-          source_role="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user')"
-          target_role="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user')"
+          source_role="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user' | tr -d '[:space:]')"
+          target_role="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_user' | tr -d '[:space:]')"
           [[ "$source_role" == 'dabbir_mumbai_migrator_src' ]] || { echo "ERROR: unexpected Sydney role: $source_role" >&2; exit 24; }
           [[ "$target_role" == 'dabbir_mumbai_migrator_dst' ]] || { echo "ERROR: unexpected Mumbai role: $target_role" >&2; exit 25; }
-          echo 'PASS: OIDC database access verified on Sydney and Mumbai.'
+          echo 'PASS: OIDC database access verified.'
 
           target_existing="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from information_schema.tables where table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state'))" | tr -d '[:space:]')"
           [[ "$target_existing" == '0' ]] || { echo "ERROR: Mumbai already contains $target_existing DABBIR tables." >&2; exit 26; }
 
-          noninternal_auth_triggers="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and c.relname in ('users','identities','mfa_factors') and not t.tgisinternal" | tr -d '[:space:]')"
-          [[ "$noninternal_auth_triggers" == '0' ]] || { echo 'ERROR: custom Auth triggers exist on Mumbai; refusing staged Auth copy.' >&2; exit 27; }
-
           target_auth_users="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c 'select count(*) from auth.users' | tr -d '[:space:]')"
-          [[ "$target_auth_users" == '0' ]] || { echo 'ERROR: Mumbai Auth is not empty.' >&2; exit 28; }
+          [[ "$target_auth_users" == '0' ]] || { echo 'ERROR: Mumbai Auth is not empty.' >&2; exit 27; }
 
-          stage_ok="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select (has_table_privilege(current_user,'public.migration_auth_users_stage','INSERT,TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_identities_stage','INSERT,TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_mfa_factors_stage','INSERT,TRUNCATE') and has_function_privilege(current_user,'public.dabbir_mumbai_commit_auth_stage_v1()','EXECUTE'))::int" | tr -d '[:space:]')"
+          auth_triggers="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and c.relname in ('users','identities','mfa_factors') and not t.tgisinternal" | tr -d '[:space:]')"
+          [[ "$auth_triggers" == '0' ]] || { echo 'ERROR: custom Auth triggers exist on Mumbai.' >&2; exit 28; }
+
+          stage_ok="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select (has_table_privilege(current_user,'public.migration_auth_users_stage','INSERT') and has_table_privilege(current_user,'public.migration_auth_users_stage','TRUNCATE') and has_table_privilege(current_user,'public.migration_auth_identities_stage','INSERT') and has_table_privilege(current_user,'public.migration_auth_mfa_factors_stage','INSERT') and has_function_privilege(current_user,'public.migration_commit_auth_stage_v1()','EXECUTE'))::int" | tr -d '[:space:]')"
           [[ "$stage_ok" == '1' ]] || { echo 'ERROR: Mumbai Auth staging permissions are incomplete.' >&2; exit 29; }
 
-          python3 <<'PY'
-          from pathlib import Path
-          path = Path('infra/falconcloud-dubai/migrate-db.sh')
-          text = path.read_text()
-          old = '''cat >"$WORKDIR/restore-auth.psql" <<EOF
-set session_replication_role = replica;
-\\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
-\\copy auth.identities(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
-\\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
-set session_replication_role = origin;
-EOF
-chmod 600 "$WORKDIR/restore-auth.psql"
-tgt -f "$WORKDIR/restore-auth.psql"
-'''
-          new = '''cat >"$WORKDIR/restore-auth.psql" <<EOF
-truncate table public.migration_auth_users_stage, public.migration_auth_identities_stage, public.migration_auth_mfa_factors_stage;
-\\copy public.migration_auth_users_stage(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
-\\copy public.migration_auth_identities_stage(${identities_cols}) from '${WORKDIR}/auth-identities.csv' with (format csv)
-\\copy public.migration_auth_mfa_factors_stage(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
-select public.dabbir_mumbai_commit_auth_stage_v1();
-EOF
-chmod 600 "$WORKDIR/restore-auth.psql"
-tgt -f "$WORKDIR/restore-auth.psql"
-'''
-          if old not in text:
-              raise SystemExit('ERROR: expected Auth restore block was not found in migrate-db.sh')
-          path.write_text(text.replace(old, new))
-          PY
-
-          DUMP_DIR="$RUNNER_TEMP/dabbir-migration" bash infra/falconcloud-dubai/migrate-db.sh
+          DUMP_DIR="$RUNNER_TEMP/dabbir-migration" bash infra/falconcloud-dubai/migrate-managed-supabase.sh
           bash infra/falconcloud-dubai/migrate-storage.sh
 
           src_users="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from auth.users where id in (select user_id from public.dabbir_user_accounts)" | tr -d '[:space:]')"
@@ -158,9 +120,6 @@ tgt -f "$WORKDIR/restore-auth.psql"
           src_objects="$(psql "$SOURCE_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
           dst_objects="$(psql "$TARGET_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from storage.objects where bucket_id like 'dabbir-%'" | tr -d '[:space:]')"
 
-          [[ "$src_users" == "$dst_users" && "$src_tables" == "$dst_tables" && "$src_objects" == "$dst_objects" ]] || {
-            echo 'ERROR: final compact count verification failed.' >&2
-            exit 30
-          }
+          [[ "$src_users" == "$dst_users" && "$src_tables" == "$dst_tables" && "$src_objects" == "$dst_objects" ]] || { echo 'ERROR: final count verification failed.' >&2; exit 30; }
           echo "PASS DABBIR_MUMBAI_DATABASE_AUTH_STORAGE users=$dst_users tables=$dst_tables storage_objects=$dst_objects"
           echo 'Production Vercel endpoint was NOT changed by this workflow.'
