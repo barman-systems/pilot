@@ -18,6 +18,11 @@ WORKDIR="${DUMP_DIR:-/opt/dabbir/migration/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$WORKDIR"
 chmod 700 "$WORKDIR"
 
+cleanup_sensitive(){
+  rm -f "$WORKDIR/auth-users.csv" "$WORKDIR/auth-identities.csv" "$WORKDIR/auth-mfa-factors.csv" "$WORKDIR/restore-auth.psql"
+}
+trap cleanup_sensitive EXIT
+
 for cmd in psql pg_dump pg_restore sha256sum diff; do
   command -v "$cmd" >/dev/null || { echo "Missing required command: $cmd" >&2; exit 1; }
 done
@@ -32,25 +37,22 @@ target_major="$(scalar "$TARGET_DATABASE_URL" 'show server_version_num')"
   echo "PostgreSQL 17 required on both sides: source=$source_major target=$target_major" >&2; exit 3;
 }
 
-# Fresh-target gate.
 target_existing="$(scalar "$TARGET_DATABASE_URL" "select count(*) from information_schema.tables where table_schema='dabbir_private' or (table_schema='public' and (table_name like 'dabbir%' or table_name='account_access_state'))")"
 [[ "$target_existing" == "0" ]] || { echo "Target already has $target_existing DABBIR tables; refusing destructive overwrite." >&2; exit 4; }
 
-# Only extensions actually required by DABBIR runtime are enabled on the dedicated target.
 for ext in pgcrypto uuid-ossp supabase_vault; do
   available="$(scalar "$TARGET_DATABASE_URL" "select count(*) from pg_available_extensions where name='${ext}'")"
   [[ "$available" == "1" ]] || { echo "Required extension unavailable on target: $ext" >&2; exit 5; }
   tgt -c "create extension if not exists \"$ext\";"
 done
 
-# Export DABBIR-owned relations only.
-pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges \
+# Preserve table ACLs, RLS, indexes, triggers and grants. Object ownership itself is intentionally target-local.
+pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner \
   --table='public.dabbir*' --table='public.account_access_state' \
   --file="$WORKDIR/public-relations.dump"
-pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner --no-privileges \
+pg_dump "$SOURCE_DATABASE_URL" --format=custom --no-owner \
   --schema=dabbir_private --file="$WORKDIR/private-schema.dump"
 
-# Public DABBIR functions are not guaranteed to follow a selected table dump, export definitions + ACL explicitly.
 src -A -t >"$WORKDIR/public-functions.sql" <<'SQL'
 select pg_get_functiondef(p.oid) || E';\n'
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
@@ -74,7 +76,6 @@ with funcs as (
 select stmt from (select * from revoked union all select * from grants) q order by oid,ord,stmt;
 SQL
 
-# DABBIR has 56 Auth users at the audited source snapshot. Use the DABBIR account table as the identity boundary.
 DABBIR_USER_FILTER="id in (select user_id from public.dabbir_user_accounts)"
 DABBIR_IDENTITY_FILTER="user_id in (select user_id from public.dabbir_user_accounts)"
 
@@ -86,11 +87,10 @@ column_signature(){
   local url="$1" table="$2"
   scalar "$url" "select md5(string_agg(column_name||':'||data_type||':'||is_nullable||':'||is_generated,',' order by ordinal_position)) from information_schema.columns where table_schema='auth' and table_name='${table}'"
 }
-
 for table in users identities mfa_factors; do
-  s_sig="$(column_signature "$SOURCE_DATABASE_URL" "$table")"
-  t_sig="$(column_signature "$TARGET_DATABASE_URL" "$table")"
-  [[ "$s_sig" == "$t_sig" ]] || { echo "Auth schema mismatch for auth.$table" >&2; exit 6; }
+  [[ "$(column_signature "$SOURCE_DATABASE_URL" "$table")" == "$(column_signature "$TARGET_DATABASE_URL" "$table")" ]] || {
+    echo "Auth schema mismatch for auth.$table" >&2; exit 6;
+  }
 done
 
 users_cols="$(insertable_columns "$SOURCE_DATABASE_URL" users)"
@@ -100,22 +100,21 @@ mfa_cols="$(insertable_columns "$SOURCE_DATABASE_URL" mfa_factors)"
 src -c "\\copy (select ${users_cols} from auth.users where ${DABBIR_USER_FILTER} order by id) to '${WORKDIR}/auth-users.csv' with (format csv)"
 src -c "\\copy (select ${identities_cols} from auth.identities where ${DABBIR_IDENTITY_FILTER} order by id) to '${WORKDIR}/auth-identities.csv' with (format csv)"
 src -c "\\copy (select ${mfa_cols} from auth.mfa_factors where ${DABBIR_IDENTITY_FILTER} order by id) to '${WORKDIR}/auth-mfa-factors.csv' with (format csv)"
+chmod 600 "$WORKDIR"/auth-*.csv
 
-# Evidence before restore.
-sha256sum "$WORKDIR"/* | sort | tee "$WORKDIR/SHA256SUMS"
+# Record hashes without retaining plaintext Auth exports after the process exits.
+sha256sum "$WORKDIR/public-relations.dump" "$WORKDIR/private-schema.dump" "$WORKDIR/public-functions.sql" "$WORKDIR/public-function-acl.sql" "$WORKDIR"/auth-*.csv | sort > "$WORKDIR/SHA256SUMS"
+
 source_users="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.users where $DABBIR_USER_FILTER")"
 source_identities="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.identities where $DABBIR_IDENTITY_FILTER")"
 source_mfa="$(scalar "$SOURCE_DATABASE_URL" "select count(*) from auth.mfa_factors where $DABBIR_IDENTITY_FILTER")"
 [[ "$source_users" == "56" ]] || { echo "DABBIR Auth baseline changed: expected 56, found $source_users. Re-audit before cutover." >&2; exit 7; }
 echo "SOURCE auth users=$source_users identities=$source_identities mfa_factors=$source_mfa"
 
-# Restore relation definitions and private-schema functions first.
-pg_restore --exit-on-error --no-owner --no-privileges --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
-pg_restore --exit-on-error --no-owner --no-privileges --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+pg_restore --exit-on-error --no-owner --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --section=pre-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
 tgt -f "$WORKDIR/public-functions.sql"
 
-# Insert Auth records with generated columns omitted. Sessions/refresh tokens are deliberately not copied;
-# users re-login once after cutover, while password hashes, identities and enrolled MFA factors are preserved.
 cat >"$WORKDIR/restore-auth.psql" <<EOF
 set session_replication_role = replica;
 \\copy auth.users(${users_cols}) from '${WORKDIR}/auth-users.csv' with (format csv)
@@ -123,16 +122,15 @@ set session_replication_role = replica;
 \\copy auth.mfa_factors(${mfa_cols}) from '${WORKDIR}/auth-mfa-factors.csv' with (format csv)
 set session_replication_role = origin;
 EOF
+chmod 600 "$WORKDIR/restore-auth.psql"
 tgt -f "$WORKDIR/restore-auth.psql"
 
-# Restore all DABBIR data and then constraints/indexes/RLS/triggers/ACLs.
-pg_restore --exit-on-error --no-owner --no-privileges --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
-pg_restore --exit-on-error --no-owner --no-privileges --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
-pg_restore --exit-on-error --no-owner --no-privileges --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
-pg_restore --exit-on-error --no-owner --no-privileges --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+pg_restore --exit-on-error --no-owner --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --section=data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
+pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/private-schema.dump"
+pg_restore --exit-on-error --no-owner --section=post-data --dbname="$TARGET_DATABASE_URL" "$WORKDIR/public-relations.dump"
 tgt -f "$WORKDIR/public-function-acl.sql"
 
-# Strict DABBIR schema/data verifier already maintained by the repository.
 SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" TARGET_DATABASE_URL="$TARGET_DATABASE_URL" "$VERIFY_SCRIPT"
 
 auth_fp(){
@@ -141,13 +139,12 @@ auth_fp(){
 }
 for spec in "users|$DABBIR_USER_FILTER" "identities|$DABBIR_IDENTITY_FILTER" "mfa_factors|$DABBIR_IDENTITY_FILTER"; do
   IFS='|' read -r table predicate <<<"$spec"
-  s="$(auth_fp "$SOURCE_DATABASE_URL" "$table" "$predicate")"
-  t="$(auth_fp "$TARGET_DATABASE_URL" "$table" "$predicate")"
-  [[ "$s" == "$t" ]] || { echo "Auth fingerprint mismatch: auth.$table" >&2; exit 8; }
+  [[ "$(auth_fp "$SOURCE_DATABASE_URL" "$table" "$predicate")" == "$(auth_fp "$TARGET_DATABASE_URL" "$table" "$predicate")" ]] || {
+    echo "Auth fingerprint mismatch: auth.$table" >&2; exit 8;
+  }
   echo "PASS auth.$table fingerprint"
 done
 
-# Prove no unrelated Auth users were imported.
 target_auth_total="$(scalar "$TARGET_DATABASE_URL" 'select count(*) from auth.users')"
 [[ "$target_auth_total" == "$source_users" ]] || { echo "Target contains unexpected Auth users: $target_auth_total" >&2; exit 9; }
 
