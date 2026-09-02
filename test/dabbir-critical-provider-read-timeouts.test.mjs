@@ -48,7 +48,7 @@ function response(body, init = {}) {
 }
 
 function requestWithToken() {
-  return { headers: { cookie: 'pilot_access=test-token' } };
+  return { headers: { cookie: '__Host-dabbir_access=test-token' } };
 }
 
 function mockUserAndMemberships({ membershipDelay = 0, membershipResponse = [{ business_id: BUSINESS_ID, role: 'owner', status: 'active' }] } = {}) {
