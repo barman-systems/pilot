@@ -27,6 +27,7 @@
     "/api/customer-activation-ui",
     "/api/owner-copilot-ui",
     "/api/dabbir-contextual-navigation-ui",
+    "/api/dabbir-route-authority-ui",
     "/api/dabbir-navigation-event-bridge-ui",
     "/api/car-wash-loader-ui"
   ]
