@@ -7,6 +7,7 @@ import { cronAuthMode } from '../api/barman-executive-cron.js';
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260902162000_barman_executive_runtime_v1.sql',import.meta.url),'utf8');
 const telegram=fs.readFileSync(new URL('../supabase/functions/barman-telegram-webhook/index.ts',import.meta.url),'utf8');
 const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+const executiveCore=fs.readFileSync(new URL('../api/_barman-executive-core.js',import.meta.url),'utf8');
 
 test('BARMAN runtime has atomic lease, evidence gate and private queue',()=>{
   for(const token of ['for update skip locked','lease_until','attempt_count','barman_executive_claim_v1','barman_executive_finalize_v1','DONE_REQUIRES_SUMMARY_AND_EVIDENCE','dabbir_private.dabbir_ceo_commands'])assert.match(migration,new RegExp(token,'i'));
@@ -19,6 +20,11 @@ test('BARMAN runtime has atomic lease, evidence gate and private queue',()=>{
 test('Telegram conversation uses signed Vercel AI bridge and truth-preserving status',()=>{
   for(const token of ['barman-executive-chat','x-barman-timestamp','x-barman-signature','barman_telegram_memory_recent_v1','barman_telegram_status_v1','QUEUED لا تعني'])assert.match(telegram,new RegExp(token));
   assert.doesNotMatch(telegram,/barman_openai_api_key|api\.openai\.com/);
+});
+
+test('Telegram completion routing uses the real received_at ledger column',()=>{
+  assert.match(executiveCore,/barman_telegram_updates\?command_id=.*order=received_at\.desc/);
+  assert.doesNotMatch(executiveCore,/barman_telegram_updates\?command_id=.*order=created_at\.desc/);
 });
 
 test('signed bridge rejects tampering and old requests',()=>{
