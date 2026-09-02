@@ -1,0 +1,71 @@
+name: DABBIR Native GitHub Protection Bootstrap
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-native-github-protection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  protect-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_ADMIN_TOKEN: ${{ secrets.DABBIR_GITHUB_ADMIN_TOKEN }}
+    steps:
+      - name: Resolve GitHub admin credential
+        id: credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${GH_ADMIN_TOKEN:-}" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'DABBIR_GITHUB_ADMIN_TOKEN is not configured; native branch protection remains blocked.'
+          fi
+
+      - name: Apply native protection to main
+        if: steps.credential.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/main/protection"
+          body='{"required_status_checks":{"strict":true,"contexts":["test"]},"enforce_admins":true,"required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"required_approving_review_count":0,"require_last_push_approval":false,"bypass_pull_request_allowances":{"users":[],"teams":[],"apps":[]}},"restrictions":null,"required_linear_history":true,"allow_force_pushes":false,"allow_deletions":false,"block_creations":true,"required_conversation_resolution":true,"lock_branch":false,"allow_fork_syncing":false}'
+
+          curl --silent --show-error --fail-with-body \
+            --request PUT \
+            --header "Authorization: Bearer ${GH_ADMIN_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header 'Content-Type: application/json' \
+            --data "$body" \
+            "$API" >/dev/null
+
+      - name: Verify native protection
+        if: steps.credential.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/main/protection"
+          verified="$(curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${GH_ADMIN_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$API")"
+
+          VERIFIED="$verified" node <<'NODE'
+          const protection = JSON.parse(process.env.VERIFIED || '{}');
+          const contexts = protection?.required_status_checks?.contexts || [];
+          if (!contexts.includes('test')) throw new Error('DABBIR CI test context is not required');
+          if (protection?.enforce_admins?.enabled !== true) throw new Error('Admin enforcement is not enabled');
+          if (protection?.required_linear_history?.enabled !== true) throw new Error('Linear history is not required');
+          if (protection?.allow_force_pushes?.enabled === true) throw new Error('Force pushes remain enabled');
+          if (protection?.allow_deletions?.enabled === true) throw new Error('Branch deletion remains enabled');
+          if (protection?.required_conversation_resolution?.enabled !== true) throw new Error('Conversation resolution is not required');
+          console.log('DABBIR native GitHub main protection verified.');
+          NODE
