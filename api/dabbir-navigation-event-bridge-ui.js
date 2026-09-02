@@ -50,6 +50,27 @@ const script = String.raw`(()=>{
     return {node,name,screen};
   }
 
+  function renderLoadedScreen(hit){
+    if(hit?.name!=='conversations') return;
+    try{
+      if(typeof renderChats==='function') renderChats();
+    }catch(error){
+      window.__dabbirLastNavigationPreRender={
+        target:hit.name,
+        ok:false,
+        error:String(error?.message||error),
+        at:new Date().toISOString(),
+      };
+      return;
+    }
+    window.__dabbirLastNavigationPreRender={
+      target:hit.name,
+      ok:true,
+      source:'workspace',
+      at:new Date().toISOString(),
+    };
+  }
+
   function paint(hit){
     try{current=hit.name}catch{}
     document.querySelectorAll('.screen').forEach(screen=>screen.classList.toggle('active',screen===hit.screen));
@@ -84,7 +105,10 @@ const script = String.raw`(()=>{
     const epoch=++navigationEpoch;
     const started=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
 
-    // Navigation feedback must never wait for screen rendering, data work, or wrapper modules.
+    // Conversation data is already present in the authenticated workspace. Render that local
+    // state synchronously so WebKit never exposes an activated but empty conversation screen.
+    // Network/data refresh work remains deferred with showScreen below.
+    renderLoadedScreen(hit);
     paint(hit);
 
     afterPaint(()=>{
@@ -103,6 +127,7 @@ const script = String.raw`(()=>{
         target:hit.name,
         source,
         visual_first:true,
+        loaded_content_before_activation:hit.name==='conversations',
         deferred_render:true,
         total_ms:Math.max(0,Math.round((finished-started)*10)/10),
         at:new Date().toISOString(),
@@ -159,11 +184,12 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
 
   window.__dabbirNavigationEventBridge={
-    version:'navigation-event-bridge-v4-context-resync',
+    version:'navigation-event-bridge-v5-conversation-ready',
     delegated_click:true,
     webkit_touch_fallback:true,
     safe_screen_fallback:true,
     visual_first:true,
+    loaded_conversation_content_before_activation:true,
     deferred_render:true,
     destination_authority:'context-router',
     context_resync_before_navigation:true,
@@ -175,6 +201,6 @@ export default function handler(req,res){
   if(req.method!=='GET') return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=0, s-maxage=60, stale-while-revalidate=300');
-  res.setHeader('x-dabbir-navigation-event-bridge','v4-context-resync');
+  res.setHeader('x-dabbir-navigation-event-bridge','v5-conversation-ready');
   return res.status(200).send(script);
 }
