@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const apiRoot = path.join(root, 'api');
 const retiredRef = 'spohjzrsymsmzsseygtw';
+const mumbaiRef = 'fphpoysqdsceniwduxjq';
 const retiredPublishableKey = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
 
 function jsFiles(dir) {
@@ -25,6 +26,12 @@ test('runtime API cannot silently fall back to the retired Sydney Supabase proje
     }
   }
   assert.deepEqual(offenders, []);
+});
+
+test('production Auth guard is pinned to Mumbai and not the retired Sydney project', () => {
+  const source = fs.readFileSync(path.join(root, '.github', 'workflows', 'dabbir-auth-production.yml'), 'utf8');
+  assert.match(source, new RegExp(`PROJECT_REF:\\s*${mumbaiRef}`));
+  assert.doesNotMatch(source, new RegExp(`PROJECT_REF:\\s*${retiredRef}`));
 });
 
 test('auth core has no legacy Supabase origin constant', () => {
