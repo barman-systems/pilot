@@ -35,8 +35,12 @@ test('capacity never runs automatically on push or schedule',()=>{
   must(/runtime-capacity-1000:\n    name:[^\n]*\n    needs: \[full-customer-journey, ai-capacity\]\n    if: \$\{\{[^\n]*github\.event_name == 'workflow_dispatch'[^\n]*needs\.ai-capacity\.result == 'success'[^\n]*needs\.full-customer-journey\.outputs\.production_ready == 'true'[^\n]*\}\}/,'runtime capacity must require both successful AI capacity and the explicit public-production-ready gate');
 });
 
-test('production capacity retains exact fail-closed acknowledgement',()=>{
+test('production capacity retains exact fail-closed acknowledgement and explicit target',()=>{
   const ack='ALLOW_CAPACITY_LOAD_ON_PRODUCTION';
   assert.ok(workflow.includes(ack),'workflow must require the exact production acknowledgement');
-  must(/PRODUCTION_CAPACITY_LOAD_ACK:\s*\$\{\{ inputs\.production_capacity_ack \}\}/,'the verified manual acknowledgement must reach the capacity safety guard');
+  const ackWiring=/CAPACITY_PRODUCTION_ACK:\s*\$\{\{ inputs\.production_capacity_ack \}\}/g;
+  assert.equal((workflow.match(ackWiring)||[]).length,2,'both production capacity jobs must pass the acknowledgement using the variable consumed by dabbir-capacity-load');
+  const targetWiring=/CAPACITY_TARGET:\s*production/g;
+  assert.equal((workflow.match(targetWiring)||[]).length,2,'both capacity jobs must explicitly declare the production target');
+  mustNot(/PRODUCTION_CAPACITY_LOAD_ACK:/,'obsolete unused acknowledgement variable must not return');
 });

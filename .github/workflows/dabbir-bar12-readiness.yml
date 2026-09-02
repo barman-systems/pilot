@@ -14,6 +14,7 @@ on:
       - 'api/dabbir-whatsapp-*.js'
       - 'api/_whatsapp-*.js'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/run-ai-full-customer-journey-en.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - '.github/workflows/dabbir-bar12-readiness.yml'
@@ -248,21 +249,28 @@ jobs:
           mkdir -p bar12-journey-evidence
           gh run download "$journey_run" \
             --repo "$GITHUB_REPOSITORY" \
-            --name dabbir-ai-customer-journey-evidence \
+            --name dabbir-ai-full-customer-journey-evidence \
             --dir bar12-journey-evidence
 
           report='bar12-journey-evidence/dabbir-ai-customer-journey-report.json'
+          report_en='bar12-journey-evidence/dabbir-ai-customer-journey-report-en.json'
           isolation='bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json'
           screenshot='bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png'
           test -s "$report"
+          test -s "$report_en"
           test -s "$isolation"
           test -s "$screenshot"
           jq -e \
             --arg origin "$RUNTIME_ORIGIN" \
             '.verdict == "PASS" and .required_failures == 0 and .production_origin == $origin and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' \
             "$report" >/dev/null
+          jq -e \
+            --arg origin "$RUNTIME_ORIGIN" \
+            '.verdict == "PASS" and .required_failures == 0 and .production_origin == $origin and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' \
+            "$report_en" >/dev/null
           jq -e '.verdict == "PASS" and .required_failures == 0 and (.checks | length) >= 9' "$isolation" >/dev/null
           grep -q "locale: 'ar-AE'" test/ai-full-customer-journey-v2.mjs
+          grep -q "locale: 'en-US'" test/run-ai-full-customer-journey-en.mjs
           echo "run_id=$journey_run" >> "$GITHUB_OUTPUT"
           echo "source_sha=$journey_sha" >> "$GITHUB_OUTPUT"
           echo "mode=$journey_mode" >> "$GITHUB_OUTPUT"
@@ -297,7 +305,7 @@ jobs:
               production_deployment:{state:"READY",source_commit:$runtime_sha,id:$deployment_id,environment:"production",evidence:("live_release_endpoint+full_journey_run:"+$journey_run_id)},
               end_to_end_journey:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,run_id:$journey_run_id,web_owner_journey_verified:true,cross_tenant_isolation_verified:true,real_external_connection:false,real_inbound_message:false,approved_reply_verified:false,external_scope:"UNVERIFIED"},
               iphone_safari_ar:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+ar-AE_fixture+screenshot"},
-              iphone_safari_en:null,
+              iphone_safari_en:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+en-US_fixture"},
               monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},
               critical_gates:{security:null,financial:null,legal:null}
             }' > dabbir-bar12-live-evidence.json
@@ -315,6 +323,7 @@ jobs:
             dabbir-bar12-runtime-classification.log
             dabbir-bar12-journey-equivalence.log
             bar12-journey-evidence/dabbir-ai-customer-journey-report.json
+            bar12-journey-evidence/dabbir-ai-customer-journey-report-en.json
             bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json
             bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png
           if-no-files-found: warn
