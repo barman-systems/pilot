@@ -83,6 +83,8 @@ jobs:
             git apply /tmp/barman.patch
           fi
 
+          # Intent-to-add makes newly created files visible to git diff without staging content.
+          git add -N .
           mapfile -t files < <(git diff --name-only)
           ((${#files[@]} > 0)) || { echo 'Candidate produced no changes'; exit 1; }
           printf '%s\n' "${files[@]}" | tee /tmp/changed-files.txt
