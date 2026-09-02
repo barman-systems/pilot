@@ -31,10 +31,17 @@ test('retired PILOT origin cannot return to DABBIR release controls', () => {
 test('all release workflows use the same strict canonical DABBIR public-origin gate', () => {
   for (const path of releaseWorkflows) {
     const source = fs.readFileSync(path, 'utf8');
-    assert.match(source, /vars\.DABBIR_PRODUCTION_ORIGIN/, path);
+    assert.match(source, /PRODUCTION_ORIGIN:/, path);
     assert.match(source, /scripts\/dabbir-production-origin-gate\.mjs/, path);
     assert.match(source, /launch-gate/, path);
   }
+
+  // The auth guard is account-security critical, so it pins the currently
+  // verified production origin rather than depending on an unset repository var.
+  const auth = fs.readFileSync('.github/workflows/dabbir-auth-production.yml', 'utf8');
+  assert.match(auth, /PRODUCTION_ORIGIN: https:\/\/dabbir\.bmalman\.com/);
+  assert.match(auth, /PROJECT_REF: fphpoysqdsceniwduxjq/);
+
   const gate=fs.readFileSync('scripts/dabbir-production-origin-gate.mjs','utf8');
   assert.match(gate, /DABBIR_PRODUCTION_ORIGIN must be configured as the canonical public HTTPS origin/);
   assert.match(gate, /BLOCKED_PRELAUNCH/);
@@ -64,12 +71,19 @@ test('protected prelaunch permits verification journey only while public launch 
   assert.match(auth,/steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
 });
 
-test('deployment contract records the protected no-public-domain state', () => {
+test('deployment contract records the live Mumbai production state', () => {
   const contract = JSON.parse(fs.readFileSync('config/barman-integration-contract.json', 'utf8'));
+  assert.equal(contract.status, 'ACTIVE_PRODUCTION');
   assert.equal(contract.deployment.project_name, 'dabbir');
   assert.equal(contract.deployment.project_id, 'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq');
-  assert.equal(contract.deployment.public_launch_domain, null);
-  assert.equal(contract.deployment.domain_access, 'VERCEL_AUTH_PROTECTED');
-  assert.equal(contract.deployment.production_runtime_policy, 'FAIL_CLOSED_PREVIEW_ONLY');
-  assert.equal(contract.deployment.project_live, false);
+  assert.equal(contract.deployment.public_launch_domain, 'dabbir.bmalman.com');
+  assert.equal(contract.deployment.domain_access, 'PUBLIC_PRODUCTION');
+  assert.equal(contract.deployment.production_runtime_policy, 'ACTIVE_FAIL_CLOSED');
+  assert.equal(contract.deployment.project_live, true);
+  assert.equal(contract.deployment.production_region, 'bom1');
+  assert.equal(contract.database.project_ref, 'fphpoysqdsceniwduxjq');
+  assert.equal(contract.database.region, 'ap-south-1');
+  assert.equal(contract.database.retired_runtime_source_ref, 'spohjzrsymsmzsseygtw');
+  assert.equal(contract.database.retired_runtime_source_policy, 'NO_RUNTIME_FALLBACK');
+  assert.equal(contract.rules.retired_supabase_runtime_fallback_allowed, false);
 });
