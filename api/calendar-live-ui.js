@@ -13,8 +13,9 @@ const liveScript=String.raw`(()=>{
   let lastConnectionState=null,lastConnectionCheckAt=0,connectionBlockedUntil=0,connectionBlockedError='';
   let syncInFlight=null,forceQueued=false,passiveSyncTimer=null;
   const ar=()=>document.documentElement.lang!=='en';
-  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc=value=>String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const businessId=()=>{try{return workspace?.business?.id||null}catch{return null}};
+  const businessType=()=>{try{return String(workspace?.business?.business_type||'').toLowerCase()}catch{return ''}};
   const screenActive=()=>q('#screen-appointments')?.classList.contains('active');
   const fmt=value=>{try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return String(value||'')}};
 
@@ -22,7 +23,15 @@ const liveScript=String.raw`(()=>{
   style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}';
   document.head.append(style);
 
+  function enforceBusinessModeIsolation(){
+    if(businessType()==='salon')return;
+    if(document.body.classList.contains('salonMode'))document.body.classList.remove('salonMode');
+    ['#appointmentsTable','#dabbirCalendarShell','#dabbirAppointmentManagement','#customersTable'].forEach(selector=>q(selector)?.classList.remove('hidden'));
+    q('#dabbirGenericCalendar')?.removeAttribute('hidden');
+  }
+
   function removeCancelledFromActiveCalendar(){
+    enforceBusinessModeIsolation();
     const screen=q('#screen-appointments');if(!screen)return;
     screen.querySelectorAll('.dabbirCalEvent.cancelled').forEach(node=>node.remove());
     screen.querySelectorAll('.dabbirAgendaEvent').forEach(node=>{
@@ -32,6 +41,7 @@ const liveScript=String.raw`(()=>{
   }
 
   function ensureUi(){
+    enforceBusinessModeIsolation();
     const head=q('.dabbirCalendarConnectionsHead'),host=q('#dabbirCalendarConnections');if(!head||!host)return false;
     let btn=q('#dabbirCalendarSyncNow');
     if(!btn){btn=document.createElement('button');btn.id='dabbirCalendarSyncNow';btn.type='button';btn.className='dabbirSyncBtn';btn.onclick=()=>sync(true);head.append(btn)}
@@ -43,7 +53,7 @@ const liveScript=String.raw`(()=>{
   function renderBusy(){
     const panel=q('#dabbirExternalBusy');if(!panel)return;
     const now=Date.now(),rows=lastBusy.filter(x=>new Date(x.ends_at).getTime()>now).slice(0,8);
-    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class="dabbirExternalBusyList">'+rows.map(row=>'<div class="dabbirExternalBusyRow"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style="font-size:8px;color:var(--muted)">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
+    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class=\"dabbirExternalBusyList\">'+rows.map(row=>'<div class=\"dabbirExternalBusyRow\"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style=\"font-size:8px;color:var(--muted)\">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
   }
 
   function httpError(response,body,fallback){
@@ -69,6 +79,7 @@ const liveScript=String.raw`(()=>{
     lastBusy=Array.isArray(body.busy_blocks)?body.busy_blocks:[];lastBusyLoadAt=Date.now();renderBusy();removeCancelledFromActiveCalendar();
   }
   async function runSync(force=false){
+    enforceBusinessModeIsolation();
     const id=businessId();if(!id)return;ensureUi();if(id!==lastBusiness)resetPassiveState(id);
     try{
       const connections=await connectionState(id,force),active=(connections.connections||[]).filter(c=>c.status==='active'&&c.sync_enabled!==false);
@@ -80,15 +91,15 @@ const liveScript=String.raw`(()=>{
     finally{busy=false;ensureUi();removeCancelledFromActiveCalendar()}
   }
   async function sync(force=false){if(!businessId())return;if(syncInFlight){if(force)forceQueued=true;return syncInFlight}const request=runSync(force);syncInFlight=request;try{return await request}finally{if(syncInFlight===request)syncInFlight=null;if(forceQueued){forceQueued=false;setTimeout(()=>sync(true),0)}}}
-  function schedulePassiveSync(){if(passiveSyncTimer)return;passiveSyncTimer=setTimeout(()=>{passiveSyncTimer=null;if(screenActive()&&businessId()){ensureUi();void sync(false)}},150)}
+  function schedulePassiveSync(){if(passiveSyncTimer)return;passiveSyncTimer=setTimeout(()=>{passiveSyncTimer=null;enforceBusinessModeIsolation();if(screenActive()&&businessId()){ensureUi();void sync(false)}},150)}
 
   const observer=new MutationObserver(schedulePassiveSync);
   observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   const calendarScreen=q('#screen-appointments');
   if(calendarScreen){const calendarObserver=new MutationObserver(()=>setTimeout(removeCancelledFromActiveCalendar,0));calendarObserver.observe(calendarScreen,{subtree:true,childList:true})}
-  setInterval(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},60000);
-  setTimeout(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,version:'calendar-live-v5-request-coalescing'};
+  setInterval(()=>{enforceBusinessModeIsolation();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},60000);
+  setTimeout(()=>{enforceBusinessModeIsolation();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},1200);
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,version:'calendar-live-v6-business-mode-isolation'};
 })();`;
 
 function captureResponse(){return {statusCode:200,headers:{},body:'',status(code){this.statusCode=Number(code||200);return this},setHeader(key,value){this.headers[String(key).toLowerCase()]=value;return this},end(body=''){this.body=String(body);return this},send(body=''){this.body=String(body);return this}}}
@@ -102,6 +113,6 @@ export default async function handler(req,res){
   if(salonCaptured.statusCode!==200||!salonCaptured.body)return res.status(500).end('Salon Mode UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
-  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v8-request-coalescing');
+  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v9-business-mode-isolation');
   return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
