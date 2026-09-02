@@ -138,6 +138,7 @@ const client=String.raw`
       data=null;
       notify(editingId?t.updated:t.created);
       editingId=null;
+      loading=false;
       await load(true);
     }catch(error){notify(t.failed+' '+String(error?.message||error).slice(0,80))}finally{loading=false;render()}
   }
