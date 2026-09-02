@@ -40,6 +40,7 @@ jobs:
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
+      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
       EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       EXPECTED_GIT_PROVIDER: github
       EXPECTED_GIT_REPOSITORY: barman-systems/pilot
@@ -71,17 +72,18 @@ jobs:
           token="$(jq -r '.value // empty' <<<"$token_json")"
           test -n "$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
-      - name: Fetch aggregate production evidence from Supabase
+      - name: Fetch aggregate production evidence from Mumbai Supabase
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
+          test "$SUPABASE_PROJECT_REF" = 'fphpoysqdsceniwduxjq'
           curl --fail --silent --show-error \
             -X POST \
             -H "Authorization: Bearer $OIDC_TOKEN" \
             -H 'Content-Type: application/json' \
-            'https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-qa-suite-runner' \
+            "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/barman-qa-suite-runner" \
             -d '{"action":"dabbir_bar12_readiness"}' > dabbir-bar12-supabase-evidence.json
           jq -e '.ok == true and .evidence != null' dabbir-bar12-supabase-evidence.json >/dev/null
       - name: Prepare trusted Vercel access for protected prelaunch
