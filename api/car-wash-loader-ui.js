@@ -27,7 +27,7 @@ const script=String.raw`(()=>{
     if(!isCarWash()||window.__dabbirCarWashManualBookingEnhancement)return false;
     if(document.querySelector('script[data-dabbir-car-wash-manual-ui="1"]'))return true;
     const node=document.createElement('script');
-    node.src='/api/car-wash-manual-booking-ui?v=20260903-1';
+    node.src='/api/car-wash-manual-booking-ui?v=20260903-2-loop-safe';
     node.async=true;
     node.dataset.dabbirCarWashManualUi='1';
     node.onerror=()=>console.error('dabbir_car_wash_manual_booking_ui_load_failed');
@@ -66,6 +66,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-car-wash-loader-ui','v4-manual-booking-selectors');
+  res.setHeader('x-dabbir-car-wash-loader-ui','v5-loop-safe-cache-bust');
   return res.status(200).send(script);
 }
