@@ -38,18 +38,20 @@ test('Stripe execution is isolated in Supabase and DABBIR rejects live or malfor
   assert.doesNotMatch(core, /process\.env\.STRIPE_SECRET_KEY|api\.stripe\.com/);
   assert.match(core, /functions\/v1\/barman-stripe-checkout/);
   assert.match(core, /x-dabbir-billing-bridge':'v1'/);
+  assert.match(core, /supabaseKeyHeaders/);
   assert.match(edgeCheckout, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
   assert.match(edgeCheckout, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
   assert.match(edgeWebhook, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
   assert.match(edgeWebhook, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
 });
 
-test('billing mutations are same-origin, owner-only, and bridge calls are server-authenticated', () => {
+test('billing mutations are same-origin, owner-only, and bridge calls are server-authenticated without requiring opaque API keys to be JWTs', () => {
   assert.match(checkout, /requireSameOrigin\(req\)/);
   assert.match(portal, /requireSameOrigin\(req\)/);
   assert.match(core, /membership\.role\|\|''\)\.toLowerCase\(\)!=='owner'/);
   assert.match(core, /OWNER_APPROVAL_REQUIRED/);
-  assert.match(edgeCheckout, /actual===`Bearer \$\{expected\}`/);
+  assert.match(edgeCheckout, /apiKey===expected/);
+  assert.match(edgeCheckout, /legacyJwt&&auth===`Bearer \$\{expected\}`/);
   assert.match(edgeCheckout, /x-dabbir-billing-bridge.*==='v1'/);
   assert.match(ui, /function owner\(\).*membership\?\.role/s);
   assert.match(ui, /if\(!owner\(\)\)return/);
@@ -94,14 +96,12 @@ test('subscription truth is DABBIR-metadata scoped and webhook-driven with no ca
   assert.match(edgeWebhook, /onConflict:'stripe_event_id'/);
 });
 
-test('legacy ZAJEL Stripe behavior stays outside the DABBIR bridge branch', () => {
+test('legacy ZAJEL checkout stays explicitly stopped outside the DABBIR bridge', () => {
   const bridgeAt=edgeCheckout.indexOf("if(req.headers.get('x-dabbir-billing-bridge')==='v1')");
-  const zajelAt=edgeCheckout.indexOf("p_project_key:'ZAJEL'");
-  assert.ok(bridgeAt>0&&zajelAt>bridgeAt);
-  assert.match(edgeCheckout, /PAYMENT_LIVE_NOT_APPROVED/);
-  assert.match(edgeCheckout, /barman_get_sellable_product/);
-  assert.match(edgeWebhook, /barman_record_stripe_checkout/);
-  assert.match(edgeWebhook, /barman_update_stripe_payment_intent/);
+  const stoppedAt=edgeCheckout.indexOf('LEGACY_BILLING_DISABLED');
+  assert.ok(bridgeAt>0&&stoppedAt>bridgeAt);
+  assert.match(edgeCheckout, /system:'BARMAN_ZAJEL'/);
+  assert.doesNotMatch(edgeCheckout, /p_project_key:'ZAJEL'|barman_get_sellable_product/);
 });
 
 test('Vercel has no competing billing webhook handler', async () => {

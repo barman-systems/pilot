@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { tiktokPilotConfig } from './_tiktok-pilot-core.js';
+import { applySupabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const TIKTOK_BASE = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -54,8 +55,7 @@ async function serviceRest(path, options = {}) {
   const key = serviceKey();
   if (!key) throw Object.assign(new Error('TIKTOK_SERVER_DATA_ACCESS_NOT_CONFIGURED'), { status: 503 });
   const headers = new Headers(options.headers || {});
-  headers.set('apikey', key);
-  headers.set('authorization', `Bearer ${key}`);
+  applySupabaseKeyHeaders(headers, key);
   headers.set('accept', 'application/json');
   if (options.body !== undefined) headers.set('content-type', 'application/json');
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers, cache: 'no-store' });

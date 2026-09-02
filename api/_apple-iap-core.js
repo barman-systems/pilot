@@ -1,4 +1,5 @@
 import { Environment, SignedDataVerifier } from '@apple/app-store-server-library';
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -159,13 +160,11 @@ export async function persistAppleEntitlement(entitlement) {
   const key = serviceRoleKey();
   const response = await fetch(`${SUPABASE_URL}/rest/v1/dabbir_apple_entitlements?on_conflict=user_id`, {
     method: 'POST',
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
+    headers: supabaseKeyHeaders(key, {
       'content-type': 'application/json',
       accept: 'application/json',
       prefer: 'resolution=merge-duplicates,return=representation',
-    },
+    }),
     body: JSON.stringify(entitlement),
     cache: 'no-store',
     signal: AbortSignal.timeout(10000),

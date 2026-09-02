@@ -7,6 +7,7 @@ import {
   requireSameOrigin,
   supabaseRest,
 } from './_auth-core.js';
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/,'');
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30,7 +31,7 @@ async function readResponse(response,fallback){
 async function serviceRpc(key,name,params={}){
   const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{
     method:'POST',cache:'no-store',
-    headers:{apikey:key,authorization:`Bearer ${key}`,'content-type':'application/json',accept:'application/json'},
+    headers:supabaseKeyHeaders(key,{'content-type':'application/json',accept:'application/json'}),
     body:JSON.stringify(params),
   });
   return readResponse(response,'PLATFORM_ADMIN_RPC_FAILED');

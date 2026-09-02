@@ -4,6 +4,7 @@ import {
   getBusinessMemberships,
   getVerifiedUser,
 } from './_auth-core.js';
+import { applySupabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const DEFAULT_SCOPES = ['message.list.read', 'message.list.send', 'message.list.manage'];
@@ -58,8 +59,7 @@ async function serviceRest(path, options = {}) {
   const key = serviceKey();
   if (!key) throw Object.assign(new Error('TIKTOK_SERVER_DATA_ACCESS_NOT_CONFIGURED'), { status: 503 });
   const headers = new Headers(options.headers || {});
-  headers.set('apikey', key);
-  headers.set('authorization', `Bearer ${key}`);
+  applySupabaseKeyHeaders(headers, key);
   headers.set('accept', 'application/json');
   if (options.body !== undefined) headers.set('content-type', 'application/json');
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

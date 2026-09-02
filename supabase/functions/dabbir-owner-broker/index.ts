@@ -1,7 +1,10 @@
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
 const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 const JSON_HEADERS={'content-type':'application/json','cache-control':'no-store'};
-const sbHeaders=()=>({'apikey':SERVICE_KEY,'authorization':`Bearer ${SERVICE_KEY}`,'content-type':'application/json'});
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CUSTOMER_NO_RE=/^DAB-[0-9]{6,}$/i;
+const serviceKeyIsJwt=()=>SERVICE_KEY.split('.').length===3;
+const sbHeaders=()=>{const headers:Record<string,string>={'apikey':SERVICE_KEY,'content-type':'application/json'};if(serviceKeyIsJwt())headers.authorization=`Bearer ${SERVICE_KEY}`;return headers};
 const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:JSON_HEADERS});
 const bytesToHex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 async function sha(value:string){return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))))}
@@ -10,6 +13,7 @@ async function tokenHash(token:string){return sha(`${SERVICE_KEY}:dabbir-owner-s
 function randomToken(bytes=36){const data=new Uint8Array(bytes);crypto.getRandomValues(data);return btoa(String.fromCharCode(...data)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function randomOtp(){const x=new Uint32Array(1);crypto.getRandomValues(x);return String(x[0]%1000000).padStart(6,'0')}
 function safeEqual(a:string,b:string){if(a.length!==b.length)return false;let out=0;for(let i=0;i<a.length;i++)out|=a.charCodeAt(i)^b.charCodeAt(i);return out===0}
+function clean(v:unknown,max=4000){return String(v??'').trim().slice(0,max)}
 async function sb(path:string,init:RequestInit={}){return fetch(`${SUPABASE_URL}${path}`,{...init,headers:{...sbHeaders(),...(init.headers||{})}})}
 async function activeAdmin(){
  const r=await sb('/rest/v1/dabbir_platform_admins?active=eq.true&select=user_id&order=created_at.asc&limit=1');
@@ -56,6 +60,46 @@ async function verifyOtp(body:any){
  await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&consumed_at=is.null`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({consumed_at:new Date().toISOString(),attempts:Number(row.attempts||0)+1})});
  return reply(200,{ok:true,authenticated:true,role:'platform_owner',session_token:sessionToken,expires_in:expiresIn});
 }
+async function incidentRead(body:any){
+ const incidentId=clean(body?.incident_id,80),customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);
+ if(incidentId&&!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});
+ if(customerNo&&!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});
+ if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
+ const q=new URLSearchParams({select:'*',order:'updated_at.desc',limit:'100'});
+ if(incidentId)q.set('id',`eq.${incidentId}`);
+ if(customerNo)q.set('customer_no',`eq.${customerNo}`);
+ if(businessId)q.set('business_id',`eq.${businessId}`);
+ const r=await sb(`/rest/v1/dabbir_platform_owner_incidents?${q.toString()}`);
+ if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_READ_FAILED'});
+ const incidents=await r.json().catch(()=>[]);
+ let events:any[]=[];
+ if(incidentId){
+  const e=await sb(`/rest/v1/dabbir_platform_owner_incident_events?incident_id=eq.${encodeURIComponent(incidentId)}&select=*&order=created_at.asc&limit=200`);
+  if(!e.ok)return reply(503,{ok:false,error:'INCIDENT_EVENT_READ_FAILED'});
+  const rows=await e.json().catch(()=>[]);events=Array.isArray(rows)?rows:[];
+ }
+ return reply(200,{ok:true,payload:{incidents:Array.isArray(incidents)?incidents:[],events}});
+}
+async function incidentAction(body:any){
+ const operation=clean(body?.operation,20).toLowerCase();
+ if(operation==='create'){
+  const customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);
+  if(!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});
+  if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
+  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_create_v1',{method:'POST',body:JSON.stringify({
+   p_customer_no:customerNo,p_business_id:businessId||null,p_category:clean(body?.category,30),p_priority:clean(body?.priority,20),p_summary:clean(body?.summary,200),p_description:clean(body?.description,4000)||null,p_assigned_queue:clean(body?.assigned_queue,40)||'owner'
+  })});
+  if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_CREATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
+ }
+ if(operation==='update'){
+  const incidentId=clean(body?.incident_id,80);if(!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});
+  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_update_v1',{method:'POST',body:JSON.stringify({
+   p_incident_id:incidentId,p_status:clean(body?.status,30)||null,p_priority:clean(body?.priority,20)||null,p_assigned_queue:clean(body?.assigned_queue,40)||null,p_root_cause:clean(body?.root_cause,4000)||null,p_resolution:clean(body?.resolution,4000)||null,p_note:clean(body?.note,4000)||null
+  })});
+  if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_UPDATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
+ }
+ return reply(400,{ok:false,error:'UNKNOWN_INCIDENT_OPERATION'});
+}
 async function ownerData(body:any){
  const session=await verifySession(String(body?.session_token||''));if(!session)return reply(401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
  const action=String(body?.data_action||'overview').trim().toLowerCase();
@@ -68,6 +112,8 @@ async function ownerData(body:any){
   const r=await sb('/rest/v1/rpc/dabbir_platform_customer_search',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id,p_query:q,p_limit:50})});
   if(!r.ok)return reply(503,{ok:false,error:'OWNER_SEARCH_FAILED'});const rows=await r.json().catch(()=>[]);return reply(200,{ok:true,payload:{accounts:Array.isArray(rows)?rows:[]}});
  }
+ if(action==='incidents')return incidentRead(body);
+ if(action==='incident_action')return incidentAction(body);
  return reply(400,{ok:false,error:'UNKNOWN_OWNER_DATA_ACTION'});
 }
 Deno.serve(async(req:Request)=>{
