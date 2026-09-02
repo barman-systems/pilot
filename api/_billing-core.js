@@ -6,6 +6,7 @@ import {
   supabaseRest,
 } from './_auth-core.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_HOST_RE=/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::\d{1,5})?$/i;
@@ -87,7 +88,7 @@ export async function stripeSandboxBridge(action,payload={}){
   const key=serviceRoleKey();
   const response=await fetch(`${SUPABASE_URL}/functions/v1/barman-stripe-checkout`,{
     method:'POST',
-    headers:{authorization:`Bearer ${key}`,apikey:key,'content-type':'application/json',accept:'application/json','x-dabbir-billing-bridge':'v1'},
+    headers:supabaseKeyHeaders(key,{'content-type':'application/json',accept:'application/json','x-dabbir-billing-bridge':'v1'}),
     body:JSON.stringify({action,...payload}),cache:'no-store',signal:AbortSignal.timeout(15000),
   });
   const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
