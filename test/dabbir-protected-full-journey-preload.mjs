@@ -3,6 +3,15 @@ import {
   installProtectedPlaywrightAccess,
 } from './support/dabbir-protected-journey-access.mjs';
 
+// Production data/auth and disposable QA identities were cut over to the Mumbai
+// DABBIR Supabase project. A release rollback restored the legacy Sydney project
+// ref in the workflow env, which created QA users in the wrong Auth tenant and
+// made the real Production login fail with INVALID_CREDENTIALS. Protected
+// journeys must therefore pin the canonical Mumbai QA project before the main
+// journey module is evaluated.
+const MUMBAI_QA_PROJECT_REF = 'fphpoysqdsceniwduxjq';
+process.env.SUPABASE_PROJECT_REF = MUMBAI_QA_PROJECT_REF;
+
 const origin = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 const bypass = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
 const trustedOidc = String(process.env.VERCEL_TRUSTED_OIDC_TOKEN || '').trim();
@@ -214,3 +223,4 @@ webkit.launch = async (...launchArgs) => {
 };
 
 console.log(`DABBIR_PROTECTED_FULL_JOURNEY_ACCESS=${bypass ? 'automation_bypass' : 'trusted_oidc'}`);
+console.log('DABBIR_PROTECTED_QA_PROJECT=MUMBAI');
