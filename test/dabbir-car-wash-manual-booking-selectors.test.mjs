@@ -42,5 +42,5 @@ test('adaptive appointment reuses a selected customer only inside the active bus
 test('car-wash loader mounts the manual booking enhancement only for car wash',()=>{
   assert.match(loader,/function loadManualBooking\(\)/);
   assert.match(loader,/\/api\/car-wash-manual-booking-ui/);
-  assert.match(loader,/v4-manual-booking-selectors/);
+  assert.match(loader,/v5-loop-safe-cache-bust/);
 });
