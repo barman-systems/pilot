@@ -83,10 +83,17 @@ export function providerConfig(providerValue,req){
   };
 }
 
+function calendarRootSecret(){
+  const explicit=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim();
+  if(explicit.length>=24)return explicit;
+  const service=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
+  if(service.length>=24&&!service.startsWith('sb_publishable_'))return service;
+  throw calendarError('CALENDAR_SECURITY_NOT_CONFIGURED',503);
+}
 function stateSecret(){
-  const value=String(process.env.DABBIR_CALENDAR_STATE_SECRET||process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim();
-  if(value.length<24)throw calendarError('CALENDAR_SECURITY_NOT_CONFIGURED',503);
-  return value;
+  const explicit=String(process.env.DABBIR_CALENDAR_STATE_SECRET||'').trim();
+  if(explicit.length>=24)return explicit;
+  return crypto.createHmac('sha256',calendarRootSecret()).update('dabbir-calendar-oauth-state-v1').digest();
 }
 function b64(value){return Buffer.from(value).toString('base64url')}
 function unb64(value){return Buffer.from(String(value||''),'base64url').toString('utf8')}
@@ -107,9 +114,7 @@ export function verifyOauthState(value){
 }
 
 function tokenKey(){
-  const raw=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim();
-  if(raw.length<24)throw calendarError('CALENDAR_SECURITY_NOT_CONFIGURED',503);
-  return crypto.createHash('sha256').update(raw).digest();
+  return crypto.createHmac('sha256',calendarRootSecret()).update('dabbir-calendar-token-encryption-v1').digest();
 }
 export function encryptTokenPayload(payload){
   const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',tokenKey(),iv);
