@@ -1,6 +1,7 @@
 import appRecoveryHandler from './app-recovery.js';
 
-const UI_CACHE_BUST = '20260902-p0-safari-v1';
+const UI_CACHE_BUST = '20260902-p0-safari-v2';
+const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
 
 function bustUiAssetVersion(body) {
   if (typeof body !== 'string') return body;
@@ -8,6 +9,11 @@ function bustUiAssetVersion(body) {
     .replace(/(\/dabbir-ui-critical\.js\?v=)[^"'\s<]+/g, `$1${UI_CACHE_BUST}`)
     .replace(/(\/dabbir-ui-deferred\.js\?v=)[^"'\s<]+/g, `$1${UI_CACHE_BUST}`)
     .replace(/(\/api\/dabbir-owner-first-ui\?v=)[^"'\s<]+/g, `$1${UI_CACHE_BUST}`);
+}
+
+function injectSafariAuthFailOpen(body) {
+  if (typeof body !== 'string' || body.includes('/api/dabbir-safari-auth-fail-open-ui')) return body;
+  return body.replace('</body>', `<script src="${SAFARI_AUTH_FAIL_OPEN}"></script>\n</body>`);
 }
 
 export default function handler(req, res) {
@@ -29,7 +35,7 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.statusCode = Number(proxy.statusCode || 200);
-      return res.end(bustUiAssetVersion(body));
+      return res.end(injectSafariAuthFailOpen(bustUiAssetVersion(body)));
     },
   };
 
