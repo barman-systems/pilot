@@ -1,0 +1,1 @@
+Owner-visible requirement: BARMAN Executive OS / CEO must render before the existing executive dashboard cards on authenticated owner dashboard loads.
