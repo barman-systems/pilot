@@ -12,9 +12,9 @@ test('generic service bookings render a real day week month calendar over the ca
   assert.match(ui,/renderDayCalendar/);
   assert.match(ui,/renderWeekCalendar/);
   assert.match(ui,/renderMonthCalendar/);
-  assert.match(ui,/data-calendar-view=\\"day\\"/);
-  assert.match(ui,/data-calendar-view=\\"week\\"/);
-  assert.match(ui,/data-calendar-view=\\"month\\"/);
+  assert.match(ui,/data-calendar-view="day"/);
+  assert.match(ui,/data-calendar-view="week"/);
+  assert.match(ui,/data-calendar-view="month"/);
   assert.match(ui,/workspace\?\.appointments/);
   assert.match(index,/id="screen-appointments"/);
   assert.match(index,/id="appointmentsTable"/);
