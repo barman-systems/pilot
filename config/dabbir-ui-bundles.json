@@ -14,7 +14,7 @@
     "/api/translation-ui",
     "/api/owner-operations-ui",
     "/api/service-operations-ui",
-    "/api/calendar-live-ui",
+    "/api/calendar-performance-ui",
     "/api/owner-action-center-ui",
     "/api/dabbir-owner-away-ui",
     "/api/dabbir-owner-decision-memory-ui",
