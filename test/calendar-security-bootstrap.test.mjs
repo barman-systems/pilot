@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 const SERVICE_ROLE_ENV = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
 const TOKEN_KEY_ENV = ['DABBIR', 'CALENDAR', 'TOKEN', 'KEY'].join('_');
@@ -54,4 +55,12 @@ test('oauth state signs and verifies using the server-only fallback secret', () 
   const state = signOauthState(payload);
   assert.deepEqual(verifyOauthState(state), payload);
   assert.throws(() => verifyOauthState(`${state}x`), /INVALID_CALENDAR_OAUTH_STATE/);
+});
+
+test('calendar connection readiness accepts the same server-only security fallback as token handling', async () => {
+  const source = await readFile(new URL('../api/calendar-connections.js', import.meta.url), 'utf8');
+  assert.match(source, /const storageConfigured=serviceRoleKey\.length>=24&&!serviceRoleKey\.startsWith\('sb_publishable_'\)/);
+  assert.match(source, /const rootSecretConfigured=tokenKey\.length>=24\|\|storageConfigured/);
+  assert.match(source, /const stateSecretConfigured=stateSecret\.length>=24\|\|rootSecretConfigured/);
+  assert.match(source, /securityReady:rootSecretConfigured&&stateSecretConfigured/);
 });
