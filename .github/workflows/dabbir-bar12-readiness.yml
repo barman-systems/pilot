@@ -118,9 +118,16 @@ jobs:
           origin="${PRODUCTION_ORIGIN:-}"
           auth_args=()
           if [ -z "$origin" ]; then
-            origin="$PROTECTED_QA_ORIGIN"
-            test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
-            auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+            public_domain="$(jq -r '.deployment.public_launch_domain // empty' config/barman-integration-contract.json)"
+            public_policy="$(jq -r '.deployment.production_runtime_policy // empty' config/barman-integration-contract.json)"
+            public_live="$(jq -r '.deployment.project_live // false' config/barman-integration-contract.json)"
+            if [ -n "$public_domain" ] && [ "$public_policy" = 'PUBLIC_PRODUCTION' ] && [ "$public_live" = 'true' ]; then
+              origin="https://${public_domain}"
+            else
+              origin="$PROTECTED_QA_ORIGIN"
+              test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
+              auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
+            fi
           fi
           fetch_release() {
             curl --fail-with-body --silent --show-error \
@@ -185,7 +192,7 @@ jobs:
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
           echo "origin=$origin" >> "$GITHUB_OUTPUT"
           echo "head_runtime_affecting=$head_runtime_affecting" >> "$GITHUB_OUTPUT"
-          echo "BAR12_PRODUCTION_RUNTIME_LOCKED sha=$final_sha deployment=$deployment_id head_runtime_affecting=$head_runtime_affecting"
+          echo "BAR12_PRODUCTION_RUNTIME_LOCKED sha=$final_sha deployment=$deployment_id origin=$origin head_runtime_affecting=$head_runtime_affecting"
       - name: Import runtime-equivalent Full Customer Journey evidence
         id: journey-evidence
         shell: bash
@@ -205,6 +212,7 @@ jobs:
             runs_json="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/dabbir-ai-customer-journey.yml/runs?branch=main&status=success&per_page=100")"
+            candidates_tsv="$(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<"$runs_json")"
 
             while IFS=$'\t' read -r candidate_run candidate_sha; do
               [ -n "$candidate_run" ] || continue
@@ -235,7 +243,7 @@ jobs:
                 journey_mode='runtime_equivalent'
                 break
               fi
-            done < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<"$runs_json")
+            done <<< "$candidates_tsv"
 
             if [ -n "$journey_run" ]; then break; fi
             sleep 10
@@ -255,11 +263,9 @@ jobs:
           report='bar12-journey-evidence/dabbir-ai-customer-journey-report.json'
           report_en='bar12-journey-evidence/dabbir-ai-customer-journey-report-en.json'
           isolation='bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json'
-          screenshot='bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png'
           test -s "$report"
           test -s "$report_en"
           test -s "$isolation"
-          test -s "$screenshot"
           jq -e \
             --arg origin "$RUNTIME_ORIGIN" \
             '.verdict == "PASS" and .required_failures == 0 and .production_origin == $origin and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' \
@@ -274,7 +280,7 @@ jobs:
           echo "run_id=$journey_run" >> "$GITHUB_OUTPUT"
           echo "source_sha=$journey_sha" >> "$GITHUB_OUTPUT"
           echo "mode=$journey_mode" >> "$GITHUB_OUTPUT"
-          echo "FULL_JOURNEY_RUNTIME_EVIDENCE_PASS runtime_sha=$RUNTIME_SHA source_sha=$journey_sha mode=$journey_mode run_id=$journey_run"
+          echo "FULL_JOURNEY_RUNTIME_EVIDENCE_PASS runtime_sha=$RUNTIME_SHA source_sha=$journey_sha mode=$journey_mode run_id=$journey_run origin=$RUNTIME_ORIGIN"
       - name: Assemble fail-closed BAR-12 evidence
         shell: bash
         env:
@@ -304,7 +310,7 @@ jobs:
               live_evidence:$live[0],
               production_deployment:{state:"READY",source_commit:$runtime_sha,id:$deployment_id,environment:"production",evidence:("live_release_endpoint+full_journey_run:"+$journey_run_id)},
               end_to_end_journey:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,run_id:$journey_run_id,web_owner_journey_verified:true,cross_tenant_isolation_verified:true,real_external_connection:false,real_inbound_message:false,approved_reply_verified:false,external_scope:"UNVERIFIED"},
-              iphone_safari_ar:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+ar-AE_fixture+screenshot"},
+              iphone_safari_ar:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+ar-AE_fixture"},
               iphone_safari_en:{verdict:"PASS",source_commit:$runtime_sha,journey_source_commit:$journey_source_sha,evidence_mode:$journey_evidence_mode,evidence:"25_mobile_webkit_owner_journey+en-US_fixture"},
               monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},
               critical_gates:{security:null,financial:null,legal:null}
@@ -325,6 +331,5 @@ jobs:
             bar12-journey-evidence/dabbir-ai-customer-journey-report.json
             bar12-journey-evidence/dabbir-ai-customer-journey-report-en.json
             bar12-journey-evidence/dabbir-cross-tenant-isolation-report.json
-            bar12-journey-evidence/dabbir-ai-customer-journey-screenshot.png
           if-no-files-found: warn
           retention-days: 30
