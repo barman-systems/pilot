@@ -19,3 +19,12 @@ test('car-wash loader fetches the operations surface only for car_wash businesse
   assert.match(loader,/\/api\/car-wash-booking-ui/);
   assert.match(loader,/data-dabbir-car-wash-ui/);
 });
+
+test('car-wash workspace suppresses the duplicate generic booking calendar',()=>{
+  const loader=read('api/car-wash-loader-ui.js');
+  assert.match(loader,/function enforceSingleCalendar\(\)/);
+  assert.match(loader,/#dabbirGenericCalendar/);
+  assert.match(loader,/setProperty\('display','none','important'\)/);
+  assert.match(loader,/dabbirCarWashDuplicate/);
+  assert.match(loader,/v2-single-calendar/);
+});
