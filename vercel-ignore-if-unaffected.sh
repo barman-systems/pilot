@@ -13,13 +13,14 @@ set -u
 #    build whenever any application, database migration, or unknown path changed
 #    in that range. Database schema is part of the Production artifact contract;
 #    a migration must not leave main SHA ahead of the deployed SHA.
-# 3) Exact-SHA Production verification contracts are deployment-affecting even
-#    when their source files live under .github/, test/, config/ or docs/evidence/.
-#    BAR-12/readiness evidence is truthful only when the canonical Production
-#    release identity advances to the commit that defines that evidence contract.
+# 3) Executable exact-SHA Production verification contracts are deployment-
+#    affecting even when their source files live under .github/, test/ or config/.
+#    Static BAR-12 evidence snapshots under docs/evidence are different: they are
+#    bound to the authoritative runtime SHA inside the evidence and must never
+#    manufacture a new Production runtime merely by recording that proof.
 # 4) Native iOS/App Store-only files and standalone UAE infrastructure-as-code are
 #    explicitly outside the Vercel web runtime. They may reuse the last web-runtime
-#    journey only when no web/database/runtime/release-evidence path changed in the
+#    journey only when no web/database/runtime/release-contract path changed in the
 #    same comparison range.
 # 5) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
@@ -80,7 +81,6 @@ while IFS= read -r path; do
     test/dabbir-capacity-load.mjs|\
     test/dabbir-activity-regression.test.mjs|\
     test/dabbir-bar12-*|\
-    docs/evidence/dabbir-bar12-*|\
     config/barman-integration-contract.json|\
     config/dabbir-release*.json)
       echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
