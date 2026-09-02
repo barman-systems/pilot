@@ -5,7 +5,10 @@ const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVI
 const GH_ISSUER='https://token.actions.githubusercontent.com';
 const GH_REPOSITORY='barman-systems/pilot';
 const GH_REF='refs/heads/main';
-const GH_WORKFLOW='barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main';
+const GH_WORKFLOWS=new Set([
+  'barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main',
+  'barman-systems/pilot/.github/workflows/dabbir-owner-away-production.yml@refs/heads/main',
+]);
 const GH_AUDIENCE='dabbir-ai-qa';
 const GH_EVENTS=new Set(['push','schedule','workflow_dispatch']);
 const ACTIONS=new Set(['dabbir_ai_qa_bootstrap','dabbir_ai_qa_seed_order','dabbir_ai_qa_cleanup']);
@@ -30,7 +33,7 @@ async function verifyGitHubOidc(req:Request){
   if(payload.iss!==GH_ISSUER)throw new Error('OIDC_ISSUER_DENIED');
   if(!aud.includes(GH_AUDIENCE))throw new Error('OIDC_AUDIENCE_DENIED');
   if(Number(payload.exp||0)<=now||Number(payload.nbf||0)>now+30)throw new Error('OIDC_TIME_INVALID');
-  if(payload.repository!==GH_REPOSITORY||payload.ref!==GH_REF||payload.workflow_ref!==GH_WORKFLOW)throw new Error('OIDC_SOURCE_DENIED');
+  if(payload.repository!==GH_REPOSITORY||payload.ref!==GH_REF||!GH_WORKFLOWS.has(String(payload.workflow_ref||'')))throw new Error('OIDC_SOURCE_DENIED');
   if(!GH_EVENTS.has(String(payload.event_name||'')))throw new Error('OIDC_EVENT_DENIED');
   return payload;
 }
