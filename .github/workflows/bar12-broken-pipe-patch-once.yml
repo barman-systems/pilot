@@ -1,0 +1,105 @@
+name: BAR12 Broken Pipe Patch Once
+
+on:
+  push:
+    branches:
+      - fix/bar12-broken-pipe-20260902
+    paths:
+      - '.github/workflows/bar12-broken-pipe-patch-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/bar12-broken-pipe-20260902
+      - name: Patch BAR-12 candidate buffering
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/dabbir-bar12-readiness.yml')
+          s=p.read_text()
+          old="""            while IFS=$'\\t' read -r candidate_run candidate_sha; do
+              [ -n \"$candidate_run\" ] || continue
+              [ -n \"$candidate_sha\" ] || continue
+              if [ \"$candidate_sha\" = \"$RUNTIME_SHA\" ]; then
+                journey_run=\"$candidate_run\"
+                journey_sha=\"$candidate_sha\"
+                journey_mode='exact_sha'
+                break
+              fi
+              if ! git cat-file -e \"${candidate_sha}^{commit}\" 2>/dev/null; then continue; fi
+              if ! git merge-base --is-ancestor \"$candidate_sha\" \"$RUNTIME_SHA\" 2>/dev/null; then continue; fi
+
+              set +e
+              VERCEL_GIT_COMMIT_SHA=\"$RUNTIME_SHA\" \\
+              VERCEL_GIT_COMMIT_REF='main' \\
+              VERCEL_GIT_PREVIOUS_SHA=\"$candidate_sha\" \\
+                bash vercel-ignore-if-unaffected.sh > dabbir-bar12-candidate-equivalence.log 2>&1
+              equivalent=$?
+              set -e
+              {
+                echo \"candidate_run=$candidate_run candidate_sha=$candidate_sha runtime_sha=$RUNTIME_SHA classification=$equivalent\"
+                cat dabbir-bar12-candidate-equivalence.log
+              } >> dabbir-bar12-journey-equivalence.log
+              if [ \"$equivalent\" -eq 0 ]; then
+                journey_run=\"$candidate_run\"
+                journey_sha=\"$candidate_sha\"
+                journey_mode='runtime_equivalent'
+                break
+              fi
+            done < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<\"$runs_json\")
+"""
+          new="""            mapfile -t candidate_rows < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<\"$runs_json\")
+            for candidate_row in \"${candidate_rows[@]}\"; do
+              IFS=$'\\t' read -r candidate_run candidate_sha <<<\"$candidate_row\"
+              [ -n \"$candidate_run\" ] || continue
+              [ -n \"$candidate_sha\" ] || continue
+              if [ \"$candidate_sha\" = \"$RUNTIME_SHA\" ]; then
+                journey_run=\"$candidate_run\"
+                journey_sha=\"$candidate_sha\"
+                journey_mode='exact_sha'
+                break
+              fi
+              if ! git cat-file -e \"${candidate_sha}^{commit}\" 2>/dev/null; then continue; fi
+              if ! git merge-base --is-ancestor \"$candidate_sha\" \"$RUNTIME_SHA\" 2>/dev/null; then continue; fi
+
+              set +e
+              VERCEL_GIT_COMMIT_SHA=\"$RUNTIME_SHA\" \\
+              VERCEL_GIT_COMMIT_REF='main' \\
+              VERCEL_GIT_PREVIOUS_SHA=\"$candidate_sha\" \\
+                bash vercel-ignore-if-unaffected.sh > dabbir-bar12-candidate-equivalence.log 2>&1
+              equivalent=$?
+              set -e
+              {
+                echo \"candidate_run=$candidate_run candidate_sha=$candidate_sha runtime_sha=$RUNTIME_SHA classification=$equivalent\"
+                cat dabbir-bar12-candidate-equivalence.log
+              } >> dabbir-bar12-journey-equivalence.log
+              if [ \"$equivalent\" -eq 0 ]; then
+                journey_run=\"$candidate_run\"
+                journey_sha=\"$candidate_sha\"
+                journey_mode='runtime_equivalent'
+                break
+              fi
+            done
+"""
+          if old not in s:
+              raise SystemExit('TARGET_BLOCK_NOT_FOUND')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff --check
+          grep -q 'mapfile -t candidate_rows' .github/workflows/dabbir-bar12-readiness.yml
+      - name: Commit workflow fix and remove patcher
+        shell: bash
+        run: |
+          git config user.name 'barmanai'
+          git config user.email 'alcaptain2014@gmail.com'
+          git rm .github/workflows/bar12-broken-pipe-patch-once.yml
+          git add .github/workflows/dabbir-bar12-readiness.yml
+          git commit -m 'fix(readiness): buffer BAR-12 journey candidates'
+          git push origin HEAD:fix/bar12-broken-pipe-20260902
