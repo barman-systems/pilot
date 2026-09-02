@@ -33,3 +33,14 @@ test('auth core has no legacy Supabase origin constant', () => {
   assert.match(source, /process\.env\.SUPABASE_AUTH_URL\s*\|\|\s*process\.env\.SUPABASE_URL/);
   assert.match(source, /process\.env\.SUPABASE_DATA_URL\s*\|\|\s*process\.env\.SUPABASE_URL/);
 });
+
+test('runtime Supabase URLs do not coerce a missing env value into the string undefined', () => {
+  const offenders = [];
+  for (const file of jsFiles(apiRoot)) {
+    const source = fs.readFileSync(file, 'utf8');
+    if (/String\(process\.env\.SUPABASE_URL\)\.replace/.test(source)) {
+      offenders.push(path.relative(root, file));
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
