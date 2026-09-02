@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
-const PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || 'spohjzrsymsmzsseygtw').trim();
+const PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || 'fphpoysqdsceniwduxjq').trim();
 const QA_CONTROL_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-suite-runner`;
 const OIDC_AUDIENCE = 'dabbir-ai-qa';
 const REPORT_PATH = process.env.ISOLATION_REPORT_PATH || 'dabbir-cross-tenant-isolation-report.json';

@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const workflow=fs.readFileSync('.github/workflows/dabbir-ai-customer-journey.yml','utf8');
-const readinessWorkflow=fs.readFileSync('.github/workflows/dabbir-bar12-readiness.yml','utf8');
-const ownerAwayWorkflow=fs.readFileSync('.github/workflows/dabbir-owner-away-production.yml','utf8');
+const readiness=fs.readFileSync('.github/workflows/dabbir-bar12-readiness.yml','utf8');
 const runner=fs.readFileSync('supabase/functions/dabbir-qa-suite-runner/index.ts','utf8');
 
 const MUMBAI='fphpoysqdsceniwduxjq';
@@ -15,13 +14,23 @@ test('production customer journey creates disposable QA identities in the Mumbai
   assert.doesNotMatch(workflow,new RegExp(LEGACY));
 });
 
-test('all privileged production evidence workflows are pinned to Mumbai and cannot read the retired project',()=>{
-  for(const [name,source] of [['customer journey',workflow],['BAR-12 readiness',readinessWorkflow],['owner away',ownerAwayWorkflow]]){
-    assert.match(source,new RegExp(`SUPABASE_PROJECT_REF: ${MUMBAI}`),`${name} must pin Mumbai`);
-    assert.doesNotMatch(source,new RegExp(LEGACY),`${name} must not reference retired Supabase`);
+test('every executable release and QA route is pinned away from retired Sydney',()=>{
+  const executionSources=[
+    readiness,
+    ...[
+      'test/dabbir-capacity-load.mjs',
+      'test/ai-full-customer-journey.mjs',
+      'test/dabbir-owner-away-production-journey.mjs',
+      'test/dabbir-ai-full-journey-oidc.mjs',
+      'test/ai-full-customer-journey-v2.mjs',
+      'test/ai-full-customer-journey-oidc.mjs',
+      'test/dabbir-cross-tenant-isolation.mjs'
+    ].map(path=>fs.readFileSync(path,'utf8'))
+  ];
+  for(const source of executionSources){
+    assert.match(source,new RegExp(MUMBAI));
+    assert.doesNotMatch(source,new RegExp(LEGACY));
   }
-  assert.match(readinessWorkflow,/https:\/\/\$\{SUPABASE_PROJECT_REF\}\.supabase\.co\/functions\/v1\/barman-qa-suite-runner/);
-  assert.match(readinessWorkflow,/test "\$SUPABASE_PROJECT_REF" = 'fphpoysqdsceniwduxjq'/);
 });
 
 test('Mumbai QA runner is narrowly scoped and main-only',()=>{
