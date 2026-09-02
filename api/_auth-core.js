@@ -1,14 +1,13 @@
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
-const LEGACY_SUPABASE_URL = 'https://spohjzrsymsmzsseygtw.supabase.co';
-export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
-export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL || LEGACY_SUPABASE_URL).replace(/\/$/, '');
+export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
+export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
 // Backward-compatible export. New code should choose AUTH or DATA explicitly.
 export const SUPABASE_URL = SUPABASE_DATA_URL;
 const SUPABASE_AUTH_ISSUER = `${SUPABASE_AUTH_URL}/auth/v1`;
 const SUPABASE_AUTH_JWKS_URL = `${SUPABASE_AUTH_ISSUER}/.well-known/jwks.json`;
 // Supabase publishable keys are intentionally safe for public/client use. Never place a service-role key here.
-const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
+const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim();
 const DEFAULT_SUPABASE_TIMEOUT_MS = Math.max(1000, Number(process.env.DABBIR_SUPABASE_TIMEOUT_MS || 15000));
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const JWKS_CACHE_MS = 10 * 60 * 1000;
@@ -207,7 +206,7 @@ async function verifiedUserBase(accessToken, options = {}) {
   if (!accessToken) return null;
 
   // Normal path: verify the current ES256 Supabase session locally using the
-  // public JWKS. This keeps Sydney Auth out of the hot request path.
+  // public JWKS. This keeps remote Auth out of the hot request path.
   const localUser = await verifiedUserViaJwks(accessToken);
   if (localUser) return localUser;
 

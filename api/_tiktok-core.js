@@ -6,7 +6,7 @@ import {
 } from './_auth-core.js';
 import { applySupabaseKeyHeaders } from './_supabase-key-auth.js';
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const DEFAULT_SCOPES = ['message.list.read', 'message.list.send', 'message.list.manage'];
 
 function clean(value, max = 4000) {

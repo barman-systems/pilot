@@ -3,7 +3,7 @@ import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.j
 import { withServerReadTimeout } from './_server-read-timeout.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const WHATSAPP_DATA_TIMEOUT_MS = 10_000;
 
 function clean(value, max = 4000) {

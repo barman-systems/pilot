@@ -70,7 +70,8 @@ test('auth sessions use secure host cookies and never localStorage or privileged
   assert.match(authCore, /__Host-dabbir_access/);
   assert.match(authCore, /__Host-dabbir_refresh/);
   assert.match(authCore, /Secure; HttpOnly; SameSite=Lax/);
-  assert.match(authCore, /sb_publishable_/);
+  assert.match(authCore, /SUPABASE_PUBLISHABLE_KEY\s*=\s*String\(process\.env\.SUPABASE_PUBLISHABLE_KEY\s*\|\|\s*''\)\.trim\(\)/);
+  assert.doesNotMatch(authCore, /sb_publishable_[A-Za-z0-9_-]+/);
   const privilegedKeyPrefix = ['sb', 'secret', ''].join('_');
   assert.equal(authCore.includes(privilegedKeyPrefix), false);
   assert.doesNotMatch([authCore,login,signup,session,refresh,logout].join('\n'), /localStorage/);
