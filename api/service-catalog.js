@@ -7,6 +7,7 @@ import {
   requireSameOrigin,
   supabaseRest,
 } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
@@ -37,7 +38,7 @@ export default async function handler(req,res){
   if(!ctx)return json(res,401,{ok:false,error:'AUTH_REQUIRED'});
   try{
     if(req.method==='GET'){
-      const businessId=safeId(req.query?.business_id);
+      const businessId=safeId(singleQueryValue(req,'business_id'));
       const membership=membershipFor(ctx,businessId);
       if(!businessId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
       const services=await rest(ctx.token,`dabbir_services?select=id,name,price_aed,duration_minutes,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,{},'SERVICES_LOOKUP_FAILED');
