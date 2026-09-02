@@ -8,7 +8,7 @@ const failOpen = fs.readFileSync(new URL('../api/dabbir-safari-auth-fail-open-ui
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260902-p0-safari-v3'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260902-p0-safari-v4'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
@@ -18,11 +18,13 @@ test('root shell bypasses stale Safari UI bundle versions', () => {
 test('root shell injects an independent Safari auth fail-open watchdog', () => {
   assert.match(recovery, /dabbir-safari-auth-fail-open-ui/);
   assert.match(recovery, /injectSafariAuthFailOpen/);
-  assert.match(failOpen, /BOOT_WATCHDOG/);
-  assert.match(failOpen, /response\.status===401/);
-  assert.match(failOpen, /typeof window\.showGate==='function'/);
+  assert.match(failOpen, /BOOT_STALL_FAIL_OPEN/);
+  assert.match(failOpen, /typeof globalThis\.AbortSignal\.timeout!=='function'/);
+  assert.match(failOpen, /globalThis\.AbortSignal\.timeout=function/);
   assert.match(failOpen, /auth\.classList\.remove\('hidden'\)/);
-  assert.doesNotMatch(failOpen, /AbortSignal\.timeout/);
+  assert.match(failOpen, /loading\.style\.display='none'/);
+  assert.doesNotMatch(failOpen, /response\.status===401/);
+  assert.doesNotMatch(failOpen, /Promise\.race/);
 });
 
 test('fail-open never replaces a healthy visible gate', () => {
@@ -30,7 +32,7 @@ test('fail-open never replaces a healthy visible gate', () => {
   assert.match(failOpen, /isHidden\(node\('authGate'\)\)/);
   assert.match(failOpen, /isHidden\(node\('onboardingGate'\)\)/);
   assert.match(failOpen, /isHidden\(node\('appShell'\)\)/);
-  assert.match(failOpen, /status===401&&gateMissing\(\)/);
+  assert.match(failOpen, /if\(!gateMissing\(\)\) return/);
 });
 
 test('canonical root strips legacy store navigation overrides before delivery', () => {
