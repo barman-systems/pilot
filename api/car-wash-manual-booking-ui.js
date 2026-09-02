@@ -6,7 +6,7 @@ const script=String.raw`(()=>{
   const businessId=()=>workspaceNow()?.business?.id||null;
   const isCarWash=()=>String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
   const ar=()=>document.documentElement.lang!=='en';
-  let cache={business_id:null,customers:[],offers:[],services:[]};
+  let cache={business_id:null,customers:[],offers:[],services:[],loaded:false};
   let pending=null;
 
   function cleanPhone(customer){return String(customer?.phone_e164||customer?.phone||customer?.metadata?.phone||'').trim()}
@@ -24,7 +24,7 @@ const script=String.raw`(()=>{
   }
   async function loadData(force=false){
     const id=businessId();if(!id||!isCarWash())return cache;
-    if(!force&&cache.business_id===id&&(cache.customers.length||cache.offers.length||cache.services.length))return cache;
+    if(!force&&cache.business_id===id&&cache.loaded)return cache;
     if(pending)return pending;
     pending=(async()=>{
       const [adminResult,serviceResult]=await Promise.allSettled([
@@ -38,6 +38,7 @@ const script=String.raw`(()=>{
         customers:customerRows(admin),
         offers:(Array.isArray(admin?.offers)?admin.offers:[]).filter(row=>row.active!==false),
         services:(Array.isArray(catalog?.services)?catalog.services:[]).filter(row=>row.active!==false),
+        loaded:true,
       };
       return cache;
     })().finally(()=>{pending=null});
@@ -49,12 +50,16 @@ const script=String.raw`(()=>{
     let list=q('#dabbirCarWashCustomerOptions');
     if(!list){list=document.createElement('datalist');list.id='dabbirCarWashCustomerOptions';document.body.append(list)}
     input.setAttribute('list',list.id);input.setAttribute('autocomplete','off');input.setAttribute('placeholder',ar()?'ابحث عن عميل دائم أو اكتب اسمًا جديدًا':'Search a saved customer or enter a new name');
-    list.replaceChildren();
-    for(const customer of cache.customers){
-      const option=document.createElement('option');
-      option.value=String(customer.display_name||'').trim();
-      const phone=cleanPhone(customer);if(phone)option.label=phone;
-      list.append(option);
+    const signature=cache.customers.map(row=>[row.id,row.display_name,cleanPhone(row)].join('|')).join('~');
+    if(list.dataset.dabbirSignature!==signature){
+      const fragment=document.createDocumentFragment();
+      for(const customer of cache.customers){
+        const item=document.createElement('option');
+        item.value=String(customer.display_name||'').trim();
+        const phone=cleanPhone(customer);if(phone)item.label=phone;
+        fragment.append(item);
+      }
+      list.replaceChildren(fragment);list.dataset.dabbirSignature=signature;
     }
     let hidden=q('#dabbirCarWashCustomerId');
     if(!hidden){hidden=document.createElement('input');hidden.type='hidden';hidden.id='dabbirCarWashCustomerId';hidden.dataset.apptKey='customer_id';input.after(hidden)}
@@ -65,8 +70,8 @@ const script=String.raw`(()=>{
       hidden.value=customer?.id||'';
       if(customer){const phone=q('[data-appt-key="phone"]');if(phone&&!String(phone.value||'').trim())phone.value=cleanPhone(customer)}
     };
-    if(input.dataset.dabbirSavedCustomerPicker!=='v1'){
-      input.dataset.dabbirSavedCustomerPicker='v1';
+    if(input.dataset.dabbirSavedCustomerPicker!=='v2'){
+      input.dataset.dabbirSavedCustomerPicker='v2';
       input.addEventListener('input',sync);input.addEventListener('change',sync);
     }
     sync();
@@ -80,36 +85,47 @@ const script=String.raw`(()=>{
     return {kind:'other',row:null};
   }
   function vehicleLooksStation(value){return /(station|suv|4x4|ستيشن|دفع رباعي)/i.test(String(value||''))}
-
-  function enhanceServicePicker(){
-    if(!isCarWash())return;
-    const original=q('#adaptiveApptFields [data-appt-key="service"]');
-    if(!original||original.dataset.dabbirCatalogBacking==='v1')return;
-    original.dataset.dabbirCatalogBacking='v1';original.type='hidden';
-    const field=original.closest('.field');if(!field)return;
-    const select=document.createElement('select');select.id='dabbirCarWashServicePicker';select.dataset.dabbirServicePicker='v1';
+  function serviceSignature(){return JSON.stringify({offers:cache.offers.map(row=>[row.id,row.name_ar,row.name_en,row.duration_minutes,row.saloon_price_aed,row.station_price_aed]),services:cache.services.map(row=>[row.id,row.name,row.duration_minutes,row.price_aed])})}
+  function renderServiceOptions(select){
+    const signature=serviceSignature();if(select.dataset.dabbirSignature===signature)return;
+    const previous=select.value;select.replaceChildren();
     option(select,'',ar()?'اختر الباقة / الخدمة':'Choose package / service').disabled=true;
     if(cache.offers.length){const group=document.createElement('optgroup');group.label=ar()?'الباقات المحفوظة':'Saved packages';for(const row of cache.offers){const item=document.createElement('option');item.value='offer:'+row.id;item.textContent=ar()?(row.name_ar||row.name_en):(row.name_en||row.name_ar);group.append(item)}select.append(group)}
     if(cache.services.length){const group=document.createElement('optgroup');group.label=ar()?'الخدمات المحفوظة':'Saved services';for(const row of cache.services){const item=document.createElement('option');item.value='service:'+row.id;item.textContent=row.name;group.append(item)}select.append(group)}
     option(select,'other',ar()?'أخرى — ليست ضمن الباقات / الخدمات':'Other — not in saved packages / services');
-    const other=document.createElement('input');other.type='text';other.maxLength=500;other.placeholder=ar()?'اكتب الخدمة أو الباقة':'Enter service or package';other.hidden=true;other.id='dabbirCarWashOtherService';
-    field.insertBefore(select,original);field.insertBefore(other,original);
-    let duration=q('#dabbirCarWashDuration');if(!duration){duration=document.createElement('input');duration.type='hidden';duration.id='dabbirCarWashDuration';duration.dataset.apptKey='duration';field.append(duration)}
+    if([...select.options].some(item=>item.value===previous))select.value=previous;
+    select.dataset.dabbirSignature=signature;
+  }
 
-    const apply=()=>{
-      const picked=findSelection(select.value);const price=q('[data-appt-key="price"]');const vehicle=q('[data-appt-key="vehicle"]');
-      if(picked.kind==='other'){other.hidden=false;original.value=String(other.value||'').trim();duration.value='';return}
-      other.hidden=true;
-      if(!picked.row){original.value='';duration.value='';return}
-      original.value=picked.kind==='offer'?(ar()?(picked.row.name_ar||picked.row.name_en):(picked.row.name_en||picked.row.name_ar)):String(picked.row.name||'');
-      duration.value=String(picked.row.duration_minutes||'');
-      if(price){
-        const amount=picked.kind==='offer'?(vehicleLooksStation(vehicle?.value)?picked.row.station_price_aed:picked.row.saloon_price_aed):picked.row.price_aed;
-        if(amount!==null&&amount!==undefined&&Number.isFinite(Number(amount)))price.value=String(Number(amount));
-      }
-    };
-    select.addEventListener('change',apply);other.addEventListener('input',apply);
-    q('[data-appt-key="vehicle"]')?.addEventListener('input',()=>{if(select.value.startsWith('offer:'))apply()});
+  function enhanceServicePicker(){
+    if(!isCarWash())return;
+    const original=q('#adaptiveApptFields [data-appt-key="service"]');if(!original)return;
+    const field=original.closest('.field');if(!field)return;
+    let select=q('#dabbirCarWashServicePicker');
+    let other=q('#dabbirCarWashOtherService');
+    let duration=q('#dabbirCarWashDuration');
+    if(original.dataset.dabbirCatalogBacking!=='v2'){
+      original.dataset.dabbirCatalogBacking='v2';original.type='hidden';
+      select=document.createElement('select');select.id='dabbirCarWashServicePicker';select.dataset.dabbirServicePicker='v2';
+      other=document.createElement('input');other.type='text';other.maxLength=500;other.placeholder=ar()?'اكتب الخدمة أو الباقة':'Enter service or package';other.hidden=true;other.id='dabbirCarWashOtherService';
+      field.insertBefore(select,original);field.insertBefore(other,original);
+      duration=document.createElement('input');duration.type='hidden';duration.id='dabbirCarWashDuration';duration.dataset.apptKey='duration';field.append(duration);
+      const apply=()=>{
+        const picked=findSelection(select.value);const price=q('[data-appt-key="price"]');const vehicle=q('[data-appt-key="vehicle"]');
+        if(picked.kind==='other'){other.hidden=false;original.value=String(other.value||'').trim();duration.value='';return}
+        other.hidden=true;
+        if(!picked.row){original.value='';duration.value='';return}
+        original.value=picked.kind==='offer'?(ar()?(picked.row.name_ar||picked.row.name_en):(picked.row.name_en||picked.row.name_ar)):String(picked.row.name||'');
+        duration.value=String(picked.row.duration_minutes||'');
+        if(price){
+          const amount=picked.kind==='offer'?(vehicleLooksStation(vehicle?.value)?picked.row.station_price_aed:picked.row.saloon_price_aed):picked.row.price_aed;
+          if(amount!==null&&amount!==undefined&&Number.isFinite(Number(amount)))price.value=String(Number(amount));
+        }
+      };
+      select.addEventListener('change',apply);other.addEventListener('input',apply);
+      q('[data-appt-key="vehicle"]')?.addEventListener('input',()=>{if(select.value.startsWith('offer:'))apply()});
+    }
+    renderServiceOptions(select);
   }
 
   async function enhance(force=false){
@@ -118,16 +134,19 @@ const script=String.raw`(()=>{
     ensureCustomerPicker();enhanceServicePicker();
   }
   const modal=q('#appointmentModal');
-  if(modal)new MutationObserver(()=>{if(modal.classList.contains('open')){setTimeout(()=>enhance(false),0);setTimeout(()=>enhance(false),120)}}).observe(modal,{attributes:true,attributeFilter:['class']});
-  new MutationObserver(()=>{if(q('#appointmentModal.open'))setTimeout(()=>enhance(false),0)}).observe(document.documentElement,{subtree:true,childList:true});
+  if(modal)new MutationObserver(()=>{
+    if(!modal.classList.contains('open'))return;
+    setTimeout(()=>enhance(true),0);
+    setTimeout(()=>enhance(false),120);
+  }).observe(modal,{attributes:true,attributeFilter:['class']});
   window.addEventListener('focus',()=>{if(q('#appointmentModal.open'))void enhance(false)},{passive:true});
-  window.__dabbirCarWashManualBooking={refresh:()=>enhance(true),version:'car-wash-manual-booking-v1'};
+  window.__dabbirCarWashManualBooking={refresh:()=>enhance(true),version:'car-wash-manual-booking-v2-loop-safe'};
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-car-wash-manual-booking-ui','v1');
+  res.setHeader('x-dabbir-car-wash-manual-booking-ui','v2-loop-safe');
   return res.status(200).send(script);
 }
