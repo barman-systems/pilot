@@ -1,6 +1,7 @@
 import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
 const WHATSAPP_DATA_TIMEOUT_MS = 10_000;
@@ -48,12 +49,10 @@ export async function serviceRpc(name, params = {}, options = {}) {
         method: 'POST',
         cache: 'no-store',
         signal,
-        headers: {
-          apikey: key,
-          authorization: `Bearer ${key}`,
+        headers: supabaseKeyHeaders(key, {
           'content-type': 'application/json',
           accept: 'application/json',
-        },
+        }),
         body: JSON.stringify(params),
       });
       return readResponse(response, 'WHATSAPP_SERVER_RPC_FAILED');
