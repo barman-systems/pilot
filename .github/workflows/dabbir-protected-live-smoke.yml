@@ -57,6 +57,28 @@ jobs:
 
           if [ -n "${VERCEL_TOKEN:-}" ]; then
             endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
+            project_endpoint="https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}"
+
+            project_json="$(curl --fail-with-body --silent --show-error \
+              "$project_endpoint" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+            mapfile -t stale_secrets < <(printf '%s' "$project_json" | jq -r '.protectionBypass // {} | to_entries[] | select(.value.scope == "automation-bypass" and (.value.isEnvVar // false) == false and .value.note == "DABBIR protected live smoke temporary") | .key')
+            cleaned=0
+            for old_secret in "${stale_secrets[@]:-}"; do
+              [[ "$old_secret" =~ ^[A-Za-z0-9]{32}$ ]] || continue
+              echo "::add-mask::$old_secret"
+              revoke_payload="$(jq -nc --arg secret "$old_secret" '{revoke:{secret:$secret,regenerate:false}}')"
+              if curl --fail-with-body --silent --show-error \
+                -X PATCH "$endpoint" \
+                -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+                -H 'Content-Type: application/json' \
+                --data "$revoke_payload" \
+                >/dev/null; then
+                cleaned=$((cleaned + 1))
+              fi
+            done
+            echo "STALE_AUTOMATION_BYPASSES_CLEANED=$cleaned"
+
             response="$(curl --fail-with-body --silent --show-error \
               -X PATCH "$endpoint" \
               -H "Authorization: Bearer ${VERCEL_TOKEN}" \
