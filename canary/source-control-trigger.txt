@@ -1,2 +1,3 @@
 BARMAN Executive OS source-control autonomy acceptance trigger.
 No production code is changed by this branch.
+Attempt: 2 after untracked-file validation repair.
