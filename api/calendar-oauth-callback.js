@@ -14,6 +14,12 @@ import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
 function statusCode(error){const code=Number(error?.code||500);return [400,401,403,404,409,429,502,503].includes(code)?code:500}
 function redirect(res,location){res.statusCode=302;res.setHeader('location',location);res.setHeader('cache-control','no-store');res.end()}
+function logFailure(error,status){
+  const payload={error:String(error?.message||'CALENDAR_OAUTH_FAILED').slice(0,120),status};
+  if(status>=500)console.error('dabbir_calendar_oauth_callback_failed',payload);
+  else if(status===429)console.warn('dabbir_calendar_oauth_callback_rate_limited',payload);
+  else console.info('dabbir_calendar_oauth_callback_rejected',payload);
+}
 
 export default async function handler(req,res){
   const origin=(()=>{try{return requestOrigin(req)}catch{return null}})();
@@ -33,9 +39,9 @@ export default async function handler(req,res){
     if(origin)return redirect(res,`${origin}/?calendar=connected&provider=${encodeURIComponent(state.provider)}`);
     return json(res,200,{ok:true,provider:state.provider});
   }catch(error){
-    const code=String(error?.message||'CALENDAR_OAUTH_FAILED').slice(0,120);
-    console.error('dabbir_calendar_oauth_callback_failed',{error:code,status:statusCode(error)});
+    const status=statusCode(error),code=String(error?.message||'CALENDAR_OAUTH_FAILED').slice(0,120);
+    logFailure(error,status);
     if(origin)return redirect(res,`${origin}/?calendar=error&code=${encodeURIComponent(code)}`);
-    return json(res,statusCode(error),{ok:false,error:code});
+    return json(res,status,{ok:false,error:code});
   }
 }
