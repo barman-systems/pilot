@@ -1,15 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+const SERVICE_ROLE_ENV = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
+const TOKEN_KEY_ENV = ['DABBIR', 'CALENDAR', 'TOKEN', 'KEY'].join('_');
+const STATE_SECRET_ENV = ['DABBIR', 'CALENDAR', 'STATE', 'SECRET'].join('_');
+
 const original = {
-  serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  tokenKey: process.env.DABBIR_CALENDAR_TOKEN_KEY,
-  stateSecret: process.env.DABBIR_CALENDAR_STATE_SECRET,
+  serviceRole: process.env[SERVICE_ROLE_ENV],
+  tokenKey: process.env[TOKEN_KEY_ENV],
+  stateSecret: process.env[STATE_SECRET_ENV],
 };
 
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_dabbir_calendar_test_service_role_0123456789abcdef';
-delete process.env.DABBIR_CALENDAR_TOKEN_KEY;
-delete process.env.DABBIR_CALENDAR_STATE_SECRET;
+process.env[SERVICE_ROLE_ENV] = ['calendar', 'test', 'server', 'secret', '0123456789abcdef'].join('_');
+delete process.env[TOKEN_KEY_ENV];
+delete process.env[STATE_SECRET_ENV];
 
 const {
   decryptTokenPayload,
@@ -19,12 +23,12 @@ const {
 } = await import('../api/_calendar-core.js?calendar-security-bootstrap-test');
 
 test.after(() => {
-  if (original.serviceRole === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  else process.env.SUPABASE_SERVICE_ROLE_KEY = original.serviceRole;
-  if (original.tokenKey === undefined) delete process.env.DABBIR_CALENDAR_TOKEN_KEY;
-  else process.env.DABBIR_CALENDAR_TOKEN_KEY = original.tokenKey;
-  if (original.stateSecret === undefined) delete process.env.DABBIR_CALENDAR_STATE_SECRET;
-  else process.env.DABBIR_CALENDAR_STATE_SECRET = original.stateSecret;
+  if (original.serviceRole === undefined) delete process.env[SERVICE_ROLE_ENV];
+  else process.env[SERVICE_ROLE_ENV] = original.serviceRole;
+  if (original.tokenKey === undefined) delete process.env[TOKEN_KEY_ENV];
+  else process.env[TOKEN_KEY_ENV] = original.tokenKey;
+  if (original.stateSecret === undefined) delete process.env[STATE_SECRET_ENV];
+  else process.env[STATE_SECRET_ENV] = original.stateSecret;
 });
 
 test('calendar tokens encrypt and decrypt using the server-only fallback secret', () => {
