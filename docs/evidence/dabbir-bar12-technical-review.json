@@ -1,35 +1,35 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "e5da322e56fc4903b5ee937e8a49686dc2d1de07",
-    "deployment_id": "dpl_A6cqCH6bW9ch9iDgye2FpKGCeEnQ",
+    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
+    "deployment_id": "dpl_G9ZVMVszTHjdJ3vLEmYXTJSQbAEu",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-02T12:38:19.980Z",
+    "checked_at": "2026-09-02T16:13:00.000Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
   "alert_delivery": {
-    "source_commit": "e5da322e56fc4903b5ee937e8a49686dc2d1de07",
-    "deployment_id": "dpl_A6cqCH6bW9ch9iDgye2FpKGCeEnQ",
+    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
+    "deployment_id": "dpl_G9ZVMVszTHjdJ3vLEmYXTJSQbAEu",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-02T12:49:28.186Z",
+    "verified_at": "2026-09-02T16:13:56.087Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
     "channel_name": "barman-executive-alerts",
-    "message_ts": "1788353368.186149",
-    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788353368186149",
+    "message_ts": "1788365636.087589",
+    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788365636087589",
     "readback_verified": true,
     "test_only": true,
     "contains_secrets_or_customer_data": false,
-    "notes": "A BAR-12 test alert containing only public release identity was delivered to the reserved owner-level operational alert channel and then read back from Slack with the same message timestamp. The channel is explicitly reserved for verified operational incidents, hard-gate failures, security events, and owner-level escalations."
+    "notes": "A test-only BAR-12 operational alert containing only public Production release identity was delivered by BARMAN Executive OS to the reserved owner alert channel and read back at the same Slack message timestamp."
   },
   "security": {
-    "source_commit": "e5da322e56fc4903b5ee937e8a49686dc2d1de07",
+    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
     "project_ref": "fphpoysqdsceniwduxjq",
-    "reviewed_at": "2026-09-02T12:38:59.130Z",
+    "reviewed_at": "2026-09-02T16:13:45.052Z",
     "verdict": "PASS",
     "blocking_findings": 0,
     "advisor_max_level": "WARN",
@@ -48,6 +48,6 @@
       "public_slots_are_bounded": true,
       "public_order_status_uses_unguessable_uuid_token": true
     },
-    "notes": "Security Advisor returned no blocking ERROR findings. The four WARN findings are intentionally anonymous public capabilities. They were reviewed against their live definitions and privileges: booking input is constrained and protected by an INSERT abuse-guard trigger; catalog/slots expose bounded public booking data only; order status is token-scoped and excludes simulated orders. INFO findings for RLS-without-policy are deny-by-default/server-only surfaces and are not promoted to client access."
+    "notes": "Mumbai Security Advisor was rerun against Production. It returned no blocking ERROR findings and the same four intentional anonymous public SECURITY DEFINER capabilities. Public tables with RLS disabled = 0. The four WARN functions remain explicitly reviewed public booking/status surfaces with bounded output/input and existing abuse/idempotency guards; INFO no-policy surfaces remain deny-by-default/server-only."
   }
 }
