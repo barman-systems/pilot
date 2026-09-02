@@ -19,6 +19,16 @@ test('owner authentication is username + brokered Resend OTP with an isolated ow
   assert.doesNotMatch(source, /grant_type=password/);
 });
 
+test('owner broker accepts modern Supabase secret keys without pretending they are JWTs', async () => {
+  const source = await read('supabase/functions/dabbir-owner-broker/index.ts');
+  assert.match(source, /serviceKeyIsJwt=\(\)=>SERVICE_KEY\.split\('\.'\)\.length===3/);
+  assert.match(source, /'apikey':SERVICE_KEY/);
+  assert.match(source, /if\(serviceKeyIsJwt\(\)\)headers\.authorization=`Bearer \$\{SERVICE_KEY\}`/);
+  assert.doesNotMatch(source, /sbHeaders=\(\)=>\(\{'apikey':SERVICE_KEY,'authorization':`Bearer \$\{SERVICE_KEY\}`/);
+  assert.match(source, /if\(action==='incidents'\)return incidentRead\(body\)/);
+  assert.match(source, /if\(action==='incident_action'\)return incidentAction\(body\)/);
+});
+
 test('owner login UI never asks for email or password', async () => {
   const source = await read('api/owner-login.js');
   assert.match(source, /value="barmanadmin"/);
