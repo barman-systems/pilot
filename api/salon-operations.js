@@ -16,7 +16,7 @@ const ALL_STATUSES=new Set([...ACTIVE_STATUSES,'completed','cancelled','no_show'
 const PAYMENT_METHODS=new Set(['cash','card','payment_link','other','unpaid']);
 const clean=(value,max=240)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const safeId=value=>UUID_RE.test(clean(value,60))?clean(value,60):null;
-const queryValue=(req,key)=>{const value=req?.query?.[key];return Array.isArray(value)?value[0]:value};
+const queryValue=(req,key)=>{try{const values=new URL(String(req?.url||'/'),'https://dabbir.invalid').searchParams.getAll(key);return values.length===1?values[0]:null}catch{return null}};
 const enc=value=>encodeURIComponent(String(value));
 
 async function readData(response,fallback){
