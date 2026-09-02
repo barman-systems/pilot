@@ -62,8 +62,8 @@ jobs:
               -H "Authorization: Bearer ${VERCEL_TOKEN}" \
               -H 'Content-Type: application/json' \
               --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}')"
-            secret="$(printf '%s' "$response" | jq -r '.protectionBypass // empty')"
-            if [ -z "$secret" ]; then
+            secret="$(printf '%s' "$response" | jq -r '.protectionBypass | to_entries | map(select(.value.scope == "automation-bypass" and .value.note == "DABBIR protected live smoke temporary")) | sort_by(.value.createdAt // 0) | last | .key // empty')"
+            if [[ ! "$secret" =~ ^[A-Za-z0-9]{32}$ ]]; then
               echo 'ready=false' >> "$GITHUB_OUTPUT"
               echo 'generated=false' >> "$GITHUB_OUTPUT"
               echo 'method=none' >> "$GITHUB_OUTPUT"
