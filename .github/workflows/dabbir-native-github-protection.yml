@@ -69,3 +69,5 @@ jobs:
           if (protection?.required_conversation_resolution?.enabled !== true) throw new Error('Conversation resolution is not required');
           console.log('DABBIR native GitHub main protection verified.');
           NODE
+
+# BARMAN activation refresh after secure admin secret provisioning: 2026-09-02
