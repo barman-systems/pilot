@@ -138,6 +138,7 @@ const client=String.raw`
       data=null;
       notify(editingId?t.updated:t.created);
       editingId=null;
+      loading=false;
       await load(true);
     }catch(error){notify(t.failed+' '+String(error?.message||error).slice(0,80))}finally{loading=false;render()}
   }
@@ -162,7 +163,7 @@ const client=String.raw`
   }catch{}
 
   setTimeout(initialize,500);
-  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v4-price'};
+  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v5-save-refresh'};
 })();
 `;
 
@@ -170,6 +171,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
-  res.setHeader('x-dabbir-service-operations-ui','v3');
+  res.setHeader('x-dabbir-service-operations-ui','v4-save-refresh');
   return res.status(200).send(client);
 }
