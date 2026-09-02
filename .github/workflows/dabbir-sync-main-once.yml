@@ -1,0 +1,39 @@
+name: DABBIR cleanup branch sync once
+
+on:
+  push:
+    branches:
+      - chore/dabbir-fail-closed-supabase-origin-20260902
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/dabbir-fail-closed-supabase-origin-20260902
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Merge current main without auto-resolving conflicts
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main
+          rm -f .github/workflows/dabbir-sync-main-once.yml
+          git add -A
+          node --test test/dabbir-no-retired-supabase-origin.test.mjs
+          if grep -RIn --include='*.js' -E 'spohjzrsymsmzsseygtw|sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3' api; then
+            echo 'Retired Supabase runtime reference reintroduced by main' >&2
+            exit 1
+          fi
+          git diff --cached --check
+          git commit -m 'merge: sync Supabase cleanup with current main'
+          git push origin HEAD:chore/dabbir-fail-closed-supabase-origin-20260902
