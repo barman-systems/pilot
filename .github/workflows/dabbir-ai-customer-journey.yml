@@ -1,5 +1,5 @@
 name: DABBIR AI Full Customer Journey
-# Canonical main-only production journey. During protected prelaunch the exact Vercel Production release is verified through trusted OIDC. QA identities are created in the Mumbai Supabase production project.
+# Real production journey. Before public launch, the same broker-authorized workflow tests the protected canonical Vercel Production release without widening Supabase OIDC policy.
 
 on:
   workflow_dispatch:
@@ -24,7 +24,6 @@ on:
       - 'test/dabbir-protected-full-journey-preload.mjs'
       - 'test/dabbir-protected-journey-access.test.mjs'
       - 'test/dabbir-authorized-journey-workflow.test.mjs'
-      - 'test/dabbir-mumbai-qa-routing.test.mjs'
       - 'test/support/dabbir-protected-journey-access.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
@@ -33,7 +32,6 @@ on:
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
-      - 'supabase/functions/dabbir-qa-suite-runner/**'
       - 'db/dabbir*.sql'
       - 'api/**'
       - 'api/auth/**'
@@ -72,13 +70,14 @@ jobs:
       PUBLIC_PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
-      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
       ISOLATION_REPORT_PATH: dabbir-cross-tenant-isolation-report.json
       EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       EXPECTED_GIT_PROVIDER: github
       EXPECTED_GIT_REPOSITORY: barman-systems/pilot
     outputs:
+      # Capacity remains locked until a real public launch origin exists.
       production_ready: ${{ steps.launch-gate.outputs.ready }}
       production_state: ${{ steps.launch-gate.outputs.state }}
       journey_ready: ${{ steps.journey-mode.outputs.ready }}
@@ -87,6 +86,7 @@ jobs:
       verified_deployment_id: ${{ steps.release-before.outputs.deployment }}
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -117,10 +117,12 @@ jobs:
             echo 'JOURNEY_MODE_PUBLIC'
             exit 0
           fi
+
           if [ "${{ steps.launch-gate.outputs.state }}" != 'BLOCKED_PRELAUNCH' ]; then
             echo "UNEXPECTED_PRODUCTION_GATE_STATE=${{ steps.launch-gate.outputs.state }}"
             exit 2
           fi
+
           echo "PRODUCTION_ORIGIN=${PROTECTED_QA_ORIGIN}" >> "$GITHUB_ENV"
           echo 'ready=true' >> "$GITHUB_OUTPUT"
           echo 'mode=protected' >> "$GITHUB_OUTPUT"
@@ -135,18 +137,31 @@ jobs:
           set -euo pipefail
           request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           request_token="${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
-          test -n "$request_url"
-          test -n "$request_token"
-          oidc_response="$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${request_token}" "$request_url")"
+          if [ -z "$request_url" ] || [ -z "$request_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_CONTEXT_REQUIRED'
+            exit 2
+          fi
+
+          oidc_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${request_token}" \
+            "$request_url")"
           oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
-          test -n "$oidc_token"
+          if [ -z "$oidc_token" ]; then
+            echo 'GITHUB_TRUSTED_OIDC_TOKEN_MISSING'
+            exit 3
+          fi
           echo "::add-mask::$oidc_token"
+
           probe_body="$(mktemp)"
-          probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" -H 'accept: text/html' "$PROTECTED_QA_ORIGIN/")"
+          probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+            -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+            -H 'accept: text/html' \
+            "$PROTECTED_QA_ORIGIN/")"
           if [ "$probe_status" != '200' ] || ! grep -qi 'DABBIR' "$probe_body"; then
             echo "VERCEL_TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"
             exit 4
           fi
+
           echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
           echo 'ready=true' >> "$GITHUB_OUTPUT"
           echo 'TRUSTED_VERCEL_OIDC_READY'
@@ -162,9 +177,15 @@ jobs:
             test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
             auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
           fi
-          body=''; sha=''; deployment=''
+
+          body=''
+          sha=''
+          deployment=''
           for attempt in $(seq 1 60); do
-            body="$(curl --silent --show-error "${auth_args[@]}" -H 'accept: application/json' "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            body="$(curl --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
             sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
             deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
             environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
@@ -172,8 +193,18 @@ jobs:
             git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty' 2>/dev/null || true)"
             repository="$(printf '%s' "$body" | jq -r '.repository // empty' 2>/dev/null || true)"
             ok="$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || true)"
-            if [ "$ok" = 'true' ] && [ "$sha" = "$GITHUB_SHA" ] && [ "$environment" = 'production' ] && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ] && [[ "$deployment" == dpl_* ]]; then break; fi
-            sha=''; deployment=''; sleep 5
+            if [ "$ok" = 'true' ] \
+              && [ "$sha" = "$GITHUB_SHA" ] \
+              && [ "$environment" = 'production' ] \
+              && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] \
+              && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] \
+              && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ] \
+              && [[ "$deployment" == dpl_* ]]; then
+              break
+            fi
+            sha=''
+            deployment=''
+            sleep 5
           done
           if [ -z "$sha" ]; then
             echo "EXACT_PRODUCTION_RELEASE_UNVERIFIED expected_sha=$GITHUB_SHA body=${body:0:500}"
@@ -234,17 +265,32 @@ jobs:
             test -n "${VERCEL_TRUSTED_OIDC_TOKEN:-}"
             auth_args+=( -H "x-vercel-trusted-oidc-idp-token: ${VERCEL_TRUSTED_OIDC_TOKEN}" )
           fi
-          body=''; sha=''; deployment=''
+          body=''
+          sha=''
+          deployment=''
           for attempt in $(seq 1 12); do
-            body="$(curl --silent --show-error "${auth_args[@]}" -H 'accept: application/json' "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
+            body="$(curl --silent --show-error \
+              "${auth_args[@]}" \
+              -H 'accept: application/json' \
+              "${PRODUCTION_ORIGIN}/api/release-evidence?t=$(date +%s%N)" || true)"
             sha="$(printf '%s' "$body" | jq -r '.commit_sha // empty' 2>/dev/null || true)"
             deployment="$(printf '%s' "$body" | jq -r '.deployment_id // empty' 2>/dev/null || true)"
             environment="$(printf '%s' "$body" | jq -r '.environment // empty' 2>/dev/null || true)"
             project_id="$(printf '%s' "$body" | jq -r '.project_id // empty' 2>/dev/null || true)"
             git_provider="$(printf '%s' "$body" | jq -r '.git_provider // empty' 2>/dev/null || true)"
             repository="$(printf '%s' "$body" | jq -r '.repository // empty' 2>/dev/null || true)"
-            if [ "$sha" = "$GITHUB_SHA" ] && [ "$sha" = "${{ steps.release-before.outputs.sha }}" ] && [ "$deployment" = "${{ steps.release-before.outputs.deployment }}" ] && [ "$environment" = 'production' ] && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ]; then break; fi
-            sha=''; deployment=''; sleep 5
+            if [ "$sha" = "$GITHUB_SHA" ] \
+              && [ "$sha" = "${{ steps.release-before.outputs.sha }}" ] \
+              && [ "$deployment" = "${{ steps.release-before.outputs.deployment }}" ] \
+              && [ "$environment" = 'production' ] \
+              && [ "$project_id" = "$EXPECTED_VERCEL_PROJECT_ID" ] \
+              && [ "$git_provider" = "$EXPECTED_GIT_PROVIDER" ] \
+              && [ "$repository" = "$EXPECTED_GIT_REPOSITORY" ]; then
+              break
+            fi
+            sha=''
+            deployment=''
+            sleep 5
           done
           if [ -z "$sha" ]; then
             echo "EXACT_PRODUCTION_RELEASE_DRIFT_OR_UNAVAILABLE expected_sha=$GITHUB_SHA body=${body:0:500}"
@@ -254,11 +300,37 @@ jobs:
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
           echo "STABLE_EXACT_PRODUCTION_SHA=$sha deployment=$deployment"
 
-      - name: Upload full journey evidence
-        if: always()
+      - name: Publish journey summary
+        if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
+        shell: bash
+        run: |
+          echo '## DABBIR AI Full Customer Journey' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Mode:** ${{ steps.journey-mode.outputs.mode }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Expected SHA:** $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA before:** ${{ steps.release-before.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Production SHA after:** ${{ steps.release-after.outputs.sha || 'UNVERIFIED' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Deployment:** ${{ steps.release-before.outputs.deployment || 'UNAVAILABLE' }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$JOURNEY_REPORT_PATH" ]; then
+            echo "**Verdict:** $(jq -r '.verdict' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Required failures:** $(jq -r '.required_failures' "$JOURNEY_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Step | Status | Duration ms | Detail |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---:|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.steps[] | "| \(.name) | \(.status) | \(.duration_ms // 0) | \((.detail // "") | gsub("\\|"; "\\|")) |"' "$JOURNEY_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Verdict:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$ISOLATION_REPORT_PATH" ]; then
+            echo "**Cross-tenant isolation:** $(jq -r '.verdict' "$ISOLATION_REPORT_PATH") ($(jq -r '.checks | length' "$ISOLATION_REPORT_PATH") checks)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '**Cross-tenant isolation:** NO_REPORT' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload journey evidence
+        if: ${{ always() && steps.journey-mode.outputs.ready == 'true' }}
         uses: actions/upload-artifact@v6
         with:
-          name: dabbir-ai-full-customer-journey-evidence
+          name: dabbir-ai-customer-journey-evidence
           path: |
             dabbir-ai-customer-journey-report.json
             dabbir-ai-customer-journey-screenshot.png
@@ -274,7 +346,7 @@ jobs:
     timeout-minutes: 25
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
-      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
       RUN_RUNTIME: 'false'
@@ -286,9 +358,22 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: node test/dabbir-capacity-load.mjs
-      - uses: actions/upload-artifact@v6
+      - name: Run clean AI concurrency test
+        run: node test/dabbir-capacity-load.mjs
+      - name: Publish AI capacity summary
         if: always()
+        shell: bash
+        run: |
+          if [ -f dabbir-ai-capacity-report.json ]; then
+            echo '## DABBIR AI Capacity' >> "$GITHUB_STEP_SUMMARY"
+            echo "**AI concurrency passed:** $(jq -r '.capacity.ai_concurrency' dabbir-ai-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Concurrent | Error rate | AI reply rate | p95 ms | Pass |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.ai_stages[] | "| \(.concurrency) | \(.error_rate) | \(.ai_reply_rate // 0) | \(.p95_ms) | \(.pass) |"' dabbir-ai-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload AI capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: dabbir-ai-capacity-evidence
           path: dabbir-ai-capacity-report.json
@@ -303,7 +388,7 @@ jobs:
     timeout-minutes: 30
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
-      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
       PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
       RUN_RUNTIME: 'true'
@@ -315,9 +400,24 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: node test/dabbir-capacity-load.mjs
-      - uses: actions/upload-artifact@v6
+      - name: Run 1000-customer runtime capacity test
+        run: node test/dabbir-capacity-load.mjs
+      - name: Publish runtime capacity summary
         if: always()
+        shell: bash
+        run: |
+          if [ -f dabbir-runtime-capacity-report.json ]; then
+            echo '## DABBIR Runtime Capacity' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Customers created:** $(jq -r '.customer_count' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Strict UX concurrency:** $(jq -r '.capacity.infrastructure_stable_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Available concurrency:** $(jq -r '.capacity.infrastructure_available_concurrency' dabbir-runtime-capacity-report.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo '| Concurrent | Error rate | p95 ms | p99 ms | Stable | Available |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---:|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.runtime_stages[] | "| \(.concurrency) | \(.error_rate) | \(.p95_ms) | \(.p99_ms) | \(.stable) | \(.available) |"' dabbir-runtime-capacity-report.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload runtime capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: dabbir-runtime-capacity-evidence
           path: dabbir-runtime-capacity-report.json
