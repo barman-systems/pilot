@@ -26,5 +26,12 @@ test('car-wash workspace suppresses the duplicate generic booking calendar',()=>
   assert.match(loader,/#dabbirGenericCalendar/);
   assert.match(loader,/setProperty\('display','none','important'\)/);
   assert.match(loader,/dabbirCarWashDuplicate/);
-  assert.match(loader,/v2-single-calendar/);
+});
+
+test('car-wash calendar observer is idempotent and never observes hidden mutations',()=>{
+  const loader=read('api/car-wash-loader-ui.js');
+  assert.match(loader,/dabbirCarWashDuplicate!=='hidden'/);
+  assert.match(loader,/calendarObserver\.observe\(document\.documentElement,\{subtree:true,childList:true\}\)/);
+  assert.doesNotMatch(loader,/calendarObserver\.observe[^\n]+attributeFilter:\[[^\]]*hidden/);
+  assert.match(loader,/v3-observer-safe/);
 });

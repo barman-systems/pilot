@@ -8,9 +8,11 @@ const script=String.raw`(()=>{
     const duplicate=document.querySelector('#dabbirGenericCalendar');
     if(!duplicate)return false;
     if(isCarWash()){
-      duplicate.setAttribute('hidden','');
-      duplicate.style.setProperty('display','none','important');
-      duplicate.dataset.dabbirCarWashDuplicate='hidden';
+      if(duplicate.dataset.dabbirCarWashDuplicate!=='hidden'){
+        duplicate.dataset.dabbirCarWashDuplicate='hidden';
+        duplicate.setAttribute('hidden','');
+        duplicate.style.setProperty('display','none','important');
+      }
       return true;
     }
     if(duplicate.dataset.dabbirCarWashDuplicate==='hidden'){
@@ -42,7 +44,7 @@ const script=String.raw`(()=>{
   const loaderObserver=new MutationObserver(()=>{if(load())loaderObserver.disconnect()});
   loaderObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   const calendarObserver=new MutationObserver(enforceSingleCalendar);
-  calendarObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
+  calendarObserver.observe(document.documentElement,{subtree:true,childList:true});
   setTimeout(()=>{load();enforceSingleCalendar();if(attempts>=40)loaderObserver.disconnect()},20000);
   window.addEventListener('focus',()=>{load();enforceSingleCalendar()},{passive:true});
   window.__dabbirCarWashLoader={load,enforceSingleCalendar,get loaded(){return loaded}};
@@ -52,6 +54,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-car-wash-loader-ui','v2-single-calendar');
+  res.setHeader('x-dabbir-car-wash-loader-ui','v3-observer-safe');
   return res.status(200).send(script);
 }
