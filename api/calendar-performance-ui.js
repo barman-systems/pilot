@@ -1,4 +1,5 @@
 import calendarLiveHandler from './calendar-live-ui.js';
+import {applySalonProductModelPatches} from './salon-product-model-ui-patches.js';
 
 const PATCHES=[
   {
@@ -96,14 +97,14 @@ export default async function handler(req,res){
   await calendarLiveHandler(req,captured);
   if(captured.statusCode!==200||!captured.body)return res.status(500).end('Calendar UI unavailable');
   let body;
-  try{body=applyPerformancePatches(captured.body)}catch(error){
+  try{body=applySalonProductModelPatches(applyPerformancePatches(captured.body))}catch(error){
     console.error('dabbir_calendar_performance_patch_failed',String(error?.message||error));
     return res.status(500).end('Calendar performance guard unavailable');
   }
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=60');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-calendar-performance-ui','v3-calendar-correctness-event-scoped');
+  res.setHeader('x-dabbir-calendar-performance-ui','v4-salon-employee-first');
   return res.status(200).send(body);
 }
 
