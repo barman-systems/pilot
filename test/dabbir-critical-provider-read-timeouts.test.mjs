@@ -55,8 +55,8 @@ function mockUserAndMemberships({ membershipDelay = 0, membershipResponse = [{ b
   global.fetch = async (url, options = {}) => {
     const text = String(url);
     if (text.includes('/auth/v1/user')) return response({ id: USER_ID, app_metadata: { product: 'DABBIR' } });
-    if (text.includes('/rest/v1/dabbir_account_access')) return response([{ user_id: USER_ID, status: 'active' }]);
-    if (text.includes('/rest/v1/memberships')) {
+    if (text.includes('/rest/v1/account_access_state')) return response([{ user_id: USER_ID, status: 'active' }]);
+    if (text.includes('/rest/v1/dabbir_memberships')) {
       if (membershipDelay) await new Promise((resolve, reject) => {
         const timer = setTimeout(resolve, membershipDelay);
         options.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('aborted', 'AbortError')); }, { once: true });
@@ -124,8 +124,8 @@ test('deadlines remain active after headers while Billing and WhatsApp bodies ar
   global.fetch = async (url, options = {}) => {
     const text = String(url);
     if (text.includes('/auth/v1/user')) return response({ id: USER_ID, app_metadata: { product: 'DABBIR' } });
-    if (text.includes('/rest/v1/dabbir_account_access')) return response([{ user_id: USER_ID, status: 'active' }]);
-    if (text.includes('/rest/v1/memberships')) return response([{ business_id: BUSINESS_ID, role: 'owner', status: 'active' }]);
+    if (text.includes('/rest/v1/account_access_state')) return response([{ user_id: USER_ID, status: 'active' }]);
+    if (text.includes('/rest/v1/dabbir_memberships')) return response([{ business_id: BUSINESS_ID, role: 'owner', status: 'active' }]);
     if (text.includes('/rest/v1/dabbir_billing_accounts') || text.includes('/rest/v1/dabbir_whatsapp_connections')) {
       return new Response(new ReadableStream({ start() {} }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
@@ -162,6 +162,7 @@ test('real authentication rejection remains auth failure instead of being relabe
   global.fetch = async (url) => {
     const text = String(url);
     if (text.includes('/auth/v1/user')) return response({ message: 'invalid token' }, { status: 401 });
+    if (text.includes('/rest/v1/dabbir_memberships')) return response([{ business_id: BUSINESS_ID, role: 'owner', status: 'active' }]);
     throw new Error(`UNEXPECTED_FETCH:${text}`);
   };
   await assert.rejects(
