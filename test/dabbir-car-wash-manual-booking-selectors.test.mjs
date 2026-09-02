@@ -24,6 +24,14 @@ test('car-wash saved customers are searchable and preserve customer identity',()
   assert.match(manual,/hidden\.value=customer\?\.id\|\|''/);
 });
 
+test('car-wash selector enhancement cannot self-trigger a document mutation loop',()=>{
+  assert.doesNotMatch(manual,/observe\(document\.documentElement,\{subtree:true,childList:true\}\)/);
+  assert.match(manual,/cache\.business_id===id&&cache\.loaded/);
+  assert.match(manual,/list\.dataset\.dabbirSignature!==signature/);
+  assert.match(manual,/setTimeout\(\(\)=>enhance\(true\),0\)/);
+  assert.match(manual,/v2-loop-safe/);
+});
+
 test('adaptive appointment reuses a selected customer only inside the active business',()=>{
   assert.match(appointment,/requestedCustomerId=clean\(d\.customer_id,60\)/);
   assert.match(appointment,/business_id=eq\.\$\{encodeURIComponent\(businessId\)\}.*id=eq\.\$\{encodeURIComponent\(requestedCustomerId\)\}/s);
