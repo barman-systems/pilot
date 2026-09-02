@@ -2,58 +2,49 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const ui=fs.readFileSync(new URL('../api/owner-command-center-v27.js',import.meta.url),'utf8');
+const legacy=fs.readFileSync(new URL('../api/owner-command-center-v27.js',import.meta.url),'utf8');
+const current=fs.readFileSync(new URL('../api/owner-command-center.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/owner-ceo-command.js',import.meta.url),'utf8');
-const edge=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-ceo-command/index.ts',import.meta.url),'utf8');
-const queue=fs.readFileSync(new URL('../supabase/migrations/20260902113149_dabbir_ceo_command_queue_v1.sql',import.meta.url),'utf8');
-const privileges=fs.readFileSync(new URL('../supabase/migrations/20260902113212_dabbir_ceo_command_queue_privileges_v1.sql',import.meta.url),'utf8');
-const rpc=fs.readFileSync(new URL('../supabase/migrations/20260902113432_dabbir_ceo_command_rpc_v1.sql',import.meta.url),'utf8');
+const broker=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-broker/index.ts',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260902120949_dabbir_owner_command_center_v28_core.sql',import.meta.url),'utf8');
 
-test('owner gateway routes through CEO command desk v27 while preserving v26',()=>{
+test('v27 is preserved as rollback history while v28 is authoritative',()=>{
+  assert.match(gateway,/owner-command-center\.js/);
   assert.match(gateway,/owner-command-center-v27\.js/);
-  assert.match(gateway,/owner-command-center-v26\.js/);
-  assert.match(ui,/owner-command-center-v26\.js/);
+  assert.match(legacy,/owner-command-center-v26\.js/);
+  assert.doesNotMatch(gateway,/import dashboard from '.\/owner-command-center-v27\.js'/);
 });
 
-test('CEO command desk is visible, trackable and truth-preserving',()=>{
-  for(const token of ['أمر إلى CEO','BARMAN Executive OS','CEO COMMAND DESK','إرسال إلى CEO','تحديث الحالات','QUEUED','IN_PROGRESS','DONE','BLOCKED']) assert.match(ui,new RegExp(token));
-  assert.match(ui,/\/api\/owner-ceo-command/);
-  assert.match(ui,/credentials:'same-origin'/);
-  assert.match(ui,/ownerCeoCommandDeskV27/);
-  assert.match(ui,/لا يتم تحويل الحالة إلى منجز من الواجهة/);
-  assert.doesNotMatch(ui,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
+test('authoritative CEO mission control is visible and truth preserving',()=>{
+  for(const token of ['BARMAN Executive OS','CEO Mission Control','QUEUED','IN_PROGRESS','DONE','BLOCKED','معايير القبول','الموعد النهائي']) assert.match(current,new RegExp(token));
+  assert.match(current,/\/api\/owner-ceo-command/);
+  assert.match(current,/setInterval/);
+  assert.match(current,/15000/);
+  assert.match(current,/ACTION → ARTIFACT → TEST → EVIDENCE/);
+  assert.doesNotMatch(current,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
 });
 
-test('same-origin API requires owner session and bounded input',()=>{
-  assert.match(api,/ownerSessionToken/);
+test('CEO command API is same-origin, bounded and routed through the unified owner broker',()=>{
+  assert.match(api,/ownerBroker/);
   assert.match(api,/requireSameOrigin/);
-  assert.match(api,/readJsonBody\(req,8192\)/);
+  assert.match(api,/readJsonBody\(req,16384\)/);
+  assert.match(api,/ceo_command_create/);
+  assert.match(api,/ceo_command_update/);
   assert.match(api,/COMMAND_TEXT_INVALID/);
-  assert.match(api,/PRIORITY_INVALID/);
-  assert.match(api,/dabbir-owner-ceo-command/);
+  assert.doesNotMatch(api,/DABBIR_OWNER_CEO_COMMAND_URL|dabbir-owner-ceo-command/);
 });
 
-test('edge endpoint verifies platform-owner session before CEO command RPCs',()=>{
-  assert.match(edge,/dabbir_owner_session_verify_v1/);
-  assert.match(edge,/platform_owner/);
-  assert.match(edge,/dabbir_ceo_command_create_v1/);
-  assert.match(edge,/dabbir_ceo_commands_recent_v1/);
-  assert.match(edge,/OWNER_SESSION_REQUIRED/);
+test('unified broker owns CEO commands and owner decisions',()=>{
+  for(const token of ['ceo_commands','ceo_command_create','ceo_command_update','decisions','decision_resolve','OWNER_SESSION_REQUIRED']) assert.match(broker,new RegExp(token));
 });
 
-test('CEO command queue is RLS protected and service role cannot delete',()=>{
-  assert.match(queue,/alter table public\.dabbir_ceo_commands enable row level security/i);
-  assert.match(queue,/revoke all on table public\.dabbir_ceo_commands from anon, authenticated/i);
-  assert.match(privileges,/revoke all on table public\.dabbir_ceo_commands from service_role/i);
-  assert.match(privileges,/grant select, insert, update on table public\.dabbir_ceo_commands to service_role/i);
-  assert.doesNotMatch(privileges,/delete/i);
-});
-
-test('owner command becomes an executive event instead of a chat-only note',()=>{
-  assert.match(rpc,/insert into dabbir_private\.executive_events/);
-  assert.match(rpc,/'owner-directive'/);
-  assert.match(rpc,/'ceo_command'/);
-  assert.match(rpc,/'open'/);
-  assert.match(rpc,/executive_event_status/);
+test('CEO queue moved out of public schema and supports mission fields plus evidence timeline',()=>{
+  assert.match(migration,/alter table public\.dabbir_ceo_commands set schema dabbir_private/i);
+  assert.match(migration,/objective text/);
+  assert.match(migration,/acceptance_criteria jsonb/);
+  assert.match(migration,/due_at timestamptz/);
+  assert.match(migration,/guidance jsonb/);
+  assert.match(migration,/executive_evidence/);
+  assert.match(migration,/revoke all on table dabbir_private\.dabbir_ceo_commands from public, anon, authenticated, service_role/i);
 });

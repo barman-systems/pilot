@@ -8,125 +8,50 @@
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com"
   },
   "crons": [
-    {
-      "path": "/api/salon-reminders-cron",
-      "schedule": "*/5 * * * *"
-    }
+    {"path": "/api/salon-reminders-cron", "schedule": "*/5 * * * *"},
+    {"path": "/api/owner-ops-synthetic-cron", "schedule": "*/5 * * * *"},
+    {"path": "/api/owner-recovery-cron", "schedule": "17 23 * * *"}
   ],
   "functions": {
-    "api/salon-reminders-cron.js": {
-      "maxDuration": 60
-    },
-    "api/app.js": {
-      "includeFiles": "index.html"
-    },
-    "api/app-recovery.js": {
-      "includeFiles": "index.html"
-    },
-    "api/app-safari-recovery.js": {
-      "includeFiles": "index.html"
-    },
-    "api/car-wash-booking.js": {
-      "includeFiles": "booking.html"
-    },
-    "api/team-page.js": {
-      "includeFiles": "team.html"
-    }
+    "api/salon-reminders-cron.js": {"maxDuration": 60},
+    "api/owner-ops-synthetic-cron.js": {"maxDuration": 30},
+    "api/owner-recovery-cron.js": {"maxDuration": 120},
+    "api/app.js": {"includeFiles": "index.html"},
+    "api/app-recovery.js": {"includeFiles": "index.html"},
+    "api/app-safari-recovery.js": {"includeFiles": "index.html"},
+    "api/car-wash-booking.js": {"includeFiles": "booking.html"},
+    "api/team-page.js": {"includeFiles": "team.html"}
   },
   "routes": [
-    {
-      "src": "^/privacy/?$",
-      "dest": "/privacy.html"
-    },
-    {
-      "src": "^/terms/?$",
-      "dest": "/terms.html"
-    },
-    {
-      "src": "^/support/?$",
-      "dest": "/support.html"
-    },
-    {
-      "src": "^/team/?$",
-      "dest": "/api/team-page"
-    },
-    {
-      "src": "^/team\\.html/?$",
-      "dest": "/api/team-page"
-    },
-    {
-      "src": "^/owner/?$",
-      "dest": "/api/owner-login"
-    },
-    {
-      "src": "^/owner-dashboard/?$",
-      "dest": "/api/owner-dashboard-gateway"
-    },
-    {
-      "src": "^/book/?$",
-      "dest": "/api/car-wash-booking"
-    },
-    {
-      "src": "^/$",
-      "dest": "/api/app-safari-recovery"
-    }
+    {"src": "^/privacy/?$", "dest": "/privacy.html"},
+    {"src": "^/terms/?$", "dest": "/terms.html"},
+    {"src": "^/support/?$", "dest": "/support.html"},
+    {"src": "^/team/?$", "dest": "/api/team-page"},
+    {"src": "^/team\\.html/?$", "dest": "/api/team-page"},
+    {"src": "^/owner/?$", "dest": "/api/owner-login"},
+    {"src": "^/owner-dashboard/?$", "dest": "/api/owner-dashboard-gateway"},
+    {"src": "^/book/?$", "dest": "/api/car-wash-booking"},
+    {"src": "^/$", "dest": "/api/app-safari-recovery"}
   ],
   "rewrites": [
-    {
-      "source": "/privacy",
-      "destination": "/privacy.html"
-    },
-    {
-      "source": "/terms",
-      "destination": "/terms.html"
-    },
-    {
-      "source": "/support",
-      "destination": "/support.html"
-    },
-    {
-      "source": "/team",
-      "destination": "/api/team-page"
-    },
-    {
-      "source": "/owner",
-      "destination": "/api/owner-login"
-    },
-    {
-      "source": "/owner-dashboard",
-      "destination": "/api/owner-dashboard-gateway"
-    },
-    {
-      "source": "/book",
-      "destination": "/api/car-wash-booking"
-    },
-    {
-      "source": "/",
-      "destination": "/api/app-safari-recovery"
-    }
+    {"source": "/privacy", "destination": "/privacy.html"},
+    {"source": "/terms", "destination": "/terms.html"},
+    {"source": "/support", "destination": "/support.html"},
+    {"source": "/team", "destination": "/api/team-page"},
+    {"source": "/owner", "destination": "/api/owner-login"},
+    {"source": "/owner-dashboard", "destination": "/api/owner-dashboard-gateway"},
+    {"source": "/book", "destination": "/api/car-wash-booking"},
+    {"source": "/", "destination": "/api/app-safari-recovery"}
   ],
   "headers": [
-    {
-      "source": "/dabbir-ui-(critical|deferred)\\.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
-    },
-    {
-      "source": "/(dabbir-app-icon|favicon)\\.(png|ico)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net" }
-      ]
-    }
+    {"source": "/dabbir-ui-(critical|deferred)\\.js", "headers": [{"key": "Cache-Control", "value": "no-store, max-age=0"}]},
+    {"source": "/(dabbir-app-icon|favicon)\\.(png|ico)", "headers": [{"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}]},
+    {"source": "/(.*)", "headers": [
+      {"key": "X-Content-Type-Options", "value": "nosniff"},
+      {"key": "X-Frame-Options", "value": "DENY"},
+      {"key": "Referrer-Policy", "value": "no-referrer"},
+      {"key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()"},
+      {"key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net"}
+    ]}
   ]
 }
