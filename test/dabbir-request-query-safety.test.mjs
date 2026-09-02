@@ -15,7 +15,14 @@ const guardedFiles = [
   "api/dabbir-runtime.js",
   "api/dabbir-whatsapp-status.js",
   "api/dabbir-whatsapp-webhook.js",
-  "api/owner-action-center.js"
+  "api/owner-action-center.js",
+  "api/calendar-oauth-start.js",
+  "api/calendar-oauth-callback.js",
+  "api/calendar-sync.js",
+  "api/calendar-connections.js",
+  "api/service-catalog.js",
+  "api/clinic-operations.js",
+  "api/salon-operations.js"
 ];
 
 test('singleQueryValue uses WHATWG parsing and fails closed for duplicate or invalid values', () => {
@@ -29,6 +36,21 @@ test('DABBIR runtime endpoints do not access Vercel legacy req.query', async () 
   for (const path of guardedFiles) {
     const source = await readFile(new URL(path, root), 'utf8');
     assert.doesNotMatch(source, /req\.query/, path);
+  }
+});
+
+test('calendar OAuth and connection endpoints use the guarded WHATWG parser', async () => {
+  for (const path of ['api/calendar-oauth-start.js','api/calendar-oauth-callback.js','api/calendar-sync.js','api/calendar-connections.js']) {
+    const source = await readFile(new URL(path, root), 'utf8');
+    assert.match(source, /singleQueryValue\(req,/u, path);
+  }
+});
+
+test('salon and clinic query helpers parse req.url with WHATWG URL semantics', async () => {
+  for (const path of ['api/salon-operations.js','api/clinic-operations.js']) {
+    const source = await readFile(new URL(path, root), 'utf8');
+    assert.match(source, /new URL\(String\(req\?\.url\|\|'\/'\),'https:\/\/dabbir\.invalid'\)/u, path);
+    assert.match(source, /searchParams\.getAll\(key\)/u, path);
   }
 });
 
