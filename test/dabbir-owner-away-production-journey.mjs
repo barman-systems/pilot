@@ -8,7 +8,7 @@ const QA_CONTROL_URL=`https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-
 const OIDC_AUDIENCE='dabbir-ai-qa';
 const REPORT_PATH=process.env.AWAY_REPORT_PATH||'dabbir-owner-away-production-report.json';
 const RUN_ID=`${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
-const RUN_LABEL=`DABBIR Away QA ${RUN_ID}`;
+const RUN_LABEL=`DABBIR AI QA ${RUN_ID}`;
 
 const report={run_id:RUN_ID,journey:'DABBIR_OWNER_AWAY_PRODUCTION',production_origin:ORIGIN,started_at:new Date().toISOString(),completed_at:null,verdict:'RUNNING',required_failures:0,steps:[],cleanup:[]};
 let owner=null,employee=null,businessId=null,oidcToken=null;
