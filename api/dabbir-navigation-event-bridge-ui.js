@@ -9,6 +9,8 @@ const script = String.raw`(()=>{
   let suppressClickNode=null;
   let suppressClickUntil=0;
   let navigationEpoch=0;
+  let conversationRefreshInFlight=null;
+  let conversationRefreshBusinessId=null;
 
   function itemFrom(target){
     return target?.closest?.(NAV_ITEM_SELECTOR)||null;
@@ -71,6 +73,34 @@ const script = String.raw`(()=>{
     };
   }
 
+  function refreshConversationWorkspace(){
+    const businessId=String(workspace?.business?.id||'').trim();
+    if(!businessId||typeof loadRuntime!=='function') return Promise.resolve({ok:false,reason:'RUNTIME_REFRESH_UNAVAILABLE'});
+    if(conversationRefreshInFlight&&conversationRefreshBusinessId===businessId) return conversationRefreshInFlight;
+
+    const before=workspace;
+    const conversationId=typeof selectedConversationId!=='undefined'?selectedConversationId:null;
+    conversationRefreshBusinessId=businessId;
+    conversationRefreshInFlight=Promise.resolve()
+      .then(()=>loadRuntime(businessId,conversationId))
+      .then(()=>{
+        const ok=workspace!==before&&String(workspace?.business?.id||'')===businessId;
+        const result={ok,reason:ok?'SERVER_REFRESHED':'NO_FRESH_RUNTIME'};
+        window.__dabbirLastConversationRefresh={...result,business_id:businessId,at:new Date().toISOString()};
+        return result;
+      })
+      .catch(error=>{
+        const result={ok:false,reason:'RUNTIME_REFRESH_FAILED'};
+        window.__dabbirLastConversationRefresh={...result,business_id:businessId,error:String(error?.message||error),at:new Date().toISOString()};
+        return result;
+      })
+      .finally(()=>{
+        conversationRefreshInFlight=null;
+        conversationRefreshBusinessId=null;
+      });
+    return conversationRefreshInFlight;
+  }
+
   function paint(hit){
     try{current=hit.name}catch{}
     document.querySelectorAll('.screen').forEach(screen=>screen.classList.toggle('active',screen===hit.screen));
@@ -105,33 +135,45 @@ const script = String.raw`(()=>{
     const epoch=++navigationEpoch;
     const started=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
 
-    // Conversation data is already present in the authenticated workspace. Render that local
-    // state synchronously so WebKit never exposes an activated but empty conversation screen.
-    // Network/data refresh work remains deferred with showScreen below.
+    // Render the authenticated local workspace immediately so WebKit never shows a blank chat.
+    // Then refresh canonical server state after first paint so newly-created conversations appear.
     renderLoadedScreen(hit);
     paint(hit);
 
     afterPaint(()=>{
       if(epoch!==navigationEpoch) return;
-      let error=null;
-      try{
-        if(typeof showScreen==='function') showScreen(hit.name);
-      }catch(caught){
-        error=caught;
-      }
-      if(epoch!==navigationEpoch) return;
-      if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
-      else if(error) safeFallback(hit,source,error);
-      const finished=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
-      window.__dabbirLastNavigationTiming={
-        target:hit.name,
-        source,
-        visual_first:true,
-        loaded_content_before_activation:hit.name==='conversations',
-        deferred_render:true,
-        total_ms:Math.max(0,Math.round((finished-started)*10)/10),
-        at:new Date().toISOString(),
+
+      const finish=(conversationRefresh=null)=>{
+        if(epoch!==navigationEpoch) return;
+        if(hit.name==='conversations'&&!workspace?.business?.id) return;
+        let error=null;
+        try{
+          if(typeof showScreen==='function') showScreen(hit.name);
+        }catch(caught){
+          error=caught;
+        }
+        if(epoch!==navigationEpoch) return;
+        if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
+        else if(error) safeFallback(hit,source,error);
+        const finished=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+        window.__dabbirLastNavigationTiming={
+          target:hit.name,
+          source,
+          visual_first:true,
+          loaded_content_before_activation:hit.name==='conversations',
+          server_refresh_after_first_paint:hit.name==='conversations',
+          conversation_refreshed:conversationRefresh?.ok===true,
+          deferred_render:true,
+          total_ms:Math.max(0,Math.round((finished-started)*10)/10),
+          at:new Date().toISOString(),
+        };
       };
+
+      if(hit.name==='conversations'){
+        refreshConversationWorkspace().then(finish).catch(()=>finish({ok:false,reason:'RUNTIME_REFRESH_FAILED'}));
+        return;
+      }
+      finish();
     });
   }
 
@@ -194,6 +236,9 @@ const script = String.raw`(()=>{
     safe_screen_fallback:true,
     visual_first:true,
     loaded_conversation_content_before_activation:true,
+    server_conversation_refresh_after_first_paint:true,
+    repeated_refresh_coalescing:true,
+    stale_navigation_response_guard:true,
     deferred_render:true,
     destination_authority:'context-router',
     context_resync_before_navigation:true,
