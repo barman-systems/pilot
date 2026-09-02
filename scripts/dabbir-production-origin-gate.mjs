@@ -5,9 +5,17 @@ const CONTRACT_PATH = 'config/barman-integration-contract.json';
 const HTTPS_ORIGIN_RE = /^https:\/\/[^/]+$/i;
 
 export function classifyProductionOrigin({ origin = '', contract }) {
-  const value = String(origin || '').trim().replace(/\/$/, '');
   const deployment = contract?.deployment || {};
   const launchDomain = String(deployment.public_launch_domain || '').trim().toLowerCase();
+  const explicit = String(origin || '').trim().replace(/\/$/, '');
+  const liveContractOrigin =
+    launchDomain &&
+    deployment.domain_access !== 'VERCEL_AUTH_PROTECTED' &&
+    deployment.production_runtime_policy !== 'FAIL_CLOSED_PREVIEW_ONLY' &&
+    deployment.project_live === true
+      ? `https://${launchDomain}`
+      : '';
+  const value = explicit || liveContractOrigin;
   const protectedPrelaunch =
     !launchDomain &&
     deployment.domain_access === 'VERCEL_AUTH_PROTECTED' &&
@@ -55,7 +63,7 @@ function append(file, text) {
 export function runGate({ origin = process.env.PRODUCTION_ORIGIN, contractPath = CONTRACT_PATH } = {}) {
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
   const result = classifyProductionOrigin({ origin, contract });
-  append(process.env.GITHUB_OUTPUT, `ready=${result.ready ? 'true' : 'false'}\nstate=${result.state}\n`);
+  append(process.env.GITHUB_OUTPUT, `ready=${result.ready ? 'true' : 'false'}\nstate=${result.state}\norigin=${result.origin || ''}\n`);
   append(process.env.GITHUB_STEP_SUMMARY, `## DABBIR Production Origin Gate\n\n**State:** ${result.state}\n\n${result.reason}\n`);
   console.log(`${result.state}: ${result.reason}`);
   return result;
