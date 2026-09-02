@@ -23,6 +23,17 @@ test('navigation bridge delegates primary destination choice to contextual routi
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
 });
 
+test('real iPhone touch navigation cannot be discarded by a redundant WebKit hit-test', () => {
+  const touchEnd = bridge.match(/document\.addEventListener\('touchend',event=>\{([\s\S]*?)\n  \},\{capture:true,passive:false\}\);/)?.[1] || '';
+  assert.match(touchEnd, /start\.node!==node/);
+  assert.match(touchEnd, /distance>MAX_TAP_DISTANCE\|\|duration>MAX_TAP_DURATION/);
+  assert.match(touchEnd, /const hit=resolve\(node\)/);
+  assert.match(touchEnd, /activate\(hit,'touchend'\)/);
+  assert.doesNotMatch(touchEnd, /elementFromPoint/);
+  assert.match(bridge, /version:'navigation-event-bridge-v6-real-iphone-touch'/);
+  assert.match(bridge, /redundant_touch_hit_test:false/);
+});
+
 test('store activity stays Operations even if a stale appointments call reaches showScreen', () => {
   assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
   assert.match(router, /authority:'primary-context-router'/);
