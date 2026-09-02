@@ -1,4 +1,5 @@
 name: DABBIR iOS Maestro Smoke
+# BAR-39 invariant probe: the protected `test` context must remain pending until this workflow is terminal SUCCESS when required.
 
 on:
   pull_request:
