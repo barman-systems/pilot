@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { json, SUPABASE_URL } from './_auth-core.js';
-import { loadBusinessConnection } from './_whatsapp-embedded-core.js';
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
+import { loadBusinessConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 import { sendMetaTemplate } from './_whatsapp-live-core.js';
 
 const clean=(value,max=500)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
@@ -9,11 +10,7 @@ const EXPECTED_SCHEDULE='*/5 * * * *';
 const EDGE_WORKER_URL=`${SUPABASE_URL}/functions/v1/dabbir-salon-reminder-worker`;
 
 export function adminRpcHeaders(key){
-  const headers={apikey:key,accept:'application/json','content-type':'application/json',prefer:'return=representation'};
-  // Supabase secret keys (sb_secret_*) authenticate through apikey. Sending
-  // them as Bearer tokens makes PostgREST parse them as JWTs and fail.
-  if(!String(key).startsWith('sb_secret_'))headers.authorization=`Bearer ${key}`;
-  return headers;
+  return supabaseKeyHeaders(key,{accept:'application/json','content-type':'application/json',prefer:'return=representation'});
 }
 async function adminRpc(key,name,params){
   return fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{
@@ -86,7 +83,7 @@ async function finalize(req,key,item,status,providerMessageId=null,error=null){
 }
 async function deliver(req,key,item){
   try{
-    const connection=key?await loadBusinessConnection(key,item.business_id):item.connection;
+    const connection=key?await loadBusinessConnectionWithServiceKey(key,item.business_id):item.connection;
     if(!connection||connection.status!=='connected'){
       await finalize(req,key,item,'failed',null,'WHATSAPP_TENANT_NOT_LINKED');
       return {id:item.notification_id,status:'failed',error:'WHATSAPP_TENANT_NOT_LINKED'};
