@@ -32,7 +32,7 @@ test('persistent worker is event-looped and cannot bypass governance files',()=>
   for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(worker,/phase:'claim'/);
   assert.match(worker,/p_lane:'tool_agent'|phase:'claim'/);
-  assert.match(worker,/git',['"]apply['"],['"]--check/);
+  assert.match(worker,/spawnSync\('git',\['apply','--check'/);
   assert.match(worker,/PATCH_TOUCHED_GOVERNANCE_FILE/);
   assert.match(worker,/path\.startsWith\('\.github\/'\)/);
   assert.match(worker,/api\/barman-tool-agent-broker\.js/);
