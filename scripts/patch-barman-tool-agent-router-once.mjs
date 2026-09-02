@@ -11,11 +11,12 @@ let broker=fs.readFileSync(brokerPath,'utf8');
 const claimAnchor="export function validateToolAgentClaims(payload,now=Math.floor(Date.now()/1000)){return claimAllowed(payload,now)}\n";
 const router=`
 export function routeToolAgentCommand(value){
-  const text=clean(value,4000);
+  const raw=String(value??'').slice(0,4000);
+  const lineBreak=String.fromCharCode(10),slash=String.fromCharCode(92);
+  const normalized=raw.split(slash+slash+'n').join(lineBreak).split(slash+'n').join(lineBreak);
+  const lines=normalized.split(lineBreak).map(x=>clean(x,1200)).filter(Boolean);
+  const text=lines.join(' ').trim();
   if(!text)return {route:'REVIEW_REQUIRED',reason:'EMPTY_COMMAND'};
-  const lineBreak=String.fromCharCode(10),escapedBreak=String.fromCharCode(92)+'n';
-  const normalized=text.split(escapedBreak).join(lineBreak);
-  const lines=normalized.split(lineBreak).map(x=>x.trim()).filter(Boolean);
   const goals=lines.filter(x=>{const marker=x.split(' ')[0];return /^[0-9]+[.)]$/.test(marker)||marker==='-'||marker==='•'}).length;
   if(/(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي)/i.test(text))
     return {route:'OWNER_GATE',reason:'OWNER_ONLY_AUTHORITY'};
