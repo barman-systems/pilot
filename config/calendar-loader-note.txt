@@ -1,1 +1,0 @@
-internal calendar loader pending manifest wiring
