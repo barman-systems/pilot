@@ -104,7 +104,7 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=60');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-calendar-performance-ui','v4-salon-employee-first');
+  res.setHeader('x-dabbir-calendar-performance-ui','v3-calendar-correctness-event-scoped');
   return res.status(200).send(body);
 }
 
