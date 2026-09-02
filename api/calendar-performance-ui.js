@@ -21,6 +21,26 @@ const PATCHES=[
     from:`  const observer=new MutationObserver(()=>{if(q('#screen-appointments')?.classList.contains('active'))setTimeout(render,0)});\n  observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});\n  setInterval(()=>{if(q('#screen-appointments')?.classList.contains('active'))render()},1500);`,
     to:`  const appointmentScreen=q('#screen-appointments');\n  if(appointmentScreen){\n    const screenObserver=new MutationObserver(()=>{if(appointmentScreen.classList.contains('active'))setTimeout(render,0)});\n    screenObserver.observe(appointmentScreen,{attributes:true,attributeFilter:['class']});\n  }\n  const appointmentTable=q('#appointmentsTable');\n  if(appointmentTable){\n    const tableObserver=new MutationObserver(()=>{if(q('#screen-appointments')?.classList.contains('active'))setTimeout(render,0)});\n    tableObserver.observe(appointmentTable,{childList:true});\n  }`,
   },
+  {
+    name:'clinic-loading-state',
+    from:`  let D=null,busy=false;`,
+    to:`  let D=null,busy=false,loading=false;`,
+  },
+  {
+    name:'clinic-load-coalescing',
+    from:`  async function load(){if(!isClinic()||!bid()||busy)return;try{D=await api();render()}catch(e){console.error('clinic_mode_load',e)}}`,
+    to:`  async function load(){if(!isClinic()||!bid()||busy||loading)return;loading=true;try{D=await api();render()}catch(e){console.error('clinic_mode_load',e)}finally{loading=false}}`,
+  },
+  {
+    name:'clinic-global-observer',
+    from:`  const mo=new MutationObserver(()=>{if(isClinic()&&$('#screen-appointments')?.classList.contains('active'))load()});mo.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class'],childList:true});setTimeout(load,700);window.__dabbirClinicMode={refresh:load,version:'beauty-laser-v1-no-images'};`,
+    to:`  const clinicScreen=$('#screen-appointments');\n  if(clinicScreen){\n    const clinicActivationObserver=new MutationObserver(()=>{if(isClinic()&&clinicScreen.classList.contains('active'))load()});\n    clinicActivationObserver.observe(clinicScreen,{attributes:true,attributeFilter:['class']});\n  }\n  try{\n    const baseRenderAllClinic=renderAll;\n    renderAll=function(){const result=baseRenderAllClinic.apply(this,arguments);if(isClinic()&&clinicScreen?.classList.contains('active'))setTimeout(load,0);return result};\n  }catch{}\n  setTimeout(load,700);window.__dabbirClinicMode={refresh:load,version:'beauty-laser-v2-event-scoped'};`,
+  },
+  {
+    name:'business-activity-global-observer',
+    from:`  const observer=new MutationObserver(()=>{if(genericCard()&&business()?.id)setTimeout(enforce,0)});\n  observer.observe(document.body,{subtree:true,childList:true});\n  try{const baseRenderAll=renderAll;renderAll=function(){const result=baseRenderAll.apply(this,arguments);setTimeout(enforce,0);return result}}catch{}\n  try{const baseApplyLang=applyLang;applyLang=function(){const result=baseApplyLang.apply(this,arguments);lastRenderKey='';setTimeout(enforce,0);return result}}catch{}`,
+    to:`  let businessProfileQueued=false;\n  function scheduleBusinessProfileEnforce(){\n    if(businessProfileQueued)return;\n    businessProfileQueued=true;\n    const run=()=>{businessProfileQueued=false;if(genericCard()&&business()?.id)enforce()};\n    if(typeof requestAnimationFrame==='function')requestAnimationFrame(run);else setTimeout(run,0);\n  }\n  const settingsProfileScreen=q('#screen-settings');\n  if(settingsProfileScreen){\n    const observer=new MutationObserver(scheduleBusinessProfileEnforce);\n    observer.observe(settingsProfileScreen,{subtree:true,childList:true});\n  }\n  try{const baseRenderAll=renderAll;renderAll=function(){const result=baseRenderAll.apply(this,arguments);scheduleBusinessProfileEnforce();return result}}catch{}\n  try{const baseApplyLang=applyLang;applyLang=function(){const result=baseApplyLang.apply(this,arguments);lastRenderKey='';scheduleBusinessProfileEnforce();return result}}catch{}`,
+  },
 ];
 
 function captureResponse(){
@@ -58,7 +78,7 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=60');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-calendar-performance-ui','v1-event-scoped');
+  res.setHeader('x-dabbir-calendar-performance-ui','v2-navigation-event-scoped');
   return res.status(200).send(body);
 }
 
