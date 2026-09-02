@@ -24,7 +24,7 @@
     "verified_source_commit": "f48011f68e1ed2cc2fa4a368e6d37608d1b0b5fa",
     "production_region": "bom1",
     "protected_project_domain": "dabbir-nd56cm4j5v-3619s-projects.vercel.app",
-    "public_launch_domain": "https://dabbir.bmalman.com",
+    "public_launch_domain": "dabbir.bmalman.com",
     "domain_access": "PUBLIC_PRODUCTION",
     "production_runtime_policy": "ACTIVE_FAIL_CLOSED",
     "project_live": true,
