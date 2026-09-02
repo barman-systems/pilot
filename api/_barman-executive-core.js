@@ -136,7 +136,7 @@ export function runtimeEvidence(snapshot){
 
 export async function telegramRoute(key,commandId){
   const cfg=await adminRpc(key,'barman_telegram_config_v1',{});
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/barman_telegram_updates?command_id=eq.${encodeURIComponent(commandId)}&select=chat_id&order=created_at.desc&limit=1`,{
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/barman_telegram_updates?command_id=eq.${encodeURIComponent(commandId)}&select=chat_id&order=received_at.desc&limit=1`,{
     headers:supabaseKeyHeaders(key,{accept:'application/json'}),cache:'no-store',signal:AbortSignal.timeout(10000),
   });
   const rows=response.ok?await response.json().catch(()=>[]):[];
