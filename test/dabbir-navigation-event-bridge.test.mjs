@@ -5,32 +5,32 @@ import fs from 'node:fs';
 const root = new URL('../', import.meta.url);
 const bridge = fs.readFileSync(new URL('api/dabbir-navigation-event-bridge-ui.js', root), 'utf8');
 const router = fs.readFileSync(new URL('api/dabbir-contextual-navigation-ui.js', root), 'utf8');
-const routeAuthority = fs.readFileSync(new URL('api/dabbir-route-authority-ui.js', root), 'utf8');
 const bundles = JSON.parse(fs.readFileSync(new URL('config/dabbir-ui-bundles.json', root), 'utf8'));
 const recovery = fs.readFileSync(new URL('api/app-recovery.js', root), 'utf8');
 
-test('navigation bridge delegates existing primary nav without owning destinations', () => {
+test('navigation bridge delegates primary destination choice to contextual routing', () => {
   assert.match(bridge, /#nav > \[data-screen\],#bottomNav > \[data-screen\]/);
   assert.match(bridge, /document\.addEventListener\('click'/);
   assert.match(bridge, /document\.addEventListener\('touchend'/);
   assert.match(bridge, /typeof showScreen==='function'/);
   assert.match(bridge, /safeFallback/);
   assert.match(bridge, /destination_authority:'context-router'/);
-  assert.doesNotMatch(bridge, /function normalizeName\(/);
-  assert.doesNotMatch(bridge, /name==='appointments'/);
-  assert.doesNotMatch(bridge, /name='dashboard'/);
+  assert.match(bridge, /window\.__dabbirContextualNavigation\?\.refresh\?\.\(\)/);
+  assert.match(bridge, /document\.querySelector\('\[data-dabbir-activity-slot="true"\]'\)/);
+  assert.doesNotMatch(bridge, /return ['"]operations['"]/);
+  assert.doesNotMatch(bridge, /business_type/);
   assert.doesNotMatch(bridge, /dataset\.screen\s*=(?!=)/);
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
 });
 
-test('store activity destination remains Operations even when a stale appointments target survives', () => {
+test('store activity stays Operations even if a stale appointments call reaches showScreen', () => {
   assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
   assert.match(router, /authority:'primary-context-router'/);
-  assert.match(routeAuthority, /target==='appointments'&&workspaceBusinessType\(\)==='store'/);
-  assert.match(routeAuthority, /return 'operations'/);
-  assert.match(routeAuthority, /baseShowScreen\.call\(this,target\)/);
-  assert.match(routeAuthority, /store_appointments_target:'operations'/);
-  assert.match(bridge, /const name=String\(node\.dataset\?\.screen\|\|''\)\.trim\(\)/);
+  assert.match(bridge, /if\(requested!==['"]appointments['"]\) return requested/);
+  assert.match(bridge, /const routed=String\(slot\?\.dataset\?\.screen\|\|''\)\.trim\(\)/);
+  assert.match(bridge, /return routed\|\|requested/);
+  assert.match(bridge, /baseShowScreen\.call\(this,target\)/);
+  assert.match(bridge, /programmatic_show_screen_delegation:true/);
 });
 
 test('tab feedback paints before deferred screen rendering', () => {
@@ -44,15 +44,13 @@ test('tab feedback paints before deferred screen rendering', () => {
   assert.match(bridge, /deferred_render:true/);
 });
 
-test('canonical route guard is loaded between contextual routing and the mobile event bridge', () => {
+test('navigation bridge remains immediately after contextual routing and shell module ceiling stays frozen', () => {
   const modules=[...bundles.critical,...bundles.deferred];
   const routerIndex=bundles.deferred.indexOf('/api/dabbir-contextual-navigation-ui');
-  const guardIndex=bundles.deferred.indexOf('/api/dabbir-route-authority-ui');
   const bridgeIndex=bundles.deferred.indexOf('/api/dabbir-navigation-event-bridge-ui');
   assert.ok(routerIndex>=0);
-  assert.equal(guardIndex,routerIndex+1);
-  assert.equal(bridgeIndex,guardIndex+1);
-  assert.equal(modules.length,27);
+  assert.equal(bridgeIndex,routerIndex+1);
+  assert.equal(modules.length,26);
   assert.equal(new Set(modules).size,modules.length);
 });
 
