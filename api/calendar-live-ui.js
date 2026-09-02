@@ -20,13 +20,19 @@ const liveScript=String.raw`(()=>{
   const fmt=value=>{try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return String(value||'')}};
 
   const style=document.createElement('style');
-  style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}';
+  style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}.salonMode #dabbirApptManage,.salonMode #dabbirGenericCalendar{display:none!important}';
   document.head.append(style);
 
   function enforceBusinessModeIsolation(){
-    if(businessType()==='salon')return;
+    if(businessType()==='salon'){
+      q('#dabbirApptManage')?.classList.add('hidden');
+      q('#dabbirGenericCalendar')?.setAttribute('hidden','');
+      q('#appointmentsTable')?.classList.add('hidden');
+      q('#dabbirCalendarShell')?.classList.add('hidden');
+      return;
+    }
     if(document.body.classList.contains('salonMode'))document.body.classList.remove('salonMode');
-    ['#appointmentsTable','#dabbirCalendarShell','#dabbirAppointmentManagement','#customersTable'].forEach(selector=>q(selector)?.classList.remove('hidden'));
+    ['#appointmentsTable','#dabbirCalendarShell','#dabbirApptManage','#customersTable'].forEach(selector=>q(selector)?.classList.remove('hidden'));
     q('#dabbirGenericCalendar')?.removeAttribute('hidden');
   }
 
@@ -130,7 +136,7 @@ const liveScript=String.raw`(()=>{
   setInterval(()=>{enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},60000);
   setTimeout(()=>{enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},1200);
   setTimeout(renderResolvedAwareNotices,0);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,sanitizeNotices:renderResolvedAwareNotices,version:'calendar-live-v8-notice-source-status'};
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,sanitizeNotices:renderResolvedAwareNotices,version:'calendar-live-v9-salon-single-booking-surface'};
 })();`;
 
 function captureResponse(){return {statusCode:200,headers:{},body:'',status(code){this.statusCode=Number(code||200);return this},setHeader(key,value){this.headers[String(key).toLowerCase()]=value;return this},end(body=''){this.body=String(body);return this},send(body=''){this.body=String(body);return this}}}
@@ -144,6 +150,6 @@ export default async function handler(req,res){
   if(salonCaptured.statusCode!==200||!salonCaptured.body)return res.status(500).end('Salon Mode UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
-  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v11-notice-source-status');
+  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v12-salon-single-booking-surface');
   return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
