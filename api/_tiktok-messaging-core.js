@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { tiktokPilotConfig } from './_tiktok-pilot-core.js';
+import { tiktokConfig } from './_tiktok-core.js';
 import { applySupabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
@@ -15,6 +15,7 @@ function serviceKey() {
 
 function tokenKey(config, businessId) {
   if (!config.integrationSecret) throw Object.assign(new Error('TIKTOK_ENCRYPTION_NOT_CONFIGURED'), { status: 503 });
+  // Compatibility salt: changing this string would make already-encrypted TikTok tokens unreadable.
   return crypto.createHash('sha256')
     .update('dabbir-tiktok-pilot-v1\0')
     .update(String(businessId))
@@ -143,7 +144,7 @@ async function refreshConnection(row, config) {
 }
 
 async function usableConnection(req, businessId, requiredScope) {
-  const config = tiktokPilotConfig(req);
+  const config = tiktokConfig(req);
   if (!config.ready) throw Object.assign(new Error('TIKTOK_APP_NOT_CONFIGURED'), { status: 503 });
   let row = await secretConnection(businessId);
   if (requiredScope && !scopes(row).includes(requiredScope)) {
