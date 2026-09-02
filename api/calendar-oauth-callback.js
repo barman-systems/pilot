@@ -1,4 +1,5 @@
 import { json } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 import {
   calendarError,
   exchangeAuthorizationCode,
@@ -18,10 +19,10 @@ export default async function handler(req,res){
   const origin=(()=>{try{return requestOrigin(req)}catch{return null}})();
   try{
     if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
-    const providerError=String(req.query?.error||'').trim();
-    const state=verifyOauthState(req.query?.state);
+    const providerError=String(singleQueryValue(req,'error')||'').trim();
+    const state=verifyOauthState(singleQueryValue(req,'state'));
     if(providerError)throw calendarError(`CALENDAR_PROVIDER_${providerError.toUpperCase().replace(/[^A-Z0-9_]/g,'_')}`,400);
-    const code=String(req.query?.code||'').trim();if(!code)throw calendarError('CALENDAR_AUTHORIZATION_CODE_MISSING',400);
+    const code=String(singleQueryValue(req,'code')||'').trim();if(!code)throw calendarError('CALENDAR_AUTHORIZATION_CODE_MISSING',400);
     const ctx=await requireCalendarMember(req,state.business_id,{manage:true});
     if(String(ctx.user.id)!==String(state.user_id))throw calendarError('CALENDAR_OAUTH_USER_MISMATCH',403);
     const config=providerConfig(state.provider,req);
