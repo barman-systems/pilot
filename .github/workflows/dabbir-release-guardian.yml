@@ -8,6 +8,7 @@ on:
       - DABBIR Protected Live Smoke
       - DABBIR AI Full Customer Journey
       - DABBIR Auth Production Guard
+      - DABBIR Main Lineage Guard
     types: [completed]
 
 permissions:
