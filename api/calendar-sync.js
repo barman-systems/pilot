@@ -1,4 +1,5 @@
 import { accessTokenFromRequest, json, readJsonBody, requireSameOrigin, supabaseRest } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 import { calendarError, requireCalendarMember, safeBusinessId } from './_calendar-core.js';
 import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
@@ -22,7 +23,7 @@ async function userRestJson(path,accessToken,fallback){
 export default async function handler(req,res){
   try{
     if(req.method==='GET'){
-      const businessId=safeBusinessId(req.query?.business_id);
+      const businessId=safeBusinessId(singleQueryValue(req,'business_id'));
       const ctx=await requireCalendarMember(req,businessId);
       const busy=await userRestJson(
         `dabbir_calendar_busy_blocks?select=id,connection_id,provider_event_id,starts_at,ends_at,summary,provider_updated_at&business_id=eq.${encodeURIComponent(businessId)}&order=starts_at.asc&limit=500`,

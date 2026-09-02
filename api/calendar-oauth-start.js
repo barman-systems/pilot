@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { json } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 import {
   authorizationUrl,
   calendarError,
@@ -15,7 +16,7 @@ function statusCode(error){const code=Number(error?.code||500);return [400,401,4
 export default async function handler(req,res){
   try{
     if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
-    const businessId=safeBusinessId(req.query?.business_id),provider=safeProvider(req.query?.provider);
+    const businessId=safeBusinessId(singleQueryValue(req,'business_id')),provider=safeProvider(singleQueryValue(req,'provider'));
     if(!provider)throw calendarError('INVALID_CALENDAR_PROVIDER',400);
     const ctx=await requireCalendarMember(req,businessId,{manage:true});
     const config=providerConfig(provider,req);
