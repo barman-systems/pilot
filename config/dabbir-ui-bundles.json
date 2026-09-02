@@ -28,6 +28,7 @@
     "/api/owner-copilot-ui",
     "/api/dabbir-contextual-navigation-ui",
     "/api/dabbir-navigation-event-bridge-ui",
-    "/api/car-wash-loader-ui"
+    "/api/car-wash-loader-ui",
+    "/api/salon-screen-isolation-ui"
   ]
 }
