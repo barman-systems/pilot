@@ -30,7 +30,7 @@ const [
   read('api/billing/portal.js'),
   read('api/_whatsapp-embedded-core.js'),
   read('api/_whatsapp-live-core.js'),
-  read('api/whatsapp-status.js'),
+  read('api/dabbir-whatsapp-status.js'),
   read('api/dabbir-whatsapp-reply.js'),
 ]);
 
