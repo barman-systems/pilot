@@ -10,6 +10,22 @@
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
+  "alert_delivery": {
+    "source_commit": "e5da322e56fc4903b5ee937e8a49686dc2d1de07",
+    "deployment_id": "dpl_A6cqCH6bW9ch9iDgye2FpKGCeEnQ",
+    "origin": "https://dabbir.bmalman.com",
+    "verified_at": "2026-09-02T12:49:28.186Z",
+    "provider": "Slack",
+    "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
+    "channel_id": "C0BRQQER3UH",
+    "channel_name": "barman-executive-alerts",
+    "message_ts": "1788353368.186149",
+    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788353368186149",
+    "readback_verified": true,
+    "test_only": true,
+    "contains_secrets_or_customer_data": false,
+    "notes": "A BAR-12 test alert containing only public release identity was delivered to the reserved owner-level operational alert channel and then read back from Slack with the same message timestamp. The channel is explicitly reserved for verified operational incidents, hard-gate failures, security events, and owner-level escalations."
+  },
   "security": {
     "source_commit": "e5da322e56fc4903b5ee937e8a49686dc2d1de07",
     "project_ref": "fphpoysqdsceniwduxjq",

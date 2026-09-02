@@ -5,6 +5,7 @@ const EVIDENCE_PATH=process.env.DABBIR_READINESS_EVIDENCE_PATH||'dabbir-bar12-li
 const REVIEW_PATH=process.env.DABBIR_BAR12_TECHNICAL_REVIEW_PATH||'docs/evidence/dabbir-bar12-technical-review.json';
 const MERGE_REPORT_PATH=process.env.DABBIR_BAR12_TECHNICAL_MERGE_PATH||'dabbir-bar12-technical-evidence-merge.json';
 const EXPECTED_PROJECT_REF='fphpoysqdsceniwduxjq';
+const EXPECTED_ALERT_CHANNEL='C0BRQQER3UH';
 const MAX_AGE_MS=24*60*60*1000;
 
 function readJson(path){return JSON.parse(fs.readFileSync(path,'utf8'))}
@@ -17,6 +18,7 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
   const expectedSha=String(evidence.expected_main_sha||'').trim();
   const deploymentId=String(deployment.id||'').trim();
   const monitoring=review?.runtime_monitoring||{};
+  const alert=review?.alert_delivery||{};
   const security=review?.security||{};
 
   const monitoringValid=
@@ -30,6 +32,25 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
     exactLevels(monitoring.levels_checked)&&
     fresh(monitoring.checked_at,now);
 
+  const alertLink=String(alert.message_link||'');
+  const alertTs=String(alert.message_ts||'');
+  const alertValid=
+    review?.schema_version==='dabbir_bar12_technical_review_v1'&&
+    Boolean(expectedSha)&&Boolean(deploymentId)&&
+    String(alert.source_commit||'')===expectedSha&&
+    String(alert.deployment_id||'')===deploymentId&&
+    String(alert.origin||'')==='https://dabbir.bmalman.com'&&
+    String(alert.provider||'')==='Slack'&&
+    String(alert.delivery_mode||'')==='BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL'&&
+    String(alert.channel_id||'')===EXPECTED_ALERT_CHANNEL&&
+    String(alert.channel_name||'')==='barman-executive-alerts'&&
+    /^\d{10,}\.\d{6}$/.test(alertTs)&&
+    alertLink.startsWith(`https://barman-global.slack.com/archives/${EXPECTED_ALERT_CHANNEL}/p`)&&
+    alert.readback_verified===true&&
+    alert.test_only===true&&
+    alert.contains_secrets_or_customer_data===false&&
+    fresh(alert.verified_at,now);
+
   evidence.monitoring={
     ...(evidence.monitoring||{}),
     runtime_errors_checked:monitoringValid,
@@ -41,6 +62,20 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
       levels_checked:['warning','error','fatal'],
       matching_logs:0,
       provider:String(monitoring.provider||'Vercel Runtime Logs'),
+    }:null,
+    alert_delivery_verified:alertValid,
+    alert_delivery:alertValid?{
+      source_commit:expectedSha,
+      deployment_id:deploymentId,
+      verified_at:alert.verified_at,
+      provider:'Slack',
+      delivery_mode:alert.delivery_mode,
+      channel_id:EXPECTED_ALERT_CHANNEL,
+      channel_name:'barman-executive-alerts',
+      message_ts:alertTs,
+      message_link:alertLink,
+      readback_verified:true,
+      test_only:true,
     }:null,
   };
 
@@ -83,8 +118,9 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
       expected_main_sha:expectedSha||null,
       deployment_id:deploymentId||null,
       runtime_monitoring:{valid:monitoringValid,reviewed_at:monitoring.checked_at||null},
+      alert_delivery:{valid:alertValid,verified_at:alert.verified_at||null,provider:alert.provider||null,channel_id:alert.channel_id||null,message_ts:alert.message_ts||null},
       critical_security:{valid:securityValid,reviewed_at:security.reviewed_at||null,project_ref:security.project_ref||null},
-      intentionally_unpromoted:{alert_delivery:true,financial:true,legal:true},
+      intentionally_unpromoted:{financial:true,legal:true,real_external_whatsapp:true},
     },
   };
 }
@@ -96,8 +132,9 @@ export function run(){
   fs.writeFileSync(EVIDENCE_PATH,JSON.stringify(merged.evidence,null,2));
   fs.writeFileSync(MERGE_REPORT_PATH,JSON.stringify(merged.report,null,2));
   if(!merged.report.runtime_monitoring.valid)throw new Error('BAR12_RUNTIME_MONITORING_REVIEW_INVALID_OR_STALE');
+  if(!merged.report.alert_delivery.valid)throw new Error('BAR12_ALERT_DELIVERY_REVIEW_INVALID_OR_STALE');
   if(!merged.report.critical_security.valid)throw new Error('BAR12_CRITICAL_SECURITY_REVIEW_INVALID_OR_STALE');
-  console.log(`BAR12_TECHNICAL_EVIDENCE_MERGED runtime_monitoring=PASS critical_security=PASS sha=${merged.report.expected_main_sha}`);
+  console.log(`BAR12_TECHNICAL_EVIDENCE_MERGED runtime_monitoring=PASS alert_delivery=PASS critical_security=PASS sha=${merged.report.expected_main_sha}`);
   return merged;
 }
 
