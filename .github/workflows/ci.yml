@@ -1,6 +1,7 @@
 name: DABBIR CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main, dabbir/isolated-export]
@@ -29,10 +30,17 @@ jobs:
       - name: Audit production dependencies
         run: npm run audit:prod
       - name: Enforce Production database change discipline
+        shell: bash
         env:
-          DABBIR_DB_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DABBIR_DB_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           DABBIR_DB_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/dabbir-production-db-change-gate.mjs
+        run: |
+          set -euo pipefail
+          if [ -z "${DABBIR_DB_GATE_BASE_SHA}" ]; then
+            DABBIR_DB_GATE_BASE_SHA="$(git rev-parse HEAD^)"
+            export DABBIR_DB_GATE_BASE_SHA
+          fi
+          node scripts/dabbir-production-db-change-gate.mjs
       - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
