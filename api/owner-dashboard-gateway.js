@@ -1,4 +1,5 @@
-// v28 is the single authoritative DABBIR owner command center. Legacy v22-v27 files remain only as rollback/source history and are not in the runtime render chain.
+// v28 is the single authoritative DABBIR owner command center.
+// Legacy rollback/source lineage only (NOT runtime imports): owner-command-center-v22.js -> owner-command-center-v23.js -> owner-command-center-v24.js -> owner-command-center-v25.js -> owner-command-center-v26.js -> owner-command-center-v27.js.
 import dashboard from './owner-command-center.js';
 import { parseCookies } from './_auth-core.js';
 
