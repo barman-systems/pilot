@@ -1,0 +1,46 @@
+name: DABBIR Main Lineage Guard
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: dabbir-main-lineage-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  require-governed-main-lineage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.sha }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Require merged-PR lineage or Guardian rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          subject="$(gh api "repos/${REPOSITORY}/commits/${HEAD_SHA}" --jq '.commit.message | split("\n")[0]')"
+          if [[ "$subject" == revert\(guardian\):* ]]; then
+            echo "Guardian rollback lineage accepted for ${HEAD_SHA}."
+            exit 0
+          fi
+
+          merged_pr_count="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/commits/${HEAD_SHA}/pulls" \
+            --jq '[.[] | select(.base.ref == "main" and .merged_at != null)] | length')"
+
+          if [[ "$merged_pr_count" =~ ^[0-9]+$ ]] && [ "$merged_pr_count" -ge 1 ]; then
+            echo "Governed merged-PR lineage verified for ${HEAD_SHA}."
+            exit 0
+          fi
+
+          echo "::error::Direct or ungoverned push to main detected for ${HEAD_SHA}. A merged pull request is required."
+          exit 1
