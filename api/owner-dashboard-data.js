@@ -19,7 +19,7 @@ export default async function handler(req,res){
   if(!sessionToken)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
 
   const action=String(singleQueryValue(req,'action')||'overview').trim();
-  if(!['overview','search'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
+  if(!['overview','search','executive'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
 
   try{
     const body={action:'owner_data',session_token:sessionToken,data_action:action};
@@ -29,6 +29,7 @@ export default async function handler(req,res){
       return json(res,r.status===401?401:r.status>=500?503:r.status,{ok:false,error:p?.error||'OWNER_DATA_FAILED'});
     }
     if(action==='overview')return json(res,200,{ok:true,overview:p.payload});
+    if(action==='executive')return json(res,200,{ok:true,executive:p.payload});
     return json(res,200,{ok:true,...(p.payload||{})});
   }catch{
     return json(res,503,{ok:false,error:'OWNER_DATA_FAILED'});
