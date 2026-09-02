@@ -29,6 +29,26 @@ function claimAllowed(payload,now=Math.floor(Date.now()/1000)){
 }
 export function validateToolAgentClaims(payload,now=Math.floor(Date.now()/1000)){return claimAllowed(payload,now)}
 
+export function routeToolAgentCommand(value){
+  const raw=String(value??'').slice(0,4000);
+  const lineBreak=String.fromCharCode(10),slash=String.fromCharCode(92);
+  const normalized=raw.split(slash+slash+'n').join(lineBreak).split(slash+'n').join(lineBreak);
+  const lines=normalized.split(lineBreak).map(x=>clean(x,1200)).filter(Boolean);
+  const text=lines.join(' ').trim();
+  if(!text)return {route:'REVIEW_REQUIRED',reason:'EMPTY_COMMAND'};
+  const goals=lines.filter(x=>{const marker=x.split(' ')[0];return /^[0-9]+[.)]$/.test(marker)||marker==='-'||marker==='•'}).length;
+  if(/(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي)/i.test(text))
+    return {route:'OWNER_GATE',reason:'OWNER_ONLY_AUTHORITY'};
+  if(goals>=2)return {route:'MULTI_STEP',reason:'COMPOUND_COMMAND_REQUIRES_PLAN'};
+  const repoChange=/(?:أصلح|اصلح|إصلاح|اصلاح|طوّر|طور|تطوير|عدّل|عدل|تعديل|غيّر|غير|تغيير|أضف|اضف|إضافة|اضافة|احذف|حذف|برمج|نفذ.*(?:كود|واجهة|لوحة)|fix|develop|implement|refactor|update[ ]+(?:code|ui|dashboard)|change[ ]+(?:code|ui|dashboard))/i.test(text);
+  const dataQuestion=/(?:^| )(?:كم|ما عدد|عدد|احصاء|إحصاء|إحصائية|احصائية|statistics?|count|how many)(?: |$)/i.test(text);
+  if(dataQuestion&&!repoChange)return {route:'DATA_QUERY',reason:'READ_ONLY_DATA_REQUEST'};
+  if(repoChange)return {route:'REPO_CHANGE',reason:'SOURCE_CHANGE_REQUEST'};
+  if(/(?:أرسل|ارسل|تواصل|اتصل|راسل|اشتر|شراء|ادفع|انشر في|send|contact|purchase|pay|publish to)/i.test(text))
+    return {route:'EXTERNAL_ACTION',reason:'NON_REPOSITORY_ACTION'};
+  return {route:'REVIEW_REQUIRED',reason:'NO_SAFE_EXECUTION_CLASS'};
+}
+
 async function verifyGithubOidc(token){
   const parts=String(token||'').split('.');
   if(parts.length!==3)throw Object.assign(new Error('OIDC_TOKEN_INVALID'),{status:401});
@@ -117,6 +137,7 @@ export default async function handler(req,res){
       const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:`github-tool-agent:${clean(claims.run_id,80)||'run'}`,p_lane:'tool_agent',p_lease_seconds:3600});
       return json(res,200,{ok:true,...claim});
     }
+    if(phase==='route')return json(res,200,{ok:true,...routeToolAgentCommand(body.command)});
     if(phase==='discover')return json(res,200,{ok:true,...await discover(body.command,body.paths)});
     if(phase==='patch')return json(res,200,{ok:true,...await proposePatch(body.command,body.files,body.previous_patch,body.apply_error)});
     if(phase==='finalize'){

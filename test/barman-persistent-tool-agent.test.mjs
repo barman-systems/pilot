@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { validateToolAgentClaims } from '../api/barman-tool-agent-broker.js';
+import { routeToolAgentCommand, validateToolAgentClaims } from '../api/barman-tool-agent-broker.js';
 
 const workflow=fs.readFileSync(new URL('../.github/workflows/barman-tool-agent.yml',import.meta.url),'utf8');
 const worker=fs.readFileSync(new URL('../scripts/barman-tool-agent.mjs',import.meta.url),'utf8');
@@ -25,6 +25,16 @@ test('tool-agent OIDC is locked to the canonical main workflow',()=>{
   assert.equal(validateToolAgentClaims({...baseClaims,ref:'refs/heads/dev'},1000),false);
   assert.equal(validateToolAgentClaims({...baseClaims,event_name:'pull_request'},1000),false);
   assert.equal(validateToolAgentClaims({...baseClaims,aud:'wrong'},1000),false);
+});
+
+test('tool-agent routes non-code commands fail-closed before patch generation',()=>{
+  assert.equal(routeToolAgentCommand('كم عميل لدينا ونشاط').route,'DATA_QUERY');
+  assert.equal(routeToolAgentCommand('قم بتطوير وإصلاح لوحة تحكم مالك دبر').route,'REPO_CHANGE');
+  assert.equal(routeToolAgentCommand('1. أصلح BAR-12\n2. اربط واتساب').route,'MULTI_STEP');
+  assert.equal(routeToolAgentCommand('1. أصلح BAR-12\\n2. اربط واتساب').route,'MULTI_STEP');
+  assert.equal(routeToolAgentCommand('أرسل رمز التحقق').route,'OWNER_GATE');
+  assert.match(worker,/phase:'route'/);
+  assert.match(worker,/routing\.route!==['"]REPO_CHANGE['"]/);
 });
 
 test('persistent worker is event-looped and cannot bypass governance files',()=>{
