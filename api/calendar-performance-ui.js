@@ -1,4 +1,5 @@
 import calendarLiveHandler from './calendar-live-ui.js';
+import {applySalonProductModelPatches} from './salon-product-model-ui-patches.js';
 
 const PATCHES=[
   {
@@ -96,7 +97,7 @@ export default async function handler(req,res){
   await calendarLiveHandler(req,captured);
   if(captured.statusCode!==200||!captured.body)return res.status(500).end('Calendar UI unavailable');
   let body;
-  try{body=applyPerformancePatches(captured.body)}catch(error){
+  try{body=applySalonProductModelPatches(applyPerformancePatches(captured.body))}catch(error){
     console.error('dabbir_calendar_performance_patch_failed',String(error?.message||error));
     return res.status(500).end('Calendar performance guard unavailable');
   }
