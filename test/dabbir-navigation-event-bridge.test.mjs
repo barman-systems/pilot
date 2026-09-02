@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const root = new URL('../', import.meta.url);
 const bridge = fs.readFileSync(new URL('api/dabbir-navigation-event-bridge-ui.js', root), 'utf8');
+const router = fs.readFileSync(new URL('api/dabbir-contextual-navigation-ui.js', root), 'utf8');
 const bundles = JSON.parse(fs.readFileSync(new URL('config/dabbir-ui-bundles.json', root), 'utf8'));
 const recovery = fs.readFileSync(new URL('api/app-recovery.js', root), 'utf8');
 
@@ -13,8 +14,18 @@ test('navigation bridge delegates existing primary nav without owning destinatio
   assert.match(bridge, /document\.addEventListener\('touchend'/);
   assert.match(bridge, /typeof showScreen==='function'/);
   assert.match(bridge, /safeFallback/);
+  assert.match(bridge, /destination_authority:'context-router'/);
+  assert.doesNotMatch(bridge, /function normalizeName\(/);
+  assert.doesNotMatch(bridge, /name==='appointments'/);
+  assert.doesNotMatch(bridge, /name='dashboard'/);
   assert.doesNotMatch(bridge, /dataset\.screen\s*=(?!=)/);
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
+});
+
+test('store activity destination remains Operations under the contextual router', () => {
+  assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
+  assert.match(router, /authority:'primary-context-router'/);
+  assert.match(bridge, /const name=String\(node\.dataset\?\.screen\|\|''\)\.trim\(\)/);
 });
 
 test('tab feedback paints before deferred screen rendering', () => {
