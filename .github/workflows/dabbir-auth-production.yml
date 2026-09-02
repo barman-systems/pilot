@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      PROJECT_REF: spohjzrsymsmzsseygtw
-      PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
+      PROJECT_REF: fphpoysqdsceniwduxjq
+      PRODUCTION_ORIGIN: https://dabbir.bmalman.com
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:

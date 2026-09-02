@@ -1,9 +1,9 @@
 {
-  "version": 2,
+  "version": 3,
   "producer": "DABBIR",
   "control_plane": "barman-systems/barman-control-plane",
   "target_source_repository": "barman-systems/pilot",
-  "status": "ACTIVE_STANDALONE_REPOSITORY",
+  "status": "ACTIVE_PRODUCTION",
   "integration_mode": "API_EVENTS_ONLY",
   "provenance": {
     "verified_import_commit": "99c32c074ca47cdb6caa83474df46f60a9bdd0aa",
@@ -12,23 +12,33 @@
     "verified_import_ci_status": "PASS"
   },
   "deployment": {
-    "status": "DEPLOYED_AUTH_PROTECTED_NO_PUBLIC_LAUNCH_DOMAIN",
+    "status": "DEPLOYED_PRODUCTION_READY",
     "platform": "VERCEL",
     "project_name": "dabbir",
     "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
     "source_repository": "barman-systems/pilot",
     "source_branch": "main",
     "root_directory": "./",
-    "verified_deployment_id": "dpl_BDD7c9jHa39bQmfkJCAWyLDNruLi",
+    "verified_deployment_id": "dpl_99zcU5cT6f1rkL4jmrN3t85PzZsr",
     "verified_deployment_state": "READY",
-    "verified_source_commit": "07c5885c0d80af93dffa63377a5dfd0248d7009a",
+    "verified_source_commit": "f48011f68e1ed2cc2fa4a368e6d37608d1b0b5fa",
+    "production_region": "bom1",
     "protected_project_domain": "dabbir-nd56cm4j5v-3619s-projects.vercel.app",
-    "public_launch_domain": null,
-    "domain_access": "VERCEL_AUTH_PROTECTED",
-    "production_runtime_policy": "FAIL_CLOSED_PREVIEW_ONLY",
-    "project_live": false,
-    "verified_at": "2026-08-27T07:32:53Z",
+    "public_launch_domain": "dabbir.bmalman.com",
+    "domain_access": "PUBLIC_PRODUCTION",
+    "production_runtime_policy": "ACTIVE_FAIL_CLOSED",
+    "project_live": true,
+    "verified_at": "2026-09-02T08:52:01Z",
     "environment_secrets_shared_with_barman": false
+  },
+  "database": {
+    "platform": "SUPABASE",
+    "project_name": "DABBIR Mumbai",
+    "project_ref": "fphpoysqdsceniwduxjq",
+    "region": "ap-south-1",
+    "status": "ACTIVE_HEALTHY",
+    "retired_runtime_source_ref": "spohjzrsymsmzsseygtw",
+    "retired_runtime_source_policy": "NO_RUNTIME_FALLBACK"
   },
   "rules": {
     "source_code_imports_across_boundary": false,
@@ -37,6 +47,7 @@
     "authenticated_requests_required": true,
     "separate_deployment_identity": true,
     "separate_environment_configuration": true,
-    "separate_ci_release_lifecycle": true
+    "separate_ci_release_lifecycle": true,
+    "retired_supabase_runtime_fallback_allowed": false
   }
 }
