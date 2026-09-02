@@ -30,8 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -nE 'lineBreak|escapedBreak|normalized=|const goals' api/barman-tool-agent-broker.js || true
-          sed -n '27,39p' test/barman-persistent-tool-agent.test.mjs
+          grep -nE 'const raw=|lineBreak|normalized=|const goals' api/barman-tool-agent-broker.js || true
           node --input-type=module <<'NODE'
           import { routeToolAgentCommand } from './api/barman-tool-agent-broker.js';
           const slash=String.fromCharCode(92);
@@ -53,4 +52,4 @@ jobs:
           git add api/barman-tool-agent-broker.js scripts/barman-tool-agent.mjs test/barman-persistent-tool-agent.test.mjs .github/workflows/patch-barman-tool-agent-router-once.yml scripts/patch-barman-tool-agent-router-once.mjs
           git commit -m 'Route BARMAN tool-agent commands before code execution'
           git push origin HEAD:fix/barman-tool-agent-router-20260902
-      # diagnostic marker: inspect exact generated representations
+      # rerun marker: preserve raw newlines v6
