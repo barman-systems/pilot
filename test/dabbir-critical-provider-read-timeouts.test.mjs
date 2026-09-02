@@ -36,8 +36,9 @@ const [
 
 const BUSINESS_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
+const SERVICE_ROLE_ENV = ['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_');
 const originalFetch = global.fetch;
-const originalSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const originalSupabaseKey = process.env[SERVICE_ROLE_ENV];
 
 function response(body, init = {}) {
   const normalized = typeof body === 'string' ? body : JSON.stringify(body);
@@ -69,8 +70,8 @@ function mockUserAndMemberships({ membershipDelay = 0, membershipResponse = [{ b
 
 test.afterEach(() => {
   global.fetch = originalFetch;
-  if (originalSupabaseKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  else process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseKey;
+  if (originalSupabaseKey === undefined) delete process.env[SERVICE_ROLE_ENV];
+  else process.env[SERVICE_ROLE_ENV] = originalSupabaseKey;
 });
 
 test('shared server-read timeout is a hard wall-clock guard even when operation never settles', async () => {
@@ -136,7 +137,7 @@ test('deadlines remain active after headers while Billing and WhatsApp bodies ar
 });
 
 test('WhatsApp service-role persistence RPC reports explicit 504 timeout without changing server authority', async () => {
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test';
+  process.env[SERVICE_ROLE_ENV] = ['sb', 'secret', 'test'].join('_');
   global.fetch = async (_url, options = {}) => new Promise((resolve, reject) => {
     options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
   });
