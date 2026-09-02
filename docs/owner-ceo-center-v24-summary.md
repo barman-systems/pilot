@@ -1,0 +1,1 @@
+BARMAN Executive OS is embedded as the visible DABBIR CEO in the authenticated owner dashboard, backed by the protected executive action feed and preserving prior v23/v22 layers.

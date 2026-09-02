@@ -1,0 +1,1 @@
+BARMAN Executive OS is placed above the existing v23 executive dashboard so the platform owner sees the CEO first, followed by executive metrics, incidents, diagnostics, feedback, and operational truth.
