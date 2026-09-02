@@ -1,0 +1,1 @@
+The embedded CEO center is a live control/status surface for BARMAN Executive OS. It does not bypass owner OTP/session protection and does not expand OWNER_ONLY authority for payment, legal commitments, KYC, or OTP.
