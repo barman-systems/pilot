@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "critical": [
     "/api/brand-ui",
     "/api/auth/recovery-ui",
@@ -17,7 +17,7 @@
     "/api/calendar-performance-ui",
     "/api/owner-action-center-ui",
     "/api/dabbir-owner-away-ui",
-    "/api/dabbir-owner-decision-memory-ui",
+    "/api/home-service-ui",
     "/api/business-profile-ui",
     "/api/dabbir-billing-ui",
     "/api/platform-customers-ui",
