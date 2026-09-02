@@ -69,7 +69,7 @@ export function providerConfig(providerValue,req){
       provider,clientId,clientSecret,redirectUri,configured:Boolean(clientId&&clientSecret),
       authUrl:'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl:'https://oauth2.googleapis.com/token',
-      scopes:['openid','email','profile','https://www.googleapis.com/auth/calendar'],
+      scopes:['openid','email','profile','https://www.googleapis.com/auth/calendar.events'],
     };
   }
   const clientId=String(process.env.DABBIR_MICROSOFT_CALENDAR_CLIENT_ID||'').trim();
