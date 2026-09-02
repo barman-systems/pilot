@@ -33,52 +33,21 @@ const script = String.raw`(()=>{
     try{window.__dabbirContextualNavigation?.refresh?.()}catch{}
   }
 
-  function isSalonBusiness(){
-    return String(workspace?.business?.business_type||'').toLowerCase()==='salon';
+  function isSalonActive(){
+    return document.body?.classList.contains('salonMode')||document.querySelector('#salonToday')!==null;
   }
 
   function salonScreen(name){
     return ['dashboard','appointments','salon-team','salon-services','salon-reports','salon-reminders'].includes(String(name||''));
   }
 
-  function salonCopy(){
-    return document.documentElement.lang==='en'?{refresh:'Refresh',refreshing:'Refreshing…'}:{refresh:'تحديث',refreshing:'جارٍ التحديث…'};
-  }
-
-  function ensureSalonRefreshControl(){
-    if(!isSalonBusiness()) return null;
-    const toolbar=document.querySelector('#salonToday .salonToolbar');
-    if(!toolbar) return null;
-    let button=toolbar.querySelector('[data-salon-live-refresh]');
-    if(!button){
-      button=document.createElement('button');
-      button.type='button';
-      button.className='salonBtn';
-      button.dataset.salonLiveRefresh='1';
-      button.textContent=salonCopy().refresh;
-      button.addEventListener('click',event=>{
-        event.preventDefault();
-        void refreshSalonSnapshot(true,button);
-      });
-      toolbar.append(button);
-    }else if(!button.disabled){
-      button.textContent=salonCopy().refresh;
-    }
-    return button;
-  }
-
-  function refreshSalonSnapshot(force=false,button=null){
-    if(!isSalonBusiness()||document.hidden) return Promise.resolve({ok:false,reason:'SALON_INACTIVE'});
+  function refreshSalonSnapshot(force=false){
+    if(!isSalonActive()||document.hidden) return Promise.resolve({ok:false,reason:'SALON_INACTIVE'});
     const salon=window.__dabbirSalonMode;
     if(!salon?.refresh) return Promise.resolve({ok:false,reason:'SALON_REFRESH_UNAVAILABLE'});
     if(salonRefreshInFlight) return salonRefreshInFlight;
     const now=Date.now();
-    if(!force&&now-salonLastRefreshAt<SALON_REFRESH_STALE_MS){
-      ensureSalonRefreshControl();
-      return Promise.resolve({ok:false,reason:'SALON_FRESH'});
-    }
-    const control=button||ensureSalonRefreshControl();
-    if(control){control.disabled=true;control.textContent=salonCopy().refreshing}
+    if(!force&&now-salonLastRefreshAt<SALON_REFRESH_STALE_MS) return Promise.resolve({ok:false,reason:'SALON_FRESH'});
     salonRefreshInFlight=Promise.resolve()
       .then(()=>salon.refresh())
       .then(()=>{
@@ -94,18 +63,13 @@ const script = String.raw`(()=>{
       })
       .finally(()=>{
         salonRefreshInFlight=null;
-        if(control){control.disabled=false;control.textContent=salonCopy().refresh}
-        setTimeout(ensureSalonRefreshControl,0);
       });
     return salonRefreshInFlight;
   }
 
   function queueSalonRefresh(name,force=false){
-    if(!isSalonBusiness()||!salonScreen(name)) return;
-    setTimeout(()=>{
-      ensureSalonRefreshControl();
-      void refreshSalonSnapshot(force);
-    },0);
+    if(!isSalonActive()||!salonScreen(name)) return;
+    setTimeout(()=>{void refreshSalonSnapshot(force)},0);
   }
 
   function routedName(name){
@@ -276,8 +240,7 @@ const script = String.raw`(()=>{
     const baseRenderAllSalonFreshness=renderAll;
     renderAll=function(){
       const result=baseRenderAllSalonFreshness.apply(this,arguments);
-      if(isSalonBusiness())setTimeout(()=>{
-        ensureSalonRefreshControl();
+      if(isSalonActive())setTimeout(()=>{
         const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
         if(salonScreen(active))void refreshSalonSnapshot(false);
       },0);
@@ -332,29 +295,28 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){salonHiddenAt=Date.now();return}
-    if(isSalonBusiness()){
+    if(isSalonActive()){
       const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
       if(salonScreen(active))void refreshSalonSnapshot(Date.now()-salonHiddenAt>3000);
     }
   });
   window.addEventListener('focus',()=>{
-    if(!isSalonBusiness())return;
+    if(!isSalonActive())return;
     const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
     if(salonScreen(active))void refreshSalonSnapshot(false);
   });
   window.addEventListener('online',()=>{
-    if(!isSalonBusiness())return;
+    if(!isSalonActive())return;
     const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
     if(salonScreen(active))void refreshSalonSnapshot(true);
   });
   window.addEventListener('pageshow',event=>{
-    if(!isSalonBusiness())return;
+    if(!isSalonActive())return;
     const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
     if(salonScreen(active))void refreshSalonSnapshot(event.persisted===true);
   });
   setTimeout(()=>{
-    if(!isSalonBusiness())return;
-    ensureSalonRefreshControl();
+    if(!isSalonActive())return;
     const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
     if(salonScreen(active))void refreshSalonSnapshot(true);
   },1100);
@@ -376,7 +338,6 @@ const script = String.raw`(()=>{
     context_resync_before_navigation:true,
     programmatic_show_screen_delegation:true,
     salon_snapshot_refresh_event_scoped:true,
-    salon_manual_refresh_control:true,
   };
 })();`;
 
