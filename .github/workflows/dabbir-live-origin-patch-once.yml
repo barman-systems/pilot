@@ -30,7 +30,7 @@ jobs:
               Path('.github/workflows/dabbir-owner-away-production.yml'),
               Path('.github/workflows/dabbir-bar12-readiness.yml'),
           ]
-          needle = '${{ vars.DABBIR_PRODUCTION_ORIGIN }}'
+          needle = '$' + '{{ vars.DABBIR_PRODUCTION_ORIGIN }}'
           canonical = 'https://dabbir.bmalman.com'
           for path in files:
               text = path.read_text()
