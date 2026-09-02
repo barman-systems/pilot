@@ -6,8 +6,8 @@ import {
   getBillingAccount,
 } from '../api/_billing-core.js';
 import {
-  getConnectionByBusiness,
-  requireOwnerOrAdmin,
+  loadBusinessConnection,
+  ownerContext,
 } from '../api/_whatsapp-embedded-core.js';
 import { serviceRpc } from '../api/_whatsapp-live-core.js';
 
@@ -114,7 +114,7 @@ test('critical Billing and WhatsApp core functions return explicit 504 on stalle
 
   mockUserAndMemberships({ membershipDelay: 100 });
   await assert.rejects(
-    requireOwnerOrAdmin(requestWithToken(), BUSINESS_ID, { timeoutMs: 5 }),
+    ownerContext(requestWithToken(), BUSINESS_ID, { timeoutMs: 5 }),
     error => error?.code === 504 && error?.timeout === true,
   );
 });
@@ -132,7 +132,7 @@ test('deadlines remain active after headers while Billing and WhatsApp bodies ar
     throw new Error(`UNEXPECTED_FETCH:${text}`);
   };
   await assert.rejects(getBillingAccount('test-token', BUSINESS_ID, { timeoutMs: 5 }), error => error?.code === 504 && error?.timeout === true);
-  await assert.rejects(getConnectionByBusiness('test-token', BUSINESS_ID, { timeoutMs: 5 }), error => error?.code === 504 && error?.timeout === true);
+  await assert.rejects(loadBusinessConnection('test-token', BUSINESS_ID, { timeoutMs: 5 }), error => error?.code === 504 && error?.timeout === true);
 });
 
 test('WhatsApp service-role persistence RPC reports explicit 504 timeout without changing server authority', async () => {
@@ -153,8 +153,8 @@ test('WhatsApp connection storage failure is not converted into an unlinked tena
     throw new Error(`UNEXPECTED_FETCH:${text}`);
   };
   await assert.rejects(
-    getConnectionByBusiness('token', BUSINESS_ID, { timeoutMs: 50 }),
-    error => error?.code === 503 && error?.message === 'WHATSAPP_CONNECTION_READ_FAILED',
+    loadBusinessConnection('token', BUSINESS_ID, { timeoutMs: 50 }),
+    error => error?.status === 502 && error?.code === 'WHATSAPP_CONNECTION_READ_FAILED' && error?.message === 'WHATSAPP_CONNECTION_READ_FAILED',
   );
 });
 
