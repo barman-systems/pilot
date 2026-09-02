@@ -4,12 +4,15 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 const ignore = fs.readFileSync(new URL('../vercel-ignore-if-unaffected.sh', import.meta.url), 'utf8');
 const gatePath = 'scripts/vercel-build-gate.mjs';
 const gate = fs.readFileSync(new URL(`../${gatePath}`, import.meta.url), 'utf8');
 
-test('Vercel uses the fail-closed DABBIR build gate without changing the Functions deployment contract', () => {
-  assert.equal(pkg.scripts?.['vercel-build'], 'node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs');
+test('Vercel uses one explicit non-recursive DABBIR build command', () => {
+  assert.equal(vercel.buildCommand, 'npm run dabbir:build');
+  assert.equal(pkg.scripts?.['dabbir:build'], 'node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs');
+  assert.equal(pkg.scripts?.['vercel-build'], undefined, 'reserved vercel-build hook must not coexist with explicit buildCommand');
   assert.equal(pkg.scripts?.test, 'node --test test/*.test.mjs');
   const parse = spawnSync(process.execPath, ['--check', gatePath], { encoding: 'utf8' });
   assert.equal(parse.status, 0, parse.stderr || parse.stdout);
