@@ -1,7 +1,7 @@
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
-export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL).replace(/\/$/, '');
-export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL).replace(/\/$/, '');
+export const SUPABASE_AUTH_URL = String(process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
+export const SUPABASE_DATA_URL = String(process.env.SUPABASE_DATA_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
 // Backward-compatible export. New code should choose AUTH or DATA explicitly.
 export const SUPABASE_URL = SUPABASE_DATA_URL;
 const SUPABASE_AUTH_ISSUER = `${SUPABASE_AUTH_URL}/auth/v1`;
