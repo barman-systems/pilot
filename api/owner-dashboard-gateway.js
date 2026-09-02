@@ -1,5 +1,5 @@
-// v23 preserves the owner-command-center-v22.js operational-truth layer underneath the executive layer.
-import dashboard from './owner-command-center-v23.js';
+// v24 adds the BARMAN Executive OS CEO center while preserving v23 + v22 truth layers.
+import dashboard from './owner-command-center-v24.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
