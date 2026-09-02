@@ -5,12 +5,16 @@ const script = String.raw`(()=>{
   const NAV_ITEM_SELECTOR='#nav > [data-screen],#bottomNav > [data-screen]';
   const MAX_TAP_DISTANCE=16;
   const MAX_TAP_DURATION=900;
+  const SALON_REFRESH_STALE_MS=8000;
   let touchStart=null;
   let suppressClickNode=null;
   let suppressClickUntil=0;
   let navigationEpoch=0;
   let conversationRefreshInFlight=null;
   let conversationRefreshBusinessId=null;
+  let salonRefreshInFlight=null;
+  let salonLastRefreshAt=0;
+  let salonHiddenAt=0;
 
   function installSalonScreenIsolation(){
     const styleId='dabbir-salon-screen-isolation';
@@ -29,6 +33,81 @@ const script = String.raw`(()=>{
     try{window.__dabbirContextualNavigation?.refresh?.()}catch{}
   }
 
+  function isSalonBusiness(){
+    return String(workspace?.business?.business_type||'').toLowerCase()==='salon';
+  }
+
+  function salonScreen(name){
+    return ['dashboard','appointments','salon-team','salon-services','salon-reports','salon-reminders'].includes(String(name||''));
+  }
+
+  function salonCopy(){
+    return document.documentElement.lang==='en'?{refresh:'Refresh',refreshing:'Refreshing…'}:{refresh:'تحديث',refreshing:'جارٍ التحديث…'};
+  }
+
+  function ensureSalonRefreshControl(){
+    if(!isSalonBusiness()) return null;
+    const toolbar=document.querySelector('#salonToday .salonToolbar');
+    if(!toolbar) return null;
+    let button=toolbar.querySelector('[data-salon-live-refresh]');
+    if(!button){
+      button=document.createElement('button');
+      button.type='button';
+      button.className='salonBtn';
+      button.dataset.salonLiveRefresh='1';
+      button.textContent=salonCopy().refresh;
+      button.addEventListener('click',event=>{
+        event.preventDefault();
+        void refreshSalonSnapshot(true,button);
+      });
+      toolbar.append(button);
+    }else if(!button.disabled){
+      button.textContent=salonCopy().refresh;
+    }
+    return button;
+  }
+
+  function refreshSalonSnapshot(force=false,button=null){
+    if(!isSalonBusiness()||document.hidden) return Promise.resolve({ok:false,reason:'SALON_INACTIVE'});
+    const salon=window.__dabbirSalonMode;
+    if(!salon?.refresh) return Promise.resolve({ok:false,reason:'SALON_REFRESH_UNAVAILABLE'});
+    if(salonRefreshInFlight) return salonRefreshInFlight;
+    const now=Date.now();
+    if(!force&&now-salonLastRefreshAt<SALON_REFRESH_STALE_MS){
+      ensureSalonRefreshControl();
+      return Promise.resolve({ok:false,reason:'SALON_FRESH'});
+    }
+    const control=button||ensureSalonRefreshControl();
+    if(control){control.disabled=true;control.textContent=salonCopy().refreshing}
+    salonRefreshInFlight=Promise.resolve()
+      .then(()=>salon.refresh())
+      .then(()=>{
+        salonLastRefreshAt=Date.now();
+        const result={ok:true,reason:'SALON_SERVER_REFRESHED'};
+        window.__dabbirLastSalonRefresh={...result,business_id:String(workspace?.business?.id||''),at:new Date().toISOString()};
+        return result;
+      })
+      .catch(error=>{
+        const result={ok:false,reason:'SALON_REFRESH_FAILED'};
+        window.__dabbirLastSalonRefresh={...result,business_id:String(workspace?.business?.id||''),error:String(error?.message||error),at:new Date().toISOString()};
+        return result;
+      })
+      .finally(()=>{
+        salonRefreshInFlight=null;
+        if(control){control.disabled=false;control.textContent=salonCopy().refresh}
+        setTimeout(ensureSalonRefreshControl,0);
+      });
+    return salonRefreshInFlight;
+  }
+
+  function queueSalonRefresh(name,force=false){
+    if(!isSalonBusiness()||!salonScreen(name)) return;
+    setTimeout(()=>{
+      ensureSalonRefreshControl();
+      void refreshSalonSnapshot(force);
+    },0);
+  }
+
   function routedName(name){
     const requested=String(name||'').trim();
     if(requested!=='appointments') return requested;
@@ -45,7 +124,9 @@ const script = String.raw`(()=>{
     showScreen=function(name){
       const target=routedName(name);
       window.__dabbirLastCanonicalNavigation={requested:String(name||''),target,at:new Date().toISOString()};
-      return baseShowScreen.call(this,target);
+      const result=baseShowScreen.call(this,target);
+      queueSalonRefresh(target,true);
+      return result;
     };
     window.__dabbirShowScreenRouterDelegation=true;
     return true;
@@ -191,6 +272,19 @@ const script = String.raw`(()=>{
   setTimeout(installShowScreenRouterDelegation,0);
   setTimeout(installShowScreenRouterDelegation,250);
 
+  try{
+    const baseRenderAllSalonFreshness=renderAll;
+    renderAll=function(){
+      const result=baseRenderAllSalonFreshness.apply(this,arguments);
+      if(isSalonBusiness())setTimeout(()=>{
+        ensureSalonRefreshControl();
+        const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+        if(salonScreen(active))void refreshSalonSnapshot(false);
+      },0);
+      return result;
+    };
+  }catch{}
+
   document.addEventListener('touchstart',event=>{
     const node=itemFrom(event.target);
     const touch=event.touches?.[0];
@@ -236,6 +330,34 @@ const script = String.raw`(()=>{
   },true);
 
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){salonHiddenAt=Date.now();return}
+    if(isSalonBusiness()){
+      const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+      if(salonScreen(active))void refreshSalonSnapshot(Date.now()-salonHiddenAt>3000);
+    }
+  });
+  window.addEventListener('focus',()=>{
+    if(!isSalonBusiness())return;
+    const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+    if(salonScreen(active))void refreshSalonSnapshot(false);
+  });
+  window.addEventListener('online',()=>{
+    if(!isSalonBusiness())return;
+    const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+    if(salonScreen(active))void refreshSalonSnapshot(true);
+  });
+  window.addEventListener('pageshow',event=>{
+    if(!isSalonBusiness())return;
+    const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+    if(salonScreen(active))void refreshSalonSnapshot(event.persisted===true);
+  });
+  setTimeout(()=>{
+    if(!isSalonBusiness())return;
+    ensureSalonRefreshControl();
+    const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+    if(salonScreen(active))void refreshSalonSnapshot(true);
+  },1100);
 
   window.__dabbirNavigationEventBridge={
     version:'navigation-event-bridge-v6-real-iphone-touch',
@@ -253,6 +375,8 @@ const script = String.raw`(()=>{
     destination_authority:'context-router',
     context_resync_before_navigation:true,
     programmatic_show_screen_delegation:true,
+    salon_snapshot_refresh_event_scoped:true,
+    salon_manual_refresh_control:true,
   };
 })();`;
 
