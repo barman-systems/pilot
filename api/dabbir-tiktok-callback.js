@@ -3,8 +3,8 @@ import {
   exchangeTikTokAuthCode,
   findConnectionByState,
   markTikTokFailure,
-  tiktokPilotConfig,
-} from './_tiktok-pilot-core.js';
+  tiktokConfig,
+} from './_tiktok-core.js';
 
 function clean(value, max = 4000) {
   return String(value || '').trim().slice(0, max);
@@ -13,7 +13,7 @@ function clean(value, max = 4000) {
 function redirect(res, query) {
   res.statusCode = 302;
   res.setHeader('cache-control', 'no-store');
-  res.setHeader('location', `/api/dabbir-tiktok-pilot?${query}`);
+  res.setHeader('location', `/api/dabbir-tiktok?${query}`);
   res.end();
 }
 
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       return redirect(res, 'error=TIKTOK_AUTH_CODE_REQUIRED');
     }
 
-    const config = tiktokPilotConfig(req);
+    const config = tiktokConfig(req);
     if (!config.ready) {
       await markTikTokFailure(connection.business_id, 'TIKTOK_APP_NOT_CONFIGURED');
       return redirect(res, 'error=TIKTOK_APP_NOT_CONFIGURED');
