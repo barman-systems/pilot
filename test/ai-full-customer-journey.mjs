@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
-const PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || 'spohjzrsymsmzsseygtw').trim();
+const PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || 'fphpoysqdsceniwduxjq').trim();
 const MANAGEMENT_TOKEN = String(process.env.SUPABASE_MANAGEMENT_TOKEN || process.env.SUPABASE_ACCESS_TOKEN || '').trim();
 const PROVIDED_SERVICE_ROLE = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 const SUPABASE_ORIGIN = `https://${PROJECT_REF}.supabase.co`;

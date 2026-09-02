@@ -11,7 +11,7 @@ const CAPACITY_SAFETY=assertCapacityLoadAllowed({
   ack:CAPACITY_PRODUCTION_ACK,
 });
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
-const PROJECT_REF=String(process.env.SUPABASE_PROJECT_REF||'spohjzrsymsmzsseygtw').trim();
+const PROJECT_REF=String(process.env.SUPABASE_PROJECT_REF||'fphpoysqdsceniwduxjq').trim();
 const QA_CONTROL_URL=`https://${PROJECT_REF}.supabase.co/functions/v1/barman-qa-suite-runner`;
 const OIDC_AUDIENCE='dabbir-ai-qa';
 const REPORT_PATH=process.env.CAPACITY_REPORT_PATH||'dabbir-capacity-report.json';
