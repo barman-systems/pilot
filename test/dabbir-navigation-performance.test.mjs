@@ -27,7 +27,7 @@ test('calendar performance route removes navigation-wide DOM observers and booki
   const res=response();
   await handler({method:'GET'},res);
   assert.equal(res.statusCode,200);
-  assert.equal(res.headers['x-dabbir-calendar-performance-ui'],'v1-event-scoped');
+  assert.equal(res.headers['x-dabbir-calendar-performance-ui'],'v3-calendar-correctness-event-scoped');
 
   const body=res.body;
   assert.doesNotMatch(body,/observer\.observe\(document\.body,\{subtree:true,attributes:true,attributeFilter:\['class'\]\}\)/);
@@ -40,4 +40,31 @@ test('calendar performance route removes navigation-wide DOM observers and booki
   assert.match(body,/activationObserver\.observe\(calendarScreen,\{attributes:true,attributeFilter:\['class'\]\}\)/);
   assert.match(body,/screenObserver\.observe\(appointmentScreen,\{attributes:true,attributeFilter:\['class'\]\}\)/);
   assert.match(body,/tableObserver\.observe\(appointmentTable,\{childList:true\}\)/);
+});
+
+test('calendar correctness uses business timezone, hides cancelled bookings and fixes today metric',async()=>{
+  const res=response();
+  await handler({method:'GET'},res);
+  assert.equal(res.statusCode,200);
+  const body=res.body;
+
+  assert.match(body,/function businessTimezone\(\)/);
+  for(const zone of ['Asia/Dubai','Asia/Riyadh','Asia/Kuwait','Asia/Qatar','Asia/Bahrain','Asia/Muscat']) assert.ok(body.includes(zone));
+  assert.match(body,/timeZone:businessTimezone\(\)/);
+  assert.match(body,/\['cancelled','canceled'\]\.includes\(String\(a\.status\|\|''\)\.toLowerCase\(\)\)/);
+  assert.match(body,/const todayCount=appointments\(\)\.filter\(a=>dayKey\(a\.starts_at\)===dayKey\(new Date\(\)\)\)\.length/);
+  assert.match(body,/todayStrong&&todayStrong\.textContent!==nextToday/);
+});
+
+test('booking edit and reschedule convert datetime-local using the business timezone',async()=>{
+  const res=response();
+  await handler({method:'GET'},res);
+  assert.equal(res.statusCode,200);
+  const body=res.body;
+
+  assert.match(body,/function timezoneParts\(date\)/);
+  assert.match(body,/function timezoneOffsetMinutes\(date\)/);
+  assert.match(body,/timeZone:businessTimezone\(\),year:'numeric'/);
+  assert.match(body,/resolved=new Date\(wallUtc-offset\*60000\)/);
+  assert.match(body,/refined=timezoneOffsetMinutes\(resolved\)/);
 });
