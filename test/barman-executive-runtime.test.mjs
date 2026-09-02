@@ -10,6 +10,8 @@ const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url
 
 test('BARMAN runtime has atomic lease, evidence gate and private queue',()=>{
   for(const token of ['for update skip locked','lease_until','attempt_count','barman_executive_claim_v1','barman_executive_finalize_v1','DONE_REQUIRES_SUMMARY_AND_EVIDENCE','dabbir_private.dabbir_ceo_commands'])assert.match(migration,new RegExp(token,'i'));
+  assert.match(migration,/char_length\(c\.command_text\) <= 160/i);
+  assert.match(migration,/else 'tool_agent'/i);
   assert.match(migration,/revoke all on function public\.barman_executive_claim_v1/i);
   assert.match(migration,/grant execute on function public\.barman_executive_claim_v1[\s\S]*service_role/i);
 });

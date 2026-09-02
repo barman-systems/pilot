@@ -56,7 +56,9 @@ begin
     and (c.lease_until is null or c.lease_until < now())
     and coalesce(c.execution_lane,
       case
-        when c.command_text ~* '(تقرير|الحالة|حاله|افحص|فحص|راجع|صحة|صحه|status|report|health)' then 'runtime'
+        when char_length(c.command_text) <= 160
+          and btrim(c.command_text) ~* '^(اعطني|أعطني|اريد|أريد|give me|show)?[[:space:]]*(تقرير|الحالة|حاله|افحص|فحص|صحة|صحه|status|report|health)([[:space:]]+(دبر|dabbir))?[[:space:]؟?!.]*$'
+          then 'runtime'
         else 'tool_agent'
       end
     ) = v_lane
