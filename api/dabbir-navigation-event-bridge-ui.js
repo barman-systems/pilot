@@ -155,8 +155,10 @@ const script = String.raw`(()=>{
     const distance=Math.hypot(touch.clientX-start.x,touch.clientY-start.y);
     const duration=Date.now()-start.at;
     if(distance>MAX_TAP_DISTANCE||duration>MAX_TAP_DURATION) return;
-    const top=document.elementFromPoint(touch.clientX,touch.clientY);
-    if(!(top===node||node.contains(top))) return;
+    // On real iPhone Safari, elementFromPoint at touchend can resolve to a transient overlay,
+    // transformed ancestor, or composited layer even when the touch began and ended on the same
+    // navigation control. The same-node + distance + duration checks above already establish a tap.
+    // Do not add a second hit-test that can silently discard a valid user navigation action.
     const hit=resolve(node);
     if(!hit) return;
     event.preventDefault();
@@ -184,9 +186,11 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
 
   window.__dabbirNavigationEventBridge={
-    version:'navigation-event-bridge-v5-conversation-ready',
+    version:'navigation-event-bridge-v6-real-iphone-touch',
     delegated_click:true,
     webkit_touch_fallback:true,
+    webkit_touch_same_node_validation:true,
+    redundant_touch_hit_test:false,
     safe_screen_fallback:true,
     visual_first:true,
     loaded_conversation_content_before_activation:true,
@@ -201,6 +205,6 @@ export default function handler(req,res){
   if(req.method!=='GET') return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=0, s-maxage=60, stale-while-revalidate=300');
-  res.setHeader('x-dabbir-navigation-event-bridge','v5-conversation-ready');
+  res.setHeader('x-dabbir-navigation-event-bridge','v6-real-iphone-touch');
   return res.status(200).send(script);
 }
