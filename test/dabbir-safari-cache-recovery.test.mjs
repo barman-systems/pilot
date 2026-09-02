@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const recovery = fs.readFileSync(new URL('../api/app-safari-recovery.js', import.meta.url), 'utf8');
+const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
 const failOpen = fs.readFileSync(new URL('../api/dabbir-safari-auth-fail-open-ui.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260902-p0-safari-v2'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260902-p0-safari-v3'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
@@ -30,6 +31,18 @@ test('fail-open never replaces a healthy visible gate', () => {
   assert.match(failOpen, /isHidden\(node\('onboardingGate'\)\)/);
   assert.match(failOpen, /isHidden\(node\('appShell'\)\)/);
   assert.match(failOpen, /status===401&&gateMissing\(\)/);
+});
+
+test('canonical root strips legacy store navigation overrides before delivery', () => {
+  assert.match(app, /el\.style\.display=isStore\?'none':''/);
+  assert.match(app, /name==='appointments'.*name='dashboard'/);
+  assert.match(recovery, /LEGACY_STORE_SLOT_HIDE/);
+  assert.match(recovery, /LEGACY_STORE_APPOINTMENT_REDIRECT/);
+  assert.match(recovery, /stripLegacyNavigationOverrides/);
+  assert.match(recovery, /split\(LEGACY_STORE_SLOT_HIDE\)\.join\(''\)/);
+  assert.match(recovery, /split\(LEGACY_STORE_APPOINTMENT_REDIRECT\)\.join\(''\)/);
+  assert.match(recovery, /x-dabbir-navigation-authority/);
+  assert.match(recovery, /context-router/);
 });
 
 test('root route uses Safari recovery shell and includes index.html', () => {
