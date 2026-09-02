@@ -1,5 +1,5 @@
-// v24 adds the BARMAN Executive OS CEO center while preserving owner-command-center-v23.js and owner-command-center-v22.js truth layers.
-import dashboard from './owner-command-center-v24.js';
+// v25 adds tabbed owner navigation while preserving owner-command-center-v24.js, owner-command-center-v23.js and owner-command-center-v22.js truth layers.
+import dashboard from './owner-command-center-v25.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
