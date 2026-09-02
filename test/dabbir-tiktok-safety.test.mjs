@@ -7,7 +7,8 @@ const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 
 const sendRoute = read('api/dabbir-tiktok-send.js');
 const statusRoute = read('api/dabbir-tiktok-status.js');
-const pilotPage = read('api/dabbir-tiktok-pilot.js');
+const canonicalPage = read('api/dabbir-tiktok.js');
+const legacyRoute = read('api/dabbir-tiktok-pilot.js');
 const apiFiles = fs.readdirSync(new URL('api/', root)).filter(name => name.endsWith('.js'));
 
 test('TikTok live send route is fail-closed until durable duplicate safety exists', () => {
@@ -24,7 +25,14 @@ test('TikTok status cannot advertise send readiness while the safety gate is blo
   assert.match(statusRoute, /messaging_ready:\s*false/);
   assert.match(statusRoute, /live_send_enabled:\s*false/);
   assert.match(statusRoute, /send_blocker:\s*SEND_SAFETY_BLOCKER/);
-  assert.match(pilotPage, /disabled=!st\.messaging_send/);
+  assert.match(canonicalPage, /disabled=!st\.messaging_send/);
+});
+
+test('canonical TikTok surface is DABBIR-only and the retired route only redirects', () => {
+  assert.doesNotMatch(canonicalPage, /TikTok Pilot|Messaging Pilot/);
+  assert.match(legacyRoute, /statusCode = 308/);
+  assert.match(legacyRoute, /\/api\/dabbir-tiktok/);
+  assert.doesNotMatch(legacyRoute, /<html|TikTok Business Messaging Pilot/);
 });
 
 test('no HTTP route invokes TikTok live send while containment is active', () => {
