@@ -18,7 +18,7 @@ The shell remains capped at 26 injected UI modules. Home service replaces the de
 ## Verification
 The dedicated regression test asserts navigation ownership, module count, schema constraints, RLS/grants, authentication/origin enforcement, tenant scoping, bilingual copy, and field states.
 
-The release candidate was explicitly aligned with production commit `d1cace171ea879b17122df62f106c0a0786527be` before its validation run, then synchronized with protected `main` commit `88c9e81ba755ccf5c20e0027aae51a9b6d4011fe` so the final required check also includes the latest Owner Away QA/OIDC changes.
+The release candidate was aligned with protected `main` commit `88c9e81ba755ccf5c20e0027aae51a9b6d4011fe` for the Owner Away QA/OIDC changes, then synchronized with production commit `5d4e9348cbfb15c39824d4f96c972f01567cbd2c` after the BARMAN Executive OS owner command center v26 passed its required check and merged. The final Home Service required check therefore covers both P0 changes on the current protected production base.
 
 ## Release rule
 Completion is only claimed after required GitHub checks pass, the migration is verified on DABBIR Mumbai, and the exact merged artifact has a successful Vercel production deployment.
