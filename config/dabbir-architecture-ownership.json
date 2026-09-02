@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "purpose": "Prevent recurring DABBIR failures by giving each critical truth and UI surface one authoritative owner.",
   "authorities": {
     "root_shell": "api/app-recovery.js",
@@ -15,7 +15,8 @@
     "business_activity_profile": "api/activity-profile-ui.js",
     "tenant_whatsapp_state": "api/dabbir-whatsapp-status.js",
     "verified_owner_metrics": "api/verified-metrics-ui.js",
-    "owner_visual_system": "api/dabbir-owner-first-ui.js"
+    "owner_visual_system": "api/dabbir-owner-first-ui.js",
+    "home_service_appointment_extension": "api/home-service-ui.js"
   },
   "temporary_exceptions": {},
   "shell": {
@@ -71,5 +72,6 @@
     "release_ready_requires_real_production_journey": true
   },
   "change_rule": "Any change to this contract must explain the root cause, the removed competing owner, and the regression proof. Raising a limit without removing complexity is not stabilization.",
-  "car_wash_booking_change": "The explicit ceiling increased from 25 to 26 only for the single deferred car-wash booking catalog owner; public booking remains a /book page and does not add a primary navigation destination."
+  "car_wash_booking_change": "The explicit ceiling increased from 25 to 26 only for the single deferred car-wash booking catalog owner; public booking remains a /book page and does not add a primary navigation destination.",
+  "home_service_change": "Home service reuses the appointments screen and replaces the deferred owner-decision-memory UI slot, so the shell remains at 26 injected modules and no new primary navigation owner is introduced."
 }
