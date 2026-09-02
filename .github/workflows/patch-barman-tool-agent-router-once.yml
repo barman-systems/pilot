@@ -26,6 +26,22 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Apply router patch
         run: node scripts/patch-barman-tool-agent-router-once.mjs
+      - name: Diagnose generated router safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -nE 'lineBreak|escapedBreak|normalized=|const goals' api/barman-tool-agent-broker.js || true
+          sed -n '27,39p' test/barman-persistent-tool-agent.test.mjs
+          node --input-type=module <<'NODE'
+          import { routeToolAgentCommand } from './api/barman-tool-agent-broker.js';
+          const slash=String.fromCharCode(92);
+          const cases=[
+            ['real-newline','1. أصلح BAR-12'+String.fromCharCode(10)+'2. اربط واتساب'],
+            ['one-backslash','1. أصلح BAR-12'+slash+'n2. اربط واتساب'],
+            ['two-backslashes','1. أصلح BAR-12'+slash+slash+'n2. اربط واتساب'],
+          ];
+          for(const [label,value] of cases) console.log(label,JSON.stringify(value),routeToolAgentCommand(value));
+          NODE
       - name: Verify focused tests
         run: node --test test/barman-persistent-tool-agent.test.mjs
       - name: Commit router and remove one-shot helpers
@@ -37,4 +53,4 @@ jobs:
           git add api/barman-tool-agent-broker.js scripts/barman-tool-agent.mjs test/barman-persistent-tool-agent.test.mjs .github/workflows/patch-barman-tool-agent-router-once.yml scripts/patch-barman-tool-agent-router-once.mjs
           git commit -m 'Route BARMAN tool-agent commands before code execution'
           git push origin HEAD:fix/barman-tool-agent-router-20260902
-      # rerun marker: normalize escaped newline v5
+      # diagnostic marker: inspect exact generated representations
