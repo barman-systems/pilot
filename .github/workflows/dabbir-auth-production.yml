@@ -146,3 +146,5 @@ jobs:
           }
           console.log('DABBIR hosted Auth production URL configuration verified.');
           NODE
+
+# BARMAN enforcement refresh: 2026-09-02
