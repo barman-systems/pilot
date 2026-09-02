@@ -11,6 +11,7 @@ const compatibility=read('supabase/migrations/20260831091000_dabbir_salon_legacy
 const api=read('api/salon-operations.js');
 const ui=read('api/salon-mode-ui.js');
 const cron=read('api/salon-reminders-cron.js');
+const serviceConnection=read('api/_whatsapp-service-connection.js');
 const whatsapp=read('api/_whatsapp-live-core.js');
 const edgeWorker=read('supabase/functions/dabbir-salon-reminder-worker/index.ts');
 
@@ -74,7 +75,7 @@ test('scenario 7: tenant isolation is enforced with business-scoped foreign keys
 
 test('scenario 8: WhatsApp reminders are claimed concurrently and never automatically duplicated',()=>{
   hasAll(migration,['unique (business_id,idempotency_key)','for update skip locked',"status='processing'","status='ambiguous'",'STALE_PROCESSING_REQUIRES_RECONCILIATION','dabbir_claim_workflow_notifications','dabbir_finalize_workflow_notification']);
-  hasAll(cron,['CRON_SECRET','dabbir_claim_workflow_notifications','sendMetaTemplate',"error?.ambiguous===true?'ambiguous':'failed'",'dabbir_finalize_workflow_notification','x-vercel-oidc-token','dabbir-salon-reminder-worker']);
+  hasAll(cron,['CRON_SECRET','dabbir_claim_workflow_notifications','sendMetaTemplate',"error?.ambiguous===true?'ambiguous':'failed'",'dabbir_finalize_workflow_notification','x-vercel-oidc-token','dabbir-salon-reminder-worker','loadBusinessConnectionWithServiceKey']);
   hasAll(whatsapp,["type: 'template'",'providerMessageId','META_WHATSAPP_TEMPLATE_TIMEOUT_AMBIGUOUS']);
   hasAll(edgeWorker,['createRemoteJWKSet','jwtVerify','EXPECTED_AUDIENCE','EXPECTED_SUBJECT','owner_id !== OWNER_ID','project_id !== PROJECT_ID','environment !== "production"','dabbir_claim_workflow_notifications','dabbir_finalize_workflow_notification','CONNECTION_COLUMNS']);
   assert.doesNotMatch(edgeWorker,/dabbir_(salon_quick_book|salon_transition_appointment|salon_rebook)/);
@@ -122,13 +123,20 @@ test('Vercel Pro cron is configured every five minutes with secret-first authent
   assert.equal(cronAuthMode({headers:{...officialHeaders,'x-vercel-cron-schedule':'0 * * * *'}},{VERCEL_ENV:'production'}),null);
 });
 
-test('reminder cron never sends Supabase secret keys as JWT bearer tokens',()=>{
+test('reminder cron keeps opaque service keys out of user JWT bearer paths',()=>{
   const secretHeaders=adminRpcHeaders('sb_secret_example');
   assert.equal(secretHeaders.apikey,'sb_secret_example');
   assert.equal(secretHeaders.authorization,undefined);
+  const opaqueHeaders=adminRpcHeaders('opaque-service-key');
+  assert.equal(opaqueHeaders.apikey,'opaque-service-key');
+  assert.equal(opaqueHeaders.authorization,undefined);
   const legacyHeaders=adminRpcHeaders('legacy.jwt.value');
   assert.equal(legacyHeaders.apikey,'legacy.jwt.value');
   assert.equal(legacyHeaders.authorization,'Bearer legacy.jwt.value');
+  assert.match(serviceConnection,/supabaseKeyHeaders\(key/);
+  assert.doesNotMatch(serviceConnection,/\bsupabaseRest\(/);
+  assert.match(cron,/loadBusinessConnectionWithServiceKey\(key,item\.business_id\)/);
+  assert.doesNotMatch(cron,/\bloadBusinessConnection\(key,item\.business_id\)/);
 });
 
 test('legacy appointment writers remain compatible during the Salon Mode rollout',()=>{
