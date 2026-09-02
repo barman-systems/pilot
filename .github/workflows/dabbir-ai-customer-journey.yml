@@ -275,7 +275,8 @@ jobs:
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
-      PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
+      CAPACITY_TARGET: production
+      CAPACITY_PRODUCTION_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '300'
       RUN_RUNTIME: 'false'
       RUN_AI: 'true'
@@ -304,7 +305,8 @@ jobs:
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
-      PRODUCTION_CAPACITY_LOAD_ACK: ${{ inputs.production_capacity_ack }}
+      CAPACITY_TARGET: production
+      CAPACITY_PRODUCTION_ACK: ${{ inputs.production_capacity_ack }}
       CUSTOMER_COUNT: '1000'
       RUN_RUNTIME: 'true'
       RUN_AI: 'false'
