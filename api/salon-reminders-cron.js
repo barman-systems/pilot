@@ -24,6 +24,21 @@ function sameSecret(left,right){
   const a=Buffer.from(String(left||''));const b=Buffer.from(String(right||''));
   return a.length===b.length&&a.length>0&&timingSafeEqual(a,b);
 }
+
+export async function resolveVercelOidcToken(env=process.env,oidcGetter){
+  const configured=clean(env.VERCEL_OIDC_TOKEN,16384);
+  if(configured)return configured;
+  if(!clean(env.VERCEL_ENV,32))return '';
+  let getter=oidcGetter;
+  if(!getter){
+    try{
+      const oidc=await import('@vercel/oidc');
+      getter=oidc.getVercelOidcToken;
+    }catch{return ''}
+  }
+  try{return clean(await getter(),16384)}catch{return ''}
+}
+
 export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096);
   const authorization=clean(req.headers?.authorization,8192);
@@ -42,7 +57,8 @@ async function readRpc(response,fallback){
 }
 async function rpc(key,name,params){return readRpc(await adminRpc(key,name,params),`${name.toUpperCase()}_FAILED`)}
 async function edge(req,action,payload={}){
-  const token=clean(req.headers?.['x-vercel-oidc-token'],16384);
+  const token=await resolveVercelOidcToken(process.env)
+    ||clean(req.headers?.['x-vercel-oidc-token'],16384);
   if(!token)throw Object.assign(new Error('VERCEL_OIDC_TOKEN_REQUIRED'),{status:503});
   const response=await fetch(EDGE_WORKER_URL,{
     method:'POST',cache:'no-store',redirect:'manual',
