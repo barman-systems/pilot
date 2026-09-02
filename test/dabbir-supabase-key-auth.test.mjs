@@ -37,7 +37,7 @@ test('critical DABBIR service-key paths use centralized Supabase key authenticat
     read('api/platform-customers.js'),
     read('api/platform-customer-support.js'),
     read('api/public-car-wash.js'),
-    read('api/_tiktok-pilot-core.js'),
+    read('api/_tiktok-core.js'),
     read('api/_tiktok-messaging-core.js'),
   ]);
   for (const source of files) {
