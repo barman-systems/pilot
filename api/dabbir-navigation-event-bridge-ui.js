@@ -14,18 +14,10 @@ const script = String.raw`(()=>{
     return target?.closest?.(NAV_ITEM_SELECTOR)||null;
   }
 
-  function normalizeName(name){
-    try{
-      if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') return 'dashboard';
-    }catch{}
-    return name;
-  }
-
   function resolve(node){
     if(!node) return null;
-    const rawName=String(node.dataset?.screen||'').trim();
-    if(!rawName) return null;
-    const name=normalizeName(rawName);
+    const name=String(node.dataset?.screen||'').trim();
+    if(!name) return null;
     const screen=document.getElementById('screen-'+name);
     if(!screen) return null;
     return {node,name,screen};
@@ -136,12 +128,13 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
 
   window.__dabbirNavigationEventBridge={
-    version:'navigation-event-bridge-v2-instant-paint-dub1',
+    version:'navigation-event-bridge-v3-router-authority',
     delegated_click:true,
     webkit_touch_fallback:true,
     safe_screen_fallback:true,
     visual_first:true,
     deferred_render:true,
+    destination_authority:'context-router',
   };
 })();`;
 
@@ -149,6 +142,6 @@ export default function handler(req,res){
   if(req.method!=='GET') return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=0, s-maxage=60, stale-while-revalidate=300');
-  res.setHeader('x-dabbir-navigation-event-bridge','v2-instant-paint-dub1');
+  res.setHeader('x-dabbir-navigation-event-bridge','v3-router-authority');
   return res.status(200).send(script);
 }
