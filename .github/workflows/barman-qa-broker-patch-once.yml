@@ -1,0 +1,48 @@
+name: BARMAN QA Broker Patch Once
+
+on:
+  push:
+    branches: [fix/barman-qa-owner-away-oidc-20260902]
+    paths:
+      - '.github/workflows/barman-qa-broker-patch-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/barman-qa-owner-away-oidc-20260902
+      - name: Patch exact Owner Away OIDC source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('supabase/functions/barman-qa-suite-runner/index.ts')
+          s=p.read_text()
+          old="ai:{audience:'dabbir-ai-qa',workflowRef:'barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main'},"
+          new="ai:{audience:'dabbir-ai-qa',workflowRefs:new Set(['barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main','barman-systems/pilot/.github/workflows/dabbir-owner-away-production.yml@refs/heads/main'])},"
+          assert old in s
+          s=s.replace(old,new,1)
+          old2="if(payload.workflow_ref!==expected.workflowRef)throw new Error('OIDC_WORKFLOW_DENIED');"
+          new2="if('workflowRefs' in expected?!expected.workflowRefs.has(String(payload.workflow_ref||'')):payload.workflow_ref!==expected.workflowRef)throw new Error('OIDC_WORKFLOW_DENIED');"
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          assert 'dabbir-owner-away-production.yml@refs/heads/main' in s
+          assert "workflowRefs.has(String(payload.workflow_ref||''))" in s
+          PY
+      - name: Commit broker source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'barmanai-runtime'
+          git config user.email 'barmanai-runtime@users.noreply.github.com'
+          git add supabase/functions/barman-qa-suite-runner/index.ts
+          git commit -m 'fix(qa): authorize Owner Away through BARMAN broker'
+          git push origin HEAD:fix/barman-qa-owner-away-oidc-20260902
