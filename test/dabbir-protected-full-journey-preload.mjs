@@ -113,6 +113,19 @@ webkit.launch = async (...launchArgs) => {
           if (tracked) checkpoint('wait_start', selectorText);
           try {
             const result = await protectedWaitFor(options);
+            if (selectorText === '#screen-conversations.active') {
+              // The iPhone/WebKit navigation bridge intentionally paints the active
+              // screen immediately, then calls showScreen/renderChats after two
+              // requestAnimationFrame ticks. Treat the screen as ready only after
+              // its conversation rows have actually rendered, not merely when the
+              // visual-first `active` class appears.
+              await protectedWaitForFunction(
+                () => document.querySelectorAll('#chatList .chatContact').length > 0,
+                null,
+                { timeout: 10_000 },
+              );
+              checkpoint('content_ready', '#chatList .chatContact');
+            }
             if (tracked) checkpoint('wait_pass', selectorText);
             return result;
           } catch (error) {
