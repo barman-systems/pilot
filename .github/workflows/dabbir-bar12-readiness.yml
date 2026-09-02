@@ -206,7 +206,9 @@ jobs:
               -H 'Accept: application/vnd.github+json' \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/dabbir-ai-customer-journey.yml/runs?branch=main&status=success&per_page=100")"
 
-            while IFS=$'\t' read -r candidate_run candidate_sha; do
+            mapfile -t candidate_rows < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<"$runs_json")
+            for candidate_row in "${candidate_rows[@]}"; do
+              IFS=$'\t' read -r candidate_run candidate_sha <<<"$candidate_row"
               [ -n "$candidate_run" ] || continue
               [ -n "$candidate_sha" ] || continue
               if [ "$candidate_sha" = "$RUNTIME_SHA" ]; then
@@ -235,7 +237,7 @@ jobs:
                 journey_mode='runtime_equivalent'
                 break
               fi
-            done < <(jq -r '.workflow_runs | sort_by(.run_number) | reverse | .[] | [.id,.head_sha] | @tsv' <<<"$runs_json")
+            done
 
             if [ -n "$journey_run" ]; then break; fi
             sleep 10
