@@ -14,8 +14,35 @@ const script = String.raw`(()=>{
     return target?.closest?.(NAV_ITEM_SELECTOR)||null;
   }
 
+  function refreshContextRoute(){
+    try{window.__dabbirContextualNavigation?.refresh?.()}catch{}
+  }
+
+  function routedName(name){
+    const requested=String(name||'').trim();
+    if(requested!=='appointments') return requested;
+    refreshContextRoute();
+    const slot=document.querySelector('[data-dabbir-activity-slot="true"]');
+    const routed=String(slot?.dataset?.screen||'').trim();
+    return routed||requested;
+  }
+
+  function installShowScreenRouterDelegation(){
+    if(window.__dabbirShowScreenRouterDelegation) return true;
+    if(typeof showScreen!=='function') return false;
+    const baseShowScreen=showScreen;
+    showScreen=function(name){
+      const target=routedName(name);
+      window.__dabbirLastCanonicalNavigation={requested:String(name||''),target,at:new Date().toISOString()};
+      return baseShowScreen.call(this,target);
+    };
+    window.__dabbirShowScreenRouterDelegation=true;
+    return true;
+  }
+
   function resolve(node){
     if(!node) return null;
+    refreshContextRoute();
     const name=String(node.dataset?.screen||'').trim();
     if(!name) return null;
     const screen=document.getElementById('screen-'+name);
@@ -83,6 +110,10 @@ const script = String.raw`(()=>{
     });
   }
 
+  installShowScreenRouterDelegation();
+  setTimeout(installShowScreenRouterDelegation,0);
+  setTimeout(installShowScreenRouterDelegation,250);
+
   document.addEventListener('touchstart',event=>{
     const node=itemFrom(event.target);
     const touch=event.touches?.[0];
@@ -128,13 +159,15 @@ const script = String.raw`(()=>{
   document.addEventListener('touchcancel',()=>{touchStart=null},{capture:true,passive:true});
 
   window.__dabbirNavigationEventBridge={
-    version:'navigation-event-bridge-v3-router-authority',
+    version:'navigation-event-bridge-v4-context-resync',
     delegated_click:true,
     webkit_touch_fallback:true,
     safe_screen_fallback:true,
     visual_first:true,
     deferred_render:true,
     destination_authority:'context-router',
+    context_resync_before_navigation:true,
+    programmatic_show_screen_delegation:true,
   };
 })();`;
 
@@ -142,6 +175,6 @@ export default function handler(req,res){
   if(req.method!=='GET') return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=0, s-maxage=60, stale-while-revalidate=300');
-  res.setHeader('x-dabbir-navigation-event-bridge','v3-router-authority');
+  res.setHeader('x-dabbir-navigation-event-bridge','v4-context-resync');
   return res.status(200).send(script);
 }
