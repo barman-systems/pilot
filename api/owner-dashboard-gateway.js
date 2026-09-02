@@ -1,5 +1,5 @@
-// v26 turns the owner dashboard into an executive operations command center while preserving owner-command-center-v25.js, owner-command-center-v24.js, owner-command-center-v23.js and owner-command-center-v22.js truth/security layers.
-import dashboard from './owner-command-center-v26.js';
+// v27 adds the durable CEO command desk while preserving owner-command-center-v26.js, owner-command-center-v25.js, owner-command-center-v24.js, owner-command-center-v23.js and owner-command-center-v22.js truth/security layers.
+import dashboard from './owner-command-center-v27.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
