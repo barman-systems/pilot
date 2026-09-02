@@ -20,6 +20,7 @@ on:
       - 'package-lock.json'
       - 'vercel-ignore-if-unaffected.sh'
       - 'test/ai-full-customer-journey-v2.mjs'
+      - 'test/run-ai-full-customer-journey-en.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
       - 'test/dabbir-protected-full-journey-preload.mjs'
       - 'test/dabbir-protected-journey-access.test.mjs'
@@ -200,6 +201,22 @@ jobs:
             node test/ai-full-customer-journey-v2.mjs
           fi
 
+      - name: Run English iPhone WebKit owner journey against exact Production
+        if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
+        env:
+          JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report-en.json
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            node --import ./test/dabbir-protected-full-journey-preload.mjs test/run-ai-full-customer-journey-en.mjs
+          else
+            node test/run-ai-full-customer-journey-en.mjs
+          fi
+          test -s dabbir-ai-customer-journey-report-en.json
+          jq -e '.verdict == "PASS" and .required_failures == 0 and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' dabbir-ai-customer-journey-report-en.json >/dev/null
+          echo 'ENGLISH_IPHONE_WEBKIT_JOURNEY_PASS'
+
       - name: Run cross-tenant and WhatsApp isolation attack
         if: steps.journey-mode.outputs.ready == 'true'
         shell: bash
@@ -261,6 +278,7 @@ jobs:
           name: dabbir-ai-full-customer-journey-evidence
           path: |
             dabbir-ai-customer-journey-report.json
+            dabbir-ai-customer-journey-report-en.json
             dabbir-ai-customer-journey-screenshot.png
             dabbir-cross-tenant-isolation-report.json
           if-no-files-found: warn
