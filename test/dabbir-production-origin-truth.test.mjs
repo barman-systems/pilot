@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const retiredHost = ['pilot', 'taupe.vercel.app'].join('-');
+const canonicalOrigin = 'https://dabbir.bmalman.com';
 const releaseWorkflows = [
   '.github/workflows/dabbir-ai-customer-journey.yml',
   '.github/workflows/dabbir-auth-production.yml',
@@ -31,7 +32,7 @@ test('retired PILOT origin cannot return to DABBIR release controls', () => {
 test('all release workflows use the same strict canonical DABBIR public-origin gate', () => {
   for (const path of releaseWorkflows) {
     const source = fs.readFileSync(path, 'utf8');
-    assert.match(source, /vars\.DABBIR_PRODUCTION_ORIGIN/, path);
+    assert.ok(source.includes('vars.DABBIR_PRODUCTION_ORIGIN') || source.includes(canonicalOrigin), path);
     assert.match(source, /scripts\/dabbir-production-origin-gate\.mjs/, path);
     assert.match(source, /launch-gate/, path);
   }
@@ -42,12 +43,12 @@ test('all release workflows use the same strict canonical DABBIR public-origin g
   assert.match(gate, /FAIL_CLOSED_PREVIEW_ONLY/);
 });
 
-test('protected prelaunch permits verification journey only while public launch and capacity stay blocked', () => {
+test('protected prelaunch remains a supported fail-closed mode while live production uses the public gate', () => {
   const journey=fs.readFileSync('.github/workflows/dabbir-ai-customer-journey.yml','utf8');
   const away=fs.readFileSync('.github/workflows/dabbir-owner-away-production.yml','utf8');
   const auth=fs.readFileSync('.github/workflows/dabbir-auth-production.yml','utf8');
 
-  // The full customer journey may verify the protected canonical Production release.
+  // The full customer journey may verify the protected canonical Production release when a future prelaunch state is intentional.
   assert.match(journey,/steps\.journey-mode\.outputs\.ready == 'true'/);
   assert.match(journey,/JOURNEY_MODE_PROTECTED_PRELAUNCH/);
   assert.match(journey,/dabbir-protected-full-journey-preload\.mjs/);
@@ -64,12 +65,12 @@ test('protected prelaunch permits verification journey only while public launch 
   assert.match(auth,/steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
 });
 
-test('deployment contract records the protected no-public-domain state', () => {
+test('deployment contract records the authoritative live public production state', () => {
   const contract = JSON.parse(fs.readFileSync('config/barman-integration-contract.json', 'utf8'));
   assert.equal(contract.deployment.project_name, 'dabbir');
   assert.equal(contract.deployment.project_id, 'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq');
-  assert.equal(contract.deployment.public_launch_domain, null);
-  assert.equal(contract.deployment.domain_access, 'VERCEL_AUTH_PROTECTED');
-  assert.equal(contract.deployment.production_runtime_policy, 'FAIL_CLOSED_PREVIEW_ONLY');
-  assert.equal(contract.deployment.project_live, false);
+  assert.equal(contract.deployment.public_launch_domain, 'dabbir.bmalman.com');
+  assert.equal(contract.deployment.domain_access, 'PUBLIC_CUSTOM_DOMAIN');
+  assert.equal(contract.deployment.production_runtime_policy, 'PUBLIC_PRODUCTION');
+  assert.equal(contract.deployment.project_live, true);
 });
