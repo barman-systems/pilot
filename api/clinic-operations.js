@@ -12,7 +12,7 @@ const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const clean=(value,max=240)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const safeId=value=>UUID_RE.test(clean(value,60))?clean(value,60):null;
 const enc=value=>encodeURIComponent(String(value));
-const queryValue=(req,key)=>{const value=req?.query?.[key];return Array.isArray(value)?value[0]:value};
+const queryValue=(req,key)=>{try{const values=new URL(String(req?.url||'/'),'https://dabbir.invalid').searchParams.getAll(key);return values.length===1?values[0]:null}catch{return null}};
 const number=(value,{min=0,max=1e7,fallback=0}={})=>{const n=Number(value);return Number.isFinite(n)&&n>=min&&n<=max?n:fallback};
 const isoDate=(value)=>{const d=new Date(value);return Number.isNaN(d.getTime())?null:d.toISOString()};
 
