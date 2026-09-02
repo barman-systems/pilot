@@ -10,6 +10,9 @@ const producer = fs.readFileSync(new URL('../.github/workflows/dabbir-ai-custome
 test('BAR-12 reads the authoritative deployed runtime instead of assuming repository HEAD is deployed', () => {
   assert.match(workflow, /fetch-depth:\s*0/);
   assert.match(workflow, /\/api\/release-evidence/);
+  assert.match(workflow, /public_launch_domain/);
+  assert.match(workflow, /production_runtime_policy/);
+  assert.match(workflow, /origin="https:\/\/\$\{public_domain\}"/);
   assert.match(workflow, /VERCEL_GIT_PREVIOUS_SHA="\$initial_sha"/);
   assert.match(workflow, /bash vercel-ignore-if-unaffected\.sh/);
   assert.match(workflow, /expected_runtime_sha="\$initial_sha"/);
@@ -27,6 +30,9 @@ test('runtime-affecting HEAD waits for its exact Production SHA while docs-only 
 test('BAR-12 imports only an exact or proven runtime-equivalent successful Full Customer Journey', () => {
   assert.match(workflow, /actions:\s*read/);
   assert.match(workflow, /dabbir-ai-customer-journey\.yml\/runs\?branch=main&status=success/);
+  assert.match(workflow, /candidates_tsv="\$\(jq -r/);
+  assert.match(workflow, /done <<< "\$candidates_tsv"/);
+  assert.doesNotMatch(workflow, /done < <\(jq -r/);
   assert.match(workflow, /candidate_sha.*RUNTIME_SHA/);
   assert.match(workflow, /git merge-base --is-ancestor "\$candidate_sha" "\$RUNTIME_SHA"/);
   assert.match(workflow, /VERCEL_GIT_PREVIOUS_SHA="\$candidate_sha"/);
@@ -39,15 +45,16 @@ test('BAR-12 imports only an exact or proven runtime-equivalent successful Full 
   assert.match(workflow, /FULL_JOURNEY_RUNTIME_EVIDENCE_PASS/);
 });
 
-test('Arabic and English iPhone evidence are tied to real WebKit journeys', () => {
+test('Arabic and English iPhone evidence use the functional WebKit reports and do not depend on screenshot rasterization', () => {
   assert.match(journey, /locale:\s*'ar-AE'/);
+  assert.match(journey, /functional report is sufficient evidence/i);
   assert.match(englishJourney, /locale:\s*'en-US'/);
   assert.match(englishJourney, /ai-full-customer-journey-v2\.mjs/);
   assert.match(producer, /Run English iPhone WebKit owner journey against exact Production/);
   assert.match(producer, /dabbir-ai-customer-journey-report-en\.json/);
   assert.match(workflow, /25_mobile_webkit_owner_journey/);
-  assert.match(workflow, /dabbir-ai-customer-journey-screenshot\.png/);
   assert.match(workflow, /dabbir-ai-customer-journey-report-en\.json/);
+  assert.doesNotMatch(workflow, /test -s "\$screenshot"/);
   assert.match(workflow, /iphone_safari_ar:\{verdict:"PASS"/);
   assert.match(workflow, /iphone_safari_en:\{verdict:"PASS"/);
   assert.doesNotMatch(workflow, /iphone_safari_en:null/);
