@@ -14,12 +14,13 @@ set -u
 #    in that range. Database schema is part of the Production artifact contract;
 #    a migration must not leave main SHA ahead of the deployed SHA.
 # 3) Exact-SHA Production verification contracts are deployment-affecting even
-#    when their source files live under .github/ or test/. If one of those files
-#    changes, Production must advance to the same commit before the verification
-#    workflow can truthfully claim exact-artifact evidence.
+#    when their source files live under .github/, test/, config/ or docs/evidence/.
+#    BAR-12/readiness evidence is truthful only when the canonical Production
+#    release identity advances to the commit that defines that evidence contract.
 # 4) Native iOS/App Store-only files and standalone UAE infrastructure-as-code are
 #    explicitly outside the Vercel web runtime. They may reuse the last web-runtime
-#    journey only when no web/database/runtime path changed in the same comparison range.
+#    journey only when no web/database/runtime/release-evidence path changed in the
+#    same comparison range.
 # 5) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
@@ -68,13 +69,20 @@ while IFS= read -r path; do
     test/dabbir-protected-live-smoke.mjs|\
     .github/workflows/dabbir-protected-live-smoke.yml|\
     .github/workflows/dabbir-ai-customer-journey.yml|\
+    .github/workflows/dabbir-bar12-readiness.yml|\
+    .github/scripts/dabbir-bar12-*|\
+    scripts/dabbir-readiness-gate.mjs|\
     test/ai-full-customer-journey-v2.mjs|\
     test/dabbir-protected-full-journey-preload.mjs|\
     test/dabbir-protected-journey-access.test.mjs|\
     test/dabbir-authorized-journey-workflow.test.mjs|\
     test/support/dabbir-protected-journey-access.mjs|\
     test/dabbir-capacity-load.mjs|\
-    test/dabbir-activity-regression.test.mjs)
+    test/dabbir-activity-regression.test.mjs|\
+    test/dabbir-bar12-*|\
+    docs/evidence/dabbir-bar12-*|\
+    config/barman-integration-contract.json|\
+    config/dabbir-release*.json)
       echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
       exit 1
       ;;

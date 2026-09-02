@@ -7,13 +7,17 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: package.json
@@ -24,6 +28,11 @@ jobs:
         run: npm run check:syntax
       - name: Audit production dependencies
         run: npm run audit:prod
+      - name: Enforce Production database change discipline
+        env:
+          DABBIR_DB_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DABBIR_DB_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/dabbir-production-db-change-gate.mjs
       - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
@@ -35,3 +44,8 @@ jobs:
             exit 1
           fi
           echo 'Committed-source secret pattern scan PASS'
+      - name: Require terminal mobile release gates before merge
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/dabbir-required-pr-gates.mjs

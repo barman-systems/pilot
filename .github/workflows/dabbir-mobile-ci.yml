@@ -1,4 +1,5 @@
 name: DABBIR Mobile CI
+# BAR-39 invariant probe: the protected `test` context must not finish before this workflow when this file changes.
 
 on:
   pull_request:
