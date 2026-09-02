@@ -1,4 +1,4 @@
-name: DABBIR Live Origin Patch Once
+name: DABBIR Live Origin Variable Once
 
 on:
   push:
@@ -7,52 +7,28 @@ on:
       - '.github/workflows/dabbir-live-origin-patch-once.yml'
 
 permissions:
-  contents: write
+  contents: read
   actions: write
 
 jobs:
-  patch:
+  set-variable:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      VARIABLE_NAME: DABBIR_PRODUCTION_ORIGIN
+      VARIABLE_VALUE: https://dabbir.bmalman.com
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: fix/dabbir-live-origin-release-gates-20260902
-          fetch-depth: 2
-      - name: Pin authoritative production truth
+      - name: Create or update canonical production variable
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          files = [
-              Path('.github/workflows/dabbir-ai-customer-journey.yml'),
-              Path('.github/workflows/dabbir-owner-away-production.yml'),
-              Path('.github/workflows/dabbir-bar12-readiness.yml'),
-          ]
-          needle = '$' + '{{ vars.DABBIR_PRODUCTION_ORIGIN }}'
-          canonical = 'https://dabbir.bmalman.com'
-          for path in files:
-              text = path.read_text()
-              text = text.replace(needle, canonical)
-              if path.name == 'dabbir-owner-away-production.yml':
-                  text = text.replace('SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw', 'SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq')
-              path.write_text(text)
-          for path in files:
-              text = path.read_text()
-              assert needle not in text, path
-              assert canonical in text, path
-          owner = files[1].read_text()
-          assert 'SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq' in owner
-          assert 'SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw' not in owner
-          PY
-      - name: Commit one-shot patch and retire patcher
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm .github/workflows/dabbir-live-origin-patch-once.yml
-          git config user.name 'barmanai-runtime'
-          git config user.email 'barmanai-runtime@users.noreply.github.com'
-          git add .github/workflows/dabbir-ai-customer-journey.yml .github/workflows/dabbir-owner-away-production.yml .github/workflows/dabbir-bar12-readiness.yml .github/workflows/dabbir-live-origin-patch-once.yml
-          git commit -m 'fix(release): pin DABBIR live origin across production gates'
-          git push origin HEAD:fix/dabbir-live-origin-release-gates-20260902
+          API="repos/${GITHUB_REPOSITORY}/actions/variables/${VARIABLE_NAME}"
+          if gh api "$API" >/dev/null 2>&1; then
+            gh api --method PATCH "$API" -f name="$VARIABLE_NAME" -f value="$VARIABLE_VALUE" >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/variables" -f name="$VARIABLE_NAME" -f value="$VARIABLE_VALUE" >/dev/null
+          fi
+          actual="$(gh api "$API" --jq '.value')"
+          test "$actual" = "$VARIABLE_VALUE"
+          echo "DABBIR_PRODUCTION_ORIGIN_VERIFIED=$actual"
