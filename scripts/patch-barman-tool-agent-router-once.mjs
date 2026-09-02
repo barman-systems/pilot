@@ -13,7 +13,9 @@ const router=`
 export function routeToolAgentCommand(value){
   const text=clean(value,4000);
   if(!text)return {route:'REVIEW_REQUIRED',reason:'EMPTY_COMMAND'};
-  const lines=text.split(String.fromCharCode(10)).map(x=>x.trim()).filter(Boolean);
+  const lineBreak=String.fromCharCode(10),escapedBreak=String.fromCharCode(92)+'n';
+  const normalized=text.split(escapedBreak).join(lineBreak);
+  const lines=normalized.split(lineBreak).map(x=>x.trim()).filter(Boolean);
   const goals=lines.filter(x=>{const marker=x.split(' ')[0];return /^[0-9]+[.)]$/.test(marker)||marker==='-'||marker==='•'}).length;
   if(/(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي)/i.test(text))
     return {route:'OWNER_GATE',reason:'OWNER_ONLY_AUTHORITY'};
@@ -68,6 +70,7 @@ const routeTest=`test('tool-agent routes non-code commands fail-closed before pa
   assert.equal(routeToolAgentCommand('كم عميل لدينا ونشاط').route,'DATA_QUERY');
   assert.equal(routeToolAgentCommand('قم بتطوير وإصلاح لوحة تحكم مالك دبر').route,'REPO_CHANGE');
   assert.equal(routeToolAgentCommand('1. أصلح BAR-12\\n2. اربط واتساب').route,'MULTI_STEP');
+  assert.equal(routeToolAgentCommand('1. أصلح BAR-12\\\\n2. اربط واتساب').route,'MULTI_STEP');
   assert.equal(routeToolAgentCommand('أرسل رمز التحقق').route,'OWNER_GATE');
   assert.match(worker,/phase:'route'/);
   assert.match(worker,/routing\\.route!==['\"]REPO_CHANGE['\"]/);
