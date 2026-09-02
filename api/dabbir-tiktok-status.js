@@ -3,8 +3,8 @@ import {
   findTikTokConnection,
   safeTikTokStatus,
   tiktokOwnerContext,
-  tiktokPilotConfig,
-} from './_tiktok-pilot-core.js';
+  tiktokConfig,
+} from './_tiktok-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SEND_SAFETY_BLOCKER = 'TIKTOK_SEND_SAFETY_GATE_REQUIRED';
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     const businessId = businessIdFromRequest(req);
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
     await tiktokOwnerContext(req, businessId);
-    const config = tiktokPilotConfig(req);
+    const config = tiktokConfig(req);
     const connection = await findTikTokConnection(businessId);
     const status = safeTikTokStatus(connection, config);
     return json(res, 200, {

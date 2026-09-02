@@ -4,8 +4,8 @@ import {
   newOauthState,
   stageTikTokOAuth,
   tiktokOwnerContext,
-  tiktokPilotConfig,
-} from './_tiktok-pilot-core.js';
+  tiktokConfig,
+} from './_tiktok-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const businessId = String(body?.business_id || '').trim();
     if (!UUID_RE.test(businessId)) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
 
-    const config = tiktokPilotConfig(req);
+    const config = tiktokConfig(req);
     if (!config.ready) {
       return json(res, 503, {
         ok: false,

@@ -28,7 +28,7 @@ function requestOrigin(req) {
   return `${proto === 'http' ? 'http' : 'https'}://${host}`;
 }
 
-export function tiktokPilotConfig(req) {
+export function tiktokConfig(req) {
   const appId = firstEnv('DABBIR_TIKTOK_APP_ID', 'TIKTOK_APP_ID');
   const appSecret = firstEnv('DABBIR_TIKTOK_APP_SECRET', 'TIKTOK_APP_SECRET');
   const explicitRedirect = firstEnv('DABBIR_TIKTOK_REDIRECT_URI', 'TIKTOK_REDIRECT_URI');
@@ -99,6 +99,7 @@ export async function tiktokOwnerContext(req, businessId) {
 
 function tokenKey(config, businessId) {
   if (!config.integrationSecret) throw Object.assign(new Error('TIKTOK_ENCRYPTION_NOT_CONFIGURED'), { status: 503 });
+  // Compatibility salt: changing this string would make already-encrypted TikTok tokens unreadable.
   return crypto.createHash('sha256')
     .update('dabbir-tiktok-pilot-v1\0')
     .update(String(businessId))
