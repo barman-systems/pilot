@@ -103,8 +103,9 @@ export default async function handler(req,res){
   if(salonCaptured.statusCode!==200||!salonCaptured.body)return res.status(500).end('Salon Mode UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
-  let salonBody;
-  try{salonBody=applySalonBookingContractPatch(salonCaptured.body)}catch(error){console.error('dabbir_salon_booking_contract_patch_failed',String(error?.message||error));return res.status(500).end('Salon booking contract unavailable')}
+  const managementSalon=managementCaptured.body+'\n'+salonCaptured.body;
+  let patchedManagementSalon;
+  try{patchedManagementSalon=applySalonBookingContractPatch(managementSalon)}catch(error){console.error('dabbir_salon_booking_contract_patch_failed',String(error?.message||error));return res.status(500).end('Salon booking contract unavailable')}
   res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v9-employee-services-contract');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonBody+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+patchedManagementSalon+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
