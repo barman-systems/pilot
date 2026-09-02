@@ -5,6 +5,7 @@ import { access, readFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const platformApi = await readFile(new URL('api/platform-customers.js', root), 'utf8');
 const shell = await readFile(new URL('api/app-recovery.js', root), 'utf8');
+const safariShell = await readFile(new URL('api/app-safari-recovery.js', root), 'utf8');
 const uiBundles = JSON.parse(await readFile(new URL('config/dabbir-ui-bundles.json', root), 'utf8'));
 const whatsappStatus = await readFile(new URL('api/dabbir-whatsapp-status.js', root), 'utf8');
 
@@ -54,6 +55,8 @@ test('root routing remains pinned to the recovery-authoritative shell', async ()
   const vercel = JSON.parse(await readFile(new URL('vercel.json', root), 'utf8'));
   assert.ok(Array.isArray(vercel.routes));
   assert.ok(Array.isArray(vercel.rewrites));
-  assert.ok(vercel.routes.some(route => route?.src === '^/$' && route?.dest === '/api/app-recovery'));
-  assert.ok(vercel.rewrites.some(rewrite => rewrite?.source === '/' && rewrite?.destination === '/api/app-recovery'));
+  assert.ok(vercel.routes.some(route => route?.src === '^/$' && route?.dest === '/api/app-safari-recovery'));
+  assert.ok(vercel.rewrites.some(rewrite => rewrite?.source === '/' && rewrite?.destination === '/api/app-safari-recovery'));
+  assert.match(safariShell, /import appRecoveryHandler from '\.\/app-recovery\.js'/);
+  assert.match(safariShell, /x-dabbir-ui-cache-bust/);
 });
