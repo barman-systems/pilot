@@ -18,5 +18,7 @@ The shell remains capped at 26 injected UI modules. Home service replaces the de
 ## Verification
 The dedicated regression test asserts navigation ownership, module count, schema constraints, RLS/grants, authentication/origin enforcement, tenant scoping, bilingual copy, and field states.
 
+The release candidate was explicitly aligned with production commit `d1cace171ea879b17122df62f106c0a0786527be` before the final required-check run, so the final test covers both the Home Service P0 changes and the latest production-origin/release-gate fixes.
+
 ## Release rule
 Completion is only claimed after required GitHub checks pass, the migration is verified on DABBIR Mumbai, and the exact merged artifact has a successful Vercel production deployment.
