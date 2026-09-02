@@ -177,18 +177,18 @@ export default async function handler(req,res){
   const businessActivityCaptured=captureResponse();
   await activityProfileHandler(req,activityCaptured);
   await appointmentManagementUiHandler(req,managementCaptured);
-  await internalCalendarUiHandler(req,internalCalendarCaptured);
   await salonModeUiHandler(req,salonCaptured);
+  await internalCalendarUiHandler(req,internalCalendarCaptured);
   await clinicModeUiHandler(req,clinicCaptured);
   await businessActivityProfileUiHandler(req,businessActivityCaptured);
   if(activityCaptured.statusCode!==200||!activityCaptured.body) return res.status(500).end('Activity profile UI unavailable');
   if(managementCaptured.statusCode!==200||!managementCaptured.body) return res.status(500).end('Appointment management UI unavailable');
-  if(internalCalendarCaptured.statusCode!==200||!internalCalendarCaptured.body) return res.status(500).end('Internal calendar UI unavailable');
   if(salonCaptured.statusCode!==200||!salonCaptured.body) return res.status(500).end('Salon Mode UI unavailable');
+  if(internalCalendarCaptured.statusCode!==200||!internalCalendarCaptured.body) return res.status(500).end('Internal calendar UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body) return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body) return res.status(500).end('Business activity profile UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v9-internal-calendar');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+internalCalendarCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+  res.setHeader('x-dabbir-calendar-live-ui','v10-internal-calendar');
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+internalCalendarCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
