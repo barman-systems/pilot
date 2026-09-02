@@ -86,16 +86,12 @@ async function incidentAction(body:any){
   const customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);
   if(!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});
   if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_create_v1',{method:'POST',body:JSON.stringify({
-   p_customer_no:customerNo,p_business_id:businessId||null,p_category:clean(body?.category,30),p_priority:clean(body?.priority,20),p_summary:clean(body?.summary,200),p_description:clean(body?.description,4000)||null,p_assigned_queue:clean(body?.assigned_queue,40)||'owner'
-  })});
+  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_create_v1',{method:'POST',body:JSON.stringify({p_customer_no:customerNo,p_business_id:businessId||null,p_category:clean(body?.category,30),p_priority:clean(body?.priority,20),p_summary:clean(body?.summary,200),p_description:clean(body?.description,4000)||null,p_assigned_queue:clean(body?.assigned_queue,40)||'owner'})});
   if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_CREATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
  }
  if(operation==='update'){
   const incidentId=clean(body?.incident_id,80);if(!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_update_v1',{method:'POST',body:JSON.stringify({
-   p_incident_id:incidentId,p_status:clean(body?.status,30)||null,p_priority:clean(body?.priority,20)||null,p_assigned_queue:clean(body?.assigned_queue,40)||null,p_root_cause:clean(body?.root_cause,4000)||null,p_resolution:clean(body?.resolution,4000)||null,p_note:clean(body?.note,4000)||null
-  })});
+  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_update_v1',{method:'POST',body:JSON.stringify({p_incident_id:incidentId,p_status:clean(body?.status,30)||null,p_priority:clean(body?.priority,20)||null,p_assigned_queue:clean(body?.assigned_queue,40)||null,p_root_cause:clean(body?.root_cause,4000)||null,p_resolution:clean(body?.resolution,4000)||null,p_note:clean(body?.note,4000)||null})});
   if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_UPDATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
  }
  return reply(400,{ok:false,error:'UNKNOWN_INCIDENT_OPERATION'});
@@ -106,6 +102,15 @@ async function ownerData(body:any){
  if(action==='overview'){
   const r=await sb('/rest/v1/rpc/dabbir_platform_owner_overview',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id})});
   if(!r.ok)return reply(503,{ok:false,error:'OWNER_DATA_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
+ }
+ if(action==='executive'){
+  const started=performance.now();
+  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_executive_v1',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id})});
+  const elapsed=Math.round((performance.now()-started)*10)/10;
+  if(!r.ok)return reply(503,{ok:false,error:'OWNER_EXECUTIVE_DATA_FAILED'});
+  const payload=await r.json().catch(()=>null);
+  if(payload&&typeof payload==='object')payload.reliability={...(payload.reliability||{}),database_rpc_latency_ms:elapsed,database_rpc_latency_state:'MEASURED_AT_BROKER'};
+  return reply(200,{ok:true,payload});
  }
  if(action==='search'){
   const q=String(body?.q||'').trim().slice(0,160);

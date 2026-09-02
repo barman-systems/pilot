@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v22.js',import.meta.url),'utf8');
+const ui23=fs.readFileSync(new URL('../api/owner-command-center-v23.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner dashboard v22 reports live operational truth without invented metrics',()=>{
-  assert.match(gateway,/owner-command-center-v22\.js/);
+test('owner dashboard keeps v22 operational truth under v23 without invented metrics',()=>{
+  assert.match(gateway,/owner-command-center-v23\.js/);
+  assert.match(ui23,/owner-command-center-v22\.js/);
   assert.match(ui,/\/api\/qa-capability/);
   assert.match(ui,/\/api\/release-evidence/);
   assert.match(ui,/fphpoysqdsceniwduxjq/);
