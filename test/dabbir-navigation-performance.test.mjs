@@ -23,15 +23,17 @@ test('owner bundle uses the event-scoped calendar performance route',()=>{
   assert.equal(bundles.deferred.includes('/api/calendar-live-ui'),false);
 });
 
-test('calendar performance route removes navigation-wide DOM observers and booking polling',async()=>{
+test('calendar performance route removes navigation-wide render and request storms',async()=>{
   const res=response();
   await handler({method:'GET'},res);
   assert.equal(res.statusCode,200);
-  assert.equal(res.headers['x-dabbir-calendar-performance-ui'],'v1-event-scoped');
+  assert.equal(res.headers['x-dabbir-calendar-performance-ui'],'v2-navigation-event-scoped');
 
   const body=res.body;
   assert.doesNotMatch(body,/observer\.observe\(document\.body,\{subtree:true,attributes:true,attributeFilter:\['class'\]\}\)/);
   assert.doesNotMatch(body,/observer\.observe\(document\.body,\{subtree:true,childList:true,attributes:true,attributeFilter:\['class'\]\}\)/);
+  assert.doesNotMatch(body,/mo\.observe\(document\.body,\{subtree:true,attributes:true,attributeFilter:\['class'\],childList:true\}\)/);
+  assert.doesNotMatch(body,/observer\.observe\(document\.body,\{subtree:true,childList:true\}\)/);
   assert.doesNotMatch(body,/setInterval\(\(\)=>\{if\(workspace\?\.business\?\.id&&workspace\.business\.id!==lastBusiness\)load\(true\)\},1200\)/);
   assert.doesNotMatch(body,/setInterval\(\(\)=>\{if\(q\('#screen-appointments'\)\?\.classList\.contains\('active'\)\)render\(\)\},1500\)/);
 
@@ -40,4 +42,10 @@ test('calendar performance route removes navigation-wide DOM observers and booki
   assert.match(body,/activationObserver\.observe\(calendarScreen,\{attributes:true,attributeFilter:\['class'\]\}\)/);
   assert.match(body,/screenObserver\.observe\(appointmentScreen,\{attributes:true,attributeFilter:\['class'\]\}\)/);
   assert.match(body,/tableObserver\.observe\(appointmentTable,\{childList:true\}\)/);
+  assert.match(body,/clinicActivationObserver\.observe\(clinicScreen,\{attributes:true,attributeFilter:\['class'\]\}\)/);
+  assert.match(body,/busy\|\|loading/);
+  assert.match(body,/finally\{loading=false\}/);
+  assert.match(body,/settingsProfileScreen=q\('#screen-settings'\)/);
+  assert.match(body,/observer\.observe\(settingsProfileScreen,\{subtree:true,childList:true\}\)/);
+  assert.match(body,/scheduleBusinessProfileEnforce/);
 });
