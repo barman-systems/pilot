@@ -1,7 +1,7 @@
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
-const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/,'');
-const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
+const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
+const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||'').trim();
 const SLUG_RE=/^[a-z0-9][a-z0-9_-]{2,119}$/i;
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

@@ -10,7 +10,7 @@ import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_HOST_RE=/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::\d{1,5})?$/i;
-const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/,'');
+const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const BILLING_READ_TIMEOUT_MS=10_000;
 export const DABBIR_OWNER_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT';
 export const DABBIR_TRIAL_DAYS=7;

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { tiktokConfig } from './_tiktok-core.js';
 import { applySupabaseKeyHeaders } from './_supabase-key-auth.js';
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || 'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/, '');
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const TIKTOK_BASE = 'https://business-api.tiktok.com/open_api/v1.3';
 
 function clean(value, max = 6000) {
