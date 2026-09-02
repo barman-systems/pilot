@@ -22,9 +22,20 @@ test('internal calendar corrects today appointments metric',()=>{
   assert.ok(source.includes('dayKey(a.starts_at)===todayKey()'));
 });
 
-test('internal calendar is aggregated through the existing calendar bundle',()=>{
+test('calendar events open the existing booking editor and presentation stays event driven',()=>{
+  assert.ok(source.includes("qa('[data-appt-edit]').find"));
+  assert.ok(source.includes('const observer=new MutationObserver(queueRender)'));
+  assert.equal(/setInterval\s*\(/.test(source),false);
+});
+
+test('salon keeps its specialized calendar instead of receiving a duplicate generic calendar',()=>{
+  assert.ok(source.includes("businessType()==='salon'"));
+  assert.ok(source.includes("q('#dabbirInternalCalendar')?.remove()"));
+});
+
+test('internal calendar is aggregated through the existing calendar bundle without growing shell modules',()=>{
   assert.ok(calendarBundle.includes("import internalCalendarUiHandler from './internal-calendar-ui.js'"));
-  assert.ok(calendarBundle.includes('internalCalendarCaptured.body'));
+  assert.ok(calendarBundle.includes("managementCaptured.body+'\\n'+salonCaptured.body+'\\n'+internalCalendarCaptured.body"));
   assert.equal(manifest.deferred.includes('/api/internal-calendar-ui'),false);
   assert.ok(manifest.deferred.includes('/api/calendar-live-ui'));
 });
