@@ -4,6 +4,8 @@ import fs from 'node:fs';
 
 const workflow = fs.readFileSync(new URL('../.github/workflows/dabbir-bar12-readiness.yml', import.meta.url), 'utf8');
 const journey = fs.readFileSync(new URL('./ai-full-customer-journey-v2.mjs', import.meta.url), 'utf8');
+const englishJourney = fs.readFileSync(new URL('./run-ai-full-customer-journey-en.mjs', import.meta.url), 'utf8');
+const producer = fs.readFileSync(new URL('../.github/workflows/dabbir-ai-customer-journey.yml', import.meta.url), 'utf8');
 
 test('BAR-12 reads the authoritative deployed runtime instead of assuming repository HEAD is deployed', () => {
   assert.match(workflow, /fetch-depth:\s*0/);
@@ -31,16 +33,24 @@ test('BAR-12 imports only an exact or proven runtime-equivalent successful Full 
   assert.match(workflow, /journey_mode='exact_sha'/);
   assert.match(workflow, /journey_mode='runtime_equivalent'/);
   assert.match(workflow, /gh run download "\$journey_run"/);
-  assert.match(workflow, /--name dabbir-ai-customer-journey-evidence/);
+  assert.match(producer, /name:\s*dabbir-ai-full-customer-journey-evidence/);
+  assert.match(workflow, /--name dabbir-ai-full-customer-journey-evidence/);
+  assert.doesNotMatch(workflow, /--name dabbir-ai-customer-journey-evidence/);
   assert.match(workflow, /FULL_JOURNEY_RUNTIME_EVIDENCE_PASS/);
 });
 
-test('Arabic iPhone evidence is tied to the real WebKit step and Arabic journey fixture', () => {
+test('Arabic and English iPhone evidence are tied to real WebKit journeys', () => {
   assert.match(journey, /locale:\s*'ar-AE'/);
+  assert.match(englishJourney, /locale:\s*'en-US'/);
+  assert.match(englishJourney, /ai-full-customer-journey-v2\.mjs/);
+  assert.match(producer, /Run English iPhone WebKit owner journey against exact Production/);
+  assert.match(producer, /dabbir-ai-customer-journey-report-en\.json/);
   assert.match(workflow, /25_mobile_webkit_owner_journey/);
   assert.match(workflow, /dabbir-ai-customer-journey-screenshot\.png/);
+  assert.match(workflow, /dabbir-ai-customer-journey-report-en\.json/);
   assert.match(workflow, /iphone_safari_ar:\{verdict:"PASS"/);
-  assert.match(workflow, /iphone_safari_en:null/);
+  assert.match(workflow, /iphone_safari_en:\{verdict:"PASS"/);
+  assert.doesNotMatch(workflow, /iphone_safari_en:null/);
 });
 
 test('BAR-12 preserves external WhatsApp fail-closed truth while importing internal journey evidence', () => {
