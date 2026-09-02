@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 12
     env:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
-      SUPABASE_PROJECT_REF: spohjzrsymsmzsseygtw
+      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
       AWAY_REPORT_PATH: dabbir-owner-away-production-report.json
     outputs:
       production_ready: ${{ steps.launch-gate.outputs.ready }}
