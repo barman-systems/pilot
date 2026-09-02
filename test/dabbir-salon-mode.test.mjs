@@ -62,7 +62,7 @@ test('scenario 5: cancellation releases the slot and returns matching waitlist e
 
 test('scenario 6: salon employees are restricted to their assigned appointments and clients',()=>{
   hasAll(migration,['salon_member_scope','salon_customer_scope','w.membership_user_id=(select auth.uid())','a.worker_id=w.id','dabbir_private.salon_member_scope(business_id,worker_id,false)']);
-  assert.match(migration,/m\.role in \('owner','admin','manager','staff'\)/);
+  assert.match(migration,/m\.role in \('owner','admin','manager'\)/);
   assert.match(migration,/dabbir_customers_select[\s\S]+salon_customer_scope\(business_id,id,false\)/);
   assert.match(migration,/dabbir_operational_payments_select[\s\S]+salon_member_scope\(a\.business_id,a\.worker_id,true\)/);
 });
