@@ -1,0 +1,87 @@
+name: Patch BARMAN Tool Agent Router Once
+
+on:
+  push:
+    branches: [fix/barman-tool-agent-router-20260902]
+    paths: ['.github/workflows/patch-barman-tool-agent-router-once.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/barman-tool-agent-router-20260902
+          fetch-depth: 0
+      - name: Add fail-closed command router
+        shell: python
+        run: |
+          from pathlib import Path
+
+          broker=Path('api/barman-tool-agent-broker.js')
+          s=broker.read_text()
+          anchor="export function validateToolAgentClaims(payload,now=Math.floor(Date.now()/1000)){return claimAllowed(payload,now)}\n"
+          router=r'''\nexport function routeToolAgentCommand(value){
+  const text=clean(value,4000);
+  if(!text)return {route:'REVIEW_REQUIRED',reason:'EMPTY_COMMAND'};
+  const lines=text.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const goals=lines.filter(x=>/^(?:\d+[.)-]|[-•])\s*/.test(x)).length;
+  if(/(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي)/i.test(text))
+    return {route:'OWNER_GATE',reason:'OWNER_ONLY_AUTHORITY'};
+  if(goals>=2)return {route:'MULTI_STEP',reason:'COMPOUND_COMMAND_REQUIRES_PLAN'};
+  const repoChange=/(?:أصلح|اصلح|إصلاح|اصلاح|طوّر|طور|تطوير|عدّل|عدل|تعديل|غيّر|غير|تغيير|أضف|اضف|إضافة|اضافة|احذف|حذف|برمج|نفذ.*(?:كود|واجهة|لوحة)|fix|develop|implement|refactor|update\s+(?:code|ui|dashboard)|change\s+(?:code|ui|dashboard))/i.test(text);
+  const dataQuestion=/(?:^|\s)(?:كم|ما عدد|عدد|احصاء|إحصاء|إحصائية|احصائية|statistics?|count|how many)(?:\s|$)/i.test(text);
+  if(dataQuestion&&!repoChange)return {route:'DATA_QUERY',reason:'READ_ONLY_DATA_REQUEST'};
+  if(repoChange)return {route:'REPO_CHANGE',reason:'SOURCE_CHANGE_REQUEST'};
+  if(/(?:أرسل|ارسل|تواصل|اتصل|راسل|اشتر|شراء|ادفع|انشر في|send|contact|purchase|pay|publish to)/i.test(text))
+    return {route:'EXTERNAL_ACTION',reason:'NON_REPOSITORY_ACTION'};
+  return {route:'REVIEW_REQUIRED',reason:'NO_SAFE_EXECUTION_CLASS'};
+}
+'''
+          if 'export function routeToolAgentCommand' not in s:
+            s=s.replace(anchor,anchor+router)
+          phase="    if(phase==='discover')return json(res,200,{ok:true,...await discover(body.command,body.paths)});"
+          if "phase==='route'" not in s:
+            s=s.replace(phase,"    if(phase==='route')return json(res,200,{ok:true,...routeToolAgentCommand(body.command)});\n"+phase)
+          broker.write_text(s)
+
+          worker=Path('scripts/barman-tool-agent.mjs')
+          w=worker.read_text()
+          anchor="  console.log(`Claimed ${execution.commandId}: ${clean(commandText,300)}`);\n\n  const allPaths=repositoryPaths();"
+          replacement="""  console.log(`Claimed ${execution.commandId}: ${clean(commandText,300)}`);\n\n  const routing=await broker({phase:'route',command:commandText});\n  if(routing.route!=='REPO_CHANGE'){\n    const labels={DATA_QUERY:'طلب بيانات يحتاج منفذ قراءة مخصص، ولن أحوله إلى تعديل كود.',EXTERNAL_ACTION:'هذا إجراء خارجي وليس تعديل مستودع، ولن أنفذه بعامل الكود.',OWNER_GATE:'هذا الإجراء يتطلب صلاحية المالك ولن يتجاوز BARMAN هذا الحد.',MULTI_STEP:'الأمر مركب ويحتاج تفكيك خطة قبل التنفيذ الآلي.',REVIEW_REQUIRED:'لم أجد مسار تنفيذ آمنًا لهذا الأمر.'};\n    await finalize('BLOCKED',labels[routing.route]||labels.REVIEW_REQUIRED,[],`ROUTER_${routing.route}_${routing.reason||'UNKNOWN'}`);\n    process.exit(0);\n  }\n\n  const allPaths=repositoryPaths();"""
+          if "phase:'route'" not in w:
+            w=w.replace(anchor,replacement)
+          worker.write_text(w)
+
+          test=Path('test/barman-persistent-tool-agent.test.mjs')
+          t=test.read_text()
+          t=t.replace("import { validateToolAgentClaims } from '../api/barman-tool-agent-broker.js';","import { routeToolAgentCommand, validateToolAgentClaims } from '../api/barman-tool-agent-broker.js';")
+          marker="test('persistent worker is event-looped and cannot bypass governance files',()=>{"
+          routing_test=r'''test('tool-agent routes non-code commands fail-closed before patch generation',()=>{
+  assert.equal(routeToolAgentCommand('كم عميل لدينا ونشاط').route,'DATA_QUERY');
+  assert.equal(routeToolAgentCommand('قم بتطوير وإصلاح لوحة تحكم مالك دبر').route,'REPO_CHANGE');
+  assert.equal(routeToolAgentCommand('1. أصلح BAR-12\n2. اربط واتساب').route,'MULTI_STEP');
+  assert.equal(routeToolAgentCommand('أرسل رمز التحقق').route,'OWNER_GATE');
+  assert.match(worker,/phase:'route'/);
+  assert.match(worker,/routing\.route!==['"]REPO_CHANGE['"]/);
+});
+
+'''
+          if "routes non-code commands fail-closed" not in t:
+            t=t.replace(marker,routing_test+marker)
+          test.write_text(t)
+      - name: Verify focused tests
+        run: node --test test/barman-persistent-tool-agent.test.mjs
+      - name: Commit router and remove patch helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/patch-barman-tool-agent-router-once.yml
+          git config user.name 'barmanai'
+          git config user.email 'barmanai@users.noreply.github.com'
+          git add api/barman-tool-agent-broker.js scripts/barman-tool-agent.mjs test/barman-persistent-tool-agent.test.mjs .github/workflows/patch-barman-tool-agent-router-once.yml
+          git commit -m 'Route BARMAN tool-agent commands before code execution'
+          git push origin HEAD:fix/barman-tool-agent-router-20260902
