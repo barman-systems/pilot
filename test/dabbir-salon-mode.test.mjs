@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { cronAuthMode } from '../api/salon-reminders-cron.js';
+import { adminRpcHeaders, cronAuthMode } from '../api/salon-reminders-cron.js';
 
 const root=path.resolve(import.meta.dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
@@ -120,6 +120,15 @@ test('Vercel Pro cron is configured every five minutes with secret-first authent
   assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'preview'}),null);
   assert.equal(cronAuthMode({headers:{...officialHeaders,'user-agent':'browser'}},{VERCEL_ENV:'production'}),null);
   assert.equal(cronAuthMode({headers:{...officialHeaders,'x-vercel-cron-schedule':'0 * * * *'}},{VERCEL_ENV:'production'}),null);
+});
+
+test('reminder cron never sends Supabase secret keys as JWT bearer tokens',()=>{
+  const secretHeaders=adminRpcHeaders('sb_secret_example');
+  assert.equal(secretHeaders.apikey,'sb_secret_example');
+  assert.equal(secretHeaders.authorization,undefined);
+  const legacyHeaders=adminRpcHeaders('legacy.jwt.value');
+  assert.equal(legacyHeaders.apikey,'legacy.jwt.value');
+  assert.equal(legacyHeaders.authorization,'Bearer legacy.jwt.value');
 });
 
 test('legacy appointment writers remain compatible during the Salon Mode rollout',()=>{

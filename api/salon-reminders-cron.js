@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { json, SUPABASE_URL, supabaseRpc } from './_auth-core.js';
+import { json, SUPABASE_URL } from './_auth-core.js';
 import { loadBusinessConnection } from './_whatsapp-embedded-core.js';
 import { sendMetaTemplate } from './_whatsapp-live-core.js';
 
@@ -7,6 +7,21 @@ const clean=(value,max=500)=>String(value??'').trim().replace(/[\u0000-\u001f\u0
 const serviceKey=()=>clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);
 const EXPECTED_SCHEDULE='*/5 * * * *';
 const EDGE_WORKER_URL=`${SUPABASE_URL}/functions/v1/dabbir-salon-reminder-worker`;
+
+export function adminRpcHeaders(key){
+  const headers={apikey:key,accept:'application/json','content-type':'application/json',prefer:'return=representation'};
+  // Supabase secret keys (sb_secret_*) authenticate through apikey. Sending
+  // them as Bearer tokens makes PostgREST parse them as JWTs and fail.
+  if(!String(key).startsWith('sb_secret_'))headers.authorization=`Bearer ${key}`;
+  return headers;
+}
+async function adminRpc(key,name,params){
+  return fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{
+    method:'POST',cache:'no-store',redirect:'manual',
+    headers:adminRpcHeaders(key),
+    body:JSON.stringify(params),
+  });
+}
 
 function sameSecret(left,right){
   const a=Buffer.from(String(left||''));const b=Buffer.from(String(right||''));
@@ -28,7 +43,7 @@ async function readRpc(response,fallback){
   if(!response.ok)throw Object.assign(new Error(payload?.message||payload?.code||fallback),{status:response.status});
   return payload;
 }
-async function rpc(key,name,params){return readRpc(await supabaseRpc(name,key,params),`${name.toUpperCase()}_FAILED`)}
+async function rpc(key,name,params){return readRpc(await adminRpc(key,name,params),`${name.toUpperCase()}_FAILED`)}
 async function edge(req,action,payload={}){
   const token=clean(req.headers?.['x-vercel-oidc-token'],16384);
   if(!token)throw Object.assign(new Error('VERCEL_OIDC_TOKEN_REQUIRED'),{status:503});
