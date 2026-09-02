@@ -86,8 +86,11 @@ test('calendar UI provides day, week, month, employee columns, drag/drop and dur
   hasAll(ui,["view==='day'","view==='week'",'monthCalendar','salonDayGrid','data-worker','ondragstart','ondrop','data-resize','duration_minutes','quickBooking']);
   const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
   const calendarOwner=read('api/calendar-live-ui.js');
+  const calendarPerformance=read('api/calendar-performance-ui.js');
   assert.equal(manifest.deferred.includes('/api/salon-mode-ui'),false);
-  assert.ok(manifest.deferred.includes('/api/calendar-live-ui'));
+  assert.ok(manifest.deferred.includes('/api/calendar-performance-ui'));
+  assert.equal(manifest.deferred.includes('/api/calendar-live-ui'),false);
+  assert.match(calendarPerformance,/import calendarLiveHandler from '\.\/calendar-live-ui\.js'/);
   assert.match(calendarOwner,/import salonModeUiHandler from '\.\/salon-mode-ui\.js'/);
   assert.match(calendarOwner,/managementCaptured\.body\+'\\n'\+salonCaptured\.body/);
 });
