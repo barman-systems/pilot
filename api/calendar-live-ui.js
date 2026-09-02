@@ -35,20 +35,28 @@ const liveScript=String.raw`(()=>{
     return ['requested','pending','new','unconfirmed','awaiting_confirmation'].includes(status);
   }
 
-  function sanitizeResolvedBookingNotice(){
+  function renderResolvedAwareNotices(){
     const list=q('#noticeList');if(!list)return;
-    const now=Date.now(),day=now+86400000;
-    const hasPending=(workspace?.appointments||[]).some(a=>{
+    let t=null;try{t=typeof T==='function'?T():null}catch{}
+    const items=[],now=Date.now(),day=now+86400000;
+    (workspace?.handoffs||[]).forEach(h=>items.push({a:h.route_class,b:h.reason||h.state,type:'handoffs'}));
+    const upcoming=(workspace?.appointments||[]).filter(a=>{
       const start=new Date(a?.starts_at).getTime();
       return Number.isFinite(start)&&start>=now&&start<=day&&bookingStatusNeedsAttention(a?.status);
     });
-    if(hasPending)return;
-    list.querySelectorAll('[data-notice-type="appointments"]').forEach(node=>node.remove());
-    if(!list.children.length){
-      let label=ar()?'لا توجد تنبيهات مهمة.':'No important alerts.';
-      try{if(typeof T==='function')label=T().noNotices||label}catch{}
-      list.innerHTML='<div class="empty">'+esc(label)+'</div>';
-    }
+    if(upcoming.length)items.push({a:t?.appointments||(ar()?'الحجوزات':'Bookings'),b:(t?.upcomingNotice||(ar()?'حجوزات قادمة:':'Upcoming bookings:'))+' '+upcoming.length,type:'appointments'});
+    if(workspace?.whatsapp?.state!=='OPERATIONAL')items.push({a:t?.whatsapp||'WhatsApp',b:t?.whatsappDesc||(ar()?'قناة WhatsApp غير تشغيلية.':'WhatsApp channel is not operational.'),type:'channel_issues'});
+    const emptyLabel=t?.noNotices||(ar()?'لا توجد تنبيهات مهمة.':'No important alerts.');
+    list.innerHTML=items.length?items.map(x=>'<div class="item" data-notice-type="'+esc(x.type)+'"><div class="grow"><b>'+esc(x.a)+'</b><small>'+esc(x.b)+'</small></div></div>').join(''):'<div class="empty">'+esc(emptyLabel)+'</div>';
+  }
+
+  try{
+    if(typeof window.renderNotices==='function')window.renderNotices=renderResolvedAwareNotices;
+    if(typeof renderNotices==='function')renderNotices=renderResolvedAwareNotices;
+  }catch{}
+
+  function sanitizeResolvedBookingNotice(){
+    renderResolvedAwareNotices();
   }
 
   function removeCancelledFromActiveCalendar(){
@@ -121,7 +129,8 @@ const liveScript=String.raw`(()=>{
   if(calendarScreen){const calendarObserver=new MutationObserver(()=>setTimeout(()=>{removeCancelledFromActiveCalendar();sanitizeResolvedBookingNotice()},0));calendarObserver.observe(calendarScreen,{subtree:true,childList:true})}
   setInterval(()=>{enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},60000);
   setTimeout(()=>{enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,sanitizeNotices:sanitizeResolvedBookingNotice,version:'calendar-live-v7-alert-resolution'};
+  setTimeout(renderResolvedAwareNotices,0);
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,sanitizeNotices:renderResolvedAwareNotices,version:'calendar-live-v8-notice-source-status'};
 })();`;
 
 function captureResponse(){return {statusCode:200,headers:{},body:'',status(code){this.statusCode=Number(code||200);return this},setHeader(key,value){this.headers[String(key).toLowerCase()]=value;return this},end(body=''){this.body=String(body);return this},send(body=''){this.body=String(body);return this}}}
@@ -135,6 +144,6 @@ export default async function handler(req,res){
   if(salonCaptured.statusCode!==200||!salonCaptured.body)return res.status(500).end('Salon Mode UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
-  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v10-alert-resolution');
+  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v11-notice-source-status');
   return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
