@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const AUTHORIZED_WORKFLOW = '.github/workflows/dabbir-ai-customer-journey.yml';
+const OWNER_AWAY_WORKFLOW = '.github/workflows/dabbir-owner-away-production.yml';
 const UNAUTHORIZED_DUPLICATE = '.github/workflows/dabbir-protected-full-customer-journey.yml';
 const BROKER = 'supabase/functions/barman-qa-suite-runner/index.ts';
 const ISOLATION_JOURNEY = 'test/dabbir-cross-tenant-isolation.mjs';
@@ -11,13 +12,15 @@ function read(path) {
   return fs.readFileSync(path, 'utf8');
 }
 
-test('privileged DABBIR QA broker remains pinned to the canonical full-journey workflow on main', () => {
+test('privileged DABBIR QA broker accepts exactly the two approved main workflows', () => {
   const broker = read(BROKER);
   assert.match(
     broker,
-    /workflowRef:'barman-systems\/pilot\/\.github\/workflows\/dabbir-ai-customer-journey\.yml@refs\/heads\/main'/,
+    /workflowRefs:new Set\(\['barman-systems\/pilot\/\.github\/workflows\/dabbir-ai-customer-journey\.yml@refs\/heads\/main','barman-systems\/pilot\/\.github\/workflows\/dabbir-owner-away-production\.yml@refs\/heads\/main'\]\)/,
   );
+  assert.match(broker, /workflowRefs\.has\(String\(payload\.workflow_ref\|\|''\)\)/);
   assert.match(broker, /const GH_REF='refs\/heads\/main'/);
+  assert.doesNotMatch(broker, /workflow_ref[^\n]*(startsWith|includes)\(/);
 });
 
 test('canonical authorized workflow owns protected-prelaunch full journey without widening broker policy', () => {
@@ -27,6 +30,13 @@ test('canonical authorized workflow owns protected-prelaunch full journey withou
   assert.match(workflow, /x-vercel-trusted-oidc-idp-token/);
   assert.match(workflow, /FULL_JOURNEY_PASS/);
   assert.match(workflow, /Prove Production release did not move during journey/);
+});
+
+test('Owner Away production gate is the only second privileged QA workflow', () => {
+  const workflow = read(OWNER_AWAY_WORKFLOW);
+  assert.match(workflow, /dabbir-owner-away-production-journey\.mjs/);
+  assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /SUPABASE_PROJECT_REF:\s*fphpoysqdsceniwduxjq/);
 });
 
 test('privileged journey is main-only and cannot accept a stale Production artifact', () => {
