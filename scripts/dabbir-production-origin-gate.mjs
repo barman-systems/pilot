@@ -64,6 +64,9 @@ export function runGate({ origin = process.env.PRODUCTION_ORIGIN, contractPath =
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
   const result = classifyProductionOrigin({ origin, contract });
   append(process.env.GITHUB_OUTPUT, `ready=${result.ready ? 'true' : 'false'}\nstate=${result.state}\norigin=${result.origin || ''}\n`);
+  if (result.ready && result.origin) {
+    append(process.env.GITHUB_ENV, `PRODUCTION_ORIGIN=${result.origin}\nPUBLIC_PRODUCTION_ORIGIN=${result.origin}\n`);
+  }
   append(process.env.GITHUB_STEP_SUMMARY, `## DABBIR Production Origin Gate\n\n**State:** ${result.state}\n\n${result.reason}\n`);
   console.log(`${result.state}: ${result.reason}`);
   return result;
