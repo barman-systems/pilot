@@ -37,3 +37,4 @@ jobs:
           git add api/barman-tool-agent-broker.js scripts/barman-tool-agent.mjs test/barman-persistent-tool-agent.test.mjs .github/workflows/patch-barman-tool-agent-router-once.yml scripts/patch-barman-tool-agent-router-once.mjs
           git commit -m 'Route BARMAN tool-agent commands before code execution'
           git push origin HEAD:fix/barman-tool-agent-router-20260902
+      # rerun marker: multi-step detection v2
