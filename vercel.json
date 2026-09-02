@@ -22,6 +22,9 @@
     "api/app-recovery.js": {
       "includeFiles": "index.html"
     },
+    "api/app-safari-recovery.js": {
+      "includeFiles": "index.html"
+    },
     "api/car-wash-booking.js": {
       "includeFiles": "booking.html"
     },
@@ -64,7 +67,7 @@
     },
     {
       "src": "^/$",
-      "dest": "/api/app-recovery"
+      "dest": "/api/app-safari-recovery"
     }
   ],
   "rewrites": [
@@ -98,14 +101,14 @@
     },
     {
       "source": "/",
-      "destination": "/api/app-recovery"
+      "destination": "/api/app-safari-recovery"
     }
   ],
   "headers": [
     {
       "source": "/dabbir-ui-(critical|deferred)\\.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400" }
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]
     },
     {

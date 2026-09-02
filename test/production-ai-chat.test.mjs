@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const runtime = fs.readFileSync(new URL('../api/dabbir-runtime.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
 const recoveryShell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
+const safariRecoveryShell = fs.readFileSync(new URL('../api/app-safari-recovery.js', import.meta.url), 'utf8');
 const recoveryUi = fs.readFileSync(new URL('../api/auth/recovery-ui.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const vercel = fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8');
@@ -28,13 +29,16 @@ test('unified conversation uses the real persisted DABBIR runtime', () => {
 
 test('root route serves the authoritative DABBIR interface with recovery enhancement only', () => {
   const config = JSON.parse(vercel);
-  assert.ok(config.rewrites.some(rule => rule.source === '/' && rule.destination === '/api/app-recovery'));
+  assert.ok(config.rewrites.some(rule => rule.source === '/' && rule.destination === '/api/app-safari-recovery'));
   assert.equal(config.functions['api/app.js'].includeFiles, 'index.html');
   assert.equal(config.functions['api/app-recovery.js'].includeFiles, 'index.html');
+  assert.equal(config.functions['api/app-safari-recovery.js'].includeFiles, 'index.html');
   assert.match(app, /x-dabbir-interface/);
   assert.doesNotMatch(app, /source\.replace/);
   assert.doesNotMatch(app, /dabbir-ai/);
   assert.match(recoveryShell, /import appHandler from '\.\/app\.js'/);
+  assert.match(safariRecoveryShell, /import appRecoveryHandler from '\.\/app-recovery\.js'/);
+  assert.match(safariRecoveryShell, /UI_CACHE_BUST/);
   assert.match(recoveryShell, /\/api\/auth\/recovery-ui/);
   assert.match(recoveryUi, /نسيت كلمة المرور/);
   assert.match(recoveryUi, /\/api\/auth\/forgot-password/);
