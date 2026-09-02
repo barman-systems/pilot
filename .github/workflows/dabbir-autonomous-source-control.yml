@@ -23,6 +23,9 @@ on:
         type: boolean
   repository_dispatch:
     types: [dabbir_source_control]
+  push:
+    branches:
+      - 'barman/source-control-canary/**'
 
 permissions:
   contents: write
@@ -39,9 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      OBJECTIVE_KEY: ${{ inputs.objective_key || github.event.client_payload.objective_key }}
-      PATCH_B64: ${{ inputs.patch_b64 || github.event.client_payload.patch_b64 }}
-      PATH_CLASS: ${{ inputs.changed_paths_classification || github.event.client_payload.changed_paths_classification }}
+      OBJECTIVE_KEY: ${{ inputs.objective_key || github.event.client_payload.objective_key || 'DABBIR_SOURCE_CONTROL_CANARY' }}
+      PATCH_B64: ${{ inputs.patch_b64 || github.event.client_payload.patch_b64 || '' }}
+      PATH_CLASS: ${{ inputs.changed_paths_classification || github.event.client_payload.changed_paths_classification || 'WEB' }}
       MOBILE_REQUIRED: ${{ inputs.mobile_required || github.event.client_payload.mobile_required || 'false' }}
     steps:
       - uses: actions/checkout@v7
@@ -55,18 +58,33 @@ jobs:
           set -euo pipefail
           [[ "$OBJECTIVE_KEY" == DABBIR_* ]] || { echo 'Only DABBIR objectives are allowed'; exit 1; }
           [[ "$PATH_CLASS" == WEB || "$PATH_CLASS" == MOBILE ]] || { echo 'Unknown path classification'; exit 1; }
-          [[ -n "$PATCH_B64" ]] || { echo 'Patch is required'; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" != push ]]; then
+            [[ -n "$PATCH_B64" ]] || { echo 'Patch is required'; exit 1; }
+          fi
 
-      - name: Decode and validate patch
+      - name: Prepare and validate bounded change
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' "$PATCH_B64" | base64 --decode > /tmp/barman.patch
-          test -s /tmp/barman.patch
-          git apply --check /tmp/barman.patch
-          git apply /tmp/barman.patch
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            [[ "$GITHUB_REF_NAME" == barman/source-control-canary/* ]] || { echo 'Push canary is branch-scoped'; exit 1; }
+            mkdir -p docs/runtime-evidence
+            receipt="docs/runtime-evidence/barman-source-control-canary-${GITHUB_RUN_ID}.txt"
+            printf '%s\n' \
+              'BARMAN Executive OS source-control canary' \
+              "run_id=${GITHUB_RUN_ID}" \
+              "source_sha=${GITHUB_SHA}" \
+              'direct_main_push=false' \
+              'merge_bypass=false' > "$receipt"
+          else
+            printf '%s' "$PATCH_B64" | base64 --decode > /tmp/barman.patch
+            test -s /tmp/barman.patch
+            git apply --check /tmp/barman.patch
+            git apply /tmp/barman.patch
+          fi
+
           mapfile -t files < <(git diff --name-only)
-          ((${#files[@]} > 0)) || { echo 'Patch produced no changes'; exit 1; }
+          ((${#files[@]} > 0)) || { echo 'Candidate produced no changes'; exit 1; }
           printf '%s\n' "${files[@]}" | tee /tmp/changed-files.txt
 
           # Autonomous code changes are deliberately narrow. Sensitive/operational surfaces
@@ -128,7 +146,8 @@ jobs:
           Merge bypass: forbidden
           Contract: DABBIR_BARMAN_SOURCE_CONTROL_V1
 
-          This PR must pass the repository's DABBIR CI and the BARMAN merge gate before merge.
+          Candidate verification was executed inside the autonomous workflow before publication.
+          Merge remains governed separately and is never bypassed by this workflow.
           EOF
           )
           url=$(gh pr create --base main --head "$BRANCH" --title "fix(dabbir): ${OBJECTIVE_KEY}" --body "$body")
