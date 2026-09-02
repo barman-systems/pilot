@@ -79,7 +79,7 @@ export function providerConfig(providerValue,req){
     provider,clientId,clientSecret,redirectUri,configured:Boolean(clientId&&clientSecret),tenant,
     authUrl:`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/authorize`,
     tokenUrl:`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`,
-    scopes:['openid','profile','email','offline_access','Calendars.ReadWrite'],
+    scopes:['openid','profile','email','offline_access','User.Read','Calendars.ReadWrite'],
   };
 }
 
