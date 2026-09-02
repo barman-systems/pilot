@@ -1,0 +1,140 @@
+import { createPublicKey, verify as verifySignature } from 'node:crypto';
+import { getVercelOidcToken } from '@vercel/oidc';
+import { json } from './_auth-core.js';
+import { adminRpc, notifyTelegram, serviceRoleKey, telegramRoute } from './_barman-executive-core.js';
+
+const AUDIENCE='barman-executive-tool-agent';
+const EXPECTED_REPO='barman-systems/pilot';
+const EXPECTED_REF='refs/heads/main';
+const EXPECTED_WORKFLOW=`${EXPECTED_REPO}/.github/workflows/barman-tool-agent.yml@${EXPECTED_REF}`;
+const GITHUB_ISSUER='https://token.actions.githubusercontent.com';
+const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
+const DEFAULT_MODEL='minimax/minimax-m3-free';
+const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
+
+function decodePart(value){
+  const normalized=value.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(value.length/4)*4,'=');
+  return Buffer.from(normalized,'base64');
+}
+function audienceIncludes(aud){return Array.isArray(aud)?aud.includes(AUDIENCE):aud===AUDIENCE}
+function claimAllowed(payload,now=Math.floor(Date.now()/1000)){
+  return payload?.iss===GITHUB_ISSUER
+    &&audienceIncludes(payload?.aud)
+    &&payload?.repository===EXPECTED_REPO
+    &&payload?.ref===EXPECTED_REF
+    &&payload?.workflow_ref===EXPECTED_WORKFLOW
+    &&['schedule','workflow_dispatch'].includes(String(payload?.event_name||''))
+    &&Number(payload?.exp||0)>now-5
+    &&Number(payload?.nbf||0)<=now+30;
+}
+export function validateToolAgentClaims(payload,now=Math.floor(Date.now()/1000)){return claimAllowed(payload,now)}
+
+async function verifyGithubOidc(token){
+  const parts=String(token||'').split('.');
+  if(parts.length!==3)throw Object.assign(new Error('OIDC_TOKEN_INVALID'),{status:401});
+  let header,payload;
+  try{header=JSON.parse(decodePart(parts[0]).toString('utf8'));payload=JSON.parse(decodePart(parts[1]).toString('utf8'))}catch{throw Object.assign(new Error('OIDC_TOKEN_INVALID'),{status:401})}
+  if(header?.alg!=='RS256'||!header?.kid)throw Object.assign(new Error('OIDC_ALG_DENIED'),{status:401});
+  const configResponse=await fetch(`${GITHUB_ISSUER}/.well-known/openid-configuration`,{cache:'force-cache',signal:AbortSignal.timeout(8000)});
+  const config=await configResponse.json();
+  const jwksResponse=await fetch(config.jwks_uri,{cache:'force-cache',signal:AbortSignal.timeout(8000)});
+  const jwks=await jwksResponse.json();
+  const jwk=Array.isArray(jwks?.keys)?jwks.keys.find(key=>key.kid===header.kid):null;
+  if(!jwk)throw Object.assign(new Error('OIDC_KEY_UNKNOWN'),{status:401});
+  const signature=decodePart(parts[2]);
+  const ok=verifySignature('RSA-SHA256',Buffer.from(`${parts[0]}.${parts[1]}`),createPublicKey({key:jwk,format:'jwk'}),signature);
+  if(!ok||!claimAllowed(payload))throw Object.assign(new Error('OIDC_SOURCE_DENIED'),{status:403});
+  return payload;
+}
+
+async function gatewayCredential(){
+  if(process.env.AI_GATEWAY_API_KEY)return String(process.env.AI_GATEWAY_API_KEY);
+  if(process.env.VERCEL_OIDC_TOKEN)return String(process.env.VERCEL_OIDC_TOKEN);
+  try{return String(await getVercelOidcToken()||'')}catch{return ''}
+}
+function parseJsonContent(payload){
+  let value=String(payload?.choices?.[0]?.message?.content||'').trim();
+  value=value.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
+  try{return JSON.parse(value)}catch{return null}
+}
+async function brain(system,user,maxTokens){
+  const credential=await gatewayCredential();
+  if(!credential)throw Object.assign(new Error('AI_GATEWAY_CREDENTIAL_MISSING'),{status:503});
+  const model=clean(process.env.BARMAN_TOOL_AGENT_MODEL||process.env.BARMAN_AI_GATEWAY_MODEL||DEFAULT_MODEL,120);
+  const response=await fetch(GATEWAY_ENDPOINT,{
+    method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
+    body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],temperature:0.05,max_tokens:maxTokens,stream:false}),
+    signal:AbortSignal.timeout(45000),
+  });
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok)throw Object.assign(new Error(`AI_GATEWAY_HTTP_${response.status}`),{status:502});
+  const parsed=parseJsonContent(payload);
+  if(!parsed)throw Object.assign(new Error('AI_GATEWAY_INVALID_JSON'),{status:502});
+  return {model,payload:parsed};
+}
+
+async function discover(command,paths){
+  const safePaths=Array.isArray(paths)?paths.map(x=>clean(x,300)).filter(Boolean).slice(0,3000):[];
+  const system=[
+    'You are the repository discovery brain for BARMAN Executive OS.',
+    'Map the Arabic or English owner command to the most likely files in the DABBIR repository.',
+    'Do not execute anything. Do not request secrets. Do not select governance/security files unless the owner command explicitly concerns those systems.',
+    'Return JSON only: {"summary":"...","search_terms":["..."],"file_hints":["exact/path"]}.',
+    'Use 3-8 concise English search terms and at most 8 exact file paths from the supplied path list.'
+  ].join('\n');
+  const result=await brain(system,{command:clean(command,4000),paths:safePaths},1200);
+  const p=result.payload;
+  return {model:result.model,summary:clean(p?.summary,800),search_terms:Array.isArray(p?.search_terms)?p.search_terms.map(x=>clean(x,80)).filter(Boolean).slice(0,8):[],file_hints:Array.isArray(p?.file_hints)?p.file_hints.map(x=>clean(x,300)).filter(x=>safePaths.includes(x)).slice(0,8):[]};
+}
+
+async function proposePatch(command,files,previousPatch='',applyError=''){
+  const context=Array.isArray(files)?files.slice(0,8).map(file=>({path:clean(file?.path,300),content:String(file?.content||'').slice(0,24000)})).filter(file=>file.path):[];
+  const system=[
+    'You are the code-editing brain for BARMAN Executive OS working on DABBIR.',
+    'Produce the smallest correct source change that satisfies the owner command.',
+    'You may edit only files supplied in context, plus create new test files under test/ or new SQL migrations under supabase/migrations/.',
+    'Never edit .github/, .env files, secrets, branch-protection/auth governance, api/barman-tool-agent-broker.js, scripts/barman-tool-agent.mjs, or vercel.json.',
+    'Preserve tenant isolation and Mumbai-only production. Do not weaken tests or authentication to make a test pass.',
+    'Return JSON only: {"summary":"...","patch":"<unified diff>"}. The patch must be a valid git unified diff applicable to the exact supplied content.',
+    'If the request cannot be safely completed from the supplied context, return {"summary":"BLOCKED: ...","patch":""}.'
+  ].join('\n');
+  const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1200)},7000);
+  return {model:result.model,summary:clean(result.payload?.summary,1200),patch:String(result.payload?.patch||'').trim().slice(0,80000)};
+}
+
+function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))?String(value):null}
+
+export default async function handler(req,res){
+  if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
+  try{
+    const auth=String(req.headers.authorization||'');
+    if(!auth.startsWith('Bearer '))return json(res,401,{ok:false,error:'OIDC_REQUIRED'});
+    const claims=await verifyGithubOidc(auth.slice(7));
+    let key;try{key=serviceRoleKey()}catch(error){return json(res,error.status||503,{ok:false,error:error.message})}
+    const body=req.body&&typeof req.body==='object'?req.body:{};
+    const phase=clean(body.phase,40);
+    if(phase==='claim'){
+      const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:`github-tool-agent:${clean(claims.run_id,80)||'run'}`,p_lane:'tool_agent',p_lease_seconds:3600});
+      return json(res,200,{ok:true,...claim});
+    }
+    if(phase==='discover')return json(res,200,{ok:true,...await discover(body.command,body.paths)});
+    if(phase==='patch')return json(res,200,{ok:true,...await proposePatch(body.command,body.files,body.previous_patch,body.apply_error)});
+    if(phase==='finalize'){
+      const commandId=uuid(body.command_id),runId=uuid(body.run_id),actionId=uuid(body.action_id);
+      if(!commandId||!runId||!actionId)return json(res,400,{ok:false,error:'EXECUTION_IDS_INVALID'});
+      const outcome=['DONE','BLOCKED','RETRY'].includes(String(body.outcome||'').toUpperCase())?String(body.outcome).toUpperCase():null;
+      if(!outcome)return json(res,400,{ok:false,error:'OUTCOME_INVALID'});
+      const evidence=Array.isArray(body.evidence)?body.evidence.slice(0,12):[];
+      const summary=clean(body.summary,4000),errorText=clean(body.error,2000)||null;
+      const finalized=await adminRpc(key,'barman_executive_finalize_v1',{p_command_id:commandId,p_run_id:runId,p_action_id:actionId,p_outcome:outcome,p_summary:summary,p_evidence:evidence,p_error:errorText});
+      const route=await telegramRoute(key,commandId).catch(()=>null);
+      const notification=await notifyTelegram(route,`${summary}\n\nالحالة: ${outcome} — BARMAN tool-agent.`).catch(error=>({sent:false,reason:clean(error?.message||error,200)}));
+      return json(res,200,{ok:true,finalized,notification});
+    }
+    return json(res,400,{ok:false,error:'PHASE_INVALID'});
+  }catch(error){
+    const status=Number(error?.status)||500;
+    console.error('barman_tool_agent_broker_failed',{status,error:clean(error?.message||error,500)});
+    return json(res,status,{ok:false,error:clean(error?.message||error,200)});
+  }
+}
