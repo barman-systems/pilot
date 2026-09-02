@@ -11,7 +11,7 @@ const GH_REPOSITORY='barman-systems/pilot';
 const GH_REF='refs/heads/main';
 const GH_EVENTS=new Set(['push','schedule','workflow_dispatch']);
 const OIDC_PROFILES={
-  ai:{audience:'dabbir-ai-qa',workflowRef:'barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main'},
+  ai:{audience:'dabbir-ai-qa',workflowRefs:new Set(['barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main','barman-systems/pilot/.github/workflows/dabbir-owner-away-production.yml@refs/heads/main'])},
   readiness:{audience:'dabbir-bar12-readiness',workflowRef:'barman-systems/pilot/.github/workflows/dabbir-bar12-readiness.yml@refs/heads/main'},
 } as const;
 
@@ -45,7 +45,7 @@ async function verifyGitHubOidc(req:Request,profile:keyof typeof OIDC_PROFILES){
   if(Number(payload.exp||0)<=now||Number(payload.nbf||0)>now+30)throw new Error('OIDC_TIME_INVALID');
   if(payload.repository!==GH_REPOSITORY)throw new Error('OIDC_REPOSITORY_DENIED');
   if(payload.ref!==GH_REF)throw new Error('OIDC_REF_DENIED');
-  if(payload.workflow_ref!==expected.workflowRef)throw new Error('OIDC_WORKFLOW_DENIED');
+  if('workflowRefs' in expected?!expected.workflowRefs.has(String(payload.workflow_ref||'')):payload.workflow_ref!==expected.workflowRef)throw new Error('OIDC_WORKFLOW_DENIED');
   if(!GH_EVENTS.has(String(payload.event_name||'')))throw new Error('OIDC_EVENT_DENIED');
   return payload;
 }
