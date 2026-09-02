@@ -32,15 +32,13 @@ function run(dir,head,base){
   });
 }
 
-test('BAR-12 and release evidence contracts always advance the exact Production SHA',()=>{
+test('executable BAR-12 and release contracts advance the exact Production SHA',()=>{
   const paths=[
     '.github/workflows/dabbir-bar12-readiness.yml',
     '.github/scripts/dabbir-bar12-technical-evidence.mjs',
     '.github/scripts/dabbir-bar12-alert-evidence.mjs',
     'scripts/dabbir-readiness-gate.mjs',
     'test/dabbir-bar12-technical-evidence.test.mjs',
-    'docs/evidence/dabbir-bar12-technical-review.json',
-    'docs/evidence/dabbir-bar12-alert-delivery.json',
     'config/barman-integration-contract.json',
     'config/dabbir-release-policy.json',
   ];
@@ -51,5 +49,20 @@ test('BAR-12 and release evidence contracts always advance the exact Production 
     const result=run(dir,head,base);
     assert.equal(result.status,1,`${relativePath}: ${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout,/Exact-SHA Production verification contract changed|Runtime or unknown path changed/);
+  }
+});
+
+test('static BAR-12 evidence snapshots never manufacture a new Production runtime',()=>{
+  const paths=[
+    'docs/evidence/dabbir-bar12-technical-review.json',
+    'docs/evidence/dabbir-bar12-alert-delivery.json',
+  ];
+  for(const relativePath of paths){
+    const dir=setup();
+    const base=git(dir,'rev-parse','HEAD');
+    const head=change(dir,relativePath);
+    const result=run(dir,head,base);
+    assert.equal(result.status,0,`${relativePath}: ${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout,/Only explicitly non-runtime DABBIR paths changed/);
   }
 });
