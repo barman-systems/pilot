@@ -14,9 +14,17 @@ function statusCode(error){
   return [400,401,403,404,409,429,502,503].includes(code)?code:500;
 }
 
-function calendarStorageConfigured(){
-  const key=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
-  return Boolean(key&&!key.startsWith('sb_publishable_'));
+function calendarRuntimeReadiness(){
+  const serviceRoleKey=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
+  const tokenKey=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim();
+  const stateSecret=String(process.env.DABBIR_CALENDAR_STATE_SECRET||'').trim();
+  const storageConfigured=serviceRoleKey.length>=24&&!serviceRoleKey.startsWith('sb_publishable_');
+  const rootSecretConfigured=tokenKey.length>=24||storageConfigured;
+  const stateSecretConfigured=stateSecret.length>=24||rootSecretConfigured;
+  return {
+    storageConfigured,
+    securityReady:rootSecretConfigured&&stateSecretConfigured,
+  };
 }
 
 function logCalendarFailure(error,status){
@@ -34,8 +42,7 @@ export default async function handler(req,res){
       const businessId=safeBusinessId(singleQueryValue(req,'business_id'));
       await requireCalendarMember(req,businessId);
       const google=providerConfig('google',req),outlook=providerConfig('outlook',req);
-      const securityReady=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24&&String(process.env.DABBIR_CALENDAR_STATE_SECRET||process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24;
-      const storageConfigured=calendarStorageConfigured();
+      const {storageConfigured,securityReady}=calendarRuntimeReadiness();
       const connections=storageConfigured?await listConnections(businessId):[];
       return json(res,200,{
         ok:true,
