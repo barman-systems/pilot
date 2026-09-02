@@ -1,0 +1,5 @@
+BARMAN Executive OS source-control canary
+run_id=33617906604
+source_sha=27e39b708607771b9e6dd8e4b3e727ad1684c6a7
+direct_main_push=false
+merge_bypass=false
