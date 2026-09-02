@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "producer": "DABBIR",
   "control_plane": "barman-systems/barman-control-plane",
   "target_source_repository": "barman-systems/pilot",
@@ -19,6 +19,17 @@
     "source_repository": "barman-systems/pilot",
     "source_branch": "main",
     "root_directory": "./",
+    "release_authority": {
+      "kind": "LIVE_RELEASE_EVIDENCE_ENDPOINT",
+      "endpoint": "https://dabbir.bmalman.com/api/release-evidence",
+      "runtime_identity_must_be_read_live": true,
+      "historical_snapshot_fields": [
+        "verified_deployment_id",
+        "verified_deployment_state",
+        "verified_source_commit",
+        "verified_at"
+      ]
+    },
     "verified_deployment_id": "dpl_3WYNiJfBKvRsZ5Xp7BErkqcYuFDT",
     "verified_deployment_state": "READY",
     "verified_source_commit": "ab03eb8e3ede239ab019ec78844cee3bf9180a12",
