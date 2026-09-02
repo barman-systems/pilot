@@ -1,4 +1,4 @@
-import dashboard from './owner-command-center-v22.js';
+import dashboard from './owner-command-center-v23.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
