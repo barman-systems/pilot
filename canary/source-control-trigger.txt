@@ -1,0 +1,2 @@
+BARMAN Executive OS source-control autonomy acceptance trigger v2.
+This branch exists only to wake the GitHub-native executor.
