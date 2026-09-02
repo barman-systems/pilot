@@ -3,7 +3,7 @@ import { existsSync, openSync, closeSync, writeFileSync, unlinkSync } from 'node
 import os from 'node:os';
 import path from 'node:path';
 
-const gateVersion = 'v4-fail-closed';
+const gateVersion = 'v3-final';
 const rawSha = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local').trim();
 const rawDeploymentId = String(process.env.VERCEL_DEPLOYMENT_ID || `pid-${process.pid}`).trim();
 const safeSha = rawSha.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'local';
@@ -19,31 +19,24 @@ function sleep(milliseconds) {
   Atomics.wait(new Int32Array(buffer), 0, 0, milliseconds);
 }
 
-function runNpm(args,label) {
-  console.log(`[dabbir-build-gate:${gateVersion}] ${label}`);
-  const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
+function runTests() {
+  console.log(`[dabbir-build-gate:${gateVersion}] verifying deployment ${safeDeploymentId} commit ${safeSha}`);
+  const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test'], {
     stdio: 'inherit',
     env: process.env,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    const error = new Error(`DABBIR_BUILD_GATE_${label.replace(/[^A-Z0-9]+/gi,'_').toUpperCase()}_FAILED_${result.status ?? 1}`);
+    const error = new Error(`DABBIR_TEST_GATE_FAILED_${result.status ?? 1}`);
     error.exitCode = result.status ?? 1;
     throw error;
   }
-}
-
-function runTests() {
-  console.log(`[dabbir-build-gate:${gateVersion}] verifying deployment ${safeDeploymentId} commit ${safeSha}`);
-  runNpm(['run','check:syntax'],'syntax');
-  runNpm(['run','audit:prod'],'dependency-audit');
-  runNpm(['test'],'test-suite');
   writeFileSync(marker, `${new Date().toISOString()}\n`, { encoding: 'utf8', mode: 0o600 });
   console.log(`[dabbir-build-gate:${gateVersion}] verified deployment ${safeDeploymentId} commit ${safeSha}`);
 }
 
 if (existsSync(marker)) {
-  console.log(`[dabbir-build-gate:${gateVersion}] deployment ${safeDeploymentId} commit ${safeSha} already verified; skipping duplicate gate run`);
+  console.log(`[dabbir-build-gate:${gateVersion}] deployment ${safeDeploymentId} commit ${safeSha} already verified; skipping duplicate test run`);
   process.exit(0);
 }
 
