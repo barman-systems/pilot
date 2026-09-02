@@ -1,35 +1,35 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
-    "deployment_id": "dpl_G9ZVMVszTHjdJ3vLEmYXTJSQbAEu",
+    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
+    "deployment_id": "dpl_2eNiiKsbQiJwJCwtjhne9V3hKhFa",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-02T16:13:00.000Z",
+    "checked_at": "2026-09-02T17:07:38.226Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
   "alert_delivery": {
-    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
-    "deployment_id": "dpl_G9ZVMVszTHjdJ3vLEmYXTJSQbAEu",
+    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
+    "deployment_id": "dpl_2eNiiKsbQiJwJCwtjhne9V3hKhFa",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-02T16:13:56.087Z",
+    "verified_at": "2026-09-02T17:08:13.759Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
     "channel_name": "barman-executive-alerts",
-    "message_ts": "1788365636.087589",
-    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788365636087589",
+    "message_ts": "1788368893.759909",
+    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788368893759909",
     "readback_verified": true,
     "test_only": true,
     "contains_secrets_or_customer_data": false,
-    "notes": "A test-only BAR-12 operational alert containing only public Production release identity was delivered by BARMAN Executive OS to the reserved owner alert channel and read back at the same Slack message timestamp."
+    "notes": "A test-only BAR-12 operational alert containing only the exact current public Production release identity was delivered by BARMAN Executive OS to the reserved owner alert channel and read back from Slack at the same message timestamp."
   },
   "security": {
-    "source_commit": "7bbec9863cdbd43e0f16b96f804465719cf4cfa8",
+    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
     "project_ref": "fphpoysqdsceniwduxjq",
-    "reviewed_at": "2026-09-02T16:13:45.052Z",
+    "reviewed_at": "2026-09-02T17:07:48.524Z",
     "verdict": "PASS",
     "blocking_findings": 0,
     "advisor_max_level": "WARN",
@@ -48,6 +48,6 @@
       "public_slots_are_bounded": true,
       "public_order_status_uses_unguessable_uuid_token": true
     },
-    "notes": "Mumbai Security Advisor was rerun against Production. It returned no blocking ERROR findings and the same four intentional anonymous public SECURITY DEFINER capabilities. Public tables with RLS disabled = 0. The four WARN functions remain explicitly reviewed public booking/status surfaces with bounded output/input and existing abuse/idempotency guards; INFO no-policy surfaces remain deny-by-default/server-only."
+    "notes": "Mumbai Security Advisor was rerun against the authoritative Production project after the current calendar runtime changes. It returned no blocking ERROR findings and the same four reviewed intentional anonymous public SECURITY DEFINER capabilities. INFO RLS-without-policy findings remain deny-by-default/server-only surfaces; the four WARN functions remain bounded public booking/status capabilities with the previously verified abuse/idempotency safeguards."
   }
 }
