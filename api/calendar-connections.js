@@ -1,4 +1,5 @@
 import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 import {
   calendarError,
   disconnectConnection,
@@ -30,7 +31,7 @@ function logCalendarFailure(error,status){
 export default async function handler(req,res){
   try{
     if(req.method==='GET'){
-      const businessId=safeBusinessId(req.query?.business_id);
+      const businessId=safeBusinessId(singleQueryValue(req,'business_id'));
       await requireCalendarMember(req,businessId);
       const google=providerConfig('google',req),outlook=providerConfig('outlook',req);
       const securityReady=String(process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24&&String(process.env.DABBIR_CALENDAR_STATE_SECRET||process.env.DABBIR_CALENDAR_TOKEN_KEY||'').trim().length>=24;
