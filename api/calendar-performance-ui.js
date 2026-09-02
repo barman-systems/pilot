@@ -2,6 +2,31 @@ import calendarLiveHandler from './calendar-live-ui.js';
 
 const PATCHES=[
   {
+    name:'activity-profile-business-timezone-day-key',
+    from:`  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+    to:`  function businessTimezone(){const b=workspace?.business||{};if(b.timezone)return String(b.timezone);const loc=String(b.locale||'ar-AE').toUpperCase();if(loc.endsWith('-SA'))return 'Asia/Riyadh';if(loc.endsWith('-KW'))return 'Asia/Kuwait';if(loc.endsWith('-QA'))return 'Asia/Qatar';if(loc.endsWith('-BH'))return 'Asia/Bahrain';if(loc.endsWith('-OM'))return 'Asia/Muscat';return 'Asia/Dubai'}\n  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:businessTimezone(),year:'numeric',month:'2-digit',day:'2-digit'}),p=Object.fromEntries(f.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day}catch{return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+  },
+  {
+    name:'activity-profile-business-timezone-clock',
+    from:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
+    to:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:businessTimezone(),hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
+  },
+  {
+    name:'activity-profile-hide-cancelled-bookings',
+    from:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+    to:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!['cancelled','canceled'].includes(String(a.status||'').toLowerCase())&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+  },
+  {
+    name:'activity-profile-today-metric',
+    from:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
+    to:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(p.show_appointments){const todayCount=appointments().filter(a=>dayKey(a.starts_at)===dayKey(new Date())).length,todayStrong=cards[1]?.querySelector('strong'),nextToday=String(todayCount);if(todayStrong&&todayStrong.textContent!==nextToday)todayStrong.textContent=nextToday}\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
+  },
+  {
+    name:'appointment-management-business-timezone',
+    from:`  function fmt(value){\n    try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Dubai'}).format(new Date(value))}catch{return String(value||'')}\n  }\n  function statusLabel(status){\n    const c=copy(),s=String(status||'requested').toLowerCase();\n    return c[s]||s;\n  }\n  function dubaiLocalMinute(date=new Date()){\n    const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});\n    const p=Object.fromEntries(f.formatToParts(date).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));\n    return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;\n  }\n  function isoFromDubaiLocal(value){\n    const raw=String(value||'').trim();\n    if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(raw))return null;\n    const d=new Date(raw+':00+04:00');\n    return Number.isNaN(d.getTime())?null:d.toISOString();\n  }`,
+    to:`  function businessTimezone(){const b=ws()?.business||{};if(b.timezone)return String(b.timezone);const loc=String(b.locale||'ar-AE').toUpperCase();if(loc.endsWith('-SA'))return 'Asia/Riyadh';if(loc.endsWith('-KW'))return 'Asia/Kuwait';if(loc.endsWith('-QA'))return 'Asia/Qatar';if(loc.endsWith('-BH'))return 'Asia/Bahrain';if(loc.endsWith('-OM'))return 'Asia/Muscat';return 'Asia/Dubai'}\n  function timezoneParts(date){const f=new Intl.DateTimeFormat('en-CA',{timeZone:businessTimezone(),year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});return Object.fromEntries(f.formatToParts(date).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]))}\n  function timezoneOffsetMinutes(date){const p=timezoneParts(date),asUtc=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);return Math.round((asUtc-date.getTime())/60000)}\n  function fmt(value){\n    try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short',timeZone:businessTimezone()}).format(new Date(value))}catch{return String(value||'')}\n  }\n  function statusLabel(status){\n    const c=copy(),s=String(status||'requested').toLowerCase();\n    return c[s]||s;\n  }\n  function dubaiLocalMinute(date=new Date()){\n    const p=timezoneParts(date);\n    return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;\n  }\n  function isoFromDubaiLocal(value){\n    const raw=String(value||'').trim();\n    if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(raw))return null;\n    const [datePart,timePart]=raw.split('T'),[year,month,day]=datePart.split('-').map(Number),[hour,minute]=timePart.split(':').map(Number);\n    const wallUtc=Date.UTC(year,month-1,day,hour,minute,0),guess=new Date(wallUtc);\n    let offset=timezoneOffsetMinutes(guess),resolved=new Date(wallUtc-offset*60000),refined=timezoneOffsetMinutes(resolved);\n    if(refined!==offset)resolved=new Date(wallUtc-refined*60000);\n    return Number.isNaN(resolved.getTime())?null:resolved.toISOString();\n  }`,
+  },
+  {
     name:'activity-profile-navigation-observer',
     from:`  const observer=new MutationObserver(()=>{if(workspace?.business?.id){setTimeout(applyProfile,0);load(false)}});\n  observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});`,
     to:`  let profileApplyQueued=false;\n  function scheduleProfileApply(){\n    if(profileApplyQueued)return;\n    profileApplyQueued=true;\n    const run=()=>{profileApplyQueued=false;if(workspace?.business?.id)void load(false)};\n    if(typeof requestAnimationFrame==='function')requestAnimationFrame(run);else setTimeout(run,0);\n  }\n  const profileLanguageObserver=new MutationObserver(scheduleProfileApply);\n  profileLanguageObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});\n  try{\n    const baseRenderAllProfile=renderAll;\n    renderAll=function(){const result=baseRenderAllProfile.apply(this,arguments);scheduleProfileApply();return result};\n  }catch{}`,
@@ -78,7 +103,7 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=60');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-calendar-performance-ui','v2-navigation-event-scoped');
+  res.setHeader('x-dabbir-calendar-performance-ui','v3-calendar-correctness-event-scoped');
   return res.status(200).send(body);
 }
 
