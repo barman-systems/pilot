@@ -46,6 +46,15 @@ test('calendar OAuth and connection endpoints use the guarded WHATWG parser', as
   }
 });
 
+test('calendar OAuth endpoints reserve error telemetry for server failures', async () => {
+  for (const path of ['api/calendar-oauth-start.js','api/calendar-oauth-callback.js']) {
+    const source = await readFile(new URL(path, root), 'utf8');
+    assert.match(source, /if\(status>=500\)console\.error/u, path);
+    assert.match(source, /else if\(status===429\)console\.warn/u, path);
+    assert.match(source, /else console\.info/u, path);
+  }
+});
+
 test('salon and clinic query helpers parse req.url with WHATWG URL semantics', async () => {
   for (const path of ['api/salon-operations.js','api/clinic-operations.js']) {
     const source = await readFile(new URL(path, root), 'utf8');
