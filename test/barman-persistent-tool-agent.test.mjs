@@ -48,6 +48,12 @@ test('persistent worker is event-looped and cannot bypass governance files',()=>
   assert.match(worker,/api\/barman-tool-agent-broker\.js/);
 });
 
+test('required branch-protection test context is emitted only by pull_request CI',()=>{
+  assert.match(ci,/name:\s*\$\{\{\s*github\.event_name == 'pull_request' && 'test' \|\| 'ci-non-pr'\s*\}\}/);
+  assert.match(ci,/Require terminal mobile release gates before merge/);
+  assert.match(ci,/if:\s*github\.event_name == 'pull_request'/);
+});
+
 test('DONE requires CI, exact Production release and full customer journey',()=>{
   assert.match(ci,/workflow_dispatch:/);
   assert.match(worker,/dispatch\('ci\.yml'/);
