@@ -33,5 +33,5 @@ test('car-wash calendar observer is idempotent and never observes hidden mutatio
   assert.match(loader,/dabbirCarWashDuplicate!=='hidden'/);
   assert.match(loader,/calendarObserver\.observe\(document\.documentElement,\{subtree:true,childList:true\}\)/);
   assert.doesNotMatch(loader,/calendarObserver\.observe[^\n]+attributeFilter:\[[^\]]*hidden/);
-  assert.match(loader,/v3-observer-safe/);
+  assert.match(loader,/v4-manual-booking-selectors/);
 });
