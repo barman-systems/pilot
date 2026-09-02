@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const root = new URL('../', import.meta.url);
 const bridge = fs.readFileSync(new URL('api/dabbir-navigation-event-bridge-ui.js', root), 'utf8');
 const router = fs.readFileSync(new URL('api/dabbir-contextual-navigation-ui.js', root), 'utf8');
+const routeAuthority = fs.readFileSync(new URL('api/dabbir-route-authority-ui.js', root), 'utf8');
 const bundles = JSON.parse(fs.readFileSync(new URL('config/dabbir-ui-bundles.json', root), 'utf8'));
 const recovery = fs.readFileSync(new URL('api/app-recovery.js', root), 'utf8');
 
@@ -22,9 +23,13 @@ test('navigation bridge delegates existing primary nav without owning destinatio
   assert.doesNotMatch(bridge, /createElement\(['"](?:button|nav)['"]\)/);
 });
 
-test('store activity destination remains Operations under the contextual router', () => {
+test('store activity destination remains Operations even when a stale appointments target survives', () => {
   assert.match(router, /setActivitySlot\(node,'operations',t\.operations\)/);
   assert.match(router, /authority:'primary-context-router'/);
+  assert.match(routeAuthority, /target==='appointments'&&workspaceBusinessType\(\)==='store'/);
+  assert.match(routeAuthority, /return 'operations'/);
+  assert.match(routeAuthority, /baseShowScreen\.call\(this,target\)/);
+  assert.match(routeAuthority, /store_appointments_target:'operations'/);
   assert.match(bridge, /const name=String\(node\.dataset\?\.screen\|\|''\)\.trim\(\)/);
 });
 
@@ -39,13 +44,15 @@ test('tab feedback paints before deferred screen rendering', () => {
   assert.match(bridge, /deferred_render:true/);
 });
 
-test('navigation bridge is deferred after contextual routing and shell module count stays frozen', () => {
+test('canonical route guard is loaded between contextual routing and the mobile event bridge', () => {
   const modules=[...bundles.critical,...bundles.deferred];
   const routerIndex=bundles.deferred.indexOf('/api/dabbir-contextual-navigation-ui');
+  const guardIndex=bundles.deferred.indexOf('/api/dabbir-route-authority-ui');
   const bridgeIndex=bundles.deferred.indexOf('/api/dabbir-navigation-event-bridge-ui');
   assert.ok(routerIndex>=0);
-  assert.equal(bridgeIndex,routerIndex+1);
-  assert.equal(modules.length,26);
+  assert.equal(guardIndex,routerIndex+1);
+  assert.equal(bridgeIndex,guardIndex+1);
+  assert.equal(modules.length,27);
   assert.equal(new Set(modules).size,modules.length);
 });
 
