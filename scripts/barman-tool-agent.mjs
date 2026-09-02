@@ -144,6 +144,19 @@ try{
   if(!commandText)throw new Error('EMPTY_COMMAND');
   console.log(`Claimed ${execution.commandId}: ${clean(commandText,300)}`);
 
+  const routing=await broker({phase:'route',command:commandText});
+  if(routing.route!=='REPO_CHANGE'){
+    const labels={
+      DATA_QUERY:'طلب بيانات يحتاج منفذ قراءة مخصص، ولن أحوله إلى تعديل كود.',
+      EXTERNAL_ACTION:'هذا إجراء خارجي وليس تعديل مستودع، ولن أنفذه بعامل الكود.',
+      OWNER_GATE:'هذا الإجراء يتطلب صلاحية المالك ولن يتجاوز BARMAN هذا الحد.',
+      MULTI_STEP:'الأمر مركب ويحتاج تفكيك خطة قبل التنفيذ الآلي.',
+      REVIEW_REQUIRED:'لم أجد مسار تنفيذ آمنًا لهذا الأمر.',
+    };
+    await finalize('BLOCKED',labels[routing.route]||labels.REVIEW_REQUIRED,[],`ROUTER_${routing.route}_${routing.reason||'UNKNOWN'}`);
+    process.exit(0);
+  }
+
   const allPaths=repositoryPaths();
   const discovery=await broker({phase:'discover',command:commandText,paths:allPaths.slice(0,3000)});
   let context=buildContext(discovery,allPaths);
