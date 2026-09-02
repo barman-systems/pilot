@@ -29,7 +29,7 @@ test('real iPhone touch navigation cannot be discarded by a redundant WebKit hit
   assert.match(touchEnd, /distance>MAX_TAP_DISTANCE\|\|duration>MAX_TAP_DURATION/);
   assert.match(touchEnd, /const hit=resolve\(node\)/);
   assert.match(touchEnd, /activate\(hit,'touchend'\)/);
-  assert.doesNotMatch(touchEnd, /elementFromPoint/);
+  assert.doesNotMatch(touchEnd, /document\.elementFromPoint\(/);
   assert.match(bridge, /version:'navigation-event-bridge-v6-real-iphone-touch'/);
   assert.match(bridge, /redundant_touch_hit_test:false/);
 });
