@@ -1,5 +1,3 @@
-begin;
-
 -- Quick booking must always be available. Customer, employee and service are
 -- optional; a missing time falls back to 30 minutes from now.
 create or replace function dabbir_private.salon_member_scope(p_business_id uuid,p_worker_id uuid,p_manage boolean default false)
@@ -205,5 +203,3 @@ $$;
 
 revoke all on function public.dabbir_salon_quick_book(uuid,text,text,uuid,uuid,timestamptz,numeric,text,text) from public,anon;
 grant execute on function public.dabbir_salon_quick_book(uuid,text,text,uuid,uuid,timestamptz,numeric,text,text) to authenticated;
-
-commit;
