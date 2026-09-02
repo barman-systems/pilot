@@ -1,3 +1,5 @@
+import { supabaseKeyHeaders } from './_supabase-key-auth.js';
+
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'https://spohjzrsymsmzsseygtw.supabase.co').replace(/\/$/,'');
 const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3').trim();
 const SLUG_RE=/^[a-z0-9][a-z0-9_-]{2,119}$/i;
@@ -19,7 +21,7 @@ function clean(value,max){return String(value??'').trim().slice(0,max)}
 function slug(value){const v=clean(value,120);return SLUG_RE.test(v)?v:null}
 function readBody(req,max=12000){return new Promise((resolve,reject)=>{let n=0;const parts=[];req.on('data',chunk=>{n+=chunk.length;if(n>max){reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'),{status:413}));req.destroy();return}parts.push(chunk)});req.on('end',()=>{try{resolve(JSON.parse(Buffer.concat(parts).toString('utf8')||'{}'))}catch{reject(Object.assign(new Error('INVALID_JSON'),{status:400}))}});req.on('error',reject)})}
 async function rpc(name,params){
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:`Bearer ${SUPABASE_PUBLISHABLE_KEY}`,accept:'application/json','content-type':'application/json'},body:JSON.stringify(params),cache:'no-store'});
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',headers:supabaseKeyHeaders(SUPABASE_PUBLISHABLE_KEY,{accept:'application/json','content-type':'application/json'}),body:JSON.stringify(params),cache:'no-store'});
   const text=await response.text();let payload=null;try{payload=text?JSON.parse(text):null}catch{}
   if(!response.ok){const error=new Error(String(payload?.message||payload?.code||'PUBLIC_BOOKING_FAILED').slice(0,120));error.status=response.status;throw error}
   return payload;
