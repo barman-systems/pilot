@@ -62,7 +62,7 @@ test('scenario 5: cancellation releases the slot and returns matching waitlist e
 
 test('scenario 6: salon employees are restricted to their assigned appointments and clients',()=>{
   hasAll(migration,['salon_member_scope','salon_customer_scope','w.membership_user_id=(select auth.uid())','a.worker_id=w.id','dabbir_private.salon_member_scope(business_id,worker_id,false)']);
-  assert.match(migration,/m\.role in \('owner','admin','manager'\)/);
+  assert.match(migration,/m\.role in \('owner','admin','manager','staff'\)/);
   assert.match(migration,/dabbir_customers_select[\s\S]+salon_customer_scope\(business_id,id,false\)/);
   assert.match(migration,/dabbir_operational_payments_select[\s\S]+salon_member_scope\(a\.business_id,a\.worker_id,true\)/);
 });
@@ -86,8 +86,11 @@ test('calendar UI provides day, week, month, employee columns, drag/drop and dur
   hasAll(ui,["view==='day'","view==='week'",'monthCalendar','salonDayGrid','data-worker','ondragstart','ondrop','data-resize','duration_minutes','quickBooking']);
   const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
   const calendarOwner=read('api/calendar-live-ui.js');
+  const calendarPerformance=read('api/calendar-performance-ui.js');
   assert.equal(manifest.deferred.includes('/api/salon-mode-ui'),false);
-  assert.ok(manifest.deferred.includes('/api/calendar-live-ui'));
+  assert.ok(manifest.deferred.includes('/api/calendar-performance-ui'));
+  assert.equal(manifest.deferred.includes('/api/calendar-live-ui'),false);
+  assert.match(calendarPerformance,/import calendarLiveHandler from '\.\/calendar-live-ui\.js'/);
   assert.match(calendarOwner,/import salonModeUiHandler from '\.\/salon-mode-ui\.js'/);
   assert.match(calendarOwner,/managementCaptured\.body\+'\\n'\+salonCaptured\.body/);
 });
