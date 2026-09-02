@@ -26,8 +26,9 @@ test('Google calendar OAuth requests event read/write without full calendar admi
   assert.ok(!config.scopes.includes('https://www.googleapis.com/auth/calendar'));
 });
 
-test('Microsoft calendar OAuth retains delegated event read/write access', () => {
+test('Microsoft calendar OAuth requests event read/write and signed-in account identity', () => {
   const config = providerConfig('outlook', req);
   assert.equal(config.configured, true);
+  assert.ok(config.scopes.includes('User.Read'));
   assert.ok(config.scopes.includes('Calendars.ReadWrite'));
 });
