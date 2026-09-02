@@ -1,5 +1,3 @@
-begin;
-
 -- External bookings are never silently confirmed.
 -- WhatsApp/web bookings use exactly one confirmation gate:
 -- 1) deposit enabled -> confirm after a real positive payment;
@@ -333,5 +331,3 @@ end;
 $$;
 revoke all on function public.dabbir_salon_owner_decide_booking(uuid,uuid,text) from public,anon;
 grant execute on function public.dabbir_salon_owner_decide_booking(uuid,uuid,text) to authenticated;
-
-commit;
