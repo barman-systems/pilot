@@ -21,11 +21,14 @@ test('protected DABBIR prelaunch is BLOCKED_PRELAUNCH rather than a false produc
   assert.match(result.reason,/no public launch domain/i);
 });
 
-test('missing production origin fails once the contract says DABBIR is no longer protected prelaunch', () => {
-  assert.throws(
-    ()=>classifyProductionOrigin({origin:'',contract:contract({public_launch_domain:'dabbir.example',domain_access:'PUBLIC',production_runtime_policy:'LIVE',project_live:true})}),
-    /DABBIR_PRODUCTION_ORIGIN must be configured/
-  );
+test('live DABBIR contract supplies the canonical production origin when CI variable is absent', () => {
+  const result=classifyProductionOrigin({
+    origin:'',
+    contract:contract({public_launch_domain:'dabbir.example',domain_access:'PUBLIC',production_runtime_policy:'LIVE',project_live:true}),
+  });
+  assert.equal(result.ready,true);
+  assert.equal(result.state,'PUBLIC_PRODUCTION_READY');
+  assert.equal(result.origin,'https://dabbir.example');
 });
 
 test('an origin cannot be configured before a public launch domain is approved', () => {
