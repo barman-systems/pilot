@@ -1,5 +1,6 @@
 import activityProfileHandler from './activity-profile-ui.js';
 import appointmentManagementUiHandler from './appointment-management-ui.js';
+import internalCalendarUiHandler from './internal-calendar-ui.js';
 import salonModeUiHandler from './salon-mode-ui.js';
 import clinicModeUiHandler from './clinic-mode-ui.js';
 import businessActivityProfileUiHandler from './business-activity-profile-ui.js';
@@ -153,7 +154,7 @@ const liveScript=String.raw`(()=>{
   }
   setInterval(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},60000);
   setTimeout(()=>{if(screenActive()&&businessId()){removeCancelledFromActiveCalendar();void sync(false)}},1200);
-  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,version:'calendar-live-v5-request-coalescing'};
+  window.__dabbirCalendarLiveUi={sync:()=>sync(true),refreshBusy:()=>businessId()?loadBusy(businessId(),true):Promise.resolve(),sanitize:removeCancelledFromActiveCalendar,version:'calendar-live-v6-internal-calendar'};
 })();`;
 
 function captureResponse(){
@@ -170,21 +171,24 @@ export default async function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   const activityCaptured=captureResponse();
   const managementCaptured=captureResponse();
+  const internalCalendarCaptured=captureResponse();
   const salonCaptured=captureResponse();
   const clinicCaptured=captureResponse();
   const businessActivityCaptured=captureResponse();
   await activityProfileHandler(req,activityCaptured);
   await appointmentManagementUiHandler(req,managementCaptured);
+  await internalCalendarUiHandler(req,internalCalendarCaptured);
   await salonModeUiHandler(req,salonCaptured);
   await clinicModeUiHandler(req,clinicCaptured);
   await businessActivityProfileUiHandler(req,businessActivityCaptured);
   if(activityCaptured.statusCode!==200||!activityCaptured.body) return res.status(500).end('Activity profile UI unavailable');
   if(managementCaptured.statusCode!==200||!managementCaptured.body) return res.status(500).end('Appointment management UI unavailable');
+  if(internalCalendarCaptured.statusCode!==200||!internalCalendarCaptured.body) return res.status(500).end('Internal calendar UI unavailable');
   if(salonCaptured.statusCode!==200||!salonCaptured.body) return res.status(500).end('Salon Mode UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body) return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body) return res.status(500).end('Business activity profile UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-calendar-live-ui','v8-request-coalescing');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+  res.setHeader('x-dabbir-calendar-live-ui','v9-internal-calendar');
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+internalCalendarCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
