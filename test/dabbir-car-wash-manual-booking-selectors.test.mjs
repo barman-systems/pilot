@@ -16,20 +16,24 @@ test('car-wash manual booking loads saved packages and services with an Other ch
   assert.match(manual,/price\.value=String\(Number\(amount\)\)/);
 });
 
-test('car-wash saved customers are searchable and preserve customer identity',()=>{
-  assert.match(manual,/dabbirCarWashCustomerOptions/);
-  assert.match(manual,/setAttribute\('list',list\.id\)/);
+test('car-wash saved customers use an in-app searchable combobox instead of Safari datalist',()=>{
+  assert.match(manual,/dabbirCarWashCustomerMenu/);
+  assert.match(manual,/role','combobox/);
+  assert.match(manual,/aria-autocomplete','list/);
   assert.match(manual,/Search a saved customer or enter a new name|ابحث عن عميل دائم أو اكتب اسمًا جديدًا/);
   assert.match(manual,/dataset\.apptKey='customer_id'/);
   assert.match(manual,/hidden\.value=customer\?\.id\|\|''/);
+  assert.match(manual,/dabbirCustomerChoice/);
+  assert.match(manual,/كعميل جديد|as a new customer/);
+  assert.doesNotMatch(manual,/createElement\('datalist'\)/);
+  assert.doesNotMatch(manual,/setAttribute\('list'/);
 });
 
 test('car-wash selector enhancement cannot self-trigger a document mutation loop',()=>{
   assert.doesNotMatch(manual,/observe\(document\.documentElement,\{subtree:true,childList:true\}\)/);
   assert.match(manual,/cache\.business_id===id&&cache\.loaded/);
-  assert.match(manual,/list\.dataset\.dabbirSignature!==signature/);
   assert.match(manual,/setTimeout\(\(\)=>enhance\(true\),0\)/);
-  assert.match(manual,/v2-loop-safe/);
+  assert.match(manual,/v3-native-combobox/);
 });
 
 test('adaptive appointment reuses a selected customer only inside the active business',()=>{
@@ -39,8 +43,9 @@ test('adaptive appointment reuses a selected customer only inside the active bus
   assert.match(appointment,/customer_reused:Boolean\(requestedCustomerId\)/);
 });
 
-test('car-wash loader mounts the manual booking enhancement only for car wash',()=>{
+test('car-wash loader mounts the mobile-safe manual booking enhancement only for car wash',()=>{
   assert.match(loader,/function loadManualBooking\(\)/);
   assert.match(loader,/\/api\/car-wash-manual-booking-ui/);
-  assert.match(loader,/v5-loop-safe-cache-bust/);
+  assert.match(loader,/20260903-3-native-combobox/);
+  assert.match(loader,/v6-native-customer-combobox/);
 });

@@ -47,34 +47,91 @@ const script=String.raw`(()=>{
 
   function ensureCustomerPicker(){
     const input=q('#apptCustomer');if(!input||!isCarWash())return;
-    let list=q('#dabbirCarWashCustomerOptions');
-    if(!list){list=document.createElement('datalist');list.id='dabbirCarWashCustomerOptions';document.body.append(list)}
-    input.setAttribute('list',list.id);input.setAttribute('autocomplete','off');input.setAttribute('placeholder',ar()?'ابحث عن عميل دائم أو اكتب اسمًا جديدًا':'Search a saved customer or enter a new name');
-    const signature=cache.customers.map(row=>[row.id,row.display_name,cleanPhone(row)].join('|')).join('~');
-    if(list.dataset.dabbirSignature!==signature){
-      const fragment=document.createDocumentFragment();
-      for(const customer of cache.customers){
-        const item=document.createElement('option');
-        item.value=String(customer.display_name||'').trim();
-        const phone=cleanPhone(customer);if(phone)item.label=phone;
-        fragment.append(item);
-      }
-      list.replaceChildren(fragment);list.dataset.dabbirSignature=signature;
+    input.removeAttribute('list');
+    q('#dabbirCarWashCustomerOptions')?.remove();
+    input.setAttribute('autocomplete','off');
+    input.setAttribute('role','combobox');
+    input.setAttribute('aria-autocomplete','list');
+    input.setAttribute('aria-controls','dabbirCarWashCustomerMenu');
+    input.setAttribute('placeholder',ar()?'ابحث عن عميل دائم أو اكتب اسمًا جديدًا':'Search a saved customer or enter a new name');
+    const field=input.closest('.field');if(!field)return;
+    field.style.position='relative';
+
+    if(!q('#dabbirCarWashCustomerPickerStyle')){
+      const style=document.createElement('style');style.id='dabbirCarWashCustomerPickerStyle';
+      style.textContent='#dabbirCarWashCustomerMenu{position:absolute;z-index:90;inset-inline:0;top:calc(100% + 6px);max-height:min(38vh,280px);overflow:auto;background:#111a2a;border:1px solid #33445f;border-radius:14px;box-shadow:0 18px 40px #000a;padding:6px;-webkit-overflow-scrolling:touch}#dabbirCarWashCustomerMenu[hidden]{display:none!important}.dabbirCustomerChoice{width:100%;border:0;background:transparent;color:#fff;text-align:start;padding:12px 11px;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;font:inherit}.dabbirCustomerChoice:active,.dabbirCustomerChoice:focus{background:#253653;outline:none}.dabbirCustomerChoiceName{font-weight:800}.dabbirCustomerChoicePhone{font-size:12px;color:#9aabc1;direction:ltr;unicode-bidi:embed}.dabbirCustomerNew{color:#79d8ff;border-top:1px solid #2a3950;margin-top:4px;padding-top:12px}';
+      document.head.append(style);
     }
+
     let hidden=q('#dabbirCarWashCustomerId');
     if(!hidden){hidden=document.createElement('input');hidden.type='hidden';hidden.id='dabbirCarWashCustomerId';hidden.dataset.apptKey='customer_id';input.after(hidden)}
-    const sync=()=>{
-      const value=String(input.value||'').trim().toLocaleLowerCase();
-      const matches=cache.customers.filter(row=>String(row.display_name||'').trim().toLocaleLowerCase()===value);
-      const customer=matches.length===1?matches[0]:null;
+    let menu=q('#dabbirCarWashCustomerMenu');
+    if(!menu){menu=document.createElement('div');menu.id='dabbirCarWashCustomerMenu';menu.hidden=true;menu.setAttribute('role','listbox');field.append(menu)}
+
+    const normalize=value=>String(value||'').trim().toLocaleLowerCase();
+    const exactCustomer=()=>{
+      const value=normalize(input.value);
+      const matches=cache.customers.filter(row=>normalize(row.display_name)===value);
+      return matches.length===1?matches[0]:null;
+    };
+    const close=()=>{menu.hidden=true;input.setAttribute('aria-expanded','false')};
+    const syncIdentity=()=>{
+      const customer=exactCustomer();
       hidden.value=customer?.id||'';
       if(customer){const phone=q('[data-appt-key="phone"]');if(phone&&!String(phone.value||'').trim())phone.value=cleanPhone(customer)}
+      return customer;
     };
-    if(input.dataset.dabbirSavedCustomerPicker!=='v2'){
-      input.dataset.dabbirSavedCustomerPicker='v2';
-      input.addEventListener('input',sync);input.addEventListener('change',sync);
+    const choose=customer=>{
+      input.value=String(customer?.display_name||'').trim();
+      hidden.value=customer?.id||'';
+      const phone=q('[data-appt-key="phone"]');if(phone&&!String(phone.value||'').trim())phone.value=cleanPhone(customer);
+      close();input.focus();
+      input.dispatchEvent(new Event('change',{bubbles:true}));
+    };
+    const render=()=>{
+      const term=normalize(input.value);
+      const rows=cache.customers.filter(row=>{
+        if(!term)return true;
+        return normalize(row.display_name).includes(term)||normalize(cleanPhone(row)).includes(term);
+      }).slice(0,12);
+      const fragment=document.createDocumentFragment();
+      for(const customer of rows){
+        const button=document.createElement('button');button.type='button';button.className='dabbirCustomerChoice';button.setAttribute('role','option');button.dataset.customerId=customer.id;
+        const name=document.createElement('span');name.className='dabbirCustomerChoiceName';name.textContent=String(customer.display_name||'').trim();
+        const phoneText=cleanPhone(customer);const phone=document.createElement('span');phone.className='dabbirCustomerChoicePhone';phone.textContent=phoneText;
+        button.append(name,phone);
+        button.addEventListener('pointerdown',event=>event.preventDefault());
+        button.addEventListener('click',()=>choose(customer));
+        fragment.append(button);
+      }
+      if(term&&!exactCustomer()){
+        const button=document.createElement('button');button.type='button';button.className='dabbirCustomerChoice dabbirCustomerNew';button.setAttribute('role','option');
+        button.textContent=(ar()?'استخدام «':'Use “')+String(input.value||'').trim()+(ar()?'» كعميل جديد':'” as a new customer');
+        button.addEventListener('pointerdown',event=>event.preventDefault());
+        button.addEventListener('click',()=>{hidden.value='';close();input.focus()});
+        fragment.append(button);
+      }
+      if(!rows.length&&!term){
+        const empty=document.createElement('div');empty.className='dabbirCustomerChoice';empty.textContent=ar()?'لا يوجد عملاء دائمون بعد — اكتب اسم العميل الجديد':'No saved customers yet — enter a new customer name';fragment.append(empty);
+      }
+      menu.replaceChildren(fragment);
+      menu.hidden=false;input.setAttribute('aria-expanded','true');
+    };
+
+    if(input.dataset.dabbirSavedCustomerPicker!=='v3-combobox'){
+      input.dataset.dabbirSavedCustomerPicker='v3-combobox';
+      input.addEventListener('focus',()=>{syncIdentity();render()});
+      input.addEventListener('input',()=>{syncIdentity();render()});
+      input.addEventListener('change',syncIdentity);
+      input.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){close();return}
+        if(event.key==='ArrowDown'&&!menu.hidden){event.preventDefault();menu.querySelector('button')?.focus()}
+      });
+      input.addEventListener('blur',()=>setTimeout(()=>{if(!menu.contains(document.activeElement))close()},120));
+      document.addEventListener('pointerdown',event=>{if(!field.contains(event.target))close()},true);
     }
-    sync();
+    syncIdentity();
+    if(document.activeElement===input)render();
   }
 
   function option(select,value,text){const item=document.createElement('option');item.value=value;item.textContent=text;select.append(item);return item}
@@ -140,13 +197,13 @@ const script=String.raw`(()=>{
     setTimeout(()=>enhance(false),120);
   }).observe(modal,{attributes:true,attributeFilter:['class']});
   window.addEventListener('focus',()=>{if(q('#appointmentModal.open'))void enhance(false)},{passive:true});
-  window.__dabbirCarWashManualBooking={refresh:()=>enhance(true),version:'car-wash-manual-booking-v2-loop-safe'};
+  window.__dabbirCarWashManualBooking={refresh:()=>enhance(true),version:'car-wash-manual-booking-v3-native-combobox'};
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-car-wash-manual-booking-ui','v2-loop-safe');
+  res.setHeader('x-dabbir-car-wash-manual-booking-ui','v3-native-combobox');
   return res.status(200).send(script);
 }
