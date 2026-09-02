@@ -16,8 +16,11 @@ on:
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/run-ai-full-customer-journey-en.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
+      - 'test/dabbir-bar12-technical-evidence.test.mjs'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - '.github/workflows/dabbir-bar12-readiness.yml'
+      - '.github/scripts/dabbir-bar12-technical-evidence.mjs'
+      - 'docs/evidence/dabbir-bar12-technical-review.json'
   schedule:
     - cron: '41 2 * * *'
 
@@ -315,6 +318,8 @@ jobs:
               monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},
               critical_gates:{security:null,financial:null,legal:null}
             }' > dabbir-bar12-live-evidence.json
+      - name: Merge verified technical readiness evidence
+        run: node .github/scripts/dabbir-bar12-technical-evidence.mjs
       - name: Evaluate BAR-12 readiness
         run: node scripts/dabbir-readiness-gate.mjs
       - name: Upload readiness evidence
@@ -326,6 +331,8 @@ jobs:
             dabbir-bar12-supabase-evidence.json
             dabbir-bar12-live-evidence.json
             dabbir-bar12-readiness-report.json
+            dabbir-bar12-technical-evidence-merge.json
+            docs/evidence/dabbir-bar12-technical-review.json
             dabbir-bar12-runtime-classification.log
             dabbir-bar12-journey-equivalence.log
             bar12-journey-evidence/dabbir-ai-customer-journey-report.json
