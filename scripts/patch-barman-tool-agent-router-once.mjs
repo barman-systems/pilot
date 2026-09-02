@@ -13,8 +13,8 @@ const router=`
 export function routeToolAgentCommand(value){
   const text=clean(value,4000);
   if(!text)return {route:'REVIEW_REQUIRED',reason:'EMPTY_COMMAND'};
-  const lines=text.split(/\\n+/).map(x=>x.trim()).filter(Boolean);
-  const goals=lines.filter(x=>/^(?:\\d+\\s*[.)]|[-•])\\s*/.test(x)).length;
+  const lines=text.split(String.fromCharCode(10)).map(x=>x.trim()).filter(Boolean);
+  const goals=lines.filter(x=>/^(?:[0-9]+[.)]|[-•])\\s*/.test(x)).length;
   if(/(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي)/i.test(text))
     return {route:'OWNER_GATE',reason:'OWNER_ONLY_AUTHORITY'};
   if(goals>=2)return {route:'MULTI_STEP',reason:'COMPOUND_COMMAND_REQUIRES_PLAN'};
