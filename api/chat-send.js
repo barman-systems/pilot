@@ -13,6 +13,16 @@ import { generateDABBIRAiReply } from './_ai-core.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const cleanText = (value, max = 2000) => String(value || '').trim().slice(0, max);
+const GCC_CURRENCY_BY_COUNTRY = Object.freeze({ AE: 'AED', SA: 'SAR', KW: 'KWD', QA: 'QAR', BH: 'BHD', OM: 'OMR' });
+const GCC_CURRENCIES = new Set(Object.values(GCC_CURRENCY_BY_COUNTRY));
+
+export function businessCurrencyCode(business = {}) {
+  const countryCode = String(business?.country_code || '').trim().toUpperCase();
+  const persistedCurrency = String(business?.currency_code || '').trim().toUpperCase();
+  const expectedCurrency = GCC_CURRENCY_BY_COUNTRY[countryCode] || null;
+  if (expectedCurrency) return expectedCurrency;
+  return GCC_CURRENCIES.has(persistedCurrency) ? persistedCurrency : null;
+}
 
 function finiteNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -94,7 +104,7 @@ function activeProducts(products = []) {
   return (products || []).filter(product => product.active !== false);
 }
 
-export function productOperationalFact(product, inventory = []) {
+export function productOperationalFact(product, inventory = [], currencyCode = null) {
   const stock = inventoryMap(inventory).get(product?.id) || null;
   const rawPrice = finiteNumberOrNull(product?.price_aed);
   const rawQuantity = stock ? finiteNumberOrNull(stock.quantity) : null;
@@ -105,12 +115,17 @@ export function productOperationalFact(product, inventory = []) {
   );
   const quantity = inventoryVerified ? rawQuantity : null;
   const reserved = inventoryVerified ? rawReserved : null;
+  const normalizedCurrency = GCC_CURRENCIES.has(String(currencyCode || '').toUpperCase()) ? String(currencyCode).toUpperCase() : null;
+  const price = priceVerified ? Number(rawPrice.toFixed(2)) : null;
   return {
     id: product?.id || null,
     name: product?.name || '',
     sku: product?.sku || '',
-    price_aed: priceVerified ? Number(rawPrice.toFixed(2)) : null,
+    price_aed: price,
+    price,
+    currency_code: normalizedCurrency,
     price_verified: priceVerified,
+    currency_verified: Boolean(normalizedCurrency),
     quantity,
     reserved,
     available: inventoryVerified ? Math.max(0, quantity - reserved) : null,
@@ -119,10 +134,12 @@ export function productOperationalFact(product, inventory = []) {
   };
 }
 
-function operationalEvidence(products = [], inventory = []) {
-  const facts = activeProducts(products).map(product => productOperationalFact(product, inventory));
+function operationalEvidence(products = [], inventory = [], currencyCode = null) {
+  const facts = activeProducts(products).map(product => productOperationalFact(product, inventory, currencyCode));
   return {
     source: 'DABBIR_TENANT_DATA',
+    currency_code: currencyCode,
+    currency_verified: Boolean(currencyCode),
     products_seen: facts.length,
     verified_price_products: facts.filter(fact => fact.price_verified).length,
     verified_inventory_products: facts.filter(fact => fact.inventory_verified).length,
@@ -147,19 +164,26 @@ function buildContext(business, knowledge = [], products = [], inventory = [], s
   const verified = verifiedKnowledge(knowledge)
     .slice(0, 12)
     .map(item => ({ key: item.knowledge_key, type: item.knowledge_type, value: item.value, source: item.source }));
-  const catalog = activeProducts(products).slice(0, 30).map(product => productOperationalFact(product, inventory));
+  const currencyCode = businessCurrencyCode(business);
+  const catalog = activeProducts(products).slice(0, 30).map(product => productOperationalFact(product, inventory, currencyCode));
   const serviceRows = (services || []).filter(service => service.active !== false).slice(0, 20).map(service => ({
     name: service.name,
     duration_minutes: service.duration_minutes,
   }));
   return JSON.stringify({
-    business: { name: business.name, type: business.business_type, locale: business.locale },
+    business: {
+      name: business.name,
+      type: business.business_type,
+      locale: business.locale,
+      country_code: business.country_code || null,
+      currency_code: currencyCode,
+    },
     knowledge: verified,
     live_operations: {
       products: catalog,
       services: serviceRows,
       source: 'DABBIR live tenant data',
-      rule: 'Use product price only when price_verified=true. Use stock/availability only when inventory_verified=true. Null means unknown, never zero or unavailable. Never invent missing values.',
+      rule: 'Use product price only when price_verified=true AND currency_verified=true. Always state the supplied ISO currency_code with a price. Use stock/availability only when inventory_verified=true. Null means unknown, never zero or unavailable. Never invent missing values or currency.',
     },
   });
 }
@@ -189,9 +213,18 @@ function productReply({ message, language, business, products, inventory }) {
       : `There is more than one product in the system. Tell me which product you mean${names ? `, for example: ${names}` : ''}, and I will give you only verified price and availability.`;
   }
 
-  const fact = productOperationalFact(product, inventory);
-  const priceAr = fact.price_verified ? `السعر ${fact.price_aed.toFixed(2)} د.إ` : 'السعر غير موثق في النظام حاليًا';
-  const priceEn = fact.price_verified ? `the price is ${fact.price_aed.toFixed(2)} AED` : 'the price is not verified in the system yet';
+  const currencyCode = businessCurrencyCode(business);
+  const fact = productOperationalFact(product, inventory, currencyCode);
+  const priceAr = fact.price_verified && fact.currency_verified
+    ? `السعر ${fact.price.toFixed(2)} ${fact.currency_code}`
+    : fact.price_verified
+      ? 'السعر موجود لكن عملة النشاط غير موثقة في النظام حاليًا'
+      : 'السعر غير موثق في النظام حاليًا';
+  const priceEn = fact.price_verified && fact.currency_verified
+    ? `the price is ${fact.price.toFixed(2)} ${fact.currency_code}`
+    : fact.price_verified
+      ? 'the price exists but the business currency is not verified in the system yet'
+      : 'the price is not verified in the system yet';
   const availabilityAr = fact.inventory_verified
     ? (fact.available > 0 ? `متوفر حاليًا، والكمية المتاحة ${fact.available}` : 'غير متوفر حاليًا حسب سجل المخزون')
     : 'التوفر غير موثق في سجل المخزون حاليًا';
@@ -328,7 +361,7 @@ export default async function handler(req, res) {
     const lookupStarted = Date.now();
     const [conversations, businesses, knowledge, historyDesc, mayReply, products, inventory, services] = await Promise.all([
       rest(accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode&business_id=eq.${businessId}&id=eq.${conversationId}&limit=1`, {}, 'CONVERSATION_LOOKUP_FAILED'),
-      rest(accessToken, `dabbir_businesses?select=id,name,business_type,locale,demo_mode&id=eq.${businessId}&limit=1`, {}, 'BUSINESS_LOOKUP_FAILED'),
+      rest(accessToken, `dabbir_businesses?select=id,name,business_type,locale,demo_mode,country_code,currency_code&id=eq.${businessId}&limit=1`, {}, 'BUSINESS_LOOKUP_FAILED'),
       rest(accessToken, `dabbir_business_knowledge?select=knowledge_key,knowledge_type,value,source,status&business_id=eq.${businessId}&order=updated_at.desc&limit=12`, {}, 'KNOWLEDGE_LOOKUP_FAILED'),
       rest(accessToken, `dabbir_messages?select=sender_type,body,created_at&business_id=eq.${businessId}&conversation_id=eq.${conversationId}&order=created_at.desc&limit=8`, {}, 'MESSAGE_HISTORY_FAILED'),
       rpc(accessToken, 'dabbir_ai_may_reply', { p_business_id: businessId, p_conversation_id: conversationId }, 'AI_POLICY_CHECK_FAILED'),
@@ -353,7 +386,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({ business_id: businessId, conversation_id: conversationId, sender_type: 'customer', body: message, intent, simulated: false }),
     }, 'CUSTOMER_MESSAGE_PERSIST_FAILED');
     const customerMessage = requirePersistedRow(customerRows, 'CUSTOMER_MESSAGE_PERSIST_UNVERIFIED');
-    const grounding = operationalEvidence(products, inventory);
+    const currencyCode = businessCurrencyCode(business);
+    const grounding = operationalEvidence(products, inventory, currencyCode);
 
     const fastReply = instantGroundedReply({ message, language, intent, business, knowledge, products, inventory });
     if (fastReply) {
@@ -361,12 +395,12 @@ export default async function handler(req, res) {
       const { aiMessage, verifiedConversation } = await persistAutomatedReply({ accessToken, businessId, conversationId, intent, reply: fastReply });
       const finalMs = Date.now() - finalStarted;
       const totalMs = Date.now() - started;
-      console.info('dabbir_chat_fast_path', { intent, live_products: Array.isArray(products) ? products.length : 0, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
+      console.info('dabbir_chat_fast_path', { intent, currency_code: currencyCode, live_products: Array.isArray(products) ? products.length : 0, lookup_ms: lookupMs, final_ms: finalMs, total_ms: totalMs });
       return json(res, 200, {
         ok: true,
         state: 'VERIFIED_PERSISTED',
         provider: 'dabbir-local-fastpath',
-        model: 'deterministic-v3-truth-safe',
+        model: 'deterministic-v4-gcc-truth-safe',
         fast_path: true,
         grounding_state: 'DETERMINISTIC_VERIFIED_OR_EXPLICITLY_UNVERIFIED',
         grounding,
@@ -399,7 +433,7 @@ export default async function handler(req, res) {
         ok: true,
         state: 'VERIFIED_PERSISTED',
         provider: 'dabbir-local-fallback',
-        model: 'deterministic-v2-truth-safe',
+        model: 'deterministic-v4-gcc-truth-safe',
         degraded: true,
         upstream_ai_state: aiResult.state,
         upstream_ai_error: aiResult.error || null,
@@ -418,7 +452,7 @@ export default async function handler(req, res) {
     const finalMs = Date.now() - finalStarted;
     const totalMs = Date.now() - started;
 
-    console.info('dabbir_chat_completed', { model: aiResult.model, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
+    console.info('dabbir_chat_completed', { model: aiResult.model, currency_code: currencyCode, lookup_ms: lookupMs, ai_ms: aiMs, final_ms: finalMs, total_ms: totalMs });
     return json(res, 200, {
       ok: true,
       state: 'VERIFIED_PERSISTED',
