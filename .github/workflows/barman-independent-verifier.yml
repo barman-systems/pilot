@@ -1,9 +1,6 @@
 name: BARMAN Independent Verifier
 
 on:
-  push:
-    branches:
-      - main
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -22,7 +19,7 @@ jobs:
   verify:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,11 +29,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Wait for exact Production verifier on push wake-up
-        if: github.event_name == 'push'
-        env:
-          BARMAN_EXPECTED_SHA: ${{ github.sha }}
-        run: node scripts/wait-dabbir-production-sha.mjs
       - name: Verify BARMAN executor evidence independently
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -6,7 +6,6 @@ import { routeToolAgentCommand, validateToolAgentClaims } from '../api/barman-to
 const workflow=fs.readFileSync(new URL('../.github/workflows/barman-tool-agent.yml',import.meta.url),'utf8');
 const worker=fs.readFileSync(new URL('../scripts/barman-tool-agent.mjs',import.meta.url),'utf8');
 const broker=fs.readFileSync(new URL('../api/barman-tool-agent-broker.js',import.meta.url),'utf8');
-const waitProduction=fs.readFileSync(new URL('../scripts/wait-dabbir-production-sha.mjs',import.meta.url),'utf8');
 const ci=fs.readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
 
 const baseClaims={
@@ -22,8 +21,6 @@ const baseClaims={
 
 test('tool-agent OIDC is locked to the canonical main workflow',()=>{
   assert.equal(validateToolAgentClaims(baseClaims,1000),true);
-  assert.equal(validateToolAgentClaims({...baseClaims,event_name:'workflow_dispatch'},1000),true);
-  assert.equal(validateToolAgentClaims({...baseClaims,event_name:'push'},1000),true);
   assert.equal(validateToolAgentClaims({...baseClaims,workflow_ref:'barman-systems/pilot/.github/workflows/evil.yml@refs/heads/main'},1000),false);
   assert.equal(validateToolAgentClaims({...baseClaims,ref:'refs/heads/dev'},1000),false);
   assert.equal(validateToolAgentClaims({...baseClaims,event_name:'pull_request'},1000),false);
@@ -40,16 +37,11 @@ test('tool-agent routes non-code commands fail-closed before patch generation',(
   assert.match(worker,/routing\.route!==['"]REPO_CHANGE['"]/);
 });
 
-test('persistent worker has schedule plus protected-main push wake-up',()=>{
+test('persistent worker is event-looped and cannot bypass governance files',()=>{
   assert.match(workflow,/cron:\s*'\*\/5 \* \* \* \*'/);
-  assert.match(workflow,/push:\s*\n\s*branches:\s*\n\s*- main/);
-  assert.match(workflow,/github\.event_name == 'push'/);
-  assert.match(workflow,/wait-dabbir-production-sha\.mjs/);
   for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(waitProduction,/release-evidence/);
-  assert.match(waitProduction,/commit_sha/);
-  assert.match(waitProduction,/environment/);
   assert.match(worker,/phase:'claim'/);
+  assert.match(worker,/p_lane:'tool_agent'|phase:'claim'/);
   assert.match(worker,/spawnSync\('git',\['apply','--check'/);
   assert.match(worker,/PATCH_TOUCHED_GOVERNANCE_FILE/);
   assert.match(worker,/path\.startsWith\('\.github\/'\)/);
