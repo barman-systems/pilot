@@ -9,6 +9,7 @@ on:
       - 'test/run-ai-full-customer-journey-ipad.mjs'
       - 'test/dabbir-ipad-webkit-production-contract.test.mjs'
       - '.github/workflows/dabbir-ipad-webkit-production.yml'
+      - 'vercel-ignore-if-unaffected.sh'
       - 'api/**'
       - 'index.html'
       - 'supabase/migrations/*dabbir*'
