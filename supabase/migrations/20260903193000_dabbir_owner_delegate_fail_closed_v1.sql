@@ -1,5 +1,3 @@
-begin;
-
 -- Canonical platform authority model. This migration is intentionally idempotent so
 -- environments that received the emergency root-audit DDL out of band converge back
 -- to source control without creating a second authority model.
@@ -306,5 +304,3 @@ grant execute on function public.dabbir_ceo_command_create_authorized_v1(uuid,te
 grant execute on function public.dabbir_ceo_command_update_authorized_v1(uuid,uuid,text,text,timestamptz,text) to service_role;
 grant execute on function public.dabbir_platform_incident_create_authorized_v1(uuid,text,uuid,text,text,text,text,text) to service_role;
 grant execute on function public.dabbir_platform_incident_update_authorized_v1(uuid,uuid,text,text,text,text,text,text) to service_role;
-
-commit;
