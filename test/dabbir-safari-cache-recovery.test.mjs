@@ -25,7 +25,7 @@ function renderCanonicalRoot(){
 }
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260903-webkit-owner-diagnostics-v4'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
