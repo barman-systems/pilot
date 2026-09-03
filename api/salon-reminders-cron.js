@@ -108,11 +108,11 @@ async function deliver(req,key,item){
     return {id:item.notification_id,status:'sent'};
   }catch(error){
     const code=clean(error?.message||'SALON_REMINDER_FAILED',160);
-    const ambiguous=error?.ambiguous===true;
-    const status=ambiguous?'ambiguous':'failed';
+    const status=error?.ambiguous===true?'ambiguous':'failed';
+    const ambiguous=status==='ambiguous';
     const retryable=retryableError(error,code);
     const state=await finalize(req,key,item,status,null,code,retryable).catch(()=>null);
-    return {id:item.notification_id,status:String(state||status),error:code,retryable};
+    return {id:item.notification_id,status:String(state||status),error:code,retryable,ambiguous};
   }
 }
 
