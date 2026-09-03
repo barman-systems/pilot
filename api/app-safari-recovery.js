@@ -1,4 +1,5 @@
 import appRecoveryHandler from './app-recovery.js';
+import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
 const UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
@@ -22,6 +23,41 @@ function stripLegacyNavigationOverrides(body) {
     .split(LEGACY_STORE_APPOINTMENT_REDIRECT).join('');
 }
 
+function ownerFirstInlineScript() {
+  const headers = new Map();
+  let statusCode = 200;
+  let payload = '';
+  const response = {
+    setHeader(name, value) {
+      headers.set(String(name).toLowerCase(), String(value));
+      return response;
+    },
+    status(code) {
+      statusCode = Number(code);
+      return response;
+    },
+    send(body = '') {
+      payload = String(body);
+      return response;
+    },
+    end(body = '') {
+      payload = String(body);
+      return response;
+    },
+  };
+  ownerFirstUiHandler({ method: 'GET', headers: {} }, response);
+  if (statusCode !== 200) throw new Error(`DABBIR_OWNER_FIRST_INLINE_STATUS_${statusCode}`);
+  if (!payload.includes("window.__dabbirUiAuthority={version:'owner-first-v4'")) {
+    throw new Error('DABBIR_OWNER_FIRST_INLINE_AUTHORITY_MISSING');
+  }
+  if (/<\/script/i.test(payload)) throw new Error('DABBIR_OWNER_FIRST_INLINE_UNSAFE_SCRIPT_CLOSE');
+  const contentType = headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/javascript')) {
+    throw new Error(`DABBIR_OWNER_FIRST_INLINE_CONTENT_TYPE_${contentType || 'missing'}`);
+  }
+  return `<script data-dabbir-owner-first-inline="owner-first-v4">\n${payload}\n</script>`;
+}
+
 function orderOwnerFirstBeforeAuthBoot(body) {
   if (typeof body !== 'string') return body;
   const ownerScripts = body.match(OWNER_FIRST_SCRIPT_RE) || [];
@@ -30,11 +66,11 @@ function orderOwnerFirstBeforeAuthBoot(body) {
   const secondBoot = firstBoot < 0 ? -1 : body.indexOf(AUTH_BOOT_ANCHOR, firstBoot + AUTH_BOOT_ANCHOR.length);
   if (firstBoot < 0 || secondBoot >= 0) throw new Error(`DABBIR_AUTH_BOOT_ANCHOR_COUNT_${firstBoot < 0 ? 0 : 2}`);
 
-  const ownerScript = ownerScripts[0];
-  const withoutLateOwner = body.replace(ownerScript, '');
+  const withoutLateOwner = body.replace(ownerScripts[0], '');
+  const inlineOwner = ownerFirstInlineScript();
   return withoutLateOwner.replace(
     AUTH_BOOT_ANCHOR,
-    `</script>\n${ownerScript}\n<script>\napplyLang();boot();\n</script>`,
+    `</script>\n${inlineOwner}\n<script>\napplyLang();boot();\n</script>`,
   );
 }
 
@@ -62,7 +98,7 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
-      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-before-auth-boot-v1');
+      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
       res.statusCode = Number(proxy.statusCode || 200);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
