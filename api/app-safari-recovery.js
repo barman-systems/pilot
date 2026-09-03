@@ -7,6 +7,40 @@ const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appoint
 const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';`;
 const OWNER_FIRST_SCRIPT_RE = /<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g;
 const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
+const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
+  if(window.__dabbirDesignAuthorityTailV1)return;
+  window.__dabbirDesignAuthorityTailV1=true;
+  let frame=0;
+  let observer=null;
+  function moveAuthority(){
+    frame=0;
+    const style=document.querySelector('style[data-dabbir-design-system="executive-calm-v1"]');
+    if(!style||!document.body)return false;
+    if(style.parentNode!==document.body||style!==document.body.lastElementChild)document.body.appendChild(style);
+    document.body.dataset.dabbirDesign='executive-calm-v1';
+    return true;
+  }
+  function schedule(){
+    if(frame)return;
+    if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(moveAuthority);
+    else frame=setTimeout(moveAuthority,0);
+  }
+  try{
+    observer=new MutationObserver(schedule);
+    if(document.head)observer.observe(document.head,{childList:true});
+    if(document.body)observer.observe(document.body,{childList:true});
+  }catch(_error){}
+  try{
+    window.__dabbirUiLifecycle?.on?.('afterRender','executive-calm-authority',schedule);
+    window.__dabbirUiLifecycle?.on?.('afterNavigate','executive-calm-authority',schedule);
+    window.__dabbirUiLifecycle?.on?.('afterLanguage','executive-calm-authority',schedule);
+  }catch(_error){}
+  window.addEventListener('load',schedule,{once:true});
+  schedule();
+  setTimeout(schedule,250);
+  setTimeout(schedule,1400);
+  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'single-style-tail-reassert',pollingLoops:0,presentationObservers:1};
+})();`;
 
 function bustUiAssetVersion(body) {
   if (typeof body !== 'string') return body;
@@ -50,6 +84,9 @@ function ownerFirstInlineScript() {
   if (!payload.includes("window.__dabbirUiAuthority={version:'owner-first-v4'")) {
     throw new Error('DABBIR_OWNER_FIRST_INLINE_AUTHORITY_MISSING');
   }
+  if (!payload.includes("designSystem:'executive-calm-v1'")) {
+    throw new Error('DABBIR_EXECUTIVE_CALM_AUTHORITY_MISSING');
+  }
   if (/<\/script/i.test(payload)) throw new Error('DABBIR_OWNER_FIRST_INLINE_UNSAFE_SCRIPT_CLOSE');
   const contentType = headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/javascript')) {
@@ -75,8 +112,18 @@ function orderOwnerFirstBeforeAuthBoot(body) {
 }
 
 function injectSafariAuthFailOpen(body) {
-  if (typeof body !== 'string' || body.includes('/api/dabbir-safari-auth-fail-open-ui')) return body;
-  return body.replace('</body>', `<script src="${SAFARI_AUTH_FAIL_OPEN}"></script>\n</body>`);
+  if (typeof body !== 'string') return body;
+  let next = body;
+  if (!next.includes('/api/dabbir-safari-auth-fail-open-ui')) {
+    next = next.replace('</body>', `<script src="${SAFARI_AUTH_FAIL_OPEN}"></script>\n</body>`);
+  }
+  if (!next.includes('data-dabbir-design-authority-tail="executive-calm-v1"')) {
+    next = next.replace(
+      '</body>',
+      `<script data-dabbir-design-authority-tail="executive-calm-v1">\n${DESIGN_AUTHORITY_SCRIPT}\n</script>\n</body>`,
+    );
+  }
+  return next;
 }
 
 export default function handler(req, res) {
@@ -99,6 +146,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
       res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
+      res.setHeader('x-dabbir-design-authority', 'executive-calm-v1');
       res.statusCode = Number(proxy.statusCode || 200);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
