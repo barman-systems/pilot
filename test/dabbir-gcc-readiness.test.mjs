@@ -10,6 +10,7 @@ const migration=read('supabase/migrations/20260903092000_dabbir_gcc_business_pro
 const createApi=read('api/gcc-create-business.js');
 const profileApi=read('api/gcc-business-profile.js');
 const ui=read('api/gcc-readiness-ui.js');
+const timezoneUi=read('api/timezone-ui.js');
 const bundles=JSON.parse(read('config/dabbir-ui-bundles.json'));
 
 const expected={
@@ -50,6 +51,18 @@ test('runtime is enriched with tenant-scoped country profile and dynamic time/mo
   assert.match(ui,/timeZone:g\.timezone/);
   assert.match(profileApi,/getBusinessMemberships/);
   assert.match(profileApi,/BUSINESS_ACCESS_DENIED/);
+});
+
+test('deferred appointment UI cannot overwrite GCC timezone or price labels with UAE-only constants',()=>{
+  assert.match(timezoneUi,/function businessGeo\(\)/);
+  assert.match(timezoneUi,/business\?\.timezone\|\|base\.timezone/);
+  assert.match(timezoneUi,/business\?\.currency_code\|\|base\.currency/);
+  assert.match(timezoneUi,/businessLocalToIso/);
+  assert.match(timezoneUi,/geo\.prefix/);
+  assert.doesNotMatch(timezoneUi,/const DABBIR_TIME_ZONE='Asia\/Dubai'/);
+  assert.doesNotMatch(timezoneUi,/Price \(AED\)/);
+  assert.doesNotMatch(timezoneUi,/السعر \(درهم\)/);
+  assert.match(timezoneUi,/x-dabbir-timezone','business-profile/);
 });
 
 test('GCC readiness loads in the critical bundle so country is available during onboarding',()=>{
