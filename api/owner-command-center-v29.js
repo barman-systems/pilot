@@ -73,6 +73,63 @@ if(nav&&!nav.querySelector('[data-owner-customer29]')){
 // Existing nested customer tabs also refresh their real data path when opened.
 document.addEventListener('click',e=>{const b=e.target.closest?.('[data-tab25="support"],[data-tab25="feedback"]');if(!b)return;setTimeout(()=>refreshCustomerWorkspace(b.dataset.tab25),0)},true);
 window.__dabbirOwnerWorkspaceV29={version:'v29',openCustomer:openCustomerWorkspace,globalSearchRemoved:true};
+})();</script>
+<style id="ownerUxAudit">
+/* UX audit: reduce duplicated navigation, improve iPhone density, and keep mission controls scannable. */
+#customers>.ownerTabs25{display:none!important}
+.ownerMissionField{display:grid;gap:6px;min-width:0}.ownerMissionField.wide{grid-column:1/-1}.ownerMissionFieldLabel{font-size:12px;font-weight:850;color:#aebbc3}.ownerMissionCounter{font-size:12px;color:#8fa1aa;text-align:end;font-variant-numeric:tabular-nums}.ownerMissionDueHint{font-size:11px;color:#7f929c;line-height:1.5}
+.ownerDecisionBox[data-empty="true"]{border-color:#2d5940;background:#0f1813}.ownerDecisionBox[data-empty="true"] .ownerDecisionCount{border-color:#356c44;color:#8ce6a1}.ownerDecisionBox[data-empty="true"] .ownerDecisionList{max-height:none}
+#ownerCeoMissionControl .ownerMissionBtn{touch-action:manipulation}
+@media(max-width:760px){
+ body #nav{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important;overflow:visible!important;padding-block:7px 9px!important}
+ body #nav a,body #nav .ownerMainTab29{min-height:48px!important;padding:7px 5px!important;font-size:12.5px!important;line-height:1.3!important;white-space:normal!important}
+ body .ownerLeadTab29{font-size:13px!important;min-height:48px!important}
+ #ownerCeoMissionControl .ownerMissionActions{display:grid!important;grid-template-columns:1fr!important}
+ #ownerCeoMissionControl .ownerMissionActions .ownerMissionBtn.primary{grid-column:auto!important;order:-1}
+ #ownerCeoMissionControl .ownerMissionList,#ownerCeoMissionControl .ownerDecisionList,body .oc23list{max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important}
+ #ownerCeoMissionControl .ownerMissionToolbar{position:static!important}
+}
+@media(max-width:430px){
+ body #nav{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ body #nav a,body #nav .ownerMainTab29{font-size:12.5px!important}
+ #ownerCeoMissionControl .ownerMissionSummary{gap:6px!important}
+ #ownerCeoMissionControl .ownerMissionMetric{padding:9px!important}
+ #ownerCeoMissionControl .ownerMissionMetric b{font-size:20px!important}
+}
+</style><script>(()=>{
+const $=s=>document.querySelector(s);
+function setMissionMessage(text){const el=$('#ownerMissionMsg');if(!el)return;el.textContent=text;el.className='ownerMissionMsg err'}
+function wrapMissionField(id,label,wide=false){
+ const el=$('#'+id);if(!el||el.closest('.ownerMissionField'))return;
+ const wrap=document.createElement('label');wrap.className='ownerMissionField'+(wide?' wide':'');
+ const title=document.createElement('span');title.className='ownerMissionFieldLabel';title.textContent=label;
+ el.parentNode.insertBefore(wrap,el);wrap.append(title,el);
+}
+function enhanceMission(){
+ const form=$('#ownerMissionCreate');if(!form||form.dataset.ownerUxReviewed==='true')return;
+ wrapMissionField('ownerMissionCommand','الأمر التنفيذي',true);
+ wrapMissionField('ownerMissionObjective','الهدف المطلوب');
+ wrapMissionField('ownerMissionPriority','الأولوية');
+ wrapMissionField('ownerMissionAcceptance','معايير القبول',true);
+ wrapMissionField('ownerMissionDue','الموعد النهائي');
+ const due=$('#ownerMissionDue');if(due){const hint=document.createElement('span');hint.className='ownerMissionDueHint';hint.textContent='يُقرأ الموعد حسب توقيت جهازك.';due.insertAdjacentElement('afterend',hint)}
+ const command=$('#ownerMissionCommand');if(command&&!$('#ownerMissionCommandCounter')){const counter=document.createElement('span');counter.id='ownerMissionCommandCounter';counter.className='ownerMissionCounter';command.insertAdjacentElement('afterend',counter);const update=()=>{counter.textContent=command.value.length+' / 4000';counter.style.color=command.value.length>3600?'#ffd87a':'#8fa1aa'};command.addEventListener('input',update);form.addEventListener('reset',()=>setTimeout(update,0));update()}
+ const actions=form.querySelector('.ownerMissionActions');const primary=actions?.querySelector('.ownerMissionBtn.primary');if(actions&&primary)actions.prepend(primary);
+ const badge=$('.ownerMissionBadge');if(badge)badge.textContent='CEO · مباشر';
+ const count=$('#ownerDecisionCount'),box=count?.closest('.ownerDecisionBox');if(count&&box){const sync=()=>{const n=parseInt(String(count.textContent||''),10);box.dataset.empty=String(Number.isFinite(n)&&n===0)};new MutationObserver(sync).observe(count,{childList:true,subtree:true,characterData:true});sync()}
+ form.dataset.ownerUxReviewed='true';
+}
+function improveLeadTabs(){const lead=$('#ownerLeadTabs29');if(!lead)return;const sync=()=>{lead.querySelectorAll('[data-lead29]').forEach(b=>{b.tabIndex=b.getAttribute('aria-selected')==='true'?0:-1})};new MutationObserver(sync).observe(lead,{subtree:true,attributes:true,attributeFilter:['aria-selected']});sync()}
+function hideDuplicateCustomerTabs(){const nested=$('#customers>.ownerTabs25');if(nested){nested.setAttribute('aria-hidden','true');nested.tabIndex=-1}}
+setTimeout(()=>{enhanceMission();improveLeadTabs();hideDuplicateCustomerTabs()},0);
+
+document.addEventListener('click',e=>{
+ const add=e.target.closest?.('[data-cmd-op="add_guidance"]');
+ if(add){const card=add.closest('[data-command]');const text=card?.querySelector('[data-cmd-guidance]')?.value.trim();if(!text){e.preventDefault();e.stopImmediatePropagation();setMissionMessage('اكتب التوجيه الإضافي قبل الإرسال.');return}}
+ const cancel=e.target.closest?.('[data-cmd-op="cancel"]');if(cancel&&!confirm('إلغاء هذه المهمة؟ لن تُحذف ويمكن إعادتها للطابور لاحقًا.')){e.preventDefault();e.stopImmediatePropagation();return}
+ const reject=e.target.closest?.('[data-resolution="reject"]');if(reject&&!confirm('رفض هذا القرار وإعادته للمسار التنفيذي؟')){e.preventDefault();e.stopImmediatePropagation()}
+},true);
+window.__dabbirOwnerUxAudit={reviewed:true,mobileNav:'compact-grid',nestedCustomerTabs:'hidden',missionLabels:true,noMobileNestedScroll:true};
 })();</script>`;
 
 export default function handler(req,res){
