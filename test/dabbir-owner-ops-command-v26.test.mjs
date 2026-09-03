@@ -4,10 +4,12 @@ import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v26.js',import.meta.url),'utf8');
 const ui27=fs.readFileSync(new URL('../api/owner-command-center-v27.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('active owner dashboard preserves executive operations v26 under v27',()=>{
-  assert.match(gateway,/owner-command-center-v28\.js/);
+test('active owner dashboard preserves executive operations v26 under the reviewed chain',()=>{
+  assert.match(gateway,/owner-command-center-v29\.js/);
+  assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui27,/owner-command-center-v26\.js/);
   assert.match(ui,/owner-command-center-v25\.js/);
 });
