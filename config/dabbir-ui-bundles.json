@@ -3,7 +3,8 @@
   "critical": [
     "/api/gcc-readiness-ui",
     "/api/auth/recovery-ui",
-    "/api/auth-session-stability-ui"
+    "/api/auth-session-stability-ui",
+    "/api/branch-context-ui"
   ],
   "deferred": [
     "/api/dabbir-whatsapp-embedded-ui",
