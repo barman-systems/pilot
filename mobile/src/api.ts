@@ -1,4 +1,5 @@
 import type { DabbirSession } from './session';
+import { isGccCountryCode, resolveSelectedCountry, saveSelectedCountry, type GccCountryCode } from './country';
 
 const configuredBase = String(process.env.EXPO_PUBLIC_DABBIR_API_BASE_URL || '').trim().replace(/\/$/, '');
 
@@ -72,17 +73,35 @@ export async function loadRuntime(accessToken: string): Promise<any> {
   const response = await fetch(`${apiBase()}/api/mobile/runtime?summary=1`, {
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
   });
-  return parseJson(response);
+  const payload = await parseJson(response);
+  const countryCode = String(payload?.business?.country_code || '').toUpperCase();
+  if (isGccCountryCode(countryCode)) await saveSelectedCountry(countryCode).catch(() => undefined);
+  return payload;
 }
 
 export type DabbirBusinessType = 'store' | 'laundry' | 'car_wash';
+export type DabbirLocale = `${'ar' | 'en'}-${GccCountryCode}`;
+export type { GccCountryCode } from './country';
 
-export async function createBusiness(accessToken: string, name: string, businessType: DabbirBusinessType, locale: 'ar-AE' | 'en-AE'): Promise<any> {
-  return post('/api/mobile/runtime', { action: 'create_business', name, business_type: businessType, locale }, accessToken);
+async function resolvedCountry(explicit?: GccCountryCode): Promise<GccCountryCode> {
+  if (explicit && isGccCountryCode(explicit)) return explicit;
+  return resolveSelectedCountry();
 }
 
-export async function createStore(accessToken: string, name: string, locale: 'ar-AE' | 'en-AE'): Promise<any> {
-  return post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale }, accessToken);
+export async function createBusiness(accessToken: string, name: string, businessType: DabbirBusinessType, locale: DabbirLocale | 'ar-AE' | 'en-AE', countryCode?: GccCountryCode): Promise<any> {
+  const resolved = await resolvedCountry(countryCode);
+  const language = String(locale || '').toLowerCase().startsWith('en') ? 'en' : 'ar';
+  const payload = await post('/api/mobile/runtime', { action: 'create_business', name, business_type: businessType, locale: `${language}-${resolved}`, country_code: resolved }, accessToken);
+  await saveSelectedCountry(resolved).catch(() => undefined);
+  return payload;
+}
+
+export async function createStore(accessToken: string, name: string, locale: DabbirLocale | 'ar-AE' | 'en-AE', countryCode?: GccCountryCode): Promise<any> {
+  const resolved = await resolvedCountry(countryCode);
+  const language = String(locale || '').toLowerCase().startsWith('en') ? 'en' : 'ar';
+  const payload = await post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale: `${language}-${resolved}`, country_code: resolved }, accessToken);
+  await saveSelectedCountry(resolved).catch(() => undefined);
+  return payload;
 }
 
 export async function deleteDabbirAccount(accessToken: string): Promise<any> {
