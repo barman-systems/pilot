@@ -8,6 +8,8 @@ const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appoint
 const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';`;
 const OWNER_FIRST_SCRIPT_RE = /<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g;
 const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
+const OWNER_FIRST_BROKEN_PREFIX = "const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':';";
+const OWNER_FIRST_FIXED_PREFIX = "const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':'';";
 
 function bustUiAssetVersion(body) {
   if (typeof body !== 'string') return body;
@@ -22,6 +24,12 @@ function stripLegacyNavigationOverrides(body) {
   return body
     .split(LEGACY_STORE_SLOT_HIDE).join('')
     .split(LEGACY_STORE_APPOINTMENT_REDIRECT).join('');
+}
+
+function reconcileOwnerFirstPayload(payload) {
+  const pieces = String(payload).split(OWNER_FIRST_BROKEN_PREFIX);
+  if (pieces.length !== 2) throw new Error(`DABBIR_OWNER_FIRST_PREFIX_RECONCILIATION_COUNT_${pieces.length - 1}`);
+  return pieces.join(OWNER_FIRST_FIXED_PREFIX);
 }
 
 function ownerFirstInlineScript() {
@@ -56,6 +64,7 @@ function ownerFirstInlineScript() {
   if (!contentType.toLowerCase().includes('application/javascript')) {
     throw new Error(`DABBIR_OWNER_FIRST_INLINE_CONTENT_TYPE_${contentType || 'missing'}`);
   }
+  payload = reconcileOwnerFirstPayload(payload);
   try {
     new Script(payload, { filename: 'dabbir-owner-first-inline.js' });
   } catch (error) {
@@ -107,7 +116,7 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
-      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v3');
+      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-compiled-reconciled-before-auth-boot-v4');
       res.statusCode = Number(proxy.statusCode || 200);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
