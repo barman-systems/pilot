@@ -1,11 +1,31 @@
 # DABBIR Golden Canary v1
 
-Status: implementation candidate pending governed merge and first successful live run
+Status: Phase 1 implementation candidate
 Contract: `DABBIR_GOLDEN_CANARY_V1`
 
 ## Release contract
 
 `candidate SHA -> exact protected Vercel Preview -> unprivileged candidate tests -> trusted main-only verifier -> exact Preview smoke -> disposable full customer journey -> no-drift proof -> immutable commit status -> governed merge -> existing Release Guardian -> production`
+
+## Two-phase activation
+
+### Phase 1 — install the trusted verifier
+
+PR #441 installs the Golden Canary workflow, trusted smoke harness, isolated disposable QA control plane, and evidence contract. It deliberately does **not** make `DABBIR Golden Canary` a required main-branch status yet. Existing main protection continues to require the established `test` context while the new verifier is bootstrapped.
+
+This avoids a circular dependency: GitHub cannot require a trusted workflow that is not yet present on `main`, and the new protection must not be reported as active before a real Canary run proves it.
+
+### Phase 2 — prove it, then enforce it
+
+After Phase 1 is merged, a separate enforcement PR must:
+
+1. change native main protection to require both `test` and `DABBIR Golden Canary`;
+2. update the protection contract test accordingly;
+3. receive an exact Vercel Preview for its own candidate SHA;
+4. run `DABBIR Golden Canary` from the trusted workflow on `main` against that exact Preview;
+5. obtain a SUCCESS `DABBIR Golden Canary` status on the exact candidate SHA before merge;
+6. merge through the governed PR path only;
+7. verify GitHub's live branch-protection API reports both required contexts.
 
 ## Security boundary
 
@@ -41,7 +61,7 @@ The same SHA and deployment ID must still be active after the full journey, othe
 
 On success the workflow emits a 30-day artifact receipt containing the candidate SHA, Preview URL, deployment ID, run ID, PASS gates, `promotion_allowed=true`, and `fail_closed=true`.
 
-It also writes the commit status context `DABBIR Golden Canary` directly onto the exact candidate SHA. Main branch protection is changed to require both `test` and `DABBIR Golden Canary`; therefore a missing, failed, or stale Canary result blocks merge.
+It also writes the commit status context `DABBIR Golden Canary` directly onto the exact candidate SHA. During Phase 1 this status is available as evidence but is not yet required by main protection. Phase 2 converts that proven status into an enforced merge requirement.
 
 ## Inputs
 
@@ -54,4 +74,4 @@ There are no reusable Canary user credentials in GitHub Actions.
 
 ## Operational completion condition
 
-This implementation is not considered operational until PR #441 is merged, native main protection reports `DABBIR Golden Canary` as a required context, and a real workflow run against an exact Vercel Preview finishes successfully with an evidence artifact and SUCCESS commit status.
+Golden Canary is considered fully operational only after Phase 1 is merged, a real Golden Canary run succeeds against an exact Phase 2 Preview, Phase 2 is merged, and GitHub's live branch-protection API confirms that both `test` and `DABBIR Golden Canary` are required on `main`.
