@@ -3,6 +3,33 @@
 -- Explicit membership permission arrays may narrow delegated roles, but must never
 -- reduce an active owner below full workspace authority.
 
+-- Normalize legacy owner rows first. Application helpers historically interpreted a
+-- non-empty permissions array as a restrictive override; owners must never carry one.
+update public.dabbir_memberships
+set permissions='{}'::text[],updated_at=now()
+where role='owner' and cardinality(coalesce(permissions,'{}'::text[]))>0;
+
+create or replace function dabbir_private.enforce_owner_unrestricted_membership()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+begin
+  if new.role='owner' then
+    new.permissions='{}'::text[];
+  end if;
+  return new;
+end;
+$$;
+revoke all on function dabbir_private.enforce_owner_unrestricted_membership() from public,anon,authenticated;
+grant execute on function dabbir_private.enforce_owner_unrestricted_membership() to service_role;
+
+drop trigger if exists dabbir_owner_unrestricted_membership on public.dabbir_memberships;
+create trigger dabbir_owner_unrestricted_membership
+before insert or update of role,permissions on public.dabbir_memberships
+for each row execute function dabbir_private.enforce_owner_unrestricted_membership();
+
 create or replace function dabbir_private.user_has_permission(
   p_business_id uuid,
   p_user_id uuid,
@@ -66,7 +93,7 @@ using (
   and exists(
     select 1
     from public.dabbir_memberships m
-    where m.business_id=id
+    where m.business_id=public.dabbir_businesses.id
       and m.user_id=(select auth.uid())
       and m.role='owner'
       and m.status='active'
