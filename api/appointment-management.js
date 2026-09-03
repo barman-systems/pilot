@@ -73,15 +73,30 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
   if(body.starts_at!==undefined){
     const start=validStart(body.starts_at);
     if(start===null)return {status:400,body:{ok:false,error:'VALID_START_TIME_REQUIRED'}};
-    patch.starts_at=start.toISOString();
-    patch.ends_at=new Date(start.getTime()+durationMs(current)).toISOString();
+    const currentStart=validStart(current.starts_at);
+    if(!currentStart||start.getTime()!==currentStart.getTime()){
+      patch.starts_at=start.toISOString();
+      patch.ends_at=new Date(start.getTime()+durationMs(current)).toISOString();
+    }
   }
   if(body.status!==undefined){
     const status=String(body.status||'').trim().toLowerCase();
     if(!ALLOWED_STATUS.has(status))return {status:400,body:{ok:false,error:'INVALID_APPOINTMENT_STATUS'}};
-    patch.status=status;
+    if(status!==String(current.status||'').trim().toLowerCase())patch.status=status;
   }
-  if(!Object.keys(patch).length)return {status:400,body:{ok:false,error:'NO_APPOINTMENT_CHANGES'}};
+  if(!Object.keys(patch).length){
+    return {
+      status:200,
+      body:{
+        ok:true,
+        action:'update',
+        state:'NO_CHANGE',
+        appointment:current,
+        calendar_sync:calendarOutboxTruth(),
+        truth:{state:'VERIFIED',source:'SUPABASE_READ',entity:'appointment',entity_id:current.id,verified_at:new Date().toISOString()},
+      },
+    };
+  }
 
   const rows=await rest(
     ctx.token,

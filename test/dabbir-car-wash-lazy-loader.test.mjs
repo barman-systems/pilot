@@ -33,7 +33,7 @@ test('car-wash calendar observer is idempotent and never observes hidden mutatio
   assert.match(loader,/dabbirCarWashDuplicate!=='hidden'/);
   assert.match(loader,/calendarObserver\.observe\(document\.documentElement,\{subtree:true,childList:true\}\)/);
   assert.doesNotMatch(loader,/calendarObserver\.observe[^\n]+attributeFilter:\[[^\]]*hidden/);
-  assert.match(loader,/v7-historical-booking-edit/);
+  assert.match(loader,/v8-historical-calendar-edit/);
 });
 
 test('car-wash manual booking cache key changes for the iPhone customer combobox fix',()=>{
@@ -41,9 +41,9 @@ test('car-wash manual booking cache key changes for the iPhone customer combobox
   assert.match(loader,/car-wash-manual-booking-ui\?v=20260903-3-native-combobox/);
 });
 
-test('car-wash loader mounts the historical booking editor',()=>{
+test('car-wash loader mounts the historical booking editor with the calendar-edit cache key',()=>{
   const loader=read('api/car-wash-loader-ui.js');
   assert.match(loader,/function loadBookingEdit\(\)/);
-  assert.match(loader,/car-wash-booking-edit-ui\?v=20260903-1-historical/);
+  assert.match(loader,/car-wash-booking-edit-ui\?v=20260903-2-historical-calendar/);
   assert.match(loader,/data-dabbir-car-wash-booking-edit-ui/);
 });
