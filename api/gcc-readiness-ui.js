@@ -1,3 +1,5 @@
+import brandUiHandler from './brand-ui.js';
+
 const script=String.raw`(()=>{
   if(window.__dabbirGccReadinessLoaded)return;
   window.__dabbirGccReadinessLoaded=true;
@@ -142,14 +144,39 @@ const script=String.raw`(()=>{
   setTimeout(()=>{ensureOnboarding();reassertAuthorities()},0);
 })();`;
 
-export default function handler(req,res){
+function captureBrandUi(req){
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const proxy={
+      statusCode:200,
+      setHeader(){},
+      end(body=''){
+        if(settled)return;
+        settled=true;
+        if(this.statusCode!==200)return reject(Object.assign(new Error('BRAND_UI_COMPOSITION_FAILED'),{status:this.statusCode}));
+        resolve(String(body||''));
+      },
+    };
+    Promise.resolve(brandUiHandler(req,proxy)).then(()=>{if(!settled){settled=true;reject(new Error('BRAND_UI_EMPTY_RESPONSE'))}}).catch(reject);
+  });
+}
+
+export default async function handler(req,res){
   if(req.method!=='GET'){
     res.statusCode=405;res.setHeader('allow','GET');return res.end('Method Not Allowed');
   }
-  res.statusCode=200;
-  res.setHeader('content-type','application/javascript; charset=utf-8');
-  res.setHeader('cache-control','no-store');
-  res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-gcc-readiness','country-authority-v1');
-  return res.end(script);
+  try{
+    const brandScript=await captureBrandUi(req);
+    res.statusCode=200;
+    res.setHeader('content-type','application/javascript; charset=utf-8');
+    res.setHeader('cache-control','no-store');
+    res.setHeader('x-content-type-options','nosniff');
+    res.setHeader('x-dabbir-gcc-readiness','country-authority-v1-composed-brand-slot');
+    return res.end(brandScript+'\n'+script);
+  }catch(error){
+    res.statusCode=Number(error?.status||500);
+    res.setHeader('content-type','application/javascript; charset=utf-8');
+    res.setHeader('cache-control','no-store');
+    return res.end('throw new Error("DABBIR_GCC_CRITICAL_UI_COMPOSITION_FAILED")');
+  }
 }
