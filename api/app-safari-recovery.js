@@ -55,7 +55,16 @@ function ownerFirstInlineScript() {
   if (!contentType.toLowerCase().includes('application/javascript')) {
     throw new Error(`DABBIR_OWNER_FIRST_INLINE_CONTENT_TYPE_${contentType || 'missing'}`);
   }
-  return `<script data-dabbir-owner-first-inline="owner-first-v4">\n${payload}\n</script>`;
+  try {
+    // Compile the exact browser payload. api/dabbir-owner-first-ui.js itself can be
+    // syntactically valid while the JavaScript stored inside its String.raw payload is not.
+    new Function(payload);
+  } catch (error) {
+    throw new Error(`DABBIR_OWNER_FIRST_INLINE_PARSE_${String(error?.message || error).slice(0, 180)}`);
+  }
+  const probe = '<script data-dabbir-owner-first-probe="owner-first-probe-v1">window.__dabbirOwnerFirstBootstrapProbe={version:"owner-first-probe-v1",reached:true};</script>';
+  const owner = `<script data-dabbir-owner-first-inline="owner-first-v4">\n${payload}\n</script>`;
+  return `${probe}\n${owner}`;
 }
 
 function orderOwnerFirstBeforeAuthBoot(body) {
@@ -98,7 +107,7 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
-      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
+      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v3');
       res.statusCode = Number(proxy.statusCode || 200);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
