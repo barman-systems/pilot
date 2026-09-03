@@ -1,4 +1,5 @@
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
+import { consumeRateLimit, rateLimitHeaders } from './_rate-limit.js';
 
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const SLUG_RE=/^[a-z0-9][a-z0-9_-]{2,119}$/i;
@@ -56,6 +57,8 @@ export default async function handler(req,res){
     }
     if(req.method==='POST'){
       if(!sameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
+      const throttle=await consumeRateLimit(req,{action:'public_car_wash_booking',limit:20,windowSeconds:300,failClosed:true});
+      if(!throttle.allowed)return json(res,429,{ok:false,error:'BOOKING_RATE_LIMITED'},rateLimitHeaders(throttle));
       const body=await readBody(req);
       const pSlug=slug(body.slug),offer=clean(body.offer_id,80),vehicle=clean(body.vehicle_type,16).toLowerCase();
       const starts=clean(body.starts_at,40),name=clean(body.customer_name,120),phone=clean(body.customer_phone,30),label=clean(body.location_label,240);
