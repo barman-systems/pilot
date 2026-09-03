@@ -1,12 +1,16 @@
+import { Script } from 'node:vm';
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
-const UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3';
+const UI_CACHE_BUST = '20260903-webkit-owner-compile-v5';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
 const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});`;
 const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';`;
 const OWNER_FIRST_SCRIPT_RE = /<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g;
 const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
+const MOBILE_MENU_TOUCH_TARGET = `<style data-dabbir-mobile-menu-touch-target="v1">@media(max-width:700px){html body #appShell #menuBtn{min-width:44px!important;min-height:44px!important;flex-shrink:0!important;box-sizing:border-box!important}}</style>`;
+const OWNER_FIRST_BROKEN_PREFIX = "const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':';";
+const OWNER_FIRST_FIXED_PREFIX = "const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':'';";
 
 function bustUiAssetVersion(body) {
   if (typeof body !== 'string') return body;
@@ -21,6 +25,12 @@ function stripLegacyNavigationOverrides(body) {
   return body
     .split(LEGACY_STORE_SLOT_HIDE).join('')
     .split(LEGACY_STORE_APPOINTMENT_REDIRECT).join('');
+}
+
+function reconcileOwnerFirstPayload(payload) {
+  const pieces = String(payload).split(OWNER_FIRST_BROKEN_PREFIX);
+  if (pieces.length !== 2) throw new Error(`DABBIR_OWNER_FIRST_PREFIX_RECONCILIATION_COUNT_${pieces.length - 1}`);
+  return pieces.join(OWNER_FIRST_FIXED_PREFIX);
 }
 
 function ownerFirstInlineScript() {
@@ -55,6 +65,13 @@ function ownerFirstInlineScript() {
   if (!contentType.toLowerCase().includes('application/javascript')) {
     throw new Error(`DABBIR_OWNER_FIRST_INLINE_CONTENT_TYPE_${contentType || 'missing'}`);
   }
+  payload = reconcileOwnerFirstPayload(payload);
+  try {
+    new Script(payload, { filename: 'dabbir-owner-first-inline.js' });
+  } catch (error) {
+    const detail = String(error?.stack || error?.message || error).replace(/\s*\n\s*/g, ' | ').slice(0, 700);
+    throw new Error(`DABBIR_OWNER_FIRST_INLINE_PARSE_${detail}`);
+  }
   return `<script data-dabbir-owner-first-inline="owner-first-v4">\n${payload}\n</script>`;
 }
 
@@ -72,6 +89,11 @@ function orderOwnerFirstBeforeAuthBoot(body) {
     AUTH_BOOT_ANCHOR,
     `</script>\n${inlineOwner}\n<script>\napplyLang();boot();\n</script>`,
   );
+}
+
+function injectMobileMenuTouchTarget(body) {
+  if (typeof body !== 'string' || body.includes('data-dabbir-mobile-menu-touch-target')) return body;
+  return body.replace('</head>', `${MOBILE_MENU_TOUCH_TARGET}\n</head>`);
 }
 
 function injectSafariAuthFailOpen(body) {
@@ -98,12 +120,13 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
-      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
+      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-compiled-reconciled-before-auth-boot-v4');
       res.statusCode = Number(proxy.statusCode || 200);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
       const ordered = orderOwnerFirstBeforeAuthBoot(canonical);
-      return res.end(injectSafariAuthFailOpen(ordered));
+      const touchSafe = injectMobileMenuTouchTarget(ordered);
+      return res.end(injectSafariAuthFailOpen(touchSafe));
     },
   };
 
