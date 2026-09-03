@@ -4,10 +4,13 @@ import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
+const flattener=fs.readFileSync(new URL('../scripts/build-owner-command-center-runtime.mjs',import.meta.url),'utf8');
 
-test('owner production remains pinned to one stable command-center entrypoint',()=>{
-  assert.match(gateway,/import dashboard from '\.\/owner-command-center\.js'/);
-  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center-v\d+\.js'/);
+test('owner production remains pinned to one generated command-center runtime',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
+  assert.match(flattener,/const entry='owner-command-center\.js'/);
+  assert.match(flattener,/OWNER_COMMAND_CENTER_SOURCE_MANIFEST/);
   assert.match(ui,/authoritative:true/);
 });
 

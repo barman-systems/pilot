@@ -7,8 +7,9 @@ const reviewed=fs.readFileSync(new URL('../api/owner-command-center-v28.js',impo
 const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner dashboard keeps CEO center v24 in the active reviewed chain while preserving v23',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('owner dashboard keeps CEO center v24 in the flattened reviewed source chain while preserving v23',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
   assert.match(active,/owner-command-center-v28\.js/);
   assert.match(reviewed,/owner-command-center-v27\.js/);
   assert.match(ui,/owner-command-center-v23\.js/);

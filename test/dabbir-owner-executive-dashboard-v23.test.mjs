@@ -8,8 +8,9 @@ const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import
 const data=fs.readFileSync(new URL('../api/owner-dashboard-data.js',import.meta.url),'utf8');
 const broker=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-broker/index.ts',import.meta.url),'utf8');
 
-test('v23 remains the executive truth layer under the active reviewed owner dashboard',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('v23 remains the executive truth layer under the flattened reviewed owner dashboard',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
   assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui,/owner-command-center-v22\.js/);
   assert.match(ui,/ownerExecutiveV23/);
