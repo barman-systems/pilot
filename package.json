@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "pretest": "node scripts/build-owner-command-center-runtime.mjs",
     "test": "node --test test/*.test.mjs",
+    "precheck:syntax": "node scripts/build-owner-command-center-runtime.mjs",
     "check:syntax": "git ls-files '*.js' '*.mjs' | xargs -r -n1 node --check",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "dabbir:build": "node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs"
+    "dabbir:build": "node scripts/build-owner-command-center-runtime.mjs && node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "3.1.0",
