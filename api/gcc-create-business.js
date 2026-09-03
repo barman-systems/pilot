@@ -7,19 +7,11 @@ import {
   supabaseRest,
   supabaseRpc,
 } from './_auth-core.js';
+import { getMarketProfile, localeForMarket, normalizeMarketCode } from './_market-core.js';
 
 const BUSINESS_TYPES = new Set(['store','laundry','car_wash','clinic','creator','salon','real_estate','services','other']);
-const GCC = Object.freeze({
-  AE:{currency_code:'AED',timezone:'Asia/Dubai',phone_country_prefix:'+971',region:'AE'},
-  SA:{currency_code:'SAR',timezone:'Asia/Riyadh',phone_country_prefix:'+966',region:'SA'},
-  KW:{currency_code:'KWD',timezone:'Asia/Kuwait',phone_country_prefix:'+965',region:'KW'},
-  QA:{currency_code:'QAR',timezone:'Asia/Qatar',phone_country_prefix:'+974',region:'QA'},
-  BH:{currency_code:'BHD',timezone:'Asia/Bahrain',phone_country_prefix:'+973',region:'BH'},
-  OM:{currency_code:'OMR',timezone:'Asia/Muscat',phone_country_prefix:'+968',region:'OM'},
-});
 
 function clean(value,max=120){return String(value??'').trim().slice(0,max)}
-function country(value){const code=clean(value,2).toUpperCase();return GCC[code]?code:null}
 function language(value){return String(value||'').toLowerCase().startsWith('en')?'en':'ar'}
 
 async function read(response,fallback){
@@ -48,14 +40,15 @@ export default async function handler(req,res){
     const body=await readJsonBody(req,8192);
     const name=clean(body?.name,120);
     const businessType=clean(body?.business_type,40).toLowerCase();
-    const countryCode=country(body?.country_code);
+    const countryCode=normalizeMarketCode(body?.country_code);
+    const market=getMarketProfile(countryCode);
     const lang=language(body?.locale);
 
     if(!name)return json(res,400,{ok:false,error:'BUSINESS_NAME_REQUIRED'});
     if(!BUSINESS_TYPES.has(businessType))return json(res,400,{ok:false,error:'UNSUPPORTED_BUSINESS_TYPE'});
-    if(!countryCode)return json(res,400,{ok:false,error:'UNSUPPORTED_GCC_COUNTRY'});
+    if(!market)return json(res,400,{ok:false,error:'UNSUPPORTED_MARKET'});
 
-    const locale=`${lang}-${GCC[countryCode].region}`;
+    const locale=localeForMarket(countryCode,lang);
     const created=await read(await supabaseRpc('dabbir_create_business',accessToken,{
       p_name:name,
       p_business_type:businessType,
@@ -70,8 +63,8 @@ export default async function handler(req,res){
       accessToken,
     ),'BUSINESS_PROFILE_VERIFY_FAILED');
     const business=Array.isArray(rows)?rows[0]:null;
-    if(!business?.id||business.country_code!==countryCode||business.currency_code!==GCC[countryCode].currency_code){
-      return json(res,502,{ok:false,error:'BUSINESS_COUNTRY_PROFILE_UNVERIFIED',business_id:businessId});
+    if(!business?.id||business.country_code!==countryCode||business.currency_code!==market.currency_code||business.timezone!==market.timezone||business.phone_country_prefix!==market.phone_country_prefix){
+      return json(res,502,{ok:false,error:'BUSINESS_MARKET_PROFILE_UNVERIFIED',business_id:businessId});
     }
 
     return json(res,200,{
@@ -92,6 +85,6 @@ export default async function handler(req,res){
       truth:{state:'VERIFIED',source:'SUPABASE_RETURN_AND_READBACK',entity:'business',entity_id:businessId,verified_at:new Date().toISOString()},
     });
   }catch(error){
-    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'GCC_BUSINESS_CREATE_FAILED',detail:error?.detail||null});
+    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'MARKET_BUSINESS_CREATE_FAILED',detail:error?.detail||null});
   }
 }
