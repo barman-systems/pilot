@@ -5,7 +5,9 @@ const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVI
 const GH_ISSUER='https://token.actions.githubusercontent.com';
 const GH_REPOSITORY='barman-systems/pilot';
 const GH_REF='refs/heads/main';
-const GH_EVENT='workflow_dispatch';
+const GH_EVENTS=new Set(['workflow_dispatch','issue_comment']);
+const GH_COMMENT_ACTOR='barmanai';
+const GH_COMMENT_ACTOR_ID='319216860';
 const GH_WORKFLOW_REF='barman-systems/pilot/.github/workflows/dabbir-golden-canary.yml@refs/heads/main';
 const OIDC_AUDIENCE='dabbir-ai-qa';
 const ACTIONS=new Set(['dabbir_ai_qa_bootstrap','dabbir_ai_qa_seed_order','dabbir_ai_qa_cleanup']);
@@ -34,7 +36,10 @@ async function verifyGitHubOidc(req:Request){
   if(payload.repository!==GH_REPOSITORY)throw new Error('OIDC_REPOSITORY_DENIED');
   if(payload.ref!==GH_REF)throw new Error('OIDC_REF_DENIED');
   if(payload.workflow_ref!==GH_WORKFLOW_REF)throw new Error('OIDC_WORKFLOW_DENIED');
-  if(payload.event_name!==GH_EVENT)throw new Error('OIDC_EVENT_DENIED');
+  if(!GH_EVENTS.has(String(payload.event_name||'')))throw new Error('OIDC_EVENT_DENIED');
+  if(payload.event_name==='issue_comment'){
+    if(payload.actor!==GH_COMMENT_ACTOR||String(payload.actor_id||'')!==GH_COMMENT_ACTOR_ID)throw new Error('OIDC_COMMENT_ACTOR_DENIED');
+  }
   return payload;
 }
 
