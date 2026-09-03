@@ -83,6 +83,16 @@ const script = String.raw`(()=>{
 
   function installShowScreenRouterDelegation(){
     if(window.__dabbirShowScreenRouterDelegation) return true;
+    const lifecycle=window.__dabbirUiLifecycle;
+    if(lifecycle?.route&&lifecycle?.on){
+      lifecycle.route('navigation-event-bridge',routedName);
+      lifecycle.on('afterNavigate','navigation-event-bridge',({requested,target})=>{
+        window.__dabbirLastCanonicalNavigation={requested:String(requested||''),target:String(target||''),at:new Date().toISOString()};
+        queueSalonRefresh(target,true);
+      });
+      window.__dabbirShowScreenRouterDelegation='lifecycle';
+      return true;
+    }
     if(typeof showScreen!=='function') return false;
     const baseShowScreen=showScreen;
     showScreen=function(name){
@@ -92,7 +102,7 @@ const script = String.raw`(()=>{
       queueSalonRefresh(target,true);
       return result;
     };
-    window.__dabbirShowScreenRouterDelegation=true;
+    window.__dabbirShowScreenRouterDelegation='legacy-fallback';
     return true;
   }
 
@@ -231,22 +241,31 @@ const script = String.raw`(()=>{
     });
   }
 
+  function refreshSalonAfterRender(){
+    if(!isSalonActive())return;
+    setTimeout(()=>{
+      const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
+      if(salonScreen(active))void refreshSalonSnapshot(false);
+    },0);
+  }
+
   installSalonScreenIsolation();
   installShowScreenRouterDelegation();
   setTimeout(installShowScreenRouterDelegation,0);
   setTimeout(installShowScreenRouterDelegation,250);
 
-  try{
-    const baseRenderAllSalonFreshness=renderAll;
-    renderAll=function(){
-      const result=baseRenderAllSalonFreshness.apply(this,arguments);
-      if(isSalonActive())setTimeout(()=>{
-        const active=document.querySelector('.screen.active')?.id?.replace(/^screen-/,'')||'';
-        if(salonScreen(active))void refreshSalonSnapshot(false);
-      },0);
-      return result;
-    };
-  }catch{}
+  if(window.__dabbirUiLifecycle?.on){
+    window.__dabbirUiLifecycle.on('afterRender','navigation-event-bridge-salon',refreshSalonAfterRender);
+  }else{
+    try{
+      const baseRenderAllSalonFreshness=renderAll;
+      renderAll=function(){
+        const result=baseRenderAllSalonFreshness.apply(this,arguments);
+        refreshSalonAfterRender();
+        return result;
+      };
+    }catch{}
+  }
 
   document.addEventListener('touchstart',event=>{
     const node=itemFrom(event.target);
@@ -337,6 +356,7 @@ const script = String.raw`(()=>{
     destination_authority:'context-router',
     context_resync_before_navigation:true,
     programmatic_show_screen_delegation:true,
+    lifecycle_router_authority:window.__dabbirShowScreenRouterDelegation==='lifecycle',
     salon_snapshot_refresh_event_scoped:true,
   };
 })();`;
