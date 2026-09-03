@@ -11,18 +11,26 @@ test('authoritative shell installs one lifecycle authority before generated UI b
   assert.match(recovery,/const UI_LIFECYCLE_BOOTSTRAP/);
   assert.match(recovery,/version:'ui-lifecycle-v1'/);
   assert.match(recovery,/UI_LIFECYCLE_BOOTSTRAP \+ `\\n<script src="\/dabbir-ui-critical\.js/);
-  assert.match(recovery,/const hooks=new Map\(\[\['afterRender',new Map\(\)\],\['afterNavigate',new Map\(\)\],\['afterLanguage',new Map\(\)\]\]\)/);
+  for(const event of ['afterRender','afterNavigate','afterLanguage','afterChats','afterMessages']){
+    assert.match(recovery,new RegExp(`\\['${event}',new Map\\(\\)\\]`));
+  }
   assert.match(recovery,/const routes=new Map\(\)/);
 });
 
-test('lifecycle reconciliation is generation-safe for render navigation and language',()=>{
+test('lifecycle reconciliation is generation-safe for render navigation language and chat renders',()=>{
   assert.match(recovery,/const generation=\+\+renderGeneration/);
   assert.match(recovery,/generation===renderGeneration/);
   assert.match(recovery,/const generation=\+\+navigationGeneration/);
   assert.match(recovery,/generation!==navigationGeneration/);
   assert.match(recovery,/const generation=\+\+languageGeneration/);
   assert.match(recovery,/generation===languageGeneration/);
+  assert.match(recovery,/const generation=\+\+chatsGeneration/);
+  assert.match(recovery,/generation===chatsGeneration/);
+  assert.match(recovery,/const generation=\+\+messagesGeneration/);
+  assert.match(recovery,/generation===messagesGeneration/);
   assert.match(recovery,/emit\('afterLanguage'/);
+  assert.match(recovery,/emit\('afterChats'/);
+  assert.match(recovery,/emit\('afterMessages'/);
   assert.match(recovery,/window\.__dabbirUiLifecycle\?\.reconcile\?\.\(\)/);
   assert.match(recovery,/script\.onload=\(\)=>\{[\s\S]*?__dabbirDeferredUiReady=true;[\s\S]*?__dabbirUiLifecycle\?\.reconcile/);
 });

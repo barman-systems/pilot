@@ -3,7 +3,7 @@ const script=String.raw`(()=>{
   window.__dabbirHumanChatUiLoaded=true;
 
   const style=document.createElement('style');
-  style.dataset.dabbirChatUi='v2';
+  style.dataset.dabbirChatUi='v3';
   style.textContent=[
     '#newChatBtn{display:none!important}',
     '.dabbirChatControl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
@@ -100,14 +100,14 @@ const script=String.raw`(()=>{
     const input=q('#composer');
     if(input&&!input.dataset.dabbirHumanComposer){
       const clone=input.cloneNode(true);
-      clone.dataset.dabbirHumanComposer='v2';
+      clone.dataset.dabbirHumanComposer='v3';
       input.replaceWith(clone);
       clone.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHumanReply()}});
     }
     const button=q('#sendBtn');
     if(button&&!button.dataset.dabbirHumanComposer){
       const clone=button.cloneNode(true);
-      clone.dataset.dabbirHumanComposer='v2';
+      clone.dataset.dabbirHumanComposer='v3';
       button.replaceWith(clone);
       clone.addEventListener('click',sendHumanReply);
     }
@@ -185,6 +185,14 @@ const script=String.raw`(()=>{
     }
   }
 
+  let refreshQueued=false;
+  function queueHumanUi(){
+    if(refreshQueued)return;
+    refreshQueued=true;
+    const run=()=>{refreshQueued=false;updateHumanUi()};
+    if(typeof queueMicrotask==='function')queueMicrotask(run);else Promise.resolve().then(run);
+  }
+
   async function chatControl(action,message){
     const businessId=currentBusinessId();
     const conversationId=currentConversationId();
@@ -216,7 +224,7 @@ const script=String.raw`(()=>{
       }
       if(typeof loadRuntime==='function')await loadRuntime(currentBusinessId(),currentConversationId());
     }catch(error){notify((conversation.state==='human_active'?t.returnFail:t.takeoverFail)+(error&&error.message?' — '+error.message:''))}
-    finally{if(button)button.disabled=false;updateHumanUi()}
+    finally{if(button)button.disabled=false;queueHumanUi()}
   }
 
   let sending=false;
@@ -238,34 +246,24 @@ const script=String.raw`(()=>{
         workspace.messages.push(saved);
         workspace.messages_loaded=true;
         if(typeof renderMessages==='function')renderMessages();
-        labelMessages();
       }else if(typeof loadRuntime==='function'){
         await loadRuntime(currentBusinessId(),currentConversationId());
       }
     }catch(error){notify(t.sendFail+(error&&error.message?' — '+error.message:''))}
-    finally{sending=false;if(button)button.disabled=false;updateHumanUi();const live=q('#composer');if(live&&!live.disabled)live.focus()}
+    finally{sending=false;if(button)button.disabled=false;queueHumanUi();const live=q('#composer');if(live&&!live.disabled)live.focus()}
   }
 
   ensureControl();
   replaceLegacyComposer();
-  try{
-    if(typeof renderMessages==='function'){
-      const baseRenderMessages=renderMessages;
-      renderMessages=function(){const value=baseRenderMessages.apply(this,arguments);labelMessages();updateHumanUi();return value};
-    }
-    if(typeof renderChats==='function'){
-      const baseRenderChats=renderChats;
-      renderChats=function(){const value=baseRenderChats.apply(this,arguments);updateHumanUi();return value};
-    }
-    if(typeof renderAll==='function'){
-      const baseRenderAll=renderAll;
-      renderAll=function(){const value=baseRenderAll.apply(this,arguments);updateHumanUi();return value};
-    }
-  }catch{}
-  new MutationObserver(updateHumanUi).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterMessages','human-chat-ui',queueHumanUi);
+    lifecycle.on('afterChats','human-chat-ui',queueHumanUi);
+    lifecycle.on('afterRender','human-chat-ui',queueHumanUi);
+    lifecycle.on('afterLanguage','human-chat-ui',queueHumanUi);
+  }
   setTimeout(updateHumanUi,0);
-  setTimeout(updateHumanUi,500);
-  window.__dabbirHumanChatUiVersion='v2';
+  window.__dabbirHumanChatUiVersion='v3-lifecycle';
 })();`;
 
 export default function handler(req,res){
@@ -276,6 +274,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-chat-ui','v2');
+  res.setHeader('x-dabbir-chat-ui','v3-lifecycle');
   return res.end(script);
 }
