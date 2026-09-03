@@ -47,5 +47,5 @@ test('car-wash loader mounts the mobile-safe manual booking enhancement only for
   assert.match(loader,/function loadManualBooking\(\)/);
   assert.match(loader,/\/api\/car-wash-manual-booking-ui/);
   assert.match(loader,/20260903-3-native-combobox/);
-  assert.match(loader,/v6-native-customer-combobox/);
+  assert.match(loader,/v7-historical-booking-edit/);
 });

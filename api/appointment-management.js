@@ -54,10 +54,9 @@ async function appointmentFor(token,businessId,appointmentId){
   return rows?.[0]||null;
 }
 
-function validFutureStart(value){
+function validStart(value){
   const date=new Date(String(value||''));
   if(Number.isNaN(date.getTime()))return null;
-  if(date.getTime()<Date.now())return false;
   return date;
 }
 
@@ -67,9 +66,8 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
 
   const patch={};
   if(body.starts_at!==undefined){
-    const start=validFutureStart(body.starts_at);
+    const start=validStart(body.starts_at);
     if(start===null)return {status:400,body:{ok:false,error:'VALID_START_TIME_REQUIRED'}};
-    if(start===false)return {status:409,body:{ok:false,error:'PAST_APPOINTMENT_NOT_ALLOWED'}};
     patch.starts_at=start.toISOString();
   }
   if(body.status!==undefined){
