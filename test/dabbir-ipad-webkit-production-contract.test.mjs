@@ -6,6 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 const runner=read('test/run-ai-full-customer-journey-ipad.mjs');
 const workflow=read('.github/workflows/dabbir-ipad-webkit-production.yml');
+const deploymentClassifier=read('vercel-ignore-if-unaffected.sh');
 
 test('iPad runner reuses the canonical full journey and changes only the touch viewport',()=>{
   assert.match(runner,/ai-full-customer-journey-v2\.mjs/);
@@ -28,4 +29,18 @@ test('iPad Production workflow is exact-SHA, OIDC protected, and fail closed on 
   assert.match(workflow,/IPAD_WEBKIT_FULL_JOURNEY_PASS/);
   assert.match(workflow,/STABLE_IPAD_PRODUCTION_SHA/);
   assert.doesNotMatch(workflow,/continue-on-error:\s*true/);
+});
+
+test('iPad exact-SHA workflow tracks the Vercel release classifier that can allow or cancel its Production SHA',()=>{
+  assert.match(workflow,/- 'vercel-ignore-if-unaffected\.sh'/);
+});
+
+test('all iPad exact-SHA QA contract files force a truthful Production deployment',()=>{
+  for(const path of [
+    '.github/workflows/dabbir-ipad-webkit-production.yml',
+    'test/run-ai-full-customer-journey-ipad.mjs',
+    'test/dabbir-ipad-webkit-production-contract.test.mjs',
+  ]){
+    assert.ok(deploymentClassifier.includes(path),`${path} must be classified as exact-SHA Production-affecting`);
+  }
 });

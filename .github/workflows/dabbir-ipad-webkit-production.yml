@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'vercel-ignore-if-unaffected.sh'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/run-ai-full-customer-journey-ipad.mjs'
       - 'test/dabbir-ipad-webkit-production-contract.test.mjs'
