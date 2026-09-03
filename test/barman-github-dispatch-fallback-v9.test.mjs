@@ -9,7 +9,9 @@ test('scheduler never exposes the GitHub wake credential',()=>{
   assert.match(sql,/vault\.decrypted_secrets/);
   assert.match(sql,/CREDENTIAL_MISSING/);
   assert.doesNotMatch(sql,/return\s+v_token/i);
-  assert.doesNotMatch(sql,/jsonb_build_object\([^;]*v_token/si);
+  assert.doesNotMatch(sql,/'(?:token|credential|secret)'\s*,\s*v_token/i);
+  assert.doesNotMatch(sql,/raise\s+(?:notice|warning|exception)[^;]*v_token/i);
+  assert.match(sql,/'Authorization','Bearer '\|\|v_token/);
 });
 
 test('scheduler dispatches only canonical BARMAN workflows on main',()=>{
