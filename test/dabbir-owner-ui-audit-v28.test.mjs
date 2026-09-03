@@ -6,8 +6,9 @@ const ui=fs.readFileSync(new URL('../api/owner-command-center-v28.js',import.met
 const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner gateway routes through v29 while preserving reviewed v28 and v27 truth chain',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('owner gateway uses the flat runtime while preserving reviewed v28 and v27 source truth chain',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
   assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui,/owner-command-center-v27\.js/);
 });
