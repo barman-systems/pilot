@@ -1,5 +1,5 @@
 const css=String.raw`
-.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:12px;line-height:1.55}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:12px;line-height:1.45}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .58fr .55fr .55fr auto;gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:12px;line-height:1.45}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:11px;font-weight:800}.svcName b{display:block;font-size:13px}.svcName small{color:var(--muted);font-size:11px;line-height:1.4}.svcPrice{font-weight:900;white-space:nowrap}.svcStatus{display:inline-flex;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900;line-height:1.3}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:44px;font-size:12px;font-weight:800}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:12px;line-height:1.55}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(105px,1fr) .62fr .62fr auto;gap:7px;font-size:12px}.svcRow .svcStateCol{display:none}.svcName b{font-size:13px}.svcAction{min-height:44px;font-size:12px}}
+.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:12px;line-height:1.55}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:12px;line-height:1.45}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .58fr .55fr .55fr minmax(126px,auto);gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:12px;line-height:1.45}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:11px;font-weight:800}.svcName b{display:block;font-size:13px}.svcName small{color:var(--muted);font-size:11px;line-height:1.4}.svcPrice{font-weight:900;white-space:nowrap}.svcStatus{display:inline-flex;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900;line-height:1.3}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcActions{display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:44px;font-size:12px;font-weight:800}.svcAction.danger{border-color:#5c3034;background:#281719;color:#ffb4ba}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:12px;line-height:1.55}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(105px,1fr) .62fr .62fr minmax(112px,auto);gap:7px;font-size:12px}.svcRow .svcStateCol{display:none}.svcName b{font-size:13px}.svcAction{min-height:44px;font-size:12px;padding:8px}.svcActions{gap:4px}}
 `;
 
 const client=String.raw`
@@ -19,9 +19,9 @@ const client=String.raw`
   let editingId=null;
 
   const copy=()=>ar()?{
-    nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',price:'قيمة الخدمة',aed:'درهم',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
+    nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',price:'قيمة الخدمة',aed:'درهم',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',delete:'حذف',deleteConfirm:'هل تريد حذف هذه الخدمة من النشاط؟ سيبقى سجل الحجوزات السابق محفوظًا.',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',deleted:'تم حذف الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
   }:{
-    nav:'Services',title:'Services',desc:'The real services your business provides. DABBIR uses active services when replying to customers.',truth:'Active services here are treated as live operational facts by AI.',add:'Add service',name:'Service name',price:'Service price',aed:'AED',duration:'Duration',minutes:'min',status:'Status',active:'Active',inactive:'Inactive',edit:'Edit',save:'Save',cancel:'Cancel',empty:'No services yet.',loading:'Loading services…',failed:'Could not load services.',created:'Service added.',updated:'Service updated.',activeMetric:'Active services',totalMetric:'Total services'
+    nav:'Services',title:'Services',desc:'The real services your business provides. DABBIR uses active services when replying to customers.',truth:'Active services here are treated as live operational facts by AI.',add:'Add service',name:'Service name',price:'Service price',aed:'AED',duration:'Duration',minutes:'min',status:'Status',active:'Active',inactive:'Inactive',edit:'Edit',delete:'Delete',deleteConfirm:'Delete this service from the business? Previous booking history will be preserved.',save:'Save',cancel:'Cancel',empty:'No services yet.',loading:'Loading services…',failed:'Could not load services.',created:'Service added.',updated:'Service updated.',deleted:'Service deleted.',activeMetric:'Active services',totalMetric:'Total services'
   };
 
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
@@ -103,10 +103,11 @@ const client=String.raw`
     const services=Array.isArray(data.services)?data.services:[];
     const active=services.filter(service=>service.active!==false).length;
     const metrics='<div class="svcMetrics"><div class="svcMetric"><span>'+escapeHtml(t.activeMetric)+'</span><strong>'+active+'</strong></div><div class="svcMetric"><span>'+escapeHtml(t.totalMetric)+'</span><strong>'+services.length+'</strong></div></div>';
-    const rows=services.length?services.map(service=>'<div class="svcRow"><div class="svcName"><b>'+escapeHtml(service.name)+'</b><small>'+escapeHtml(String(service.id||'').slice(0,8))+'</small></div><span class="svcPrice">'+escapeHtml(money(service.price_aed))+' '+escapeHtml(t.aed)+'</span><span>'+escapeHtml(service.duration_minutes)+' '+escapeHtml(t.minutes)+'</span><span class="svcStateCol"><span class="svcStatus '+(service.active!==false?'on':'off')+'">'+escapeHtml(service.active!==false?t.active:t.inactive)+'</span></span>'+(data.can_manage?'<button class="svcAction" data-svc-edit="'+escapeHtml(service.id)+'">'+escapeHtml(t.edit)+'</button>':'<span></span>')+'</div>').join(''):'<div class="svcEmpty">'+escapeHtml(t.empty)+'</div>';
+    const rows=services.length?services.map(service=>'<div class="svcRow"><div class="svcName"><b>'+escapeHtml(service.name)+'</b><small>'+escapeHtml(String(service.id||'').slice(0,8))+'</small></div><span class="svcPrice">'+escapeHtml(money(service.price_aed))+' '+escapeHtml(t.aed)+'</span><span>'+escapeHtml(service.duration_minutes)+' '+escapeHtml(t.minutes)+'</span><span class="svcStateCol"><span class="svcStatus '+(service.active!==false?'on':'off')+'">'+escapeHtml(service.active!==false?t.active:t.inactive)+'</span></span>'+(data.can_manage?'<div class="svcActions"><button class="svcAction" type="button" data-svc-edit="'+escapeHtml(service.id)+'">'+escapeHtml(t.edit)+'</button><button class="svcAction danger" type="button" data-svc-delete="'+escapeHtml(service.id)+'">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class="svcEmpty">'+escapeHtml(t.empty)+'</div>';
     body.innerHTML=metrics+'<div class="svcTable"><div class="svcRow head"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.duration)+'</span><span class="svcStateCol">'+escapeHtml(t.status)+'</span><span></span></div>'+rows+'</div>';
     if(q('#svcAdd'))q('#svcAdd').style.display=data.can_manage?'inline-flex':'none';
     body.querySelectorAll('[data-svc-edit]').forEach(button=>button.addEventListener('click',()=>openModal(services.find(service=>service.id===button.dataset.svcEdit)||null)));
+    body.querySelectorAll('[data-svc-delete]').forEach(button=>button.addEventListener('click',()=>deleteService(services.find(service=>service.id===button.dataset.svcDelete)||null)));
   }
 
   function openModal(service){
@@ -142,6 +143,20 @@ const client=String.raw`
     }catch(error){notify(t.failed+' '+String(error?.message||error).slice(0,80))}finally{loading=false;render()}
   }
 
+  async function deleteService(service){
+    if(!service||loading)return;
+    const t=copy();
+    if(!window.confirm(t.deleteConfirm))return;
+    loading=true;
+    try{
+      const response=await fetch('/api/service-catalog',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action:'delete_service',business_id:workspace.business.id,service_id:service.id})});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(payload?.detail||payload?.error||'SERVICE_DELETE_FAILED');
+      if(editingId===service.id){q('#svcModal')?.classList.remove('open');editingId=null}
+      data=null;notify(t.deleted);loading=false;await load(true);
+    }catch(error){notify(t.failed+' '+String(error?.message||error).slice(0,80))}finally{loading=false;render()}
+  }
+
   function initialize(){
     if(!isServiceBusiness())return;
     applyCopy();
@@ -163,7 +178,7 @@ const client=String.raw`
   }
 
   setTimeout(initialize,500);
-  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v4-price'};
+  window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v5-owner-control'};
 })();
 `;
 
@@ -171,6 +186,6 @@ export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
-  res.setHeader('x-dabbir-service-operations-ui','v3');
+  res.setHeader('x-dabbir-service-operations-ui','v4-owner-control');
   return res.status(200).send(client);
 }
