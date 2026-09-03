@@ -8,35 +8,34 @@ const SECURITY_HEADERS = {
   'content-security-policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net",
 };
 
-// Compatibility mirror for source-level regression tests. The quality gate compares
-// this exact order with config/dabbir-ui-bundles.json so it cannot drift silently.
+// Legacy logical authority order retained for source-level regression contracts.
+// Runtime bundle composition is generated independently from config/dabbir-ui-bundles.json.
 const UI_MODULE_ORDER = [
   '/api/brand-ui',
-  '/api/auth/recovery-ui',
-  '/api/auth-session-stability-ui',
   '/api/dabbir-whatsapp-embedded-ui',
   '/api/dabbir-whatsapp-connect-guard-ui',
   '/api/timezone-ui',
-  '/api/business-workspaces-ui',
+  '/api/auth/recovery-ui',
   '/api/chat-human-ui',
   '/api/translation-ui',
   '/api/owner-operations-ui',
   '/api/service-operations-ui',
-  '/api/calendar-performance-ui',
+  '/api/activity-profile-ui',
   '/api/owner-action-center-ui',
   '/api/dabbir-owner-away-ui',
-  '/api/home-service-ui',
+  '/api/dabbir-owner-decision-memory-ui',
   '/api/business-profile-ui',
+  '/api/dabbir-customer-number-ui',
   '/api/dabbir-billing-ui',
   '/api/platform-customers-ui',
   '/api/platform-customer-support-ui',
   '/api/platform-recovery-reconciliation-ui',
+  '/api/dabbir-owner-first-ui',
   '/api/verified-metrics-ui',
   '/api/customer-activation-ui',
   '/api/owner-copilot-ui',
   '/api/dabbir-contextual-navigation-ui',
-  '/api/dabbir-navigation-event-bridge-ui',
-  '/api/car-wash-loader-ui',
+  '/api/auth-session-stability-ui',
 ];
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
