@@ -1,5 +1,5 @@
 // Stable production gateway for the DABBIR Owner Command Center.
-// The gateway imports one authoritative entrypoint only. Legacy compatibility marker: owner-command-center-v29.js. Numbered implementations are internal rollback/history layers and must never be selected here.
+// The gateway imports one authoritative entrypoint only. Numbered implementations are legacy rollback/history layers and must never be selected here.
 import dashboard from './owner-command-center.js';
 import { parseCookies } from './_auth-core.js';
 
@@ -16,10 +16,10 @@ function redirectToOwner(res, clear = false) {
 }
 
 async function verifyOwnerSession(token) {
-  const response = await fetch(BROKER_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'owner_session_verify', session_token: token }) });
+  const response = await fetch(BROKER_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'owner_session_verify', session_token: token }), cache:'no-store', signal:AbortSignal.timeout(10000) });
   if (!response.ok) return false;
   const payload = await response.json().catch(() => null);
-  return payload?.authenticated === true && payload?.role === 'platform_owner';
+  return payload?.authenticated === true && ['ROOT_OWNER','OWNER_DELEGATE'].includes(String(payload?.authority_role||''));
 }
 
 export default async function handler(req, res) {
