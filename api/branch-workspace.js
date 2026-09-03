@@ -26,7 +26,7 @@ async function readData(response,fallback='DATA_REQUEST_FAILED'){
   return payload;
 }
 
-const rest=(token,path,fallback)=>readData(supabaseRest(path,token),fallback);
+const rest=async(token,path,fallback)=>readData(await supabaseRest(path,token),fallback);
 
 async function identity(req){
   const token=accessTokenFromRequest(req);
