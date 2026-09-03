@@ -24,7 +24,10 @@ test('commission rounding follows market minor units and fails closed on source 
   assert.match(rounding,/if v_count <> 2 then/);
   assert.match(rounding,/COMMISSION_ROUNDING_SOURCE_DRIFT/);
   assert.match(rounding,/business_currency_minor_units\(new\.business_id\)/);
-  assert.doesNotMatch(rounding,/end,2\).*execute v_def/is);
+  const legacyToken=rounding.indexOf("'end,2)'");
+  const dynamicToken=rounding.indexOf("'end,dabbir_private.business_currency_minor_units(new.business_id))'");
+  const execute=rounding.indexOf('execute v_def;');
+  assert.ok(legacyToken>=0&&dynamicToken>legacyToken&&execute>dynamicToken,'legacy two-decimal source tokens must be replaced with market precision before the function definition is executed');
 });
 
 test('financial records freeze ISO currency and expose neutral amount aliases',()=>{
