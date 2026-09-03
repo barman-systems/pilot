@@ -18,25 +18,10 @@ export function canUseAllBranches(membership){
   return permissions.includes('manage_business')||permissions.includes('manage_team');
 }
 
-async function readJson(response,code){
-  const text=await response.text();
-  let body=null;
-  try{body=text?JSON.parse(text):null}catch{body=null}
-  if(!response.ok){
-    const error=new Error(code);
-    error.status=Number(response.status||500);
-    throw error;
-  }
-  return Array.isArray(body)?body:[];
-}
-
 /**
- * Resolve branch scope on the server. `rest` must be the caller's normal
- * RLS-scoped Supabase REST wrapper: (path, code) => Promise<Response|rows>.
- *
- * `requestedBranch` accepts a UUID or "all". Omitted scope defaults to all
- * only for owner/admin/manage roles. Restricted staff default to their sole
- * assignment and must choose explicitly if they have multiple assignments.
+ * Resolve branch scope on the server using RLS-scoped branch and assignment rows.
+ * Owners/admins may use all branches or any active branch. Restricted staff may
+ * only use branches explicitly assigned to their own membership.
  */
 export async function resolveBranchScope({businessId,membership,userId,requestedBranch,fetchRows}){
   if(!branchId(businessId)||!membership||membership.business_id!==businessId){
@@ -62,8 +47,11 @@ export async function resolveBranchScope({businessId,membership,userId,requested
     throw Object.assign(new Error('INVALID_BRANCH_ID'),{status:400});
   }
 
-  if(allAllowed&&!requestedId){
-    return {mode:'all',branch_id:null,branch_ids:active.map(row=>row.id),branch:null,all_allowed:true};
+  if(allAllowed){
+    if(!requestedId)return {mode:'all',branch_id:null,branch_ids:active.map(row=>row.id),branch:null,all_allowed:true};
+    const selected=active.find(row=>row.id===requestedId);
+    if(!selected)throw Object.assign(new Error('BRANCH_NOT_FOUND'),{status:404});
+    return {mode:'selected',branch_id:selected.id,branch_ids:[selected.id],branch:selected,all_allowed:true};
   }
 
   const assignments=await fetchRows(
@@ -99,8 +87,4 @@ export function branchWrite(scope){
     throw Object.assign(new Error('SELECTED_BRANCH_REQUIRED'),{status:409});
   }
   return scope.branch_id;
-}
-
-export async function rowsFromSupabaseResponse(response,code='BRANCH_SCOPE_LOOKUP_FAILED'){
-  return readJson(response,code);
 }
