@@ -28,7 +28,7 @@ const script=String.raw`(()=>{
 
   function locale(){
     const geo=businessGeo();
-    try{return typeof lang!=='undefined'&&lang==='en'?`en-${geo.countryCode}`:`ar-${geo.countryCode}`}catch{return document.documentElement.lang==='en'?`en-${geo.countryCode}`:`ar-${geo.countryCode}`}
+    try{return typeof lang!=='undefined'&&lang==='en'?'en-'+geo.countryCode:'ar-'+geo.countryCode}catch{return document.documentElement.lang==='en'?'en-'+geo.countryCode:'ar-'+geo.countryCode}
   }
 
   function businessFormat(value){
@@ -87,7 +87,7 @@ const script=String.raw`(()=>{
   function fieldLabel(key,arLabel,enLabel){
     if(key!=='price')return isArabic()?arLabel:enLabel;
     const geo=businessGeo();
-    return isArabic()?`${arLabel} (${geo.moneyAr})`:`${enLabel} (${geo.currency})`;
+    return isArabic()?arLabel+' ('+geo.moneyAr+')':enLabel+' ('+geo.currency+')';
   }
   function renderAdaptiveFields(){
     if(!appointmentForm||!appointmentTime)return;
@@ -108,7 +108,7 @@ const script=String.raw`(()=>{
       }else{
         input=document.createElement('input');input.type=type;
         if(type==='text')input.maxLength=500;
-        if(type==='tel'){input.maxLength=40;input.placeholder=`${geo.prefix} …`;input.inputMode='tel';}
+        if(type==='tel'){input.maxLength=40;input.placeholder=geo.prefix+' …';input.inputMode='tel';}
         if(type==='number'){input.min='0';input.step=key==='price'?'0.001':'5';}
       }
       input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
