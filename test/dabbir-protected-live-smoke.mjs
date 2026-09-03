@@ -48,7 +48,7 @@ async function step(name, fn) {
   } catch (error) {
     row.status = 'FAIL';
     row.duration_ms = Date.now() - started;
-    row.detail = String(error?.stack || error?.message || error).slice(0, 1200);
+    row.detail = String(error?.stack || error?.message || error).slice(0, 2000);
     console.error(`FAIL ${name} (${row.duration_ms}ms) — ${row.detail}`);
     throw error;
   }
@@ -148,8 +148,34 @@ try {
     await page.locator('#authPassword').waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#authSubmit').waitFor({ state: 'visible', timeout: 10_000 });
 
-    const authority = await page.evaluate(() => window.__dabbirUiAuthority || null);
-    assert(authority?.version === 'owner-first-v4', `UI_AUTHORITY_INVALID_${JSON.stringify(authority)}`);
+    const browserHeaders = await response.allHeaders();
+    const authorityDebug = await page.evaluate(() => {
+      const inline = document.querySelector('script[data-dabbir-owner-first-inline="owner-first-v4"]');
+      const probeTag = document.querySelector('script[data-dabbir-owner-first-probe="owner-first-probe-v1"]');
+      return {
+        authority: window.__dabbirUiAuthority || null,
+        ownerFlag: window.__dabbirOwnerFirstUiV4 === true,
+        probe: window.__dabbirOwnerFirstBootstrapProbe || null,
+        inlineCount: document.querySelectorAll('script[data-dabbir-owner-first-inline="owner-first-v4"]').length,
+        probeCount: document.querySelectorAll('script[data-dabbir-owner-first-probe="owner-first-probe-v1"]').length,
+        inlineTextLength: inline?.textContent?.length || 0,
+        probeTextLength: probeTag?.textContent?.length || 0,
+        bodyAuthority: document.body?.getAttribute('data-dabbir-ui') || null,
+      };
+    });
+    const diagnostic = {
+      ...authorityDebug,
+      firstPaintHeader: browserHeaders['x-dabbir-first-paint-authority'] || null,
+      csp: browserHeaders['content-security-policy'] || null,
+      pageErrors: pageErrors.slice(0, 8),
+      consoleErrors: consoleErrors.slice(0, 8),
+    };
+    report.artifacts.webkit_owner_authority_diagnostic = diagnostic;
+    console.log(`WEBKIT_OWNER_AUTHORITY_DIAGNOSTIC=${JSON.stringify(diagnostic)}`);
+    assert(
+      authorityDebug.authority?.version === 'owner-first-v4',
+      `UI_AUTHORITY_INVALID_${JSON.stringify(diagnostic)}`,
+    );
 
     await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
     report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
@@ -169,7 +195,7 @@ try {
   report.verdict = 'PASS';
 } catch (error) {
   report.verdict = 'FAIL';
-  report.error = String(error?.stack || error?.message || error).slice(0, 1600);
+  report.error = String(error?.stack || error?.message || error).slice(0, 2400);
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close().catch(() => {});
