@@ -7,7 +7,7 @@ function firstEnv(...names) {
 }
 
 export function metaTestModeEnabled() {
-  const raw = firstEnv('DABBIR_WHATSAPP_META_TEST_MODE', 'PILOT_WHATSAPP_META_TEST_MODE').toLowerCase();
+  const raw = firstEnv('DABBIR_WHATSAPP_META_TEST_MODE').toLowerCase();
   return ['1', 'true', 'enabled', 'on'].includes(raw);
 }
 
@@ -15,20 +15,10 @@ export function metaTestConfig() {
   const configuredGraphVersion = firstEnv('DABBIR_META_GRAPH_VERSION', 'PILOT_META_GRAPH_VERSION', 'META_GRAPH_VERSION');
   return {
     enabled: metaTestModeEnabled(),
-    accessToken: firstEnv(
-      'DABBIR_WHATSAPP_TEST_ACCESS_TOKEN',
-      'DABBIR_WHATSAPP_ACCESS_TOKEN',
-      'PILOT_WHATSAPP_ACCESS_TOKEN',
-      'WHATSAPP_ACCESS_TOKEN',
-      'META_WHATSAPP_ACCESS_TOKEN',
-    ),
-    phoneNumberId: firstEnv(
-      'DABBIR_WHATSAPP_TEST_PHONE_NUMBER_ID',
-      'DABBIR_WHATSAPP_PHONE_NUMBER_ID',
-      'PILOT_WHATSAPP_PHONE_NUMBER_ID',
-      'WHATSAPP_PHONE_NUMBER_ID',
-      'META_WHATSAPP_PHONE_NUMBER_ID',
-    ),
+    // Test-number execution is deliberately isolated from every production/tenant
+    // WhatsApp credential. Missing explicit test credentials must fail closed.
+    accessToken: firstEnv('DABBIR_WHATSAPP_TEST_ACCESS_TOKEN'),
+    phoneNumberId: firstEnv('DABBIR_WHATSAPP_TEST_PHONE_NUMBER_ID'),
     graphVersion: configuredGraphVersion === 'v23.0' ? 'v26.0' : (configuredGraphVersion || 'v26.0'),
   };
 }
@@ -44,8 +34,7 @@ export async function sendMetaTestReply(event, config = metaTestConfig()) {
   if (!config.accessToken || !config.phoneNumberId) return { attempted: false, sent: false, reason: 'TEST_CREDENTIALS_NOT_CONFIGURED' };
 
   // Fail closed: the test sender may only reply to webhooks that arrived for the
-  // configured Meta test-number phone ID. This prevents accidental replies from
-  // tenant/production numbers if the test flag is left enabled.
+  // explicitly configured Meta test-number phone ID.
   if (String(event.phoneNumberId || '') !== String(config.phoneNumberId)) {
     return { attempted: false, sent: false, reason: 'PHONE_NUMBER_ID_MISMATCH' };
   }
