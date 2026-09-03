@@ -20,7 +20,7 @@ function claimAllowed(payload,now=Math.floor(Date.now()/1000)){
     &&payload?.repository===EXPECTED_REPO
     &&payload?.ref===EXPECTED_REF
     &&payload?.workflow_ref===EXPECTED_WORKFLOW
-    &&['schedule','workflow_dispatch'].includes(String(payload?.event_name||''))
+    &&['schedule','workflow_dispatch','push'].includes(String(payload?.event_name||''))
     &&Number(payload?.exp||0)>now-5
     &&Number(payload?.nbf||0)<=now+30;
 }
