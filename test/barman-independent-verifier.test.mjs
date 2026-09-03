@@ -27,18 +27,23 @@ test('verifier rechecks external reality instead of trusting executor verified f
   assert.match(worker,/PRODUCTION_NO_LONGER_DESCENDS_FROM_EXECUTOR_SHA/);
   assert.match(worker,/QA_DATABASE_PROJECT_MISMATCH/);
   assert.match(worker,/EVIDENCE_TYPE_UNSUPPORTED_/);
-  assert.match(worker,/phase:'fail'/);
   assert.doesNotMatch(worker,/item\?\.verified/);
   assert.doesNotMatch(worker,/AI_GATEWAY/);
 });
 
-test('database only accepts the dedicated verifier identity and fail-closes mismatches',()=>{
+test('verification mismatches are fail closed and cannot invoke a failure mutation',()=>{
+  assert.match(worker,/INDEPENDENT_VERIFICATION_MISMATCH_UNPROMOTED/);
+  assert.match(worker,/phase:'verify'/);
+  assert.doesNotMatch(worker,/phase:'fail'/);
+  assert.doesNotMatch(broker,/phase==='fail'/);
+  assert.doesNotMatch(migration,/fail_verification/i);
+});
+
+test('database claim is restricted to the dedicated verifier identity',()=>{
   assert.match(migration,/\^github-independent-verifier:\[0-9\]\+\$/);
   assert.match(migration,/VERIFIER_ID_DENIED/);
-  assert.match(migration,/verification_status='VERIFIED',orchestration_state='COMPLETED'/);
-  assert.match(migration,/verification_status='FAILED'/);
-  assert.match(migration,/orchestration_state='BLOCKED'/);
-  assert.match(migration,/GITHUB_OIDC_INDEPENDENT_VERIFIER/);
+  assert.match(migration,/INDEPENDENT_REQUIRED/);
+  assert.match(migration,/SEPARATE_GITHUB_OIDC_VERIFIER/);
   assert.match(migration,/revoke all on function public\.barman_executive_claim_verification_v1\(text\) from public, anon, authenticated/i);
   assert.match(migration,/grant execute on function public\.barman_executive_claim_verification_v1\(text\) to service_role/i);
 });
