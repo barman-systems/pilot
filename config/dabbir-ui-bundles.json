@@ -3,6 +3,7 @@
   "critical": [
     "/api/brand-ui",
     "/api/auth/recovery-ui",
+    "/api/gcc-readiness-ui",
     "/api/auth-session-stability-ui"
   ],
   "deferred": [
