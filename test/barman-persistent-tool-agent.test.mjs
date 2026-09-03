@@ -39,7 +39,7 @@ test('tool-agent routes non-code commands fail-closed before patch generation',(
 
 test('persistent worker is event-looped and cannot bypass governance files',()=>{
   assert.match(workflow,/cron:\s*'\*\/5 \* \* \* \*'/);
-  for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write','deployments: read','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(worker,/phase:'claim'/);
   assert.match(worker,/p_lane:'tool_agent'|phase:'claim'/);
   assert.match(worker,/spawnSync\('git',\['apply','--check'/);
@@ -54,15 +54,24 @@ test('required branch-protection test context is emitted only by pull_request CI
   assert.match(ci,/if:\s*github\.event_name == 'pull_request'/);
 });
 
-test('DONE requires CI, exact Production release and full customer journey',()=>{
-  assert.match(ci,/workflow_dispatch:/);
-  assert.match(worker,/dispatch\('ci\.yml'/);
-  assert.match(worker,/waitWorkflow\('ci\.yml'/);
-  assert.match(worker,/\/api\/release-evidence/);
-  assert.match(worker,/payload\?\.commit_sha/);
-  assert.match(worker,/dispatch\('dabbir-ai-customer-journey\.yml','main'/);
-  assert.match(worker,/waitWorkflow\('dabbir-ai-customer-journey\.yml','main'/);
+test('BARMAN stops at exact Preview and requires explicit owner approval before Production',()=>{
+  assert.match(worker,/waitPreviewDeployment\(headSha/);
+  assert.match(worker,/\/deployments\?sha=/);
+  assert.match(worker,/environment_url/);
+  assert.match(worker,/Release policy: Preview only/);
+  assert.match(worker,/owner_approval_required:true/);
+  assert.match(worker,/دون دمج أو نشر Production/);
+  assert.doesNotMatch(worker,/\/pulls\/\$\{number\}\/merge/);
+  assert.doesNotMatch(worker,/async function mergePr/);
+  assert.doesNotMatch(worker,/waitProduction\(/);
+  assert.doesNotMatch(worker,/dispatch\('dabbir-ai-customer-journey\.yml','main'/);
+});
+
+test('candidate completion records Preview evidence without claiming Production',()=>{
+  assert.match(worker,/type:'deployment'.*production:false/s);
+  assert.match(worker,/type:'commit'.*merged:false/s);
   assert.match(worker,/finalize\('DONE'/);
+  assert.match(worker,/يلزم اعتماد المالك الصريح قبل أي ترقية للإنتاج/);
 });
 
 test('broker finalization sends Telegram outcome and evidence remains fail-closed',()=>{

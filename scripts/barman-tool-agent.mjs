@@ -70,17 +70,24 @@ async function waitWorkflow(workflow,branch,event,headSha,timeoutMs){
   }
   throw new Error(`${workflow}_TIMEOUT_${seen?.html_url||''}`);
 }
-async function waitProduction(commitSha,timeoutMs=900000){
-  const started=Date.now();let last=null;
+async function waitPreviewDeployment(commitSha,timeoutMs=900000){
+  const started=Date.now();let last='none';
   while(Date.now()-started<timeoutMs){
-    try{
-      const response=await fetch(`https://dabbir.bmalman.com/api/release-evidence?t=${Date.now()}`,{headers:{accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(15000)});
-      const payload=await response.json().catch(()=>null);last=payload;
-      if(response.ok&&payload?.ok===true&&String(payload?.environment||'').toLowerCase()==='production'&&String(payload?.commit_sha||'').toLowerCase()===commitSha.toLowerCase())return payload;
-    }catch{}
+    const deployments=await gh(`/deployments?sha=${encodeURIComponent(commitSha)}&per_page=30`).catch(()=>[]);
+    for(const deployment of Array.isArray(deployments)?deployments:[]){
+      const environment=String(deployment?.environment||'').trim();
+      if(environment.toLowerCase()==='production')continue;
+      const statuses=await gh(`/deployments/${deployment.id}/statuses?per_page=30`).catch(()=>[]);
+      const ready=(Array.isArray(statuses)?statuses:[]).find(status=>status?.state==='success'&&String(status?.environment_url||'').startsWith('https://'));
+      if(ready){
+        const url=String(ready.environment_url);
+        if(!url.includes('dabbir.bmalman.com'))return {deploymentId:String(deployment.id),environment:environment||'Preview',url};
+      }
+      last=`deployment:${deployment?.id||'unknown'}:${environment||'unknown'}`;
+    }
     await sleep(10000);
   }
-  throw new Error(`PRODUCTION_EXACT_SHA_TIMEOUT_${clean(last?.commit_sha||'none',80)}`);
+  throw new Error(`PREVIEW_EXACT_SHA_TIMEOUT_${clean(last,160)}`);
 }
 
 function repositoryPaths(){return git(['ls-files','-z']).split('\0').filter(Boolean)}
@@ -116,16 +123,6 @@ function localTests(){
 
 async function createPr(branch,title,body){
   return gh('/pulls',{method:'POST',body:{title,head:branch,base:'main',body,maintainer_can_modify:true}});
-}
-async function mergePr(number,headSha){
-  return gh(`/pulls/${number}/merge`,{method:'PUT',body:{sha:headSha,merge_method:'squash'}});
-}
-async function refreshBranch(branch){
-  git(['fetch','origin','main']);
-  git(['checkout',branch]);
-  sh('git',['merge','--no-edit','origin/main'],{stdio:'inherit'});
-  git(['push','origin',branch]);
-  return git(['rev-parse','HEAD']);
 }
 
 let execution=null;
@@ -191,40 +188,25 @@ try{
   git(['add','--',...changed]);
   git(['commit','-m',`BARMAN: ${clean(proposal.summary||commandText,68)}`]);
   git(['push','-u','origin',branch]);
-  let headSha=git(['rev-parse','HEAD']);
-  const pr=await createPr(branch,`BARMAN: ${clean(proposal.summary||commandText,80)}`,`Automated execution for owner command \`${execution.commandId}\`.\n\nOwner goal: ${clean(commandText,1200)}\n\nSafety: generated patch passed local syntax + npm test before PR creation.`);
+  const headSha=git(['rev-parse','HEAD']);
+  const pr=await createPr(branch,`BARMAN: ${clean(proposal.summary||commandText,80)}`,`Automated execution for owner command \`${execution.commandId}\`.\n\nOwner goal: ${clean(commandText,1200)}\n\nSafety: generated patch passed local syntax + npm test before PR creation.\n\nRelease policy: Preview only. Do not merge or publish Production until the owner explicitly approves this exact candidate.`);
   const prUrl=String(pr.html_url||'');
 
   await dispatch('ci.yml',branch,{});
-  let ciRun=await waitWorkflow('ci.yml',branch,'workflow_dispatch',headSha,900000);
-  let merged;
-  try{merged=await mergePr(pr.number,headSha)}catch(error){
-    if(![405,409,422].includes(Number(error.status)))throw error;
-    headSha=await refreshBranch(branch);
-    localTests();
-    await dispatch('ci.yml',branch,{});
-    ciRun=await waitWorkflow('ci.yml',branch,'workflow_dispatch',headSha,900000);
-    merged=await mergePr(pr.number,headSha);
-  }
-  if(merged?.merged!==true||!merged?.sha)throw new Error(`PR_NOT_MERGED_${clean(merged?.message||'',300)}`);
-  const mergeSha=String(merged.sha);
-  const release=await waitProduction(mergeSha,900000);
-
-  await dispatch('dabbir-ai-customer-journey.yml','main',{run_capacity:false,production_capacity_ack:''});
-  const journey=await waitWorkflow('dabbir-ai-customer-journey.yml','main','workflow_dispatch',mergeSha,1200000);
+  const ciRun=await waitWorkflow('ci.yml',branch,'workflow_dispatch',headSha,900000);
+  const preview=await waitPreviewDeployment(headSha,900000);
   const evidence=[
-    {type:'artifact',reference:prUrl,verified:true,details:{pr_number:pr.number,changed_files:changed}},
+    {type:'artifact',reference:prUrl,verified:true,details:{pr_number:pr.number,changed_files:changed,release_gate:'OWNER_APPROVAL_REQUIRED'}},
     {type:'test',reference:String(ciRun.html_url||'DABBIR CI'),verified:true,details:{workflow:'DABBIR CI',head_sha:headSha}},
-    {type:'commit',reference:mergeSha,verified:true,details:{repository:REPO}},
-    {type:'deployment',reference:String(release?.deployment_id||'production'),verified:true,details:{commit_sha:release?.commit_sha,environment:release?.environment}},
-    {type:'test',reference:String(journey.html_url||'Full Customer Journey'),verified:true,details:{workflow:'DABBIR AI Full Customer Journey',commit_sha:mergeSha}},
+    {type:'commit',reference:headSha,verified:true,details:{repository:REPO,merged:false}},
+    {type:'deployment',reference:preview.url,verified:true,details:{deployment_id:preview.deploymentId,environment:preview.environment,production:false}},
   ];
-  const summary=`BARMAN نفّذ الأمر ودمج التغيير بعد CI ثم تحقق من Production وFull Customer Journey. PR #${pr.number}, commit ${mergeSha.slice(0,12)}.`;
+  const summary=`BARMAN جهّز نسخة تجريبية معتمدة بالاختبارات دون دمج أو نشر Production. PR #${pr.number}, candidate ${headSha.slice(0,12)}. رابط التجربة: ${preview.url}. يلزم اعتماد المالك الصريح قبل أي ترقية للإنتاج.`;
   const result=await finalize('DONE',summary,evidence,'');
-  console.log('DONE',JSON.stringify({command_id:execution.commandId,pr:prUrl,merge_sha:mergeSha,notification:result?.notification||null}));
+  console.log('PREVIEW_READY',JSON.stringify({command_id:execution.commandId,pr:prUrl,candidate_sha:headSha,preview_url:preview.url,owner_approval_required:true,notification:result?.notification||null}));
 }catch(error){
   const message=clean(error?.stack||error?.message||error,1800);
   console.error('BARMAN_TOOL_AGENT_FAILED',message);
-  await finalize('RETRY','تعذر إكمال دورة التنفيذ الآلية؛ ستعاد المحاولة بعد معالجة السبب.',[],message);
+  await finalize('RETRY','تعذر إكمال دورة إعداد النسخة التجريبية؛ ستعاد المحاولة دون دمج أو نشر Production.',[],message);
   process.exitCode=1;
 }
