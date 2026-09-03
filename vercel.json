@@ -13,12 +13,22 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/dabbir-actions-cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/barman-executive-cron",
       "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
     "api/salon-reminders-cron.js": {
+      "maxDuration": 60
+    },
+    "api/dabbir-actions-cron.js": {
+      "maxDuration": 60
+    },
+    "api/dabbir-whatsapp-webhook.js": {
       "maxDuration": 60
     },
     "api/barman-executive-cron.js": {
