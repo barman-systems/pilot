@@ -93,6 +93,10 @@ async function brain(system,user,maxTokens){
   return {model,payload:parsed};
 }
 
+function safeContext(files){
+  return Array.isArray(files)?files.slice(0,12).map(file=>({path:clean(file?.path,300),content:String(file?.content||'').slice(0,24000)})).filter(file=>file.path):[];
+}
+
 async function discover(command,paths){
   const safePaths=Array.isArray(paths)?paths.map(x=>clean(x,300)).filter(Boolean).slice(0,3000):[];
   const system=[
@@ -108,7 +112,7 @@ async function discover(command,paths){
 }
 
 async function proposePatch(command,files,previousPatch='',applyError=''){
-  const context=Array.isArray(files)?files.slice(0,12).map(file=>({path:clean(file?.path,300),content:String(file?.content||'').slice(0,24000)})).filter(file=>file.path):[];
+  const context=safeContext(files);
   const system=[
     'You are the code-editing brain for BARMAN Executive OS working on DABBIR.',
     'Produce the smallest correct source change that satisfies the owner command.',
@@ -123,6 +127,30 @@ async function proposePatch(command,files,previousPatch='',applyError=''){
   ].join('\n');
   const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1600)},7000);
   return {model:result.model,summary:clean(result.payload?.summary,1200),patch:String(result.payload?.patch||'').trim().slice(0,80000)};
+}
+
+async function proposeStructuredFiles(command,files,failureReason=''){
+  const context=safeContext(files);
+  const system=[
+    'You are the structured file-edit recovery brain for BARMAN Executive OS.',
+    'The unified-diff channel failed syntactically. Do not return a patch and do not ask the owner for formatting help.',
+    'Return JSON only: {"summary":"...","files":[{"path":"...","mode":"create|replace","content":"complete UTF-8 file content"}]}.',
+    'Use at most 4 files and make the smallest correct change.',
+    'mode=create is allowed ONLY for new files under test/ or new .sql files under supabase/migrations/.',
+    'mode=replace is allowed ONLY for existing files present in the supplied context; content must be the complete replacement file.',
+    'Never target .github/, .env files, secrets, branch-protection/auth governance, api/barman-tool-agent-broker.js, scripts/barman-tool-agent.mjs, or vercel.json.',
+    'For a regression-test-only request, prefer creating one focused test file and do not change production behavior.',
+    'Preserve existing tests and security boundaries. Never weaken a test to make it pass.',
+    'If no safe structured edit exists, return {"summary":"BLOCKED: <specific technical reason>","files":[]}.'
+  ].join('\n');
+  const result=await brain(system,{command:clean(command,4000),files:context,failure_reason:clean(failureReason,1800)},7000);
+  const raw=Array.isArray(result.payload?.files)?result.payload.files:[];
+  const proposed=raw.slice(0,4).map(item=>({
+    path:clean(item?.path,300),
+    mode:['create','replace'].includes(String(item?.mode||'').toLowerCase())?String(item.mode).toLowerCase():'',
+    content:String(item?.content??'').slice(0,60000),
+  })).filter(item=>item.path&&item.mode&&item.content);
+  return {model:result.model,summary:clean(result.payload?.summary,1200),files:proposed};
 }
 
 function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))?String(value):null}
@@ -143,6 +171,7 @@ export default async function handler(req,res){
     if(phase==='route')return json(res,200,{ok:true,...routeToolAgentCommand(body.command)});
     if(phase==='discover')return json(res,200,{ok:true,...await discover(body.command,body.paths)});
     if(phase==='patch')return json(res,200,{ok:true,...await proposePatch(body.command,body.files,body.previous_patch,body.apply_error)});
+    if(phase==='files')return json(res,200,{ok:true,...await proposeStructuredFiles(body.command,body.files,body.failure_reason)});
     if(phase==='finalize'){
       const commandId=uuid(body.command_id),runId=uuid(body.run_id),actionId=uuid(body.action_id);
       if(!commandId||!runId||!actionId)return json(res,400,{ok:false,error:'EXECUTION_IDS_INVALID'});
