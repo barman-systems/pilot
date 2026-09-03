@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 const AUTHORIZED_WORKFLOW = '.github/workflows/dabbir-ai-customer-journey.yml';
 const OWNER_AWAY_WORKFLOW = '.github/workflows/dabbir-owner-away-production.yml';
+const IPAD_WORKFLOW = '.github/workflows/dabbir-ipad-webkit-production.yml';
 const UNAUTHORIZED_DUPLICATE = '.github/workflows/dabbir-protected-full-customer-journey.yml';
 const BROKER = 'supabase/functions/barman-qa-suite-runner/index.ts';
 const ISOLATION_JOURNEY = 'test/dabbir-cross-tenant-isolation.mjs';
@@ -12,11 +13,11 @@ function read(path) {
   return fs.readFileSync(path, 'utf8');
 }
 
-test('privileged DABBIR QA broker accepts exactly the two approved main workflows', () => {
+test('privileged DABBIR QA broker accepts exactly the three approved main workflows', () => {
   const broker = read(BROKER);
   assert.match(
     broker,
-    /workflowRefs:new Set\(\['barman-systems\/pilot\/\.github\/workflows\/dabbir-ai-customer-journey\.yml@refs\/heads\/main','barman-systems\/pilot\/\.github\/workflows\/dabbir-owner-away-production\.yml@refs\/heads\/main'\]\)/,
+    /workflowRefs:new Set\(\['barman-systems\/pilot\/\.github\/workflows\/dabbir-ai-customer-journey\.yml@refs\/heads\/main','barman-systems\/pilot\/\.github\/workflows\/dabbir-owner-away-production\.yml@refs\/heads\/main','barman-systems\/pilot\/\.github\/workflows\/dabbir-ipad-webkit-production\.yml@refs\/heads\/main'\]\)/,
   );
   assert.match(broker, /workflowRefs\.has\(String\(payload\.workflow_ref\|\|''\)\)/);
   assert.match(broker, /const GH_REF='refs\/heads\/main'/);
@@ -32,11 +33,19 @@ test('canonical authorized workflow owns protected-prelaunch full journey withou
   assert.match(workflow, /Prove Production release did not move during journey/);
 });
 
-test('Owner Away production gate is the only second privileged QA workflow', () => {
+test('Owner Away production gate remains an explicitly approved privileged QA workflow', () => {
   const workflow = read(OWNER_AWAY_WORKFLOW);
   assert.match(workflow, /dabbir-owner-away-production-journey\.mjs/);
   assert.match(workflow, /id-token:\s*write/);
   assert.match(workflow, /SUPABASE_PROJECT_REF:\s*fphpoysqdsceniwduxjq/);
+});
+
+test('iPad WebKit production gate is the only third privileged QA workflow and remains exact-main scoped', () => {
+  const workflow = read(IPAD_WORKFLOW);
+  assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /test "\$GITHUB_REF" = 'refs\/heads\/main'/);
+  assert.match(workflow, /SUPABASE_PROJECT_REF:\s*fphpoysqdsceniwduxjq/);
+  assert.match(workflow, /run-ai-full-customer-journey-ipad\.mjs/);
 });
 
 test('privileged journey is main-only and cannot accept a stale Production artifact', () => {
