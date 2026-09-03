@@ -25,7 +25,7 @@ test('car-wash historical editor repairs every historical edit control and wins 
   assert.match(ui,/#dabbirApptManage \[data-appt-edit\]/);
   assert.match(ui,/isHistorical\(row\)/);
   assert.match(ui,/if\(button\.disabled\)button\.disabled=false/);
-  assert.match(ui,/data-dabbir-historical-edit/);
+  assert.match(ui,/dataset\.dabbirHistoricalEdit/);
   assert.match(ui,/closest\?\.\('\[data-appt-edit\],\[data-calendar-appt\]'\)/);
   assert.match(ui,/event\.stopImmediatePropagation\(\)/);
 });
