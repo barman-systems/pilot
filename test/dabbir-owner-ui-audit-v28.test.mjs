@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v28.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner gateway routes through reviewed v28 while preserving v27 truth chain',()=>{
-  assert.match(gateway,/owner-command-center-v28\.js/);
+test('owner gateway routes through v29 while preserving reviewed v28 and v27 truth chain',()=>{
+  assert.match(gateway,/owner-command-center-v29\.js/);
+  assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui,/owner-command-center-v27\.js/);
 });
 
