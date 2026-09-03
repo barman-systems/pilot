@@ -17,9 +17,7 @@ button{touch-action:manipulation}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>`;
 const GCC_PUBLIC_BOOKING_SCRIPT='<script src="/api/gcc-public-booking-ui" defer></script>';
-const BOOKING_PAGE=BOOKING_HTML
-  .replace('</head>',`${BOOKING_INTERFACE_HARDENING}</head>`)
-  .replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`);
+const BOOKING_PAGE=BOOKING_HTML.replace('</head>',`${BOOKING_INTERFACE_HARDENING}</head>`).replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`);
 const HEADERS={
   'content-type':'text/html; charset=utf-8',
   'cache-control':'no-store',
