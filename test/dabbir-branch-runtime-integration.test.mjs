@@ -37,8 +37,11 @@ test('authorized branch options are server-derived, not guessed from the busines
   assert.match(context,/SERVER_RLS_BRANCH_ASSIGNMENTS/);
 });
 
-test('critical branch UI routes selected-branch runtime reads and writes before deferred screens',()=>{
-  assert.ok(bundles.critical.includes('/api/branch-context-ui'));
+test('branch UI reuses the bounded shell by replacing the duplicate owner-copilot presentation slot',()=>{
+  assert.ok(bundles.deferred.includes('/api/branch-context-ui'));
+  assert.ok(!bundles.deferred.includes('/api/owner-copilot-ui'));
+  assert.equal(bundles.critical.length+bundles.deferred.length,26);
+  assert.equal(bundles.critical.at(-1),'/api/auth-session-stability-ui');
   assert.match(ui,/\/api\/branch-workspace/);
   assert.match(ui,/\/api\/branch-operations/);
   assert.match(ui,/\['start_conversation','create_appointment'\]/);
