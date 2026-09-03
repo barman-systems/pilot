@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v23.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 const data=fs.readFileSync(new URL('../api/owner-dashboard-data.js',import.meta.url),'utf8');
 const broker=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-broker/index.ts',import.meta.url),'utf8');
 
 test('v23 remains the executive truth layer under the active reviewed owner dashboard',()=>{
-  assert.match(gateway,/owner-command-center-v28\.js/);
+  assert.match(gateway,/owner-command-center-v29\.js/);
+  assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui,/owner-command-center-v22\.js/);
   assert.match(ui,/ownerExecutiveV23/);
   assert.match(ui,/version:'v23-complete'/);
