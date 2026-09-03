@@ -22,7 +22,7 @@ where country_code is null
    or timezone is null
    or phone_country_prefix is null
    or vat_status is null
-   or default_vat_rate is null;
+   or (country_code not in ('KW','QA') and default_vat_rate is null);
 
 alter table public.dabbir_businesses
   alter column country_code set default 'AE',
