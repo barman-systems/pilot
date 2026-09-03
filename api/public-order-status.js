@@ -1,4 +1,5 @@
 import { json } from './_auth-core.js';
+import { singleQueryValue } from './_request-query.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
@@ -25,7 +26,7 @@ export default async function handler(req,res){
   res.setHeader('x-content-type-options','nosniff');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
   if(!SUPABASE_URL||!SERVICE_KEY)return json(res,503,{ok:false,error:'ORDER_STATUS_UNAVAILABLE'});
-  const token=String(req.query?.token||'').trim();
+  const token=String(singleQueryValue(req,'token')||'').trim();
   if(!UUID_RE.test(token))return json(res,404,{ok:false,error:'ORDER_NOT_FOUND'});
   try{
     const row=await readStatus(token);
