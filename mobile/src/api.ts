@@ -1,7 +1,32 @@
 import type { DabbirSession } from './session';
-import { isGccCountryCode, resolveSelectedCountry, saveSelectedCountry, type GccCountryCode } from './country';
+import { countryProfile, inferDeviceCountry, isGccCountryCode, resolveSelectedCountry, saveSelectedCountry, type GccCountryCode } from './country';
 
 const configuredBase = String(process.env.EXPO_PUBLIC_DABBIR_API_BASE_URL || '').trim().replace(/\/$/, '');
+const deviceProfile = countryProfile(inferDeviceCountry()) || countryProfile('AE');
+if (!deviceProfile) throw new Error('GCC_DEVICE_PROFILE_UNAVAILABLE');
+let runtimeCurrencyCode = deviceProfile.currency;
+let runtimeTimezone = deviceProfile.timezone;
+
+function syncBusinessProfile(payload: any): void {
+  const currency = String(payload?.currency_code || payload?.business?.currency_code || payload?.business_profile?.currency_code || '').toUpperCase();
+  const timezone = String(payload?.timezone || payload?.business?.timezone || payload?.business_profile?.timezone || '').trim();
+  if (/^[A-Z]{3}$/.test(currency)) runtimeCurrencyCode = currency;
+  if (timezone) {
+    try { new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date()); runtimeTimezone = timezone; } catch {}
+  }
+}
+
+export function currentCurrencyCode(): string {
+  return runtimeCurrencyCode;
+}
+
+export function formatAmount(value: unknown): string {
+  return `${Number(value || 0).toFixed(2)} ${runtimeCurrencyCode}`;
+}
+
+export function businessDateToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: runtimeTimezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
 
 function apiBase(): string {
   if (!configuredBase || !/^https:\/\//i.test(configuredBase)) {
@@ -74,6 +99,7 @@ export async function loadRuntime(accessToken: string): Promise<any> {
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
   });
   const payload = await parseJson(response);
+  syncBusinessProfile(payload);
   const countryCode = String(payload?.business?.country_code || '').toUpperCase();
   if (isGccCountryCode(countryCode)) await saveSelectedCountry(countryCode).catch(() => undefined);
   return payload;
@@ -92,6 +118,7 @@ export async function createBusiness(accessToken: string, name: string, business
   const resolved = await resolvedCountry(countryCode);
   const language = String(locale || '').toLowerCase().startsWith('en') ? 'en' : 'ar';
   const payload = await post('/api/mobile/runtime', { action: 'create_business', name, business_type: businessType, locale: `${language}-${resolved}`, country_code: resolved }, accessToken);
+  syncBusinessProfile(payload);
   await saveSelectedCountry(resolved).catch(() => undefined);
   return payload;
 }
@@ -100,6 +127,7 @@ export async function createStore(accessToken: string, name: string, locale: Dab
   const resolved = await resolvedCountry(countryCode);
   const language = String(locale || '').toLowerCase().startsWith('en') ? 'en' : 'ar';
   const payload = await post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale: `${language}-${resolved}`, country_code: resolved }, accessToken);
+  syncBusinessProfile(payload);
   await saveSelectedCountry(resolved).catch(() => undefined);
   return payload;
 }
@@ -124,7 +152,9 @@ export async function loadOwnerOperations(accessToken: string, businessId?: stri
   const response = await fetch(`${apiBase()}/api/mobile/owner-operations${query}`, {
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
   });
-  return parseJson(response);
+  const payload = await parseJson(response);
+  syncBusinessProfile(payload);
+  return payload;
 }
 
 export async function mutateOwnerOperations(accessToken: string, payload: Record<string, unknown>): Promise<any> {
