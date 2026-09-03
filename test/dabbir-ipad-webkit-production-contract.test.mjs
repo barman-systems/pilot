@@ -29,3 +29,7 @@ test('iPad Production workflow is exact-SHA, OIDC protected, and fail closed on 
   assert.match(workflow,/STABLE_IPAD_PRODUCTION_SHA/);
   assert.doesNotMatch(workflow,/continue-on-error:\s*true/);
 });
+
+test('iPad exact-Production gate retriggers when Vercel release classification changes',()=>{
+  assert.match(workflow,/- 'vercel-ignore-if-unaffected\.sh'/);
+});
