@@ -5,14 +5,19 @@ import assert from 'node:assert/strict';
 const broker=fs.readFileSync(new URL('../api/barman-independent-verifier.js',import.meta.url),'utf8');
 const worker=fs.readFileSync(new URL('../scripts/barman-independent-verifier.mjs',import.meta.url),'utf8');
 const workflow=fs.readFileSync(new URL('../.github/workflows/barman-independent-verifier.yml',import.meta.url),'utf8');
+const waitProduction=fs.readFileSync(new URL('../scripts/wait-dabbir-production-sha.mjs',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260903211000_barman_independent_verifier_v7.sql',import.meta.url),'utf8');
 
 test('independent verifier has a distinct GitHub OIDC identity',()=>{
   assert.match(broker,/AUDIENCE='barman-executive-independent-verifier'/);
   assert.match(broker,/barman-independent-verifier\.yml@\$\{EXPECTED_REF\}/);
   assert.match(broker,/payload\?\.ref===EXPECTED_REF/);
-  assert.match(broker,/\['schedule','workflow_dispatch'\]/);
+  assert.match(broker,/\['schedule','workflow_dispatch','push'\]/);
   assert.doesNotMatch(broker,/barman-executive-tool-agent/);
+  assert.match(workflow,/push:\s*\n\s*branches:\s*\n\s*- main/);
+  assert.match(workflow,/github\.event_name == 'push'/);
+  assert.match(workflow,/wait-dabbir-production-sha\.mjs/);
+  assert.match(waitProduction,/release-evidence/);
   assert.match(workflow,/id-token: write/);
   assert.match(workflow,/contents: read/);
   assert.match(workflow,/actions: read/);
