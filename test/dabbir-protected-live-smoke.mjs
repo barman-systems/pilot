@@ -132,7 +132,7 @@ try {
     const page = await context.newPage();
     const pageErrors = [];
     const consoleErrors = [];
-    page.on('pageerror', error => pageErrors.push(String(error?.message || error)));
+    page.on('pageerror', error => pageErrors.push(String(error?.stack || error?.message || error)));
     page.on('console', message => {
       if (message.type() !== 'error') return;
       const text = message.text();
@@ -148,8 +148,26 @@ try {
     await page.locator('#authPassword').waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#authSubmit').waitFor({ state: 'visible', timeout: 10_000 });
 
-    const authority = await page.evaluate(() => window.__dabbirUiAuthority || null);
-    assert(authority?.version === 'owner-first-v4', `UI_AUTHORITY_INVALID_${JSON.stringify(authority)}`);
+    const uiState = await page.evaluate(() => ({
+      authority: window.__dabbirUiAuthority || null,
+      ownerFirstGuard: window.__dabbirOwnerFirstUiV4 === true,
+      inlineScriptCount: document.querySelectorAll('script[data-dabbir-owner-first-inline="owner-first-v4"]').length,
+      authorityStyleCount: document.querySelectorAll('style[data-dabbir-ui-authority="owner-first-v4"]').length,
+      bodyAuthority: document.body?.dataset?.dabbirUi || null,
+      readyState: document.readyState,
+    }));
+    report.artifacts.ui_authority_diagnostics = {
+      ...uiState,
+      page_errors: pageErrors.slice(0, 8),
+      console_errors: consoleErrors.slice(0, 8),
+    };
+    console.log(`DABBIR_UI_AUTHORITY_DIAGNOSTICS=${JSON.stringify(report.artifacts.ui_authority_diagnostics)}`);
+
+    if (uiState.authority?.version !== 'owner-first-v4') {
+      await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
+      report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
+      throw new Error(`UI_AUTHORITY_INVALID_${JSON.stringify(report.artifacts.ui_authority_diagnostics)}`);
+    }
 
     await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
     report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
