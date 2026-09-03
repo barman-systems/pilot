@@ -26,6 +26,7 @@ const script=String.raw`(()=>{
     return customer?.display_name||(ar()?'عميل':'Customer');
   }
   function appointment(id){return (workspaceNow()?.appointments||[]).find(row=>row?.id===id)||null}
+  function isHistorical(row){const time=new Date(row?.starts_at||0).getTime();return Number.isFinite(time)&&time<Date.now()}
 
   function ensureStyle(){
     if(q('#dabbirCarWashPastEditStyle'))return;
@@ -54,7 +55,7 @@ const script=String.raw`(()=>{
       busy=true;const submit=event.submitter;if(submit)submit.disabled=true;
       try{
         const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action:'update',business_id:w.business.id,appointment_id:id,starts_at:start,status:nextStatus})});
-        const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(data?.error||'APPOINTMENT_UPDATE_FAILED');
+        const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(data?.detail||data?.error||'APPOINTMENT_UPDATE_FAILED');
         close();toast(c.saved);setTimeout(()=>location.reload(),180);
       }catch(error){toast(c.failed+' '+String(error?.message||''))}
       finally{busy=false;if(submit)submit.disabled=false}
@@ -69,20 +70,22 @@ const script=String.raw`(()=>{
     });
   }
   document.addEventListener('click',event=>{
-    const button=event.target?.closest?.('[data-appt-edit][data-dabbir-historical-edit="1"]');if(!button)return;
-    event.preventDefault();event.stopImmediatePropagation();openEditor(button.dataset.apptEdit);
+    const button=event.target?.closest?.('[data-appt-edit][data-dabbir-historical-edit="1"],[data-calendar-appt]');if(!button||!isCarWash())return;
+    const id=button.dataset.apptEdit||button.dataset.calendarAppt,row=appointment(id);
+    if(!row||!isHistorical(row))return;
+    event.preventDefault();event.stopImmediatePropagation();openEditor(id);
   },true);
   document.addEventListener('keydown',event=>{if(event.key==='Escape')close()});
   const observer=new MutationObserver(repairButtons);observer.observe(document.body,{subtree:true,childList:true});
   window.addEventListener('focus',repairButtons,{passive:true});
   setTimeout(repairButtons,0);setTimeout(repairButtons,700);
-  window.__dabbirCarWashBookingEdit={repairButtons,openEditor,version:'car-wash-booking-edit-v1-historical'};
+  window.__dabbirCarWashBookingEdit={repairButtons,openEditor,version:'car-wash-booking-edit-v2-historical-calendar'};
 })();`;
 
 export default function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
-  res.setHeader('x-dabbir-car-wash-booking-edit-ui','v1-historical');
+  res.setHeader('x-dabbir-car-wash-booking-edit-ui','v2-historical-calendar');
   return res.status(200).send(script);
 }
