@@ -63,6 +63,11 @@ test('availability and booking confirmation use verified business timezone witho
   assert.doesNotMatch(core,/result\?\.timezone\s*\|\|\s*['"]Asia\/Dubai['"]/);
 });
 
+test('availability migration never mixes a rowtype target with scalar INTO targets',()=>{
+  must(patch,/select w\.\* into v_worker[\s\S]+select coalesce\(ws\.duration_minutes,v_service_duration\),coalesce\(ws\.price_aed,v_base_price\) into v_candidate_duration,v_candidate_price/);
+  assert.doesNotMatch(patch,/select w\.\*,coalesce\(ws\.duration_minutes[\s\S]{0,500}into v_worker,v_candidate_duration,v_candidate_price/);
+});
+
 test('cancel and reschedule are scoped to the conversation customer and stop after handoff',()=>{
   for(const src of [actions,patch]){
     must(src,/a\.customer_id=v_conversation\.customer_id/);

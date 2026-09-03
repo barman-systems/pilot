@@ -53,8 +53,7 @@ begin
         v_candidate_duration:=v_service_duration;v_candidate_price:=v_base_price;v_end:=v_start+make_interval(mins=>v_candidate_duration);
         if dabbir_private.whatsapp_ai_slot_available(p_business_id,null,v_start,v_end) then v_slots:=v_slots||jsonb_build_array(jsonb_build_object('starts_at',v_start,'local_start',to_char(v_local,'YYYY-MM-DD"T"HH24:MI:SS'),'ends_at',v_end,'service_id',v_service.id,'service_name',coalesce(v_service.name_ar,v_service.name,v_service.name_en),'worker_id',null,'worker_name',null,'duration_minutes',v_candidate_duration,'price',v_candidate_price,'currency_code',v_business.currency_code,'timezone',v_business.timezone)); end if;
       else
-        select w.*,coalesce(ws.duration_minutes,v_service_duration),coalesce(ws.price_aed,v_base_price)
-          into v_worker,v_candidate_duration,v_candidate_price
+        select w.* into v_worker
         from public.dabbir_workers w
         left join public.dabbir_worker_services ws on ws.business_id=p_business_id and ws.worker_id=w.id and ws.service_id=v_service.id and ws.active=true
         where w.business_id=p_business_id and w.status='active'
@@ -62,6 +61,8 @@ begin
           and dabbir_private.whatsapp_ai_slot_available(p_business_id,w.id,v_start,v_start+make_interval(mins=>greatest(5,coalesce(ws.duration_minutes,v_service_duration))))
         order by w.display_name limit 1;
         if found then
+          select coalesce(ws.duration_minutes,v_service_duration),coalesce(ws.price_aed,v_base_price) into v_candidate_duration,v_candidate_price
+          from (select 1) q left join public.dabbir_worker_services ws on ws.business_id=p_business_id and ws.worker_id=v_worker.id and ws.service_id=v_service.id and ws.active=true;
           v_candidate_duration:=greatest(5,coalesce(v_candidate_duration,v_service_duration));v_candidate_price:=greatest(0,coalesce(v_candidate_price,v_base_price));v_end:=v_start+make_interval(mins=>v_candidate_duration);
           v_slots:=v_slots||jsonb_build_array(jsonb_build_object('starts_at',v_start,'local_start',to_char(v_local,'YYYY-MM-DD"T"HH24:MI:SS'),'ends_at',v_end,'service_id',v_service.id,'service_name',coalesce(v_service.name_ar,v_service.name,v_service.name_en),'worker_id',v_worker.id,'worker_name',v_worker.display_name,'duration_minutes',v_candidate_duration,'price',v_candidate_price,'currency_code',v_business.currency_code,'timezone',v_business.timezone));
         end if;
