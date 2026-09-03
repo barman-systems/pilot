@@ -45,8 +45,9 @@ export default async function handler(req,res){
   try{
     const claimed=await rpc(key,'dabbir_claim_integration_jobs',{p_limit:50});
     const jobs=Array.isArray(claimed)?claimed:[];
+    const groups=groupByBusiness(jobs);
     const results=[];
-    for(const [businessId,businessJobs] of groupByBusiness(jobs)){
+    for(const [businessId,businessJobs] of groups){
       if(!businessJobs.every(job=>job.destination==='calendar_sync')){
         for(const job of businessJobs){const state=await finalize(key,job,{success:false,retryable:false,error:'UNSUPPORTED_OUTBOX_DESTINATION'});results.push({job_id:job.job_id,state})}
         continue;
@@ -69,7 +70,11 @@ export default async function handler(req,res){
       }
     }
     const cleanup=await rpc(key,'dabbir_cleanup_resilience_state',{}).catch(()=>null);
-    const summary={ok:true,claimed:jobs.length,businesses:groupByBusiness(jobs).size,succeeded:results.filter(x=>x.state==='succeeded').length,retry:results.filter(x=>x.state==='retry').length,dead:results.filter(x=>x.state==='dead').length,cleanup};
+    let recovery=null;
+    if(new Date().getUTCMinutes()===0){
+      recovery=await rpc(key,'dabbir_owner_recovery_maintenance_v1',{}).catch(error=>({ok:false,error:clean(error?.message||'RECOVERY_DRY_RUN_FAILED',200)}));
+    }
+    const summary={ok:true,claimed:jobs.length,businesses:groups.size,succeeded:results.filter(x=>x.state==='succeeded').length,retry:results.filter(x=>x.state==='retry').length,dead:results.filter(x=>x.state==='dead').length,cleanup,recovery};
     console.info('dabbir_resilience_worker',{auth_mode:authMode,...summary});
     return json(res,200,summary);
   }catch(error){
