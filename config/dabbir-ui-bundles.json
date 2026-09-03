@@ -3,10 +3,10 @@
   "critical": [
     "/api/gcc-readiness-ui",
     "/api/auth/recovery-ui",
-    "/api/auth-session-stability-ui",
-    "/api/branch-context-ui"
+    "/api/auth-session-stability-ui"
   ],
   "deferred": [
+    "/api/branch-context-ui",
     "/api/dabbir-whatsapp-embedded-ui",
     "/api/dabbir-whatsapp-connect-guard-ui",
     "/api/timezone-ui",
@@ -26,7 +26,6 @@
     "/api/platform-recovery-reconciliation-ui",
     "/api/verified-metrics-ui",
     "/api/customer-activation-ui",
-    "/api/owner-copilot-ui",
     "/api/dabbir-contextual-navigation-ui",
     "/api/dabbir-navigation-event-bridge-ui",
     "/api/car-wash-loader-ui"
