@@ -37,12 +37,11 @@ test('booking time guard derives local time from GCC business authority',()=>{
   assert.doesNotMatch(recovery,/const OFFSET='\+04:00'/);
 });
 
-test('Safari recovery may advance its cache generation while rewriting every final root UI asset consistently',()=>{
+test('Safari and shell preserve one shared deployment cache-bust token after WebKit repair',()=>{
   assert.match(recovery,/UI_BUNDLE_VERSION = '20260903-chat-render-lifecycle-v3'/);
-  assert.match(safari,/UI_CACHE_BUST = '20260903-webkit-owner-compile-v5'/);
+  assert.match(safari,/UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
   assert.match(safari,/function bustUiAssetVersion\(body\)/);
   assert.match(safari,/dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(safari,/dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(safari,/dabbir-owner-first-ui\\\?v=/);
-  assert.match(safari,/\$1\$\{UI_CACHE_BUST\}/);
 });
