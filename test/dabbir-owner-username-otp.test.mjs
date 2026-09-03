@@ -23,8 +23,11 @@ test('owner broker accepts modern Supabase secret keys without pretending they a
   const source = await read('supabase/functions/dabbir-owner-broker/index.ts');
   assert.match(source, /serviceKeyIsJwt=\(\)=>SERVICE_KEY\.split\('\.'\)\.length===3/);
   assert.match(source, /'apikey':SERVICE_KEY/);
-  assert.match(source, /if\(serviceKeyIsJwt\(\)\)headers\.authorization=`Bearer \$\{SERVICE_KEY\}`/);
+  assert.match(source, /if\(serviceKeyIsJwt\(\)\)[A-Za-z_$][\w$]*\.authorization=`Bearer \$\{SERVICE_KEY\}`/);
   assert.doesNotMatch(source, /sbHeaders=\(\)=>\(\{'apikey':SERVICE_KEY,'authorization':`Bearer \$\{SERVICE_KEY\}`/);
+  assert.match(source, /role=eq\.ROOT_OWNER/);
+  assert.match(source, /revoked_at=is\.null/);
+  assert.match(source, /suspended_at=is\.null/);
   assert.match(source, /if\(action==='incidents'\)return incidentRead\(body\)/);
   assert.match(source, /if\(action==='incident_action'\)return incidentAction\(body\)/);
 });
