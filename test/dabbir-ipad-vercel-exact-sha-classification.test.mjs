@@ -25,7 +25,7 @@ function setupRepo(){
 function changePath(dir,relativePath){
   const target=path.join(dir,relativePath);
   fs.mkdirSync(path.dirname(target),{recursive:true});
-  fs.writeFileSync(target,'export {};\n');
+  fs.writeFileSync(target,relativePath.endsWith('.yml')?'name: ipad production\n':'export {};\n');
   git(dir,'add','.');
   git(dir,'commit','-qm',`change ${relativePath}`);
   return git(dir,'rev-parse','HEAD');
@@ -39,9 +39,10 @@ function runGuard(dir,current,previous){
   });
 }
 
-test('canonical iPad-bearing QA contracts force a Production deployment instead of Vercel ignore',()=>{
+test('every iPad exact-SHA QA contract forces a Production deployment instead of Vercel ignore',()=>{
   for(const relativePath of [
-    'test/run-ai-full-customer-journey-en.mjs',
+    '.github/workflows/dabbir-ipad-webkit-production.yml',
+    'test/run-ai-full-customer-journey-ipad.mjs',
     'test/dabbir-ipad-webkit-production-contract.test.mjs',
   ]){
     const dir=setupRepo();
