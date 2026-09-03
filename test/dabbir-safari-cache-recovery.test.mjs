@@ -8,7 +8,7 @@ const failOpen = fs.readFileSync(new URL('../api/dabbir-safari-auth-fail-open-ui
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260902-p0-safari-v4'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260903-lifecycle-authority-v1'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);

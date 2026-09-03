@@ -12,7 +12,9 @@ test('navigation bridge delegates primary destination choice to contextual routi
   assert.match(bridge, /#nav > \[data-screen\],#bottomNav > \[data-screen\]/);
   assert.match(bridge, /document\.addEventListener\('click'/);
   assert.match(bridge, /document\.addEventListener\('touchend'/);
-  assert.match(bridge, /typeof showScreen==='function'/);
+  assert.match(bridge, /window\.__dabbirUiLifecycle/);
+  assert.match(bridge, /lifecycle\.route\('navigation-event-bridge',routedName\)/);
+  assert.match(bridge, /lifecycle\.on\('afterNavigate','navigation-event-bridge'/);
   assert.match(bridge, /safeFallback/);
   assert.match(bridge, /destination_authority:'context-router'/);
   assert.match(bridge, /window\.__dabbirContextualNavigation\?\.refresh\?\.\(\)/);
@@ -40,8 +42,10 @@ test('store activity stays Operations even if a stale appointments call reaches 
   assert.match(bridge, /if\(requested!==['"]appointments['"]\) return requested/);
   assert.match(bridge, /const routed=String\(slot\?\.dataset\?\.screen\|\|''\)\.trim\(\)/);
   assert.match(bridge, /return routed\|\|requested/);
-  assert.match(bridge, /baseShowScreen\.call\(this,target\)/);
+  assert.match(bridge, /lifecycle\.route\('navigation-event-bridge',routedName\)/);
+  assert.match(bridge, /window\.__dabbirShowScreenRouterDelegation='lifecycle'/);
   assert.match(bridge, /programmatic_show_screen_delegation:true/);
+  assert.match(bridge, /lifecycle_router_authority:/);
 });
 
 test('tab feedback paints before deferred screen rendering', () => {

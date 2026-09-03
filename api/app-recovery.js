@@ -40,7 +40,109 @@ const UI_MODULE_ORDER = [
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260903-interface-hardening-v1';
+const UI_BUNDLE_VERSION = '20260903-lifecycle-authority-v1';
+
+// One shell-level lifecycle authority owns the final render/navigation entry points.
+// Legacy modules may still wrap them during migration; reconcile() reasserts the
+// outer authority without creating recursion, while older lifecycle wrappers become inert.
+const UI_LIFECYCLE_BOOTSTRAP = `<script>
+(()=>{
+  if(window.__dabbirUiLifecycle?.version==='ui-lifecycle-v1'){
+    window.__dabbirUiLifecycle.reconcile?.();
+    return;
+  }
+  const hooks=new Map([['afterRender',new Map()],['afterNavigate',new Map()]]);
+  const routes=new Map();
+  let renderGeneration=0;
+  let navigationGeneration=0;
+  let renderWrapper=null;
+  let navigationWrapper=null;
+  let renderReconciliations=0;
+  let navigationReconciliations=0;
+
+  function safeCurrent(){try{return typeof current==='undefined'?null:current}catch{return null}}
+  function safeWorkspace(){try{return typeof workspace==='undefined'?null:workspace}catch{return null}}
+  function emit(event,payload){
+    const group=hooks.get(event);
+    if(!group)return;
+    for(const [id,fn] of group){
+      try{fn(payload)}catch(error){
+        window.__dabbirLastUiLifecycleError={event,id,error:String(error?.message||error),at:new Date().toISOString()};
+      }
+    }
+  }
+  function resolve(requested){
+    let target=String(requested||'').trim();
+    for(const [id,fn] of routes){
+      try{
+        const next=fn(target,{requested:String(requested||''),target});
+        if(next!==undefined&&next!==null&&String(next).trim())target=String(next).trim();
+      }catch(error){
+        window.__dabbirLastUiLifecycleError={event:'route',id,error:String(error?.message||error),at:new Date().toISOString()};
+      }
+    }
+    return target;
+  }
+  function wrapRender(){
+    if(typeof renderAll!=='function')return false;
+    if(renderAll===renderWrapper)return true;
+    const base=renderAll;
+    const generation=++renderGeneration;
+    const wrapper=function(){
+      const result=base.apply(this,arguments);
+      if(generation===renderGeneration)emit('afterRender',{current:safeCurrent(),workspace:safeWorkspace()});
+      return result;
+    };
+    renderWrapper=wrapper;
+    renderAll=wrapper;
+    renderReconciliations++;
+    return true;
+  }
+  function wrapNavigation(){
+    if(typeof showScreen!=='function')return false;
+    if(showScreen===navigationWrapper)return true;
+    const base=showScreen;
+    const generation=++navigationGeneration;
+    const wrapper=function(name){
+      if(generation!==navigationGeneration)return base.call(this,name);
+      const requested=String(name||'').trim();
+      const target=resolve(requested);
+      const result=base.call(this,target);
+      emit('afterNavigate',{requested,target,current:safeCurrent(),workspace:safeWorkspace()});
+      return result;
+    };
+    navigationWrapper=wrapper;
+    showScreen=wrapper;
+    navigationReconciliations++;
+    return true;
+  }
+  const api={
+    version:'ui-lifecycle-v1',
+    on(event,id,fn){
+      if(!hooks.has(event)||!id||typeof fn!=='function')return()=>{};
+      hooks.get(event).set(String(id),fn);
+      return()=>hooks.get(event)?.delete(String(id));
+    },
+    route(id,fn){
+      if(!id||typeof fn!=='function')return()=>{};
+      routes.set(String(id),fn);
+      return()=>routes.delete(String(id));
+    },
+    emit,
+    resolve,
+    reconcile(){
+      const render=wrapRender();
+      const navigation=wrapNavigation();
+      return {render,navigation,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations};
+    },
+    status(){
+      return {version:this.version,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,render_hooks:hooks.get('afterRender').size,navigation_hooks:hooks.get('afterNavigate').size,route_resolvers:routes.size};
+    }
+  };
+  window.__dabbirUiLifecycle=api;
+  api.reconcile();
+})();
+</script>`;
 
 // The auth gate is visible before #appShell. Its owner-first presentation layer must
 // therefore load independently of the workspace-only deferred bundle; otherwise
@@ -50,6 +152,7 @@ const OWNER_FIRST_UI_BOOTSTRAP = `<script src="/api/dabbir-owner-first-ui?v=${UI
 const UI_BUNDLE_LOADER = `<script>
 (()=>{
   window.__dabbirCriticalUiReady=true;
+  window.__dabbirUiLifecycle?.reconcile?.();
   const load=()=>{
     if(!window.__dabbirCriticalUiReady||window.__dabbirDeferredUiRequested)return;
     window.__dabbirDeferredUiRequested=true;
@@ -57,7 +160,10 @@ const UI_BUNDLE_LOADER = `<script>
     script.src='/dabbir-ui-deferred.js?v=${UI_BUNDLE_VERSION}';
     script.async=false;
     script.dataset.dabbirDeferredUi='true';
-    script.onload=()=>{window.__dabbirDeferredUiReady=true};
+    script.onload=()=>{
+      window.__dabbirDeferredUiReady=true;
+      window.__dabbirUiLifecycle?.reconcile?.();
+    };
     document.body.appendChild(script);
   };
   window.__dabbirLoadDeferredUi=load;
@@ -190,7 +296,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', `<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + OWNER_FIRST_UI_BOOTSTRAP + '\n' + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n' + INTERFACE_HARDENING + '\n</body>')
+        ? body.replace('</body>', UI_LIFECYCLE_BOOTSTRAP + `\n<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + OWNER_FIRST_UI_BOOTSTRAP + '\n' + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n' + INTERFACE_HARDENING + '\n</body>')
         : body;
       return res.end(html);
     },
