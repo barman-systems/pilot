@@ -8,15 +8,73 @@ const arabicLocale = "locale: 'ar-AE',";
 const iphoneViewport = "viewport: { width: 390, height: 844 },";
 const ipadViewport = "viewport: { width: 820, height: 1180 },";
 const iphoneJourneyDetail = 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.';
-const ipadJourneyDetail = 'WebKit iPad-size journey completed password + TOTP MFA, then used the visible responsive navigation and rendered owner workspace, conversation, product, and approved DABBIR identity.';
+const ipadJourneyDetail = 'WebKit iPad-size journey completed password + TOTP MFA, then opened the real responsive sidebar and rendered owner workspace, conversation, product, and approved DABBIR identity.';
 const phoneConversationNavigation = `  await page.locator('#bottomNav [data-screen="conversations"]').click();`;
-const tabletConversationNavigation = `  const visibleConversationsNav = page.locator('#nav [data-screen="conversations"]:visible, #bottomNav [data-screen="conversations"]:visible');
+const tabletConversationNavigation = `  const ipadMenuForConversations = page.locator('#menuBtn:visible');
+  assert(await ipadMenuForConversations.count() === 1, 'BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING');
+  await ipadMenuForConversations.click();
+  await page.waitForFunction(() => {
+    const side = document.querySelector('#side');
+    if (!side || !side.classList.contains('open')) return false;
+    const rect = side.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.left < window.innerWidth && rect.right > 0;
+  }, null, { timeout: 10_000 });
+  const visibleConversationsNav = page.locator('#side.open #nav [data-screen="conversations"]:visible');
   const visibleConversationsCount = await visibleConversationsNav.count();
   assert(visibleConversationsCount === 1, \`BROWSER_VISIBLE_CONVERSATIONS_NAV_COUNT_\${visibleConversationsCount}\`);
-  await visibleConversationsNav.click();`;
+  const conversationsNavState = await visibleConversationsNav.evaluate(element => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    const hit = document.elementFromPoint(centerX, centerY);
+    return {
+      display: style.display,
+      visibility: style.visibility,
+      pointer_events: style.pointerEvents,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      left: Math.round(rect.left),
+      right: Math.round(rect.right),
+      top: Math.round(rect.top),
+      bottom: Math.round(rect.bottom),
+      viewport_width: window.innerWidth,
+      viewport_height: window.innerHeight,
+      inside_viewport: centerX >= 0 && centerX <= window.innerWidth && centerY >= 0 && centerY <= window.innerHeight,
+      centre_hits_target: hit === element || element.contains(hit),
+    };
+  });
+  console.log(\`DABBIR_IPAD_CONVERSATIONS_NAV_STATE=\${JSON.stringify(conversationsNavState)}\`);
+  assert(
+    conversationsNavState.display !== 'none'
+      && conversationsNavState.visibility !== 'hidden'
+      && conversationsNavState.pointer_events !== 'none'
+      && conversationsNavState.width >= 40
+      && conversationsNavState.height >= 40
+      && conversationsNavState.inside_viewport
+      && conversationsNavState.centre_hits_target,
+    \`BROWSER_CONVERSATIONS_NAV_NOT_ACTIONABLE_\${JSON.stringify(conversationsNavState)}\`,
+  );
+  await visibleConversationsNav.click();
+  await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
+  const conversationsTransition = await page.evaluate(() => ({
+    active: document.querySelector('#screen-conversations')?.classList.contains('active') === true,
+    sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
+  }));
+  console.log(\`DABBIR_IPAD_CONVERSATIONS_TRANSITION=\${JSON.stringify(conversationsTransition)}\`);
+  assert(conversationsTransition.active && !conversationsTransition.sidebar_open, \`BROWSER_CONVERSATIONS_TRANSITION_FAILED_\${JSON.stringify(conversationsTransition)}\`);`;
 const phoneNavigationStart = `  const mobileMenuState = await page.locator('#menuBtn').evaluate(element => {`;
 const phoneNavigationEnd = `  assert(operationsTransition.target_found && operationsTransition.active && !operationsTransition.side_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
-const tabletOperationsNavigation = `  const visibleOperationsNav = page.locator('#nav [data-screen="operations"]:visible, #bottomNav [data-screen="operations"]:visible');
+const tabletOperationsNavigation = `  const ipadMenuForOperations = page.locator('#menuBtn:visible');
+  assert(await ipadMenuForOperations.count() === 1, 'BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING');
+  await ipadMenuForOperations.click();
+  await page.waitForFunction(() => {
+    const side = document.querySelector('#side');
+    if (!side || !side.classList.contains('open')) return false;
+    const rect = side.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.left < window.innerWidth && rect.right > 0;
+  }, null, { timeout: 10_000 });
+  const visibleOperationsNav = page.locator('#side.open #nav [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
   assert(visibleOperationsCount === 1, \`BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_\${visibleOperationsCount}\`);
   const operationsNavState = await visibleOperationsNav.evaluate(element => {
@@ -32,19 +90,23 @@ const tabletOperationsNavigation = `  const visibleOperationsNav = page.locator(
       width: Math.round(rect.width),
       height: Math.round(rect.height),
       left: Math.round(rect.left),
+      right: Math.round(rect.right),
       top: Math.round(rect.top),
+      bottom: Math.round(rect.bottom),
       viewport_width: window.innerWidth,
       viewport_height: window.innerHeight,
+      inside_viewport: centerX >= 0 && centerX <= window.innerWidth && centerY >= 0 && centerY <= window.innerHeight,
       centre_hits_target: hit === element || element.contains(hit),
     };
   });
-  console.log(\`DABBIR_RESPONSIVE_OPERATIONS_NAV_STATE=\${JSON.stringify(operationsNavState)}\`);
+  console.log(\`DABBIR_IPAD_OPERATIONS_NAV_STATE=\${JSON.stringify(operationsNavState)}\`);
   assert(
     operationsNavState.display !== 'none'
       && operationsNavState.visibility !== 'hidden'
       && operationsNavState.pointer_events !== 'none'
       && operationsNavState.width >= 40
       && operationsNavState.height >= 40
+      && operationsNavState.inside_viewport
       && operationsNavState.centre_hits_target,
     \`BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_\${JSON.stringify(operationsNavState)}\`,
   );
@@ -54,8 +116,8 @@ const tabletOperationsNavigation = `  const visibleOperationsNav = page.locator(
     active: document.querySelector('#screen-operations')?.classList.contains('active') === true,
     sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
   }));
-  console.log(\`DABBIR_RESPONSIVE_OPERATIONS_TRANSITION=\${JSON.stringify(operationsTransition)}\`);
-  assert(operationsTransition.active, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
+  console.log(\`DABBIR_IPAD_OPERATIONS_TRANSITION=\${JSON.stringify(operationsTransition)}\`);
+  assert(operationsTransition.active && !operationsTransition.sidebar_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
 const englishReportPath = 'dabbir-ai-customer-journey-report-en.json';
 const ipadReportPath = 'dabbir-ai-customer-journey-report-ipad.json';
 
@@ -96,8 +158,10 @@ ipadSource = replaceSingleExact(ipadSource, phoneConversationNavigation, tabletC
 ipadSource = replaceSingleRange(ipadSource, phoneNavigationStart, phoneNavigationEnd, tabletOperationsNavigation, 'IPAD_WEBKIT_OPERATIONS_NAV_CONTRACT_CHANGED');
 ipadSource = replaceSingleExact(ipadSource, iphoneJourneyDetail, ipadJourneyDetail, 'IPAD_WEBKIT_EVIDENCE_DETAIL_CONTRACT_CHANGED');
 if (!ipadSource.includes(ipadViewport)
-  || !ipadSource.includes('#nav [data-screen="conversations"]:visible')
-  || !ipadSource.includes('#nav [data-screen="operations"]:visible')) {
+  || !ipadSource.includes('#side.open #nav [data-screen="conversations"]:visible')
+  || !ipadSource.includes('#side.open #nav [data-screen="operations"]:visible')
+  || !ipadSource.includes('BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING')
+  || !ipadSource.includes('BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING')) {
   throw new Error('IPAD_WEBKIT_RESPONSIVE_NAV_REWRITE_FAILED');
 }
 
@@ -147,7 +211,7 @@ try {
     required_failures: Number(ipad.report.required_failures || 0),
     mobile_step_status: ipad.mobileStep.status,
     viewport: { width: 820, height: 1180 },
-    navigation_contract: 'visible-responsive-nav',
+    navigation_contract: 'menu-opened-responsive-sidebar',
     report_path: ipadReportPath,
   };
   fs.writeFileSync(englishReportPath, `${JSON.stringify(english.report, null, 2)}\n`, 'utf8');
