@@ -56,6 +56,23 @@ test('persistent worker has schedule plus protected-main push wake-up',()=>{
   assert.match(worker,/api\/barman-tool-agent-broker\.js/);
 });
 
+test('empty AI patches trigger bounded autonomous context recovery instead of owner questions',()=>{
+  assert.match(worker,/PATCH_EMPTY_RECOVERY/);
+  assert.match(worker,/expandContext\(context,discovery,allPaths,commandText\)/);
+  assert.match(worker,/AI_PATCH_EMPTY_AUTORECOVERY/);
+  assert.match(worker,/AI_PATCH_EMPTY_AFTER_AUTORECOVERY/);
+  assert.match(worker,/add\('package\.json'\)/);
+  assert.match(broker,/explicitly authorized to create NEW files under test\//);
+  assert.match(broker,/does NOT need to already appear in the supplied context/);
+  assert.match(broker,/Never ask the owner to name the test file or reconfirm/);
+});
+
+test('new test and migration files are included in change detection and commit scope',()=>{
+  assert.match(worker,/git\(\['ls-files','--others','--exclude-standard'\]\)/);
+  assert.match(worker,/new Set\(\[\.\.\.tracked,\.\.\.untracked\]\)/);
+  assert.match(worker,/git\(\['add','--',\.\.\.changed\]\)/);
+});
+
 test('required branch-protection test context is emitted only by pull_request CI',()=>{
   assert.match(ci,/name:\s*\$\{\{\s*github\.event_name == 'pull_request' && 'test' \|\| 'ci-non-pr'\s*\}\}/);
   assert.match(ci,/Require terminal mobile release gates before merge/);
@@ -71,6 +88,16 @@ test('DONE requires CI, exact Production release and full customer journey',()=>
   assert.match(worker,/dispatch\('dabbir-ai-customer-journey\.yml','main'/);
   assert.match(worker,/waitWorkflow\('dabbir-ai-customer-journey\.yml','main'/);
   assert.match(worker,/finalize\('DONE'/);
+});
+
+test('executor persists independent-required state before waking verifier and cannot self-promote',()=>{
+  assert.match(worker,/FINALIZE_DONE_NOT_PERSISTED/);
+  assert.match(worker,/verification_status!=='INDEPENDENT_REQUIRED'/);
+  assert.match(worker,/terminalPersisted=true/);
+  assert.match(worker,/dispatch\('barman-independent-verifier\.yml','main',\{\}\)/);
+  assert.match(worker,/VERIFIER_WAKE_FAILED_UNPROMOTED/);
+  assert.match(worker,/POST_FINALIZE_FAILURE_COMMAND_REMAINS_UNPROMOTED/);
+  assert.doesNotMatch(worker,/barman_executive_verify_command_v1/);
 });
 
 test('broker finalization sends Telegram outcome and evidence remains fail-closed',()=>{
