@@ -36,7 +36,7 @@ test('workspace selector persists and restores an authorized active business', (
 
 test('owners can create another business and manage branch lifecycle without another login', () => {
   assert.match(ui, /action:'create_business'/);
-  assert.match(ui, /action:'create_branch'/);
+  assert.match(ui, /action=kind==='branch-edit'\?'update_branch':'create_branch'/);
   for (const action of ['create_branch','update_branch','delete_branch','update_business','delete_business']) {
     assert.match(api, new RegExp(`action==='${action}'`));
   }
