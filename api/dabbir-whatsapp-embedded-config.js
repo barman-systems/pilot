@@ -1,7 +1,14 @@
 import { singleQueryValue } from './_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json } from './_auth-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
-import { loadBusinessConnection, ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
+import { ownerContext, resolveEmbeddedPlatformConfig } from './_whatsapp-embedded-core.js';
+import {
+  loadBusinessBranchConnection,
+  loadPrimaryBusinessConnection,
+} from './_whatsapp-branch-connection.js';
+
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 
 function readiness(platform) {
   return {
@@ -35,11 +42,16 @@ export default async function handler(req, res) {
   }
 
   const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
+  const branchRaw=String(singleQueryValue(req,'branch_id')||'').trim();
+  const branchId=branchRaw?safeId(branchRaw):null;
   if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
+  if(branchRaw&&!branchId)return json(res,400,{ok:false,error:'VALID_BRANCH_REQUIRED'});
 
   try {
     await ownerContext(req, businessId);
-    const connection = await loadBusinessConnection(accessToken, businessId);
+    const connection = branchId
+      ? await loadBusinessBranchConnection(accessToken,businessId,branchId)
+      : await loadPrimaryBusinessConnection(accessToken,businessId);
     return json(res, 200, {
       ok: true,
       auth_required: false,
@@ -49,8 +61,12 @@ export default async function handler(req, res) {
       config_id: platform.ready ? platform.configId : null,
       graph_version: platform.graphVersion,
       sdk_locale: 'en_US',
+      branch_id: connection?.branch_id || branchId || null,
+      connection_id: connection?.id || null,
       connected: Boolean(connection && connection.status !== 'disconnected'),
       connection: connection ? {
+        id: connection.id,
+        branch_id: connection.branch_id,
         status: connection.status,
         waba_id: connection.waba_id,
         phone_number_id: connection.phone_number_id,
