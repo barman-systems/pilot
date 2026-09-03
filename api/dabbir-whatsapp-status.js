@@ -5,12 +5,17 @@ import { serviceRpc, whatsappLiveServerCapability } from './_whatsapp-live-core.
 import { withServerReadTimeout } from './_server-read-timeout.js';
 import {
   embeddedPlatformConfig,
-  loadBusinessConnection,
   ownerContext,
   verifyStoredConnection,
 } from './_whatsapp-embedded-core.js';
+import {
+  loadBusinessBranchConnection,
+  loadPrimaryBusinessConnection,
+} from './_whatsapp-branch-connection.js';
 
 const WHATSAPP_STATUS_TIMEOUT_MS = 10_000;
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 
 function firstEnv(...names) {
   for (const name of names) {
@@ -59,9 +64,13 @@ function emptyOperationalEvidence(available = true) {
   };
 }
 
-export async function loadOperationalEvidence(businessId) {
+export async function loadOperationalEvidence(businessId,branchId) {
+  if(!safeId(businessId)||!safeId(branchId))return emptyOperationalEvidence(false);
   try {
-    const rows = await serviceRpc('dabbir_whatsapp_operational_evidence', { p_business_id: businessId });
+    const rows = await serviceRpc('dabbir_whatsapp_branch_operational_evidence', {
+      p_business_id: businessId,
+      p_branch_id: branchId,
+    });
     const row = Array.isArray(rows) ? rows[0] : rows;
     if (!row) return emptyOperationalEvidence(false);
     return {
@@ -76,12 +85,13 @@ export async function loadOperationalEvidence(businessId) {
   }
 }
 
-export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED') {
+export function tenantUnconfiguredStatus(reason = 'TENANT_WHATSAPP_NOT_LINKED',branchId=null) {
   const machine = deriveWhatsAppOperationalState({ hasConnection: false });
   return {
     ok: true,
     channel: 'whatsapp',
     source: 'embedded_signup',
+    branch_id: branchId,
     configured: false,
     connected: false,
     webhook_configured: false,
@@ -130,15 +140,17 @@ export async function verifyMetaAuthorization(config = getWhatsAppConfig()) {
   }
 }
 
-async function embeddedStatus(req, accessToken, businessId) {
+async function embeddedStatus(req, accessToken, businessId, branchId=null) {
   await ownerContext(req, businessId);
-  const row = await loadBusinessConnection(accessToken, businessId);
+  const row = branchId
+    ? await loadBusinessBranchConnection(accessToken,businessId,branchId)
+    : await loadPrimaryBusinessConnection(accessToken,businessId);
   if (!row) return null;
   const platform = embeddedPlatformConfig();
   try {
     const [verified, evidence] = await Promise.all([
       verifyStoredConnection(platform, row),
-      loadOperationalEvidence(businessId),
+      loadOperationalEvidence(businessId,row.branch_id),
     ]);
     const machine = deriveWhatsAppOperationalState({
       hasConnection: true,
@@ -149,6 +161,8 @@ async function embeddedStatus(req, accessToken, businessId) {
       ok: true,
       channel: 'whatsapp',
       source: 'embedded_signup',
+      branch_id: row.branch_id,
+      connection_id: row.id,
       configured: true,
       connected: Boolean(verified.authorized),
       webhook_configured: Boolean(firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN') && platform.appSecret),
@@ -186,6 +200,8 @@ async function embeddedStatus(req, accessToken, businessId) {
       ok: true,
       channel: 'whatsapp',
       source: 'embedded_signup',
+      branch_id: row.branch_id,
+      connection_id: row.id,
       configured: true,
       connected: false,
       webhook_configured: Boolean(firstEnv('DABBIR_WHATSAPP_VERIFY_TOKEN', 'PILOT_WHATSAPP_VERIFY_TOKEN') && platform.appSecret),
@@ -211,9 +227,9 @@ async function embeddedStatus(req, accessToken, businessId) {
   }
 }
 
-async function tenantStatus(req, accessToken, businessId) {
-  const tenant = await embeddedStatus(req, accessToken, businessId);
-  return tenant || tenantUnconfiguredStatus();
+async function tenantStatus(req, accessToken, businessId, branchId=null) {
+  const tenant = await embeddedStatus(req, accessToken, businessId,branchId);
+  return tenant || tenantUnconfiguredStatus('TENANT_WHATSAPP_NOT_LINKED',branchId);
 }
 
 export default async function handler(req, res) {
@@ -233,9 +249,12 @@ export default async function handler(req, res) {
   if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
 
   const businessId = String(singleQueryValue(req, 'business_id') || '').trim();
+  const branchRaw=String(singleQueryValue(req,'branch_id')||'').trim();
+  const branchId=branchRaw?safeId(branchRaw):null;
+  if(branchRaw&&!branchId)return json(res,400,{ok:false,error:'VALID_BRANCH_REQUIRED'});
   if (businessId) {
     try {
-      return json(res, 200, await tenantStatus(req, accessToken, businessId));
+      return json(res, 200, await tenantStatus(req, accessToken, businessId,branchId));
     } catch (error) {
       return json(res, Number(error?.status || error?.code || 500), { ok: false, error: error?.safeCode || error?.message || 'REQUEST_FAILED' });
     }
@@ -243,7 +262,7 @@ export default async function handler(req, res) {
 
   // The authenticated DABBIR UI must never inherit a global/server WhatsApp
   // identity. Platform-level credentials remain webhook/runtime infrastructure
-  // only; tenant display state always resolves from the tenant connection row.
+  // only; tenant display state always resolves from a tenant branch connection row.
   try {
     const memberships = await withServerReadTimeout(
       signal => getBusinessMemberships(accessToken, { signal }),
@@ -253,7 +272,7 @@ export default async function handler(req, res) {
       .map(item => String(item?.business_id || '').trim())
       .filter(Boolean))];
     if (businessIds.length === 1) {
-      return json(res, 200, await tenantStatus(req, accessToken, businessIds[0]));
+      return json(res, 200, await tenantStatus(req, accessToken, businessIds[0],null));
     }
     return json(res, 200, tenantUnconfiguredStatus(businessIds.length > 1 ? 'BUSINESS_CONTEXT_REQUIRED' : 'TENANT_WHATSAPP_NOT_LINKED'));
   } catch (error) {

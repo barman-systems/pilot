@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { json, readJsonBody, requireSameOrigin, supabaseRest } from './_auth-core.js';
-import { loadBusinessConnection, ownerContext } from './_whatsapp-embedded-core.js';
+import { ownerContext } from './_whatsapp-embedded-core.js';
+import { loadExactBusinessConnection } from './_whatsapp-branch-connection.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
 import {
   finalizeOutboundReply,
@@ -101,9 +102,9 @@ export default async function handler(req, res) {
     }
 
     const owner = await ownerContext(req, businessId);
-    const connection = await loadBusinessConnection(owner.accessToken, businessId);
-    if (!connection || connection.status !== 'connected') return json(res, 409, { ok: false, error: 'WHATSAPP_TENANT_NOT_LINKED' });
 
+    // The database resolves conversation.branch_id first and reserves the exact
+    // WhatsApp connection for that branch. Never choose a connection by business alone.
     reservation = await reserveOutboundReply({
       businessId,
       conversationId,
@@ -144,6 +145,16 @@ export default async function handler(req, res) {
         retry_requires_new_operation: true,
         automatic_resend_blocked: true,
       });
+    }
+
+    const connection = await loadExactBusinessConnection(
+      owner.accessToken,
+      businessId,
+      reservation.connectionId,
+    );
+    if (!connection || connection.status !== 'connected') {
+      await markOutboundResult(reservation.reservationId, 'FAILED', 'WHATSAPP_BRANCH_CONNECTION_UNAVAILABLE_AFTER_RESERVATION');
+      return json(res, 409, { ok: false, state: 'FAILED', error: 'WHATSAPP_BRANCH_CONNECTION_UNAVAILABLE_AFTER_RESERVATION' });
     }
 
     if (String(connection.id) !== String(reservation.connectionId)
@@ -200,7 +211,7 @@ export default async function handler(req, res) {
       message: persisted,
       truth: {
         state: 'VERIFIED_PERSISTED_PROVIDER_ACCEPTED',
-        source: 'RESERVATION_META_SEND_FINALIZE_READBACK',
+        source: 'BRANCH_RESERVATION_EXACT_CONNECTION_META_SEND_FINALIZE_READBACK',
         verified_at: new Date().toISOString(),
       },
       automatic_resend_blocked: true,
