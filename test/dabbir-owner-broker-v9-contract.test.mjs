@@ -41,10 +41,12 @@ test('full executive view and owner decisions remain root-only',()=>{
   assert.match(broker,/if\(action==='decision_resolve'\).*requireRoot\(session\)/s);
 });
 
-test('public order tracking uses the server secret only on the server',()=>{
+test('public order tracking uses the server secret only on the server and WHATWG parsing',()=>{
   assert.match(tracking,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(tracking,/dabbir_public_order_status/);
   assert.match(tracking,/UUID_RE/);
+  assert.match(tracking,/singleQueryValue\(req,'token'\)/);
+  assert.doesNotMatch(tracking,/req\.query/);
   assert.match(tracking,/cache-control','no-store/);
 });
 
