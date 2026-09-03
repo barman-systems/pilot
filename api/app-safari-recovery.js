@@ -1,6 +1,6 @@
 import appRecoveryHandler from './app-recovery.js';
 
-const UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3';
+const UI_CACHE_BUST = '20260903-store-item-form-v1';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
 const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});`;
 const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';`;
