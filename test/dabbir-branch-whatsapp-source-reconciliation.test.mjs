@@ -28,7 +28,7 @@ test('Production WhatsApp branch migration history is immutable in source',()=>{
 
 test('source reconciliation rebuilds the missing branch-scope contract without owner-authority rollback',()=>{
   const reconcile=text('supabase/migrations/20260903210000_dabbir_branch_scope_source_reconciliation_v1.sql');
-  const parity=text('supabase/migrations/20260903210100_dabbir_branch_scope_production_parity_v1.sql');
+  const parity=text('supabase/migrations/20260903210100_dabbir_branch_scope_live_parity_v1.sql');
   for(const token of [
     'dabbir_membership_branches','dabbir_branch_services','dabbir_branch_products',
     'dabbir_worker_branches','dabbir_branch_inventory','branch_access_allowed',
