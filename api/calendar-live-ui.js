@@ -1,6 +1,7 @@
 import activityProfileHandler from './activity-profile-ui.js';
 import appointmentManagementUiHandler from './appointment-management-ui.js';
 import salonModeUiHandler from './salon-mode-ui.js';
+import salonPaymentIdempotencyUiHandler from './salon-payment-idempotency-ui.js';
 import clinicModeUiHandler from './clinic-mode-ui.js';
 import businessActivityProfileUiHandler from './business-activity-profile-ui.js';
 
@@ -143,13 +144,14 @@ function captureResponse(){return {statusCode:200,headers:{},body:'',status(code
 
 export default async function handler(req,res){
   if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');
-  const activityCaptured=captureResponse(),managementCaptured=captureResponse(),salonCaptured=captureResponse(),clinicCaptured=captureResponse(),businessActivityCaptured=captureResponse();
-  await activityProfileHandler(req,activityCaptured);await appointmentManagementUiHandler(req,managementCaptured);await salonModeUiHandler(req,salonCaptured);await clinicModeUiHandler(req,clinicCaptured);await businessActivityProfileUiHandler(req,businessActivityCaptured);
+  const activityCaptured=captureResponse(),managementCaptured=captureResponse(),salonCaptured=captureResponse(),paymentCaptured=captureResponse(),clinicCaptured=captureResponse(),businessActivityCaptured=captureResponse();
+  await activityProfileHandler(req,activityCaptured);await appointmentManagementUiHandler(req,managementCaptured);await salonModeUiHandler(req,salonCaptured);await salonPaymentIdempotencyUiHandler(req,paymentCaptured);await clinicModeUiHandler(req,clinicCaptured);await businessActivityProfileUiHandler(req,businessActivityCaptured);
   if(activityCaptured.statusCode!==200||!activityCaptured.body)return res.status(500).end('Activity profile UI unavailable');
   if(managementCaptured.statusCode!==200||!managementCaptured.body)return res.status(500).end('Appointment management UI unavailable');
   if(salonCaptured.statusCode!==200||!salonCaptured.body)return res.status(500).end('Salon Mode UI unavailable');
+  if(paymentCaptured.statusCode!==200||!paymentCaptured.body)return res.status(500).end('Salon payment idempotency UI unavailable');
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
-  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v12-salon-single-booking-surface');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v13-salon-payment-idempotency');
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+paymentCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }
