@@ -32,8 +32,12 @@ test('root shell bypasses stale Safari UI bundle versions', () => {
   assert.match(recovery, /x-dabbir-ui-cache-bust/);
 });
 
-test('owner-first authority is parsed, probed, server-inlined, and executed before auth boot first paint', () => {
+test('owner-first authority reconciles one known malformed token, parses, probes, and executes before auth boot first paint', () => {
   assert.match(recovery,/ownerFirstInlineScript/);
+  assert.match(recovery,/reconcileOwnerFirstPayload/);
+  assert.match(recovery,/OWNER_FIRST_BROKEN_PREFIX/);
+  assert.match(recovery,/OWNER_FIRST_FIXED_PREFIX/);
+  assert.match(recovery,/DABBIR_OWNER_FIRST_PREFIX_RECONCILIATION_COUNT_/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_STATUS_/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_AUTHORITY_MISSING/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_UNSAFE_SCRIPT_CLOSE/);
@@ -50,13 +54,15 @@ test('owner-first authority is parsed, probed, server-inlined, and executed befo
   assert.equal(externalOwnerTags.length,0,'first paint must not depend on an owner-first subresource request');
   assert.equal(probeTags.length,1,'exactly one first-paint execution probe must exist');
   assert.equal(inlineOwnerTags.length,1,'exactly one owner-first inline authority must execute');
+  assert.doesNotMatch(body,/const prefix=raw\.includes\('•'\).*\+' ':';/,'malformed owner-first prefix must not reach final HTML');
+  assert.match(body,/const prefix=raw\.includes\('•'\).*\+' ':'';/,'reconciled owner-first prefix must reach final HTML');
   const renderIndex=body.indexOf('function renderAll()');
   const probeIndex=body.indexOf(probeTags[0]);
   const ownerIndex=body.indexOf(inlineOwnerTags[0]);
   const authorityIndex=body.indexOf("window.__dabbirUiAuthority={version:'owner-first-v4'",ownerIndex);
   const bootIndex=body.indexOf('applyLang();boot();');
   assert.ok(renderIndex>=0 && probeIndex>renderIndex && ownerIndex>probeIndex && authorityIndex>ownerIndex && bootIndex>authorityIndex,`render=${renderIndex} probe=${probeIndex} owner=${ownerIndex} authority=${authorityIndex} boot=${bootIndex}`);
-  assert.equal(headers.get('x-dabbir-first-paint-authority'),'owner-first-inline-before-auth-boot-v3');
+  assert.equal(headers.get('x-dabbir-first-paint-authority'),'owner-first-compiled-reconciled-before-auth-boot-v4');
 });
 
 test('root shell injects an independent Safari auth fail-open watchdog', () => {
