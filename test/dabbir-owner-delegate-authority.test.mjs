@@ -10,6 +10,7 @@ const teamApi=read('api/owner-team.js');
 const teamUi=read('api/_owner-platform-team-ui.js');
 const authority=read('supabase/migrations/20260903193000_dabbir_owner_delegate_fail_closed_v1.sql');
 const staff=read('supabase/migrations/20260903193100_dabbir_platform_staff_rpc_source_sync_v1.sql');
+const whatsappTruth=read('supabase/migrations/20260903193200_dabbir_whatsapp_connection_truth_guard_v1.sql');
 
 test('OTP challenge is bound to one actor and verify never re-resolves first admin',()=>{
   assert.match(broker,/actor_user_id:identity\.user_id/);
@@ -70,6 +71,11 @@ test('team workspace uses a real brokered API and permission presets',()=>{
   assert.match(teamApi,/requireSameOrigin\(req\)/);
   for(const preset of ['full','operations','support','technical','finance','custom'])assert.match(teamUi,new RegExp(preset+':'));
   for(const op of ['invite','set_permissions','suspend','reactivate','revoke_sessions','remove'])assert.match(teamUi,new RegExp(op));
+});
+
+test('WhatsApp cannot become connected without provider verification evidence',()=>{
+  assert.match(whatsappTruth,/alter column status set default 'verification_required'/);
+  assert.match(whatsappTruth,/status <> 'connected' or last_verified_at is not null/);
 });
 
 test('service role stays server-side and functions are revoked from browser roles',()=>{
