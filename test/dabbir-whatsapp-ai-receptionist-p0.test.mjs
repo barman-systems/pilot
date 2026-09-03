@@ -47,7 +47,7 @@ test('AI booking inserts whatsapp source and never overrides confirmation or dep
 });
 
 test('LLM cannot supply arbitrary UUIDs to final booking; selected verified pending slot is authoritative',()=>{
-  must(core,/const slot=slots\[index\]/);
+  must(core,/slots=pendingSlots\(context\),slot=slots\[index\]/);
   must(core,/p_service_id:slot\.service_id/);
   must(core,/p_worker_id:safeUuid\(slot\.worker_id\)/);
   must(core,/p_starts_at:slot\.starts_at/);
@@ -79,10 +79,11 @@ test('same-as-last-time is grounded from customer booking history',()=>{
 });
 
 test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{
-  must(core,/error\?\.ambiguous===true/);
-  must(core,/Ambiguous WhatsApp delivery requires human review/);
-  must(core,/HUMAN_REQUIRED/);
-  assert.doesNotMatch(core,/ambiguous===true[\s\S]{0,500}finish\(claim,'RETRY'/);
+  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([\s\S]*?)\n  \}\n  if\(Number\(error\?\.providerStatus\)===429\)/)?.[1]||'';
+  assert.ok(ambiguous,'ambiguous-outbound branch must exist before retry classification');
+  must(ambiguous,/Ambiguous WhatsApp delivery requires human review/);
+  must(ambiguous,/finish\(claim,'HUMAN_REQUIRED'/);
+  assert.doesNotMatch(ambiguous,/finish\(claim,'RETRY'/);
 });
 
 test('worker requires a UUID capability token and does not expose execution state',()=>{
