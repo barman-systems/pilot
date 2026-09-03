@@ -21,10 +21,12 @@ test('database guard allows correction of an already historical appointment but 
   assert.match(migration,/before insert or update of starts_at/);
 });
 
-test('car-wash historical editor repairs disabled edit controls instead of hiding them',()=>{
-  assert.match(ui,/#dabbirApptManage \[data-appt-edit\]\[disabled\]/);
-  assert.match(ui,/button\.disabled=false/);
-  assert.match(ui,/data-dabbir-historical-edit/);
+test('car-wash historical editor repairs every historical edit control and wins click races',()=>{
+  assert.match(ui,/#dabbirApptManage \[data-appt-edit\]/);
+  assert.match(ui,/isHistorical\(row\)/);
+  assert.match(ui,/if\(button\.disabled\)button\.disabled=false/);
+  assert.match(ui,/dataset\.dabbirHistoricalEdit/);
+  assert.match(ui,/closest\?\.\('\[data-appt-edit\],\[data-calendar-appt\]'\)/);
   assert.match(ui,/event\.stopImmediatePropagation\(\)/);
 });
 
@@ -41,6 +43,17 @@ test('car-wash historical editor persists date and status through the canonical 
   assert.match(ui,/starts_at:start,status:nextStatus/);
   assert.match(ui,/data\?\.detail\|\|data\?\.error/);
   assert.match(ui,/location\.reload\(\)/);
+});
+
+test('historical booking editor follows the selected GCC business timezone authority',()=>{
+  assert.match(ui,/function businessTimezone\(\)/);
+  assert.match(ui,/business\.timezone\|\|document\.documentElement\.dataset\.dabbirTimezone\|\|window\.__dabbirTimeZone/);
+  assert.match(ui,/window\.dabbirLocalTimeToIso/);
+  assert.match(ui,/function offsetMinutesAt\(/);
+  assert.match(ui,/businessLocalMinute\(row\.starts_at\)/);
+  assert.match(ui,/isoFromBusinessLocal/);
+  assert.doesNotMatch(ui,/timeZone:'Asia\/Dubai'/);
+  assert.doesNotMatch(ui,/\+04:00/);
 });
 
 test('historical booking editor is event-driven without a continuous interval',()=>{
