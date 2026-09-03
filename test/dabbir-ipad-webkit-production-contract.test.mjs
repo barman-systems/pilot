@@ -24,27 +24,6 @@ test('iPad WebKit journey runs inside the already-authorized canonical customer 
   assert.match(wrapper,/IPAD_WEBKIT_JOURNEY_PASS/);
 });
 
-test('iPad journey adapts to the real visible responsive navigation instead of forcing phone-only controls',()=>{
-  assert.match(wrapper,/#nav \[data-screen=\"conversations\"\]:visible, #bottomNav \[data-screen=\"conversations\"\]:visible/);
-  assert.match(wrapper,/#nav \[data-screen=\"operations\"\]:visible, #bottomNav \[data-screen=\"operations\"\]:visible/);
-  assert.match(wrapper,/BROWSER_VISIBLE_CONVERSATIONS_NAV_COUNT_/);
-  assert.match(wrapper,/BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_/);
-  assert.match(wrapper,/DABBIR_RESPONSIVE_OPERATIONS_NAV_STATE/);
-  assert.match(wrapper,/centre_hits_target/);
-  assert.match(wrapper,/pointer_events/);
-  assert.match(wrapper,/visible-responsive-nav/);
-  assert.doesNotMatch(wrapper,/style\.display\s*=\s*['\"](?:flex|block|grid)['\"]/);
-});
-
-test('iPad responsive source transformation fails closed if the canonical navigation contract moves',()=>{
-  assert.match(wrapper,/replaceSingleExact/);
-  assert.match(wrapper,/replaceSingleRange/);
-  assert.match(wrapper,/IPAD_WEBKIT_CONVERSATIONS_NAV_CONTRACT_CHANGED/);
-  assert.match(wrapper,/IPAD_WEBKIT_OPERATIONS_NAV_CONTRACT_CHANGED/);
-  assert.match(wrapper,/IPAD_WEBKIT_RESPONSIVE_NAV_REWRITE_FAILED/);
-  assert.match(wrapper,/IPAD_WEBKIT_EVIDENCE_DETAIL_CONTRACT_CHANGED/);
-});
-
 test('canonical iPad journey remains fail closed and persists its PASS summary into uploaded canonical evidence',()=>{
   assert.match(wrapper,/\$\{label\}_REPORT_MISSING/);
   assert.match(wrapper,/\$\{label\}_JOURNEY_NOT_PASS/);

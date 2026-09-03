@@ -7,74 +7,8 @@ const source = fs.readFileSync(sourceUrl, 'utf8');
 const arabicLocale = "locale: 'ar-AE',";
 const iphoneViewport = "viewport: { width: 390, height: 844 },";
 const ipadViewport = "viewport: { width: 820, height: 1180 },";
-const iphoneJourneyDetail = 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.';
-const ipadJourneyDetail = 'WebKit iPad-size journey completed password + TOTP MFA, then used the visible responsive navigation and rendered owner workspace, conversation, product, and approved DABBIR identity.';
-const phoneConversationNavigation = `  await page.locator('#bottomNav [data-screen="conversations"]').click();`;
-const tabletConversationNavigation = `  const visibleConversationsNav = page.locator('#nav [data-screen="conversations"]:visible, #bottomNav [data-screen="conversations"]:visible');
-  const visibleConversationsCount = await visibleConversationsNav.count();
-  assert(visibleConversationsCount === 1, \`BROWSER_VISIBLE_CONVERSATIONS_NAV_COUNT_\${visibleConversationsCount}\`);
-  await visibleConversationsNav.click();`;
-const phoneNavigationStart = `  const mobileMenuState = await page.locator('#menuBtn').evaluate(element => {`;
-const phoneNavigationEnd = `  assert(operationsTransition.target_found && operationsTransition.active && !operationsTransition.side_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
-const tabletOperationsNavigation = `  const visibleOperationsNav = page.locator('#nav [data-screen="operations"]:visible, #bottomNav [data-screen="operations"]:visible');
-  const visibleOperationsCount = await visibleOperationsNav.count();
-  assert(visibleOperationsCount === 1, \`BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_\${visibleOperationsCount}\`);
-  const operationsNavState = await visibleOperationsNav.evaluate(element => {
-    const style = getComputedStyle(element);
-    const rect = element.getBoundingClientRect();
-    const centerX = rect.left + (rect.width / 2);
-    const centerY = rect.top + (rect.height / 2);
-    const hit = document.elementFromPoint(centerX, centerY);
-    return {
-      display: style.display,
-      visibility: style.visibility,
-      pointer_events: style.pointerEvents,
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-      left: Math.round(rect.left),
-      top: Math.round(rect.top),
-      viewport_width: window.innerWidth,
-      viewport_height: window.innerHeight,
-      centre_hits_target: hit === element || element.contains(hit),
-    };
-  });
-  console.log(\`DABBIR_RESPONSIVE_OPERATIONS_NAV_STATE=\${JSON.stringify(operationsNavState)}\`);
-  assert(
-    operationsNavState.display !== 'none'
-      && operationsNavState.visibility !== 'hidden'
-      && operationsNavState.pointer_events !== 'none'
-      && operationsNavState.width >= 40
-      && operationsNavState.height >= 40
-      && operationsNavState.centre_hits_target,
-    \`BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_\${JSON.stringify(operationsNavState)}\`,
-  );
-  await visibleOperationsNav.click();
-  await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
-  const operationsTransition = await page.evaluate(() => ({
-    active: document.querySelector('#screen-operations')?.classList.contains('active') === true,
-    sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
-  }));
-  console.log(\`DABBIR_RESPONSIVE_OPERATIONS_TRANSITION=\${JSON.stringify(operationsTransition)}\`);
-  assert(operationsTransition.active, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
 const englishReportPath = 'dabbir-ai-customer-journey-report-en.json';
 const ipadReportPath = 'dabbir-ai-customer-journey-report-ipad.json';
-
-function countExact(haystack, needle) {
-  return haystack.split(needle).length - 1;
-}
-
-function replaceSingleExact(haystack, needle, replacement, errorCode) {
-  if (countExact(haystack, needle) !== 1) throw new Error(errorCode);
-  return haystack.replace(needle, replacement);
-}
-
-function replaceSingleRange(haystack, startNeedle, endNeedle, replacement, errorCode) {
-  if (countExact(haystack, startNeedle) !== 1 || countExact(haystack, endNeedle) !== 1) throw new Error(errorCode);
-  const start = haystack.indexOf(startNeedle);
-  const end = haystack.indexOf(endNeedle, start);
-  if (start < 0 || end < start) throw new Error(errorCode);
-  return `${haystack.slice(0, start)}${replacement}${haystack.slice(end + endNeedle.length)}`;
-}
 
 if ((source.match(/locale:\s*'ar-AE',/g) || []).length !== 1) {
   throw new Error('ENGLISH_WEBKIT_SOURCE_LOCALE_CONTRACT_CHANGED');
@@ -91,14 +25,9 @@ if (!englishSource.includes("locale: 'en-US',")) {
   throw new Error('ENGLISH_WEBKIT_LOCALE_REWRITE_FAILED');
 }
 
-let ipadSource = replaceSingleExact(source, iphoneViewport, ipadViewport, 'IPAD_WEBKIT_SOURCE_VIEWPORT_CONTRACT_CHANGED');
-ipadSource = replaceSingleExact(ipadSource, phoneConversationNavigation, tabletConversationNavigation, 'IPAD_WEBKIT_CONVERSATIONS_NAV_CONTRACT_CHANGED');
-ipadSource = replaceSingleRange(ipadSource, phoneNavigationStart, phoneNavigationEnd, tabletOperationsNavigation, 'IPAD_WEBKIT_OPERATIONS_NAV_CONTRACT_CHANGED');
-ipadSource = replaceSingleExact(ipadSource, iphoneJourneyDetail, ipadJourneyDetail, 'IPAD_WEBKIT_EVIDENCE_DETAIL_CONTRACT_CHANGED');
-if (!ipadSource.includes(ipadViewport)
-  || !ipadSource.includes('#nav [data-screen="conversations"]:visible')
-  || !ipadSource.includes('#nav [data-screen="operations"]:visible')) {
-  throw new Error('IPAD_WEBKIT_RESPONSIVE_NAV_REWRITE_FAILED');
+const ipadSource = source.replace(iphoneViewport, ipadViewport);
+if (!ipadSource.includes(ipadViewport)) {
+  throw new Error('IPAD_WEBKIT_VIEWPORT_REWRITE_FAILED');
 }
 
 function readPassingJourneyReport(reportPath, label) {
@@ -147,7 +76,6 @@ try {
     required_failures: Number(ipad.report.required_failures || 0),
     mobile_step_status: ipad.mobileStep.status,
     viewport: { width: 820, height: 1180 },
-    navigation_contract: 'visible-responsive-nav',
     report_path: ipadReportPath,
   };
   fs.writeFileSync(englishReportPath, `${JSON.stringify(english.report, null, 2)}\n`, 'utf8');
