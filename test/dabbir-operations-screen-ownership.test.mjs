@@ -13,9 +13,13 @@ test('unknown business type is not classified as a service business',()=>{
   assert.doesNotMatch(source,/business_type\|\|''\)\.toLowerCase\(\)!=='store'/,'unknown workspace must not own the service operations screen');
 });
 
-test('service operations initializes after workspace render',()=>{
-  assert.match(source,/const baseRenderAll=renderAll;/);
-  assert.match(source,/renderAll=function\(\)\{const result=baseRenderAll\.apply\(this,arguments\);initialize\(\);return result\};/);
+test('service operations initializes through the central UI lifecycle',()=>{
+  assert.match(source,/const lifecycle=window\.__dabbirUiLifecycle;/);
+  assert.match(source,/lifecycle\.on\('afterRender','service-operations',initialize\);/);
+  assert.match(source,/lifecycle\.on\('afterNavigate','service-operations',activateServices\);/);
+  assert.doesNotMatch(source,/const baseRenderAll=renderAll;/);
+  assert.doesNotMatch(source,/renderAll\s*=\s*function/);
+  assert.doesNotMatch(source,/new MutationObserver/);
 });
 
 test('service screen ownership remains activity-gated without owning primary navigation',()=>{

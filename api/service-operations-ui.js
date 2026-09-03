@@ -17,7 +17,6 @@ const client=String.raw`
   let data=null;
   let loading=false;
   let editingId=null;
-  let observedScreen=null;
 
   const copy=()=>ar()?{
     nav:'الخدمات',title:'الخدمات',desc:'الخدمات الفعلية التي يقدمها نشاطك. دَبِّر يستخدم الخدمات النشطة عند الرد على العملاء.',truth:'الخدمات النشطة هنا تُعامل كمعلومة تشغيلية حية لدى AI.',add:'إضافة خدمة',name:'اسم الخدمة',price:'قيمة الخدمة',aed:'درهم',duration:'المدة',minutes:'دقيقة',status:'الحالة',active:'نشطة',inactive:'متوقفة',edit:'تعديل',save:'حفظ',cancel:'إلغاء',empty:'لا توجد خدمات بعد.',loading:'جارٍ تحميل الخدمات…',failed:'تعذر تحميل الخدمات.',created:'تمت إضافة الخدمة.',updated:'تم تحديث الخدمة.',activeMetric:'الخدمات النشطة',totalMetric:'إجمالي الخدمات'
@@ -146,21 +145,22 @@ const client=String.raw`
   function initialize(){
     if(!isServiceBusiness())return;
     applyCopy();
-    const screen=ensureScreen();
-    if(screen&&screen!==observedScreen){
-      observedScreen=screen;
-      new MutationObserver(()=>{if(screen.classList.contains('active')){applyCopy();load(false)}}).observe(screen,{attributes:true,attributeFilter:['class']});
-    }
+    ensureScreen();
     if(current==='operations')load(false);
   }
 
-  const baseSetLanguage=typeof setLanguage==='function'?setLanguage:null;
-  if(baseSetLanguage)setLanguage=function(next){const result=baseSetLanguage(next);applyCopy();return result};
+  function activateServices({target}={}){
+    if(target!=='operations'||!isServiceBusiness())return;
+    applyCopy();
+    ensureScreen();
+    load(false);
+  }
 
-  try{
-    const baseRenderAll=renderAll;
-    renderAll=function(){const result=baseRenderAll.apply(this,arguments);initialize();return result};
-  }catch{}
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterRender','service-operations',initialize);
+    lifecycle.on('afterNavigate','service-operations',activateServices);
+  }
 
   setTimeout(initialize,500);
   window.__dabbirServiceOperations={refresh:()=>load(true),version:'service-catalog-v4-price'};

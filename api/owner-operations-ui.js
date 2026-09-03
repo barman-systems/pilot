@@ -188,23 +188,25 @@ const script=String.raw`(()=>{
     try{await mutate({action:'update_order_status',order_id:orderId,status});notify(t.orderUpdated);data=null;await load(true)}catch(error){notify(t.failed+' — '+error.message);data=null;await load(true)}
   }
 
+  function syncOperationsUi(){
+    ensureScreen();
+    applyCopy();
+    if(current==='operations')load();
+  }
+
+  function activateOperations({target}={}){
+    if(target!=='operations')return;
+    ensureScreen();
+    if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;
+    load();
+  }
+
   ensureScreen();
-
-  try{
-    const baseShowScreen=showScreen;
-    showScreen=function(name){
-      const result=baseShowScreen(name);
-      if(name==='operations'){
-        ensureScreen();if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;load();
-      }
-      return result;
-    };
-  }catch{}
-
-  try{
-    const baseRenderAll=renderAll;
-    renderAll=function(){const result=baseRenderAll.apply(this,arguments);ensureScreen();applyCopy();if(current==='operations')load();return result};
-  }catch{}
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterRender','owner-operations',syncOperationsUi);
+    lifecycle.on('afterNavigate','owner-operations',activateOperations);
+  }
 
   new MutationObserver(applyCopy).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
   setTimeout(()=>{ensureScreen();if(isStore())load()},600);
