@@ -125,12 +125,15 @@ async function api(path,options={}){const r=await fetch(path,{credentials:'same-
 function msg(el,text,bad=false){el.textContent=text;el.className=bad?'muted error':'muted'}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function actorPermissions(){if(!currentMembership)return[];const explicit=Array.isArray(currentMembership.permissions)?currentMembership.permissions.filter(Boolean):[];return explicit.length?explicit:(roleDefaults[currentMembership.role]||[])}
+function canManageTeam(){return !!currentMembership&&['owner','admin'].includes(currentMembership.role)&&actorPermissions().includes('manage_team')}
+function permissionApplicableToRole(key,role){return key!=='manage_team'||role==='admin'}
 function allowedPermissionSet(){return new Set(actorPermissions())}
+function allowedPermissionSetForRole(){const role=$('employeeRole').value;return new Set(actorPermissions().filter(p=>permissionApplicableToRole(p,role)))}
 function configureInviteRoles(){const actorRole=currentMembership?.role;const roles=actorRole==='owner'?['employee','staff','manager','admin','agent','viewer']:['employee','staff','manager','agent','viewer'];$('employeeRole').innerHTML=roles.map(r=>`<option value="${r}">${esc(roleLabels[r])}</option>`).join('')}
 function selectedPermissions(){return [...document.querySelectorAll('[data-permission]:checked')].map(x=>x.dataset.permission)}
 function setSelectedPermissions(values){const selected=new Set(values);document.querySelectorAll('[data-permission]').forEach(x=>x.checked=selected.has(x.dataset.permission));updatePermissionSummary()}
-function recommendedPermissions(){const allowed=allowedPermissionSet(),role=$('employeeRole').value;return (roleDefaults[role]||[]).filter(p=>allowed.has(p))}
-function renderPermissionScreen(){const allowed=allowedPermissionSet();$('permissionGroups').innerHTML=permissionCatalog.map(group=>{const items=group.items.filter(([key])=>allowed.has(key));if(!items.length)return'';return `<div class="permissionGroup"><h4>${esc(group.group)}</h4><div class="permissionGrid">${items.map(([key,label,description])=>`<label class="permissionItem"><input type="checkbox" data-permission="${esc(key)}"><span><b>${esc(label)}</b><small>${esc(description)}</small></span></label>`).join('')}</div></div>`}).join('');document.querySelectorAll('[data-permission]').forEach(x=>x.addEventListener('change',updatePermissionSummary));setSelectedPermissions(recommendedPermissions())}
+function recommendedPermissions(){const allowed=allowedPermissionSetForRole(),role=$('employeeRole').value;return (roleDefaults[role]||[]).filter(p=>allowed.has(p))}
+function renderPermissionScreen(){const role=$('employeeRole').value,allowed=allowedPermissionSet();$('permissionGroups').innerHTML=permissionCatalog.map(group=>{const items=group.items.filter(([key])=>allowed.has(key)&&permissionApplicableToRole(key,role));if(!items.length)return'';return `<div class="permissionGroup"><h4>${esc(group.group)}</h4><div class="permissionGrid">${items.map(([key,label,description])=>`<label class="permissionItem"><input type="checkbox" data-permission="${esc(key)}"><span><b>${esc(label)}</b><small>${esc(description)}</small></span></label>`).join('')}</div></div>`}).join('');document.querySelectorAll('[data-permission]').forEach(x=>x.addEventListener('change',updatePermissionSummary));setSelectedPermissions(recommendedPermissions())}
 function updatePermissionSummary(){const count=selectedPermissions().length,name=$('employeeName').value.trim()||'عضو الفريق',role=roleLabels[$('employeeRole').value]||$('employeeRole').value;$('permissionSummary').innerHTML=`<b>${esc(name)}</b><br>${esc(role)} · ${count} صلاحية محددة`}
 function resetInviteFlow(){lastInviteUrl='';$('createdInvite').classList.add('hidden');$('permissionStep').classList.add('hidden');$('inviteBasics').classList.remove('hidden');$('employeeName').value='';$('employeeEmail').value='';configureInviteRoles();msg($('ownerMessage'),'')}
 
@@ -141,8 +144,8 @@ async function loadSession(){
  if(inviteToken)$('inviteCard').classList.remove('hidden');
  const memberships=Array.isArray(p.memberships)?p.memberships:[];
  const preferred=memberships.find(m=>['owner','admin'].includes(m.role))||memberships[0];
- businessId=preferred?.business_id||null;currentMembership=memberships.find(m=>m.business_id===businessId)||null;isTeamManager=!!currentMembership&&['owner','admin'].includes(currentMembership.role);
- if(isTeamManager){$('ownerPanel').classList.remove('hidden');configureInviteRoles()}
+ businessId=preferred?.business_id||null;currentMembership=memberships.find(m=>m.business_id===businessId)||null;isTeamManager=canManageTeam();
+ if(isTeamManager){$('ownerPanel').classList.remove('hidden');configureInviteRoles()}else{$('ownerPanel').classList.add('hidden');$('invitationListCard').classList.add('hidden')}
  if(businessId)await loadTeam();else $('members').innerHTML='<p class="muted">لا توجد عضوية شركة نشطة بعد. إذا كانت لديك دعوة فاقبلها أولاً.</p>';
  return true;
 }
@@ -155,15 +158,15 @@ $('acceptInviteBtn').onclick=async()=>{if(!inviteToken)return;const {r,p}=await 
 $('reviewPermissionsBtn').onclick=()=>{const email=$('employeeEmail').value.trim();if(!email||!email.includes('@'))return msg($('ownerMessage'),'أدخل بريدًا إلكترونيًا صحيحًا قبل تحديد الصلاحيات.',true);$('inviteBasics').classList.add('hidden');$('permissionStep').classList.remove('hidden');renderPermissionScreen();msg($('ownerMessage'),'')};
 $('backInviteBtn').onclick=()=>{$('permissionStep').classList.add('hidden');$('inviteBasics').classList.remove('hidden')};
 $('recommendedPermissionsBtn').onclick=()=>setSelectedPermissions(recommendedPermissions());
-$('selectAllPermissionsBtn').onclick=()=>setSelectedPermissions([...allowedPermissionSet()]);
-$('clearPermissionsBtn').onclick=()=>setSelectedPermissions(allowedPermissionSet().has('view_business')?['view_business']:[]);
+$('selectAllPermissionsBtn').onclick=()=>setSelectedPermissions([...allowedPermissionSetForRole()]);
+$('clearPermissionsBtn').onclick=()=>setSelectedPermissions(allowedPermissionSetForRole().has('view_business')?['view_business']:[]);
 $('createInviteBtn').onclick=async()=>{if(!businessId)return;const permissions=selectedPermissions();if(!permissions.length||!permissions.includes('view_business'))return msg($('ownerMessage'),'يجب إبقاء صلاحية مشاهدة النشاط على الأقل حتى يستطيع العضو استخدام دبّر.',true);const body={business_id:businessId,email:$('employeeEmail').value.trim(),display_name:$('employeeName').value.trim(),role:$('employeeRole').value,permissions};const btn=$('createInviteBtn');btn.disabled=true;const {r,p}=await api('/api/team/invitations',{method:'POST',body:JSON.stringify(body)});btn.disabled=false;if(!r.ok)return msg($('ownerMessage'),p.error||'تعذر إنشاء الدعوة',true);lastInviteUrl=new URL(p.invite_path,location.origin).href;$('inviteUrl').textContent=lastInviteUrl;$('permissionStep').classList.add('hidden');$('createdInvite').classList.remove('hidden');msg($('ownerMessage'),`تم إنشاء الدعوة مع ${permissions.length} صلاحية محددة.`);await loadInvitations()};
 $('copyInviteBtn').onclick=async()=>{if(!lastInviteUrl)return;await navigator.clipboard.writeText(lastInviteUrl);msg($('ownerMessage'),'تم نسخ رابط الدعوة.')};
 $('newInviteBtn').onclick=resetInviteFlow;
 
 async function loadTeam(){
  const {r,p}=await api('/api/team/members?business_id='+encodeURIComponent(businessId));
- if(!r.ok){$('members').innerHTML='<p class="muted">حسابك عضو في الشركة ولا يملك صلاحية إدارة الفريق.</p>';return}
+ if(!r.ok){isTeamManager=false;$('ownerPanel').classList.add('hidden');$('invitationListCard').classList.add('hidden');$('members').innerHTML='<p class="muted">حسابك عضو في الشركة ولا يملك صلاحية إدارة الفريق.</p>';return}
  $('ownerPanel').classList.remove('hidden');isTeamManager=true;
  $('members').innerHTML=(p.members||[]).map(m=>`<div class="row"><div class="grow"><b>${esc(m.display_name||m.email)}</b><small>${esc(m.email)} · ${esc(roleLabels[m.role]||m.role)}${Array.isArray(m.permissions)&&m.permissions.length?` · ${m.permissions.length} صلاحية مخصصة`:''}</small></div><span class="badge ${esc(m.status)}">${esc(m.status)}</span>${m.role==='owner'?'':`<div class="memberActions">${m.status==='active'?`<button class="secondary" onclick="memberAction('${m.user_id}','suspend')">تعليق</button>`:''}${m.status==='suspended'?`<button class="secondary" onclick="memberAction('${m.user_id}','reactivate')">إعادة تفعيل</button>`:''}${m.status!=='removed'?`<button class="danger" onclick="memberAction('${m.user_id}','remove')">إزالة</button>`:''}</div>`}</div>`).join('')||'<p class="muted">لا يوجد أعضاء.</p>';
  await loadInvitations();
