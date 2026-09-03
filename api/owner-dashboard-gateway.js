@@ -1,6 +1,7 @@
 // Stable production gateway for the DABBIR Owner Command Center.
 // The gateway imports one authoritative entrypoint only. Legacy compatibility marker: owner-command-center-v29.js. Numbered implementations are rollback/history layers and must never be selected here.
 import dashboard from './owner-command-center.js';
+import { OWNER_COMMAND_CENTER_DESIGN_SYSTEM } from './_owner-command-center-design-system.js';
 import { OWNER_PLATFORM_TEAM_UI } from './_owner-platform-team-ui.js';
 import { parseCookies } from './_auth-core.js';
 
@@ -23,12 +24,13 @@ async function verifyOwnerSession(token) {
   return payload?.authenticated === true && ['ROOT_OWNER','OWNER_DELEGATE'].includes(String(payload?.authority_role||''));
 }
 
-function injectTeamWorkspace(res){
+function injectOwnerExtensions(res){
   const end=res.end.bind(res);let body='';
   res.end=(chunk,...args)=>{
     body+=chunk?String(chunk):'';
-    const output=body.includes('</body>')&&!body.includes('ownerPlatformTeamStyles')?body.replace('</body>',OWNER_PLATFORM_TEAM_UI+'</body>'):body;
-    return end(output,...args);
+    if(!body.includes('</body>'))return end(body,...args);
+    const extensions=(body.includes('ownerCommandCenterDesignSystem')?'':OWNER_COMMAND_CENTER_DESIGN_SYSTEM)+(body.includes('ownerPlatformTeamStyles')?'':OWNER_PLATFORM_TEAM_UI);
+    return end(body.replace('</body>',extensions+'</body>'),...args);
   };
 }
 
@@ -38,7 +40,7 @@ export default async function handler(req, res) {
   if (!sessionToken) return redirectToOwner(res);
   try {
     if (!(await verifyOwnerSession(sessionToken))) return redirectToOwner(res, true);
-    injectTeamWorkspace(res);
+    injectOwnerExtensions(res);
     return dashboard(req, res);
   } catch { return redirectToOwner(res, true); }
 }
