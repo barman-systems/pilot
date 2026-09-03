@@ -76,11 +76,14 @@ test('sales ledger migration itemizes sales, records movement reasons, and scope
   assert.match(source, /paid_aed=case when v_payment_method='credit' then 0 else v_total end/);
 });
 
-test('owner copilot grounds store answers in Dubai-day sales, collections, expenses, and low-stock facts', () => {
+test('owner copilot grounds store answers in the business-local day and business currency', () => {
   const source = read('api/owner-copilot.js');
-  for (const token of ['dabbir_products', 'dabbir_inventory', 'dabbir_orders', 'dabbir_expenses', 'sales_today_aed', 'cash_collected_today_aed', 'receivables_today_aed', 'low_stock_products']) assert.match(source, new RegExp(token));
+  for (const token of ['dabbir_products', 'dabbir_inventory', 'dabbir_orders', 'dabbir_expenses', 'sales_today_aed', 'cash_collected_today_aed', 'receivables_today_aed', 'sales_today', 'currency_code', 'low_stock_products']) assert.match(source, new RegExp(token));
+  assert.match(source, /businessDay\(business\.timezone/);
   assert.match(source, /Never call sales minus expenses profit/);
-  assert.match(source, /store_metrics_are_dubai_day_facts:true/);
+  assert.match(source, /store_metrics_are_business_day_facts:true/);
+  assert.match(source, /legacy_aed_field_names_are_storage_compatibility:true/);
+  assert.doesNotMatch(source, /store_metrics_are_dubai_day_facts:true/);
 });
 
 test('native store manager exposes a reviewable quick-sale flow and auditable inventory movements', () => {
