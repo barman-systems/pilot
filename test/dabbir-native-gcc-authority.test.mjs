@@ -22,16 +22,22 @@ test('native onboarding sends the resolved GCC country instead of trusting the l
   assert.match(source, /country_code: resolved/);
   assert.match(source, /locale: `\$\{language\}-\$\{resolved\}`/);
   assert.match(source, /business_type: 'store'/);
-  assert.match(source, /saveSelectedCountry\(countryCode\)/);
+  assert.match(source, /saveSelectedCountry\(resolved\)/);
 });
 
-test('native server verifies persisted country currency timezone and phone prefix and uses the business local day', () => {
+test('native server verifies persisted country currency timezone and phone prefix and uses the central market registry', () => {
   const source = read('api/mobile/runtime.js');
-  for (const token of ['BUSINESS_COUNTRY_PROFILE_UNVERIFIED', 'BUSINESS_GCC_PROFILE_UNVERIFIED', 'BUSINESS_LOCAL_DAY_FAILED', 'country_code,currency_code,timezone,phone_country_prefix', 'today_appointments:todayAppointments', 'mobile_local_day_verified:true', "p_country_code:countryCode"]) {
+  for (const token of ['BUSINESS_COUNTRY_PROFILE_UNVERIFIED', 'BUSINESS_GCC_PROFILE_UNVERIFIED', 'BUSINESS_LOCAL_DAY_FAILED', 'country_code,currency_code,timezone,phone_country_prefix', 'today_appointments:todayAppointments', 'mobile_local_day_verified:true', 'mobile_market_registry_verified:true', "p_country_code:countryCode"]) {
     assert.match(source, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+  assert.match(source, /getMarketProfile/);
+  assert.match(source, /localeForMarket/);
+  assert.match(source, /profile\.currency_code/);
+  assert.match(source, /profile\.timezone/);
+  assert.match(source, /profile\.phone_country_prefix/);
   assert.match(source, /simulated=eq\.false/);
   assert.match(source, /time_zone:business\.timezone/);
   assert.match(source, /currency_code:business\.currency_code/);
   assert.match(source, /x-dabbir-mobile-gcc-authority/);
+  assert.doesNotMatch(source, /const GCC=Object\.freeze/);
 });

@@ -1,17 +1,12 @@
 import brandUiHandler from './brand-ui.js';
+import { publicMarketProfiles } from './_market-core.js';
 
+const serializedMarkets=JSON.stringify(publicMarketProfiles()).replace(/</g,'\\u003c');
 const script=String.raw`(()=>{
   if(window.__dabbirGccReadinessLoaded)return;
   window.__dabbirGccReadinessLoaded=true;
 
-  const GCC=Object.freeze({
-    AE:{currency:'AED',timezone:'Asia/Dubai',offset:'+04:00',prefix:'+971',ar:'الإمارات العربية المتحدة',en:'United Arab Emirates',moneyAr:'درهم'},
-    SA:{currency:'SAR',timezone:'Asia/Riyadh',offset:'+03:00',prefix:'+966',ar:'السعودية',en:'Saudi Arabia',moneyAr:'ريال سعودي'},
-    KW:{currency:'KWD',timezone:'Asia/Kuwait',offset:'+03:00',prefix:'+965',ar:'الكويت',en:'Kuwait',moneyAr:'دينار كويتي'},
-    QA:{currency:'QAR',timezone:'Asia/Qatar',offset:'+03:00',prefix:'+974',ar:'قطر',en:'Qatar',moneyAr:'ريال قطري'},
-    BH:{currency:'BHD',timezone:'Asia/Bahrain',offset:'+03:00',prefix:'+973',ar:'البحرين',en:'Bahrain',moneyAr:'دينار بحريني'},
-    OM:{currency:'OMR',timezone:'Asia/Muscat',offset:'+04:00',prefix:'+968',ar:'عُمان',en:'Oman',moneyAr:'ريال عماني'},
-  });
+  const GCC=Object.freeze(${serializedMarkets});
   const baseFetch=window.fetch.bind(window);
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase()!=='en';
   const selectedCountry=()=>{
@@ -33,7 +28,7 @@ const script=String.raw`(()=>{
     if(!select)return;
     const c=copy();
     const label=document.querySelector('#businessCountryLabel');if(label)label.textContent=c.country;
-    [...select.options].forEach(option=>{const p=GCC[option.value];option.textContent=ar()?p.ar:p.en});
+    [...select.options].forEach(option=>{const p=GCC[option.value];if(p)option.textContent=ar()?p.ar:p.en});
     const code=selectedCountry();const p=GCC[code];
     const derived=document.querySelector('#businessCurrencyDerived');
     if(derived)derived.textContent=c.currency+': '+p.currency+' · '+p.timezone+' · '+p.prefix;
@@ -104,7 +99,7 @@ const script=String.raw`(()=>{
   }
   function money(value){
     const g=currentGeo();const n=Number(value||0);
-    try{return new Intl.NumberFormat(runtimeLocale(),{style:'currency',currency:g.currency,maximumFractionDigits:3}).format(n)}catch{return n.toFixed(2)+' '+g.currency}
+    try{return new Intl.NumberFormat(runtimeLocale(),{style:'currency',currency:g.currency,maximumFractionDigits:Number(g.minorUnits??3)}).format(n)}catch{return n.toFixed(Number(g.minorUnits??2))+' '+g.currency}
   }
 
   function reassertAuthorities(){
@@ -171,7 +166,7 @@ export default async function handler(req,res){
     res.setHeader('content-type','application/javascript; charset=utf-8');
     res.setHeader('cache-control','no-store');
     res.setHeader('x-content-type-options','nosniff');
-    res.setHeader('x-dabbir-gcc-readiness','country-authority-v1-composed-brand-slot');
+    res.setHeader('x-dabbir-gcc-readiness','market-registry-v2-composed-brand-slot');
     return res.end(brandScript+'\n'+script);
   }catch(error){
     res.statusCode=Number(error?.status||500);
