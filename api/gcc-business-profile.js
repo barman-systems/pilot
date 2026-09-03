@@ -8,9 +8,9 @@ import {
   supabaseRest,
   supabaseRpc,
 } from './_auth-core.js';
+import { normalizeMarketCode } from './_market-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const GCC=new Set(['AE','SA','KW','QA','BH','OM']);
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 
 async function read(response,fallback){
@@ -46,7 +46,7 @@ async function loadProfile(token,businessId){
   const rows=await read(await supabaseRest(
     `dabbir_businesses?select=id,country_code,currency_code,timezone,phone_country_prefix,vat_status,default_vat_rate,locale,updated_at&id=eq.${encodeURIComponent(businessId)}&limit=1`,
     token,
-  ),'GCC_PROFILE_LOOKUP_FAILED');
+  ),'MARKET_PROFILE_LOOKUP_FAILED');
   return Array.isArray(rows)?rows[0]||null:null;
 }
 
@@ -65,18 +65,18 @@ export default async function handler(req,res){
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
     const body=await readJsonBody(req,4096);
     const businessId=safeId(body?.business_id);
-    const countryCode=String(body?.country_code||'').trim().toUpperCase();
+    const countryCode=normalizeMarketCode(body?.country_code);
     if(!businessId)return json(res,400,{ok:false,error:'BUSINESS_ID_REQUIRED'});
-    if(!GCC.has(countryCode))return json(res,400,{ok:false,error:'UNSUPPORTED_GCC_COUNTRY'});
+    if(!countryCode)return json(res,400,{ok:false,error:'UNSUPPORTED_MARKET'});
     const ctx=await context(req,res,businessId);if(!ctx)return;
     const canManage=ctx.membership.role==='owner'||(Array.isArray(ctx.membership.permissions)&&ctx.membership.permissions.includes('manage_business'));
     if(!canManage)return json(res,403,{ok:false,error:'BUSINESS_MANAGE_PERMISSION_REQUIRED'});
 
-    await read(await supabaseRpc('dabbir_set_business_country',ctx.token,{p_business_id:businessId,p_country_code:countryCode}),'GCC_PROFILE_UPDATE_FAILED');
+    await read(await supabaseRpc('dabbir_set_business_country',ctx.token,{p_business_id:businessId,p_country_code:countryCode}),'MARKET_PROFILE_UPDATE_FAILED');
     const profile=await loadProfile(ctx.token,businessId);
-    if(!profile||profile.country_code!==countryCode)return json(res,502,{ok:false,error:'GCC_PROFILE_UPDATE_UNVERIFIED'});
+    if(!profile||profile.country_code!==countryCode)return json(res,502,{ok:false,error:'MARKET_PROFILE_UPDATE_UNVERIFIED'});
     return json(res,200,{ok:true,state:'VERIFIED_PERSISTED',profile});
   }catch(error){
-    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'GCC_PROFILE_FAILED',detail:error?.detail||null});
+    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'MARKET_PROFILE_FAILED',detail:error?.detail||null});
   }
 }
