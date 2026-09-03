@@ -14,26 +14,21 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  statuses: write
 
 concurrency:
   group: dabbir-golden-canary-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 
 jobs:
-  golden-canary:
-    name: Golden Canary Gate
+  candidate-tests:
+    name: Candidate static and repository gates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 18
+    permissions:
+      contents: read
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANARY_URL: ${{ inputs.canary_url }}
-      EXPECTED_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
-      EXPECTED_REPOSITORY: barman-systems/pilot
-      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
-      CANARY_SMOKE_REPORT: dabbir-golden-canary-smoke-report.json
-      CANARY_JOURNEY_REPORT: dabbir-golden-canary-journey-report.json
     steps:
       - name: Validate immutable candidate inputs
         shell: bash
@@ -45,43 +40,52 @@ jobs:
             *.vercel.app) ;;
             *) echo 'Golden Canary accepts only an isolated Vercel Preview origin'; exit 2 ;;
           esac
-
-      - name: Mark candidate canary pending
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          payload="$(jq -nc --arg state pending --arg context 'DABBIR Golden Canary' --arg description 'Exact Preview validation is running' --arg target_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{state:$state,context:$context,description:$description,target_url:$target_url}')"
-          curl --fail-with-body --silent --show-error -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            -H 'Content-Type: application/json' \
-            --data "$payload" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${CANDIDATE_SHA}" >/dev/null
-
-      - name: Checkout exact candidate
+      - name: Checkout exact candidate without privileged credentials
         uses: actions/checkout@v7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
           fetch-depth: 0
           persist-credentials: false
-
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-
       - name: Install exact dependencies
         run: npm ci --no-audit --no-fund
-
-      - name: Static and repository gates
+      - name: Run candidate gates
         shell: bash
         run: |
           set -euo pipefail
           npm run check:syntax
           npm test
 
+  golden-canary:
+    name: Trusted exact Preview verifier
+    needs: candidate-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANARY_URL: ${{ inputs.canary_url }}
+      EXPECTED_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      EXPECTED_REPOSITORY: barman-systems/pilot
+      SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+      CANARY_SMOKE_REPORT: dabbir-golden-canary-smoke-report.json
+      CANARY_JOURNEY_REPORT: dabbir-golden-canary-journey-report.json
+    steps:
+      - name: Checkout trusted verifier from main only
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install trusted verifier dependencies
+        run: npm ci --no-audit --no-fund
       - name: Obtain trusted Vercel OIDC access
         shell: bash
         run: |
@@ -97,7 +101,6 @@ jobs:
           [ "$probe_status" = '200' ] || { echo "VERCEL_TRUSTED_OIDC_REJECTED_HTTP_${probe_status}"; exit 3; }
           grep -qi 'DABBIR' "$probe_body" || { echo 'CANARY_DABBIR_IDENTITY_MISSING'; exit 3; }
           echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
-
       - name: Lock exact Preview deployment before testing
         id: release-before
         shell: bash
@@ -118,13 +121,11 @@ jobs:
           [ -n "$deployment" ] || { echo "EXACT_CANARY_PREVIEW_UNVERIFIED body=${body:0:600}"; exit 4; }
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
           echo "LOCKED_GOLDEN_CANARY deployment=$deployment sha=$CANDIDATE_SHA"
-
       - name: Install WebKit acceptance runner
         run: |
           npm install --no-save playwright@1.62.1
           npx playwright install --with-deps webkit
-
-      - name: Run exact Preview smoke
+      - name: Run exact Preview smoke using trusted harness
         shell: bash
         env:
           PROTECTED_QA_ORIGIN: ${{ inputs.canary_url }}
@@ -133,9 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           node test/dabbir-golden-canary-smoke.mjs
-          jq -e '.verdict == "PASS" and .verified_sha == env.CANDIDATE_SHA and .environment == "preview"' "$CANARY_SMOKE_REPORT" >/dev/null
-
-      - name: Run full disposable customer journey on exact Preview
+          jq -e '.verdict == "PASS" and .verified_sha == $ENV.CANDIDATE_SHA and .environment == "preview"' "$CANARY_SMOKE_REPORT" >/dev/null
+      - name: Run full disposable customer journey using trusted harness
         shell: bash
         env:
           PRODUCTION_ORIGIN: ${{ inputs.canary_url }}
@@ -145,7 +145,6 @@ jobs:
           node --import ./test/dabbir-golden-canary-preload.mjs test/ai-full-customer-journey-v2.mjs
           test -s "$CANARY_JOURNEY_REPORT"
           jq -e '.verdict == "PASS" and .required_failures == 0 and (.steps | length) > 10' "$CANARY_JOURNEY_REPORT" >/dev/null
-
       - name: Prove Preview did not drift during validation
         shell: bash
         env:
@@ -159,7 +158,6 @@ jobs:
           [ "$sha" = "$CANDIDATE_SHA" ] || { echo 'CANARY_SHA_DRIFT'; exit 5; }
           [ "$environment" = preview ] || { echo 'CANARY_ENVIRONMENT_DRIFT'; exit 5; }
           [ "$deployment" = "$EXPECTED_DEPLOYMENT" ] || { echo 'CANARY_DEPLOYMENT_DRIFT'; exit 5; }
-
       - name: Emit immutable promotion receipt
         shell: bash
         env:
@@ -167,16 +165,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/dabbir-golden-canary
-          jq -nc \
-            --arg contract DABBIR_GOLDEN_CANARY_V1 \
-            --arg candidate_sha "$CANDIDATE_SHA" \
-            --arg canary_url "$CANARY_URL" \
-            --arg deployment_id "$VERIFIED_DEPLOYMENT" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            '{contract:$contract,candidate_sha:$candidate_sha,canary_url:$canary_url,deployment_id:$deployment_id,environment:"preview",static_tests:"PASS",protected_smoke:"PASS",full_customer_journey:"PASS",deployment_drift:"NONE",promotion_allowed:true,fail_closed:true,github_run_id:$run_id}' \
-            > /tmp/dabbir-golden-canary/receipt.json
+          jq -nc --arg contract DABBIR_GOLDEN_CANARY_V1 --arg candidate_sha "$CANDIDATE_SHA" --arg canary_url "$CANARY_URL" --arg deployment_id "$VERIFIED_DEPLOYMENT" --arg run_id "$GITHUB_RUN_ID" '{contract:$contract,candidate_sha:$candidate_sha,canary_url:$canary_url,deployment_id:$deployment_id,environment:"preview",candidate_tests:"PASS",protected_smoke:"PASS",full_customer_journey:"PASS",deployment_drift:"NONE",promotion_allowed:true,fail_closed:true,github_run_id:$run_id}' > /tmp/dabbir-golden-canary/receipt.json
           cat /tmp/dabbir-golden-canary/receipt.json
-
       - name: Upload Golden Canary evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -191,25 +181,32 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Publish immutable candidate status
-        if: always()
+  publish-status:
+    name: Publish immutable candidate status
+    if: always()
+    needs: [candidate-tests, golden-canary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      statuses: write
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANDIDATE_RESULT: ${{ needs.candidate-tests.result }}
+      CANARY_RESULT: ${{ needs.golden-canary.result }}
+    steps:
+      - name: Publish Golden Canary status on exact candidate SHA
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 2
           state=failure
           description='Golden Canary failed; promotion blocked'
-          if [ "$JOB_STATUS" = success ]; then
+          if [ "$CANDIDATE_RESULT" = success ] && [ "$CANARY_RESULT" = success ]; then
             state=success
             description='Exact Preview + full journey passed; promotion allowed'
           fi
           payload="$(jq -nc --arg state "$state" --arg context 'DABBIR Golden Canary' --arg description "$description" --arg target_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{state:$state,context:$context,description:$description,target_url:$target_url}')"
-          curl --fail-with-body --silent --show-error -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            -H 'Content-Type: application/json' \
-            --data "$payload" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${CANDIDATE_SHA}" >/dev/null
+          curl --fail-with-body --silent --show-error -X POST -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'Content-Type: application/json' --data "$payload" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${CANDIDATE_SHA}" >/dev/null
+          echo "DABBIR_GOLDEN_CANARY_STATUS=$state candidate=$CANDIDATE_SHA"
