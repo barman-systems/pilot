@@ -1,11 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import appSafariRecoveryHandler from '../api/app-safari-recovery.js';
 
 const recovery = fs.readFileSync(new URL('../api/app-safari-recovery.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
 const failOpen = fs.readFileSync(new URL('../api/dabbir-safari-auth-fail-open-ui.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+
+function renderCanonicalRoot(){
+  const headers=new Map();
+  let body='';
+  const res={
+    _status:200,
+    setHeader(name,value){headers.set(String(name).toLowerCase(),String(value));return this},
+    getHeader(name){return headers.get(String(name).toLowerCase())},
+    removeHeader(name){headers.delete(String(name).toLowerCase())},
+    end(value=''){body=String(value);return this},
+    set statusCode(value){this._status=Number(value)},
+    get statusCode(){return this._status},
+  };
+  appSafariRecoveryHandler({method:'GET',headers:{}},res);
+  return {body,headers,status:res.statusCode};
+}
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
   assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
@@ -13,6 +30,21 @@ test('root shell bypasses stale Safari UI bundle versions', () => {
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
   assert.match(recovery, /x-dabbir-ui-cache-bust/);
+});
+
+test('owner-first authority executes after base render definitions but before auth boot can expose first paint', () => {
+  assert.match(recovery,/orderOwnerFirstBeforeAuthBoot/);
+  assert.match(recovery,/DABBIR_OWNER_FIRST_SCRIPT_COUNT_/);
+  assert.match(recovery,/DABBIR_AUTH_BOOT_ANCHOR_COUNT_/);
+  const {body,headers,status}=renderCanonicalRoot();
+  assert.equal(status,200);
+  const ownerTags=body.match(/<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g)||[];
+  assert.equal(ownerTags.length,1);
+  const renderIndex=body.indexOf('function renderAll()');
+  const ownerIndex=body.indexOf(ownerTags[0]);
+  const bootIndex=body.indexOf('applyLang();boot();');
+  assert.ok(renderIndex>=0 && ownerIndex>renderIndex && bootIndex>ownerIndex,`render=${renderIndex} owner=${ownerIndex} boot=${bootIndex}`);
+  assert.equal(headers.get('x-dabbir-first-paint-authority'),'owner-first-before-auth-boot-v1');
 });
 
 test('root shell injects an independent Safari auth fail-open watchdog', () => {
