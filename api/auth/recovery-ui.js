@@ -282,17 +282,12 @@ const script = String.raw`(()=>{
     finally{chatRecoveryInFlight=false}
   }
 
-  if(typeof renderAll==='function'){
-    const renderAllBeforeChatRecovery=renderAll;
-    renderAll=function(){
-      const result=renderAllBeforeChatRecovery.apply(this,arguments);
-      setTimeout(recoverOrphanedChat,0);
-      return result;
-    };
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterRender','auth-recovery-chat-recovery',()=>setTimeout(recoverOrphanedChat,0));
+    lifecycle.on('afterLanguage','auth-recovery-language',setRecoveryLanguage);
   }
   setTimeout(recoverOrphanedChat,500);
-
-  new MutationObserver(setRecoveryLanguage).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
   setRecoveryLanguage();
 })();`;
 
