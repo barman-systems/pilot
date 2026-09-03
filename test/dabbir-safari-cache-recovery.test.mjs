@@ -25,32 +25,45 @@ function renderCanonicalRoot(){
 }
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260903-webkit-owner-compile-v5'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
   assert.match(recovery, /x-dabbir-ui-cache-bust/);
 });
 
-test('owner-first authority is server-inlined after base render definitions and before auth boot first paint', () => {
-  assert.match(recovery,/ownerFirstInlineScript/);
-  assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_STATUS_/);
-  assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_AUTHORITY_MISSING/);
-  assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_UNSAFE_SCRIPT_CLOSE/);
-  assert.match(recovery,/DABBIR_OWNER_FIRST_SCRIPT_COUNT_/);
-  assert.match(recovery,/DABBIR_AUTH_BOOT_ANCHOR_COUNT_/);
+test('owner-first payload repairs exactly one malformed token and parses before first-paint injection', () => {
+  assert.match(recovery,/reconcileOwnerFirstPayload/);
+  assert.match(recovery,/OWNER_FIRST_BROKEN_PREFIX/);
+  assert.match(recovery,/OWNER_FIRST_FIXED_PREFIX/);
+  assert.match(recovery,/DABBIR_OWNER_FIRST_PREFIX_RECONCILIATION_COUNT_/);
+  assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_PARSE_/);
+  assert.match(recovery,/new Script\(payload/);
   const {body,headers,status}=renderCanonicalRoot();
   assert.equal(status,200);
   const externalOwnerTags=body.match(/<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g)||[];
   const inlineOwnerTags=body.match(/<script data-dabbir-owner-first-inline="owner-first-v4">/g)||[];
   assert.equal(externalOwnerTags.length,0,'first paint must not depend on an owner-first subresource request');
   assert.equal(inlineOwnerTags.length,1,'exactly one owner-first inline authority must execute');
+  assert.doesNotMatch(body,/const prefix=raw\.includes\('•'\).*\+' ':';/,'malformed prefix must not reach final HTML');
+  assert.match(body,/const prefix=raw\.includes\('•'\).*\+' ':'';/,'reconciled prefix must reach final HTML');
   const renderIndex=body.indexOf('function renderAll()');
   const ownerIndex=body.indexOf(inlineOwnerTags[0]);
   const authorityIndex=body.indexOf("window.__dabbirUiAuthority={version:'owner-first-v4'",ownerIndex);
   const bootIndex=body.indexOf('applyLang();boot();');
   assert.ok(renderIndex>=0 && ownerIndex>renderIndex && authorityIndex>ownerIndex && bootIndex>authorityIndex,`render=${renderIndex} owner=${ownerIndex} authority=${authorityIndex} boot=${bootIndex}`);
-  assert.equal(headers.get('x-dabbir-first-paint-authority'),'owner-first-inline-before-auth-boot-v2');
+  assert.equal(headers.get('x-dabbir-first-paint-authority'),'owner-first-compiled-reconciled-before-auth-boot-v4');
+});
+
+test('iPhone root shell enforces an accessible mobile menu touch target', () => {
+  const {body,status}=renderCanonicalRoot();
+  assert.equal(status,200);
+  const tags=body.match(/<style data-dabbir-mobile-menu-touch-target="v1">[\s\S]*?<\/style>/g)||[];
+  assert.equal(tags.length,1,'exactly one mobile menu touch-target authority must be served');
+  assert.match(tags[0],/#appShell #menuBtn/);
+  assert.match(tags[0],/min-width:44px!important/);
+  assert.match(tags[0],/min-height:44px!important/);
+  assert.match(tags[0],/flex-shrink:0!important/);
 });
 
 test('root shell injects an independent Safari auth fail-open watchdog', () => {
