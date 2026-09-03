@@ -9,6 +9,10 @@
   },
   "crons": [
     {
+      "path": "/api/resilience-worker-cron",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/salon-reminders-cron",
       "schedule": "*/5 * * * *"
     },
@@ -18,6 +22,9 @@
     }
   ],
   "functions": {
+    "api/resilience-worker-cron.js": {
+      "maxDuration": 60
+    },
     "api/salon-reminders-cron.js": {
       "maxDuration": 60
     },
