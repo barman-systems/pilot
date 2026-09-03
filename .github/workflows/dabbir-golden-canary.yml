@@ -1,0 +1,143 @@
+name: DABBIR Golden Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_ref:
+        description: Candidate branch, tag, or SHA to validate before production promotion
+        required: true
+        default: main
+        type: string
+      require_live_journey:
+        description: Require live WhatsApp to booking journey evidence
+        required: true
+        default: true
+        type: boolean
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+
+concurrency:
+  group: dabbir-golden-canary-${{ github.event.pull_request.number || inputs.candidate_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-canary:
+    name: Golden Canary Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CANDIDATE_REF: ${{ inputs.candidate_ref || github.event.pull_request.head.sha }}
+      REQUIRE_LIVE_JOURNEY: ${{ inputs.require_live_journey || 'true' }}
+      CANARY_BASE_URL: ${{ vars.DABBIR_GOLDEN_CANARY_URL }}
+      CANARY_OWNER_EMAIL: ${{ secrets.DABBIR_GOLDEN_CANARY_OWNER_EMAIL }}
+      CANARY_OWNER_PASSWORD: ${{ secrets.DABBIR_GOLDEN_CANARY_OWNER_PASSWORD }}
+      CANARY_WHATSAPP_TO: ${{ secrets.DABBIR_GOLDEN_CANARY_WHATSAPP_TO }}
+      CANARY_VERIFY_TOKEN: ${{ secrets.DABBIR_GOLDEN_CANARY_VERIFY_TOKEN }}
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_REF }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Static and unit gates
+        run: |
+          set -euo pipefail
+          npm run check:syntax
+          npm test
+
+      - name: Enforce canary configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CANARY_BASE_URL" ]] || { echo 'DABBIR_GOLDEN_CANARY_URL is required'; exit 1; }
+          case "$CANARY_BASE_URL" in
+            https://*) ;;
+            *) echo 'Golden Canary URL must use HTTPS'; exit 1 ;;
+          esac
+          if [[ "$REQUIRE_LIVE_JOURNEY" == "true" ]]; then
+            [[ -n "$CANARY_OWNER_EMAIL" ]] || { echo 'Golden Canary owner credential is required'; exit 1; }
+            [[ -n "$CANARY_OWNER_PASSWORD" ]] || { echo 'Golden Canary owner password is required'; exit 1; }
+            [[ -n "$CANARY_WHATSAPP_TO" ]] || { echo 'Golden Canary WhatsApp destination is required'; exit 1; }
+          fi
+
+      - name: Public health smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$CANARY_BASE_URL/" >/tmp/canary-home.html
+          test -s /tmp/canary-home.html
+
+      - name: Protected canary smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -x scripts/dabbir-protected-live-smoke.sh ]]; then
+            DABBIR_BASE_URL="$CANARY_BASE_URL" \
+            DABBIR_OWNER_EMAIL="$CANARY_OWNER_EMAIL" \
+            DABBIR_OWNER_PASSWORD="$CANARY_OWNER_PASSWORD" \
+            scripts/dabbir-protected-live-smoke.sh
+          elif [[ -f scripts/dabbir-protected-live-smoke.mjs ]]; then
+            DABBIR_BASE_URL="$CANARY_BASE_URL" \
+            DABBIR_OWNER_EMAIL="$CANARY_OWNER_EMAIL" \
+            DABBIR_OWNER_PASSWORD="$CANARY_OWNER_PASSWORD" \
+            node scripts/dabbir-protected-live-smoke.mjs
+          else
+            echo 'Protected live smoke script missing; failing closed.'
+            exit 1
+          fi
+
+      - name: Full customer journey canary
+        if: env.REQUIRE_LIVE_JOURNEY == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/dabbir-ai-full-customer-journey.mjs ]]; then
+            DABBIR_BASE_URL="$CANARY_BASE_URL" \
+            DABBIR_OWNER_EMAIL="$CANARY_OWNER_EMAIL" \
+            DABBIR_OWNER_PASSWORD="$CANARY_OWNER_PASSWORD" \
+            DABBIR_CANARY_WHATSAPP_TO="$CANARY_WHATSAPP_TO" \
+            DABBIR_CANARY_VERIFY_TOKEN="$CANARY_VERIFY_TOKEN" \
+            node scripts/dabbir-ai-full-customer-journey.mjs
+          else
+            echo 'Full customer journey script missing; failing closed.'
+            exit 1
+          fi
+
+      - name: Emit promotion receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dabbir-golden-canary
+          cat > /tmp/dabbir-golden-canary/receipt.txt <<EOF
+          contract=DABBIR_GOLDEN_CANARY_V1
+          candidate_ref=$CANDIDATE_REF
+          canary_url=$CANARY_BASE_URL
+          static_tests=passed
+          public_smoke=passed
+          protected_smoke=passed
+          live_customer_journey=${REQUIRE_LIVE_JOURNEY}
+          promotion_allowed=true
+          fail_closed=true
+          EOF
+          cat /tmp/dabbir-golden-canary/receipt.txt
+
+      - name: Upload canary evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-golden-canary-${{ github.run_id }}
+          path: /tmp/dabbir-golden-canary/receipt.txt
+          retention-days: 30
