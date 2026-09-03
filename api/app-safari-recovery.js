@@ -1,3 +1,4 @@
+import { Script } from 'node:vm';
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
@@ -56,11 +57,10 @@ function ownerFirstInlineScript() {
     throw new Error(`DABBIR_OWNER_FIRST_INLINE_CONTENT_TYPE_${contentType || 'missing'}`);
   }
   try {
-    // Compile the exact browser payload. api/dabbir-owner-first-ui.js itself can be
-    // syntactically valid while the JavaScript stored inside its String.raw payload is not.
-    new Function(payload);
+    new Script(payload, { filename: 'dabbir-owner-first-inline.js' });
   } catch (error) {
-    throw new Error(`DABBIR_OWNER_FIRST_INLINE_PARSE_${String(error?.message || error).slice(0, 180)}`);
+    const detail = String(error?.stack || error?.message || error).replace(/\s*\n\s*/g, ' | ').slice(0, 700);
+    throw new Error(`DABBIR_OWNER_FIRST_INLINE_PARSE_${detail}`);
   }
   const probe = '<script data-dabbir-owner-first-probe="owner-first-probe-v1">window.__dabbirOwnerFirstBootstrapProbe={version:"owner-first-probe-v1",reached:true};</script>';
   const owner = `<script data-dabbir-owner-first-inline="owner-first-v4">\n${payload}\n</script>`;
