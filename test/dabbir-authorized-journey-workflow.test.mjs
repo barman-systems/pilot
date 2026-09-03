@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 
 const AUTHORIZED_WORKFLOW = '.github/workflows/dabbir-ai-customer-journey.yml';
 const OWNER_AWAY_WORKFLOW = '.github/workflows/dabbir-owner-away-production.yml';
-const UNAUTHORIZED_DUPLICATE = '.github/workflows/dabbir-protected-full-customer-journey.yml';
+const REMOVED_DUPLICATE = '.github/workflows/dabbir-protected-full-customer-journey.yml';
+const REMOVED_IPAD_PRIVILEGED_WORKFLOW = '.github/workflows/dabbir-ipad-webkit-production.yml';
 const BROKER = 'supabase/functions/barman-qa-suite-runner/index.ts';
 const ISOLATION_JOURNEY = 'test/dabbir-cross-tenant-isolation.mjs';
+const IPAD_JOURNEY = 'test/run-ai-full-customer-journey-ipad.mjs';
 
 function read(path) {
   return fs.readFileSync(path, 'utf8');
@@ -20,6 +22,7 @@ test('privileged DABBIR QA broker accepts exactly the two approved main workflow
   );
   assert.match(broker, /workflowRefs\.has\(String\(payload\.workflow_ref\|\|''\)\)/);
   assert.match(broker, /const GH_REF='refs\/heads\/main'/);
+  assert.doesNotMatch(broker, /dabbir-ipad-webkit-production\.yml/);
   assert.doesNotMatch(broker, /workflow_ref[^\n]*(startsWith|includes)\(/);
 });
 
@@ -30,6 +33,17 @@ test('canonical authorized workflow owns protected-prelaunch full journey withou
   assert.match(workflow, /x-vercel-trusted-oidc-idp-token/);
   assert.match(workflow, /FULL_JOURNEY_PASS/);
   assert.match(workflow, /Prove Production release did not move during journey/);
+});
+
+test('canonical authorized workflow owns the iPad WebKit journey under the same OIDC identity', () => {
+  const workflow = read(AUTHORIZED_WORKFLOW);
+  const ipad = read(IPAD_JOURNEY);
+  assert.match(workflow, /Run iPad WebKit owner journey against exact Production/);
+  assert.match(workflow, /run-ai-full-customer-journey-ipad\.mjs/);
+  assert.match(workflow, /IPAD_WEBKIT_FULL_JOURNEY_PASS/);
+  assert.match(workflow, /dabbir-ai-customer-journey-report-ipad\.json/);
+  assert.match(ipad, /viewport: \{ width: 820, height: 1180 \}/);
+  assert.equal(fs.existsSync(REMOVED_IPAD_PRIVILEGED_WORKFLOW), false);
 });
 
 test('Owner Away production gate is the only second privileged QA workflow', () => {
@@ -71,6 +85,7 @@ test('canonical release journey permanently gates tenant and WhatsApp cross-tena
   assert.match(isolation, /dabbir_ai_qa_cleanup/);
 });
 
-test('duplicate privileged workflow is removed so it cannot request a broker-denied OIDC identity', () => {
-  assert.equal(fs.existsSync(UNAUTHORIZED_DUPLICATE), false);
+test('duplicate privileged workflows are removed so they cannot request broker-denied OIDC identities', () => {
+  assert.equal(fs.existsSync(REMOVED_DUPLICATE), false);
+  assert.equal(fs.existsSync(REMOVED_IPAD_PRIVILEGED_WORKFLOW), false);
 });

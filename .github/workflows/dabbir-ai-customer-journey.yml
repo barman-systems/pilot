@@ -21,6 +21,9 @@ on:
       - 'vercel-ignore-if-unaffected.sh'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/run-ai-full-customer-journey-en.mjs'
+      - 'test/run-ai-full-customer-journey-ipad.mjs'
+      - 'test/dabbir-ipad-webkit-production-contract.test.mjs'
+      - 'test/dabbir-ipad-vercel-exact-sha-classification.test.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
       - 'test/dabbir-protected-full-journey-preload.mjs'
       - 'test/dabbir-protected-journey-access.test.mjs'
@@ -217,6 +220,22 @@ jobs:
           jq -e '.verdict == "PASS" and .required_failures == 0 and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' dabbir-ai-customer-journey-report-en.json >/dev/null
           echo 'ENGLISH_IPHONE_WEBKIT_JOURNEY_PASS'
 
+      - name: Run iPad WebKit owner journey against exact Production
+        if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
+        env:
+          JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report-ipad.json
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.journey-mode.outputs.mode }}" = 'protected' ]; then
+            node --import ./test/dabbir-protected-full-journey-preload.mjs test/run-ai-full-customer-journey-ipad.mjs
+          else
+            node test/run-ai-full-customer-journey-ipad.mjs
+          fi
+          test -s dabbir-ai-customer-journey-report-ipad.json
+          jq -e '.verdict == "PASS" and .required_failures == 0 and any(.steps[]; .name == "25_mobile_webkit_owner_journey" and .status == "PASS")' dabbir-ai-customer-journey-report-ipad.json >/dev/null
+          echo "IPAD_WEBKIT_FULL_JOURNEY_PASS steps=$(jq -r '.steps | length' dabbir-ai-customer-journey-report-ipad.json)"
+
       - name: Run cross-tenant and WhatsApp isolation attack
         if: steps.journey-mode.outputs.ready == 'true'
         shell: bash
@@ -279,6 +298,7 @@ jobs:
           path: |
             dabbir-ai-customer-journey-report.json
             dabbir-ai-customer-journey-report-en.json
+            dabbir-ai-customer-journey-report-ipad.json
             dabbir-ai-customer-journey-screenshot.png
             dabbir-cross-tenant-isolation-report.json
           if-no-files-found: warn
