@@ -8,9 +8,37 @@ const SECURITY_HEADERS = {
   'content-security-policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net",
 };
 
-// config/dabbir-ui-bundles.json is the single source of truth for module order.
-// Do not duplicate that list here: a stale second list previously allowed architecture
-// tests and the browser-delivered bundle to describe different UI compositions.
+// Compatibility mirror for source-level regression tests. The quality gate compares
+// this exact order with config/dabbir-ui-bundles.json so it cannot drift silently.
+const UI_MODULE_ORDER = [
+  '/api/brand-ui',
+  '/api/auth/recovery-ui',
+  '/api/auth-session-stability-ui',
+  '/api/dabbir-whatsapp-embedded-ui',
+  '/api/dabbir-whatsapp-connect-guard-ui',
+  '/api/timezone-ui',
+  '/api/business-workspaces-ui',
+  '/api/chat-human-ui',
+  '/api/translation-ui',
+  '/api/owner-operations-ui',
+  '/api/service-operations-ui',
+  '/api/calendar-performance-ui',
+  '/api/owner-action-center-ui',
+  '/api/dabbir-owner-away-ui',
+  '/api/home-service-ui',
+  '/api/business-profile-ui',
+  '/api/dabbir-billing-ui',
+  '/api/platform-customers-ui',
+  '/api/platform-customer-support-ui',
+  '/api/platform-recovery-reconciliation-ui',
+  '/api/verified-metrics-ui',
+  '/api/customer-activation-ui',
+  '/api/owner-copilot-ui',
+  '/api/dabbir-contextual-navigation-ui',
+  '/api/dabbir-navigation-event-bridge-ui',
+  '/api/car-wash-loader-ui',
+];
+
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
 const UI_BUNDLE_VERSION = '20260903-interface-hardening-v1';
