@@ -11,35 +11,84 @@ on:
         description: Exact protected Vercel Preview URL for the candidate SHA
         required: true
         type: string
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 concurrency:
-  group: dabbir-golden-canary-${{ inputs.candidate_sha }}
+  group: dabbir-golden-canary-${{ github.event.comment.id || inputs.candidate_sha || github.run_id }}
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Resolve trusted Golden Canary request
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       github.actor == 'barmanai' &&
+       startsWith(github.event.comment.body, '/dabbir-golden-canary '))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    outputs:
+      candidate_sha: ${{ steps.resolve.outputs.candidate_sha }}
+      canary_url: ${{ steps.resolve.outputs.canary_url }}
+    steps:
+      - name: Resolve and validate immutable request
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SHA: ${{ inputs.candidate_sha }}
+          DISPATCH_URL: ${{ inputs.canary_url }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.actor }}
+          COMMENT_ASSOCIATION: ${{ github.event.comment.author_association }}
+        run: |
+          set -euo pipefail
+          candidate=''
+          canary=''
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            candidate="$DISPATCH_SHA"
+            canary="$DISPATCH_URL"
+          elif [ "$EVENT_NAME" = 'issue_comment' ]; then
+            [ "$COMMENT_ACTOR" = 'barmanai' ] || { echo 'Golden Canary comment actor denied'; exit 2; }
+            case "$COMMENT_ASSOCIATION" in
+              OWNER|MEMBER|COLLABORATOR) ;;
+              *) echo 'Golden Canary comment association denied'; exit 2 ;;
+            esac
+            [[ "$COMMENT_BODY" != *$'\n'* ]] || { echo 'Golden Canary command must be exactly one line'; exit 2; }
+            read -r command candidate canary extra <<< "$COMMENT_BODY"
+            [ "$command" = '/dabbir-golden-canary' ] || { echo 'Golden Canary command denied'; exit 2; }
+            [ -z "${extra:-}" ] || { echo 'Golden Canary command has unexpected fields'; exit 2; }
+          else
+            echo 'Unsupported Golden Canary trigger'; exit 2
+          fi
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || { echo 'candidate_sha must be an exact lowercase 40-character SHA'; exit 2; }
+          [[ "$canary" =~ ^https://[^/]+$ ]] || { echo 'canary_url must be a bare HTTPS origin'; exit 2; }
+          case "$canary" in
+            *.vercel.app) ;;
+            *) echo 'Golden Canary accepts only an isolated Vercel Preview origin'; exit 2 ;;
+          esac
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "canary_url=$canary" >> "$GITHUB_OUTPUT"
+          echo "DABBIR_GOLDEN_CANARY_REQUEST actor=${COMMENT_ACTOR:-workflow_dispatch} candidate=$candidate"
+
   candidate-tests:
     name: Candidate static and repository gates
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 18
     permissions:
       contents: read
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANARY_URL: ${{ inputs.canary_url }}
+      CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+      CANARY_URL: ${{ needs.prepare.outputs.canary_url }}
     steps:
-      - name: Validate immutable candidate inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'candidate_sha must be an exact lowercase 40-character SHA'; exit 2; }
-          [[ "$CANARY_URL" =~ ^https://[^/]+$ ]] || { echo 'canary_url must be a bare HTTPS origin'; exit 2; }
-          case "$CANARY_URL" in
-            *.vercel.app) ;;
-            *) echo 'Golden Canary accepts only an isolated Vercel Preview origin'; exit 2 ;;
-          esac
       - name: Checkout exact candidate without privileged credentials
         uses: actions/checkout@v7
         with:
@@ -60,15 +109,15 @@ jobs:
 
   golden-canary:
     name: Trusted exact Preview verifier
-    needs: candidate-tests
+    needs: [prepare, candidate-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANARY_URL: ${{ inputs.canary_url }}
+      CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
+      CANARY_URL: ${{ needs.prepare.outputs.canary_url }}
       EXPECTED_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       EXPECTED_REPOSITORY: barman-systems/pilot
       SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
@@ -128,8 +177,8 @@ jobs:
       - name: Run exact Preview smoke using trusted harness
         shell: bash
         env:
-          PROTECTED_QA_ORIGIN: ${{ inputs.canary_url }}
-          EXPECTED_CANARY_SHA: ${{ inputs.candidate_sha }}
+          PROTECTED_QA_ORIGIN: ${{ needs.prepare.outputs.canary_url }}
+          EXPECTED_CANARY_SHA: ${{ needs.prepare.outputs.candidate_sha }}
           CANARY_REPORT_PATH: dabbir-golden-canary-smoke-report.json
         run: |
           set -euo pipefail
@@ -138,7 +187,7 @@ jobs:
       - name: Run full disposable customer journey using trusted harness
         shell: bash
         env:
-          PRODUCTION_ORIGIN: ${{ inputs.canary_url }}
+          PRODUCTION_ORIGIN: ${{ needs.prepare.outputs.canary_url }}
           JOURNEY_REPORT_PATH: dabbir-golden-canary-journey-report.json
         run: |
           set -euo pipefail
@@ -183,14 +232,14 @@ jobs:
 
   publish-status:
     name: Publish immutable candidate status
-    if: always()
-    needs: [candidate-tests, golden-canary]
+    if: always() && needs.prepare.result == 'success'
+    needs: [prepare, candidate-tests, golden-canary]
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
       statuses: write
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
       CANDIDATE_RESULT: ${{ needs.candidate-tests.result }}
       CANARY_RESULT: ${{ needs.golden-canary.result }}
     steps:
