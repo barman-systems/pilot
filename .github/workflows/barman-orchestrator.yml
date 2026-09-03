@@ -1,0 +1,27 @@
+name: BARMAN Executive Orchestrator
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: barman-executive-orchestrator
+  cancel-in-progress: false
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Process BARMAN planner and read-only lanes
+        run: node scripts/barman-orchestrator.mjs
