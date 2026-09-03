@@ -78,7 +78,7 @@ const script = String.raw`(()=>{
       '#screen-conversations .chatHead{padding:10px 11px!important}.messages{padding:12px 9px 16px!important}.bubble{max-width:88%!important;padding:10px 11px!important;border-radius:16px!important}.bubble .body{font-size:14px!important;line-height:1.62!important}',
       '.compose{padding:8px 8px calc(8px + env(safe-area-inset-bottom))!important}.compose input{font-size:16px!important;min-height:48px!important}.send{width:48px!important;flex:0 0 48px!important}',
       '.table{border-radius:17px!important}.tr{font-size:12px!important;line-height:1.5!important;padding:11px!important}',
-      '#screen-settings #settingsList{display:grid!important;gap:7px!important}.authWrap{align-items:center!important;padding:calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom))!important}.authCard{padding:21px 18px!important;border-radius:23px!important}.authCard .logo{width:56px!important;height:56px!important}.authCard h1{font-size:22px!important}.field input,.field select,.dk-field input,.dk-field textarea,.dk-time input{font-size:16px!important;min-height:52px!important}',
+      '#screen-settings #settingsList{display:grid!important;gap:7px!important}.authWrap{align-items:center!important;padding:calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom))!important}.authCard{padding:21px 18px!important;border-radius:23px!important}.authCard .logo{width:56px!important;height:56px!important;border-radius:18px!important}.authCard h1{font-size:22px!important}.field input,.field select,.dk-field input,.dk-field textarea,.dk-time input{font-size:16px!important;min-height:52px!important}',
       '.bottomNav{position:fixed!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:3px!important;left:0!important;right:0!important;bottom:0!important;z-index:30!important;background:#07101df8!important;border-top:1px solid var(--d4-line)!important;padding:6px 6px calc(6px + env(safe-area-inset-bottom))!important;box-shadow:0 -10px 28px #00000055!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
       '.bottomNav>button,.bottomNav>a{min-width:0!important;min-height:58px!important;border:0!important;background:transparent!important;color:#91a2b7!important;border-radius:15px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;padding:5px 2px!important;font-size:11px!important;line-height:1.2!important;overflow:hidden!important}',
       '.bottomNav .d4-nav-icon{width:21px!important;height:21px!important;margin:0!important;color:currentColor!important}.bottomNav>button.active,.bottomNav>a.active{background:linear-gradient(180deg,#8b5cf622,#3b82f618)!important;color:#c5d0ff!important;box-shadow:inset 0 0 0 1px #8b5cf633!important}',
@@ -174,7 +174,7 @@ const script = String.raw`(()=>{
       if(!el.dataset.d4RawText)el.dataset.d4RawText=raw;
       const key=Object.keys(map).find(k=>raw===k||raw.endsWith('• '+k)||raw.endsWith('· '+k));
       if(!key)return;
-      const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':';
+      const prefix=raw.includes('•')?raw.slice(0,raw.lastIndexOf('•')+1)+' ':raw.includes('·')?raw.slice(0,raw.lastIndexOf('·')+1)+' ':'';
       el.textContent=prefix+map[key];
     });
   }
