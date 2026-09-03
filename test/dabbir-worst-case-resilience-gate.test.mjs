@@ -57,10 +57,14 @@ test('worst-case gate: stale and expired customer messages fail closed',()=>{
   assert.match(resilience,/a\.starts_at<=now\(\)/);
 });
 
-test('worst-case gate: failed main releases still have automatic rollback protection',()=>{
+test('worst-case gate: failed main releases retain automatic rollback through protected PR governance',()=>{
   assert.match(guardian,/DABBIR CI/);
   assert.match(guardian,/DABBIR Protected Live Smoke/);
   assert.match(guardian,/DABBIR AI Full Customer Journey/);
   assert.match(guardian,/git revert/);
-  assert.match(guardian,/Fail-closed rollback pushed/);
+  assert.match(guardian,/guardian\/revert-/);
+  assert.match(guardian,/git push origin HEAD:"\$branch"/);
+  assert.match(guardian,/gh pr create/);
+  assert.match(guardian,/Governed rollback PR created/);
+  assert.doesNotMatch(guardian,/git push origin HEAD:main/);
 });

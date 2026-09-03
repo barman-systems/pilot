@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: dabbir-release-guardian-main
@@ -30,12 +31,14 @@ jobs:
       FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
       FAILED_WORKFLOW: ${{ github.event.workflow_run.name }}
       FAILED_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 20
-      - name: Fail closed by reverting the failing head if it is still current
+
+      - name: Fail closed with a governed revert PR if the failing head is still current
         shell: bash
         run: |
           set -euo pipefail
@@ -52,8 +55,16 @@ jobs:
             exit 1
           fi
 
+          short_sha="${FAILED_SHA:0:12}"
+          branch="guardian/revert-${short_sha}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "Governed revert branch $branch already exists; duplicate rollback suppressed."
+            exit 0
+          fi
+
           git config user.name 'dabbir-release-guardian'
           git config user.email 'dabbir-release-guardian@users.noreply.github.com'
+          git switch -c "$branch"
 
           parent_count="$(git rev-list --parents -n 1 "$FAILED_SHA" | awk '{print NF-1}')"
           if [ "$parent_count" -gt 1 ]; then
@@ -63,5 +74,32 @@ jobs:
           fi
 
           git commit --amend -m "revert(guardian): ${FAILED_WORKFLOW} ${FAILED_CONCLUSION} on ${FAILED_SHA}"
-          git push origin HEAD:main
-          echo "Fail-closed rollback pushed for $FAILED_SHA after ${FAILED_WORKFLOW}=${FAILED_CONCLUSION}."
+          git push origin HEAD:"$branch"
+
+          body=$(cat <<EOF
+          DABBIR Release Guardian detected a protected-main validation failure and prepared a governed rollback candidate.
+
+          Failed workflow: ${FAILED_WORKFLOW}
+          Failed conclusion: ${FAILED_CONCLUSION}
+          Failed SHA: ${FAILED_SHA}
+          Rollback branch: ${branch}
+
+          Safety contract:
+          - direct main push: forbidden
+          - branch protection: preserved
+          - required checks: must pass
+          - rollback merge: only through pull request
+          - re-revert loop: blocked
+          EOF
+          )
+
+          pr_url=$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "revert(guardian): ${FAILED_WORKFLOW} failure on ${short_sha}" \
+            --body "$body")
+          echo "Governed rollback PR created: $pr_url"
+
+          # Enable auto-merge only if repository policy supports it. This never bypasses
+          # required reviews/checks; otherwise the PR remains open and fail-closed.
+          gh pr merge "$pr_url" --auto --squash || echo "Auto-merge unavailable; rollback PR remains governed and open."
