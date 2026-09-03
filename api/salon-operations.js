@@ -172,11 +172,18 @@ async function handlePost(req,ctx,businessId,membership,body){
   }
   if(action==='record_payment'){
     const appointmentId=safeId(body.appointment_id),method=clean(body.method,30);if(!appointmentId||!PAYMENT_METHODS.has(method))return {status:400,body:{ok:false,error:'VALID_PAYMENT_REQUIRED'}};
-    const appointments=await rest(ctx.token,`dabbir_appointments?select=id,customer_id&business_id=eq.${enc(businessId)}&id=eq.${enc(appointmentId)}&limit=1`,{},'APPOINTMENT_LOOKUP_FAILED');if(!appointments?.[0])return {status:404,body:{ok:false,error:'APPOINTMENT_NOT_FOUND'}};
     const amount=method==='unpaid'?0:number(body.amount_aed,{min:0,max:1e7,fallback:-1});if(amount<0)return {status:400,body:{ok:false,error:'VALID_PAYMENT_AMOUNT_REQUIRED'}};
-    const idempotency=clean(body.idempotency_key||`appointment:${appointmentId}:${method}:${amount}`,180);
-    const rows=await rest(ctx.token,'dabbir_operational_payments?on_conflict=business_id,idempotency_key&select=id,appointment_id,customer_id,amount_aed,method,status,created_at',{method:'POST',headers:{prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({business_id:businessId,appointment_id:appointmentId,customer_id:appointments[0].customer_id,amount_aed:amount,method,status:method==='unpaid'?'unpaid':'paid',reference:clean(body.reference,240)||null,idempotency_key:idempotency,recorded_by:ctx.user.id})},'PAYMENT_RECORD_FAILED');
-    return {status:201,body:{ok:true,payment:rows?.[0]||null}};
+    const idempotencyKey=clean(body.idempotency_key||body.request_id,160);
+    if(!idempotencyKey||!IDEMPOTENCY_RE.test(idempotencyKey))return {status:400,body:{ok:false,error:'PAYMENT_REQUEST_ID_REQUIRED'}};
+    const payment=await rpc(ctx.token,'dabbir_record_operational_payment',{
+      p_business_id:businessId,
+      p_appointment_id:appointmentId,
+      p_amount:amount,
+      p_method:method,
+      p_idempotency_key:idempotencyKey,
+      p_reference:clean(body.reference,240)||null,
+    },'PAYMENT_RECORD_FAILED');
+    return {status:payment?.idempotent_replay?200:201,body:{ok:true,payment}};
   }
   if(action==='save_worker'){
     if(!canManageTeam(membership))return {status:403,body:{ok:false,error:'TEAM_MANAGEMENT_REQUIRED'}};
