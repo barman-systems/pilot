@@ -36,6 +36,7 @@ const script=String.raw`(()=>{
     '.opsRow:last-child{border-bottom:0}.opsRow.head{color:var(--muted);background:#15181b;font-size:11px;font-weight:800}',
     '.opsOrderRow{grid-template-columns:minmax(120px,1.2fr) .9fr .8fr .8fr}',
     '.opsName b{display:block;font-size:13px}',
+    '.opsName small{color:var(--muted);font-size:11px;line-height:1.4}',
     '.opsLow{border:1px solid #5b4b20;background:#2b2516;border-radius:14px;padding:11px;margin-bottom:12px;color:#f4d991;font-size:12px;line-height:1.55}',
     '.opsActions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}',
     '.opsAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:44px;font-size:12px;font-weight:800}',
