@@ -6,20 +6,20 @@ const script=String.raw`(()=>{
   const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
   const text=()=>ar()?{
-    nav:'العمليات',title:'مركز العمليات',desc:'المنتجات والمخزون والطلبات من بيانات نشاطك الفعلية.',
-    products:'المنتجات',stock:'المخزون',available:'المتاح',low:'مخزون منخفض',orders:'الطلبات',sales:'المبيعات المؤكدة',
-    add:'إضافة منتج',sku:'SKU',name:'اسم المنتج',price:'السعر (درهم)',qty:'الكمية',reserved:'محجوز',status:'الحالة',customer:'العميل',date:'التاريخ',
-    noProducts:'لا توجد منتجات بعد.',noOrders:'لا توجد طلبات فعلية بعد.',lowTitle:'تحتاج انتباه',lowNone:'لا يوجد نقص مخزون حاليًا.',
+    nav:'العمليات',title:'مركز العمليات',desc:'السلع والمخزون والطلبات من بيانات نشاطك الفعلية.',
+    products:'السلع',stock:'المخزون',available:'المتاح',low:'مخزون منخفض',orders:'الطلبات',sales:'المبيعات المؤكدة',
+    add:'إضافة سلعة',name:'اسم السلعة',price:'القيمة',qty:'الكمية',reserved:'محجوز',status:'الحالة',customer:'العميل',date:'التاريخ',
+    noProducts:'لا توجد سلع بعد.',noOrders:'لا توجد طلبات فعلية بعد.',lowTitle:'تحتاج انتباه',lowNone:'لا يوجد نقص مخزون حاليًا.',
     simulated:'الطلبات التجريبية مستبعدة من المبيعات.',save:'حفظ',cancel:'إلغاء',editStock:'تعديل المخزون',update:'تحديث',
-    created:'تمت إضافة المنتج.',updated:'تم تحديث المخزون.',orderUpdated:'تم تحديث حالة الطلب.',failed:'تعذر إكمال العملية.',
+    created:'تمت إضافة السلعة.',updated:'تم تحديث المخزون.',orderUpdated:'تم تحديث حالة الطلب.',failed:'تعذر إكمال العملية.',
     draft:'مسودة',reservedStatus:'محجوز',confirmed:'مؤكد',cancelled:'ملغي',completed:'مكتمل',loading:'جارٍ تحميل العمليات...'
   }:{
-    nav:'Operations',title:'Owner operations',desc:'Products, inventory, and orders from your real business data.',
-    products:'Products',stock:'Inventory',available:'Available',low:'Low stock',orders:'Orders',sales:'Recognized sales',
-    add:'Add product',sku:'SKU',name:'Product name',price:'Price (AED)',qty:'Quantity',reserved:'Reserved',status:'Status',customer:'Customer',date:'Date',
-    noProducts:'No products yet.',noOrders:'No real orders yet.',lowTitle:'Needs attention',lowNone:'No low-stock items right now.',
+    nav:'Operations',title:'Owner operations',desc:'Items, inventory, and orders from your real business data.',
+    products:'Items',stock:'Inventory',available:'Available',low:'Low stock',orders:'Orders',sales:'Recognized sales',
+    add:'Add item',name:'Item name',price:'Value',qty:'Quantity',reserved:'Reserved',status:'Status',customer:'Customer',date:'Date',
+    noProducts:'No items yet.',noOrders:'No real orders yet.',lowTitle:'Needs attention',lowNone:'No low-stock items right now.',
     simulated:'Simulated orders are excluded from recognized sales.',save:'Save',cancel:'Cancel',editStock:'Edit inventory',update:'Update',
-    created:'Product added.',updated:'Inventory updated.',orderUpdated:'Order status updated.',failed:'Operation failed.',
+    created:'Item added.',updated:'Inventory updated.',orderUpdated:'Order status updated.',failed:'Operation failed.',
     draft:'Draft',reservedStatus:'Reserved',confirmed:'Confirmed',cancelled:'Cancelled',completed:'Completed',loading:'Loading operations...'
   };
 
@@ -46,50 +46,62 @@ const script=String.raw`(()=>{
   let loading=false;
   let businessId=null;
 
-  function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-  function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))+' AED'}catch{return Number(value||0).toFixed(2)+' AED'}}
+  function escapeHtml(value){return String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+  function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))+' '+currencyCode()}catch{return Number(value||0).toFixed(2)+' '+currencyCode()}}
   function date(value){if(!value)return '—';try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium'}).format(new Date(value))}catch{return String(value)}}
   function isStore(){try{return String(workspace?.business?.business_type||'').toLowerCase()==='store'}catch{return false}}
+  function currencyCode(){try{return String(workspace?.business?.currency_code||'AED').trim().toUpperCase()||'AED'}catch{return 'AED'}}
   function notify(message){try{if(typeof toast==='function')toast(message)}catch{}}
+  function productSku(){return 'DAB-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
 
   function ensureScreen(){
     let screen=q('#screen-operations');
-    if(screen)return screen;
-    screen=document.createElement('section');
-    screen.className='screen';
-    screen.id='screen-operations';
-    screen.innerHTML='<div class="hero"><div><h1 id="opsTitle"></h1><p id="opsDesc"></p></div><button class="primary" id="opsAddProduct" type="button"></button></div><div id="opsBody"></div>';
-    q('.content')?.appendChild(screen);
+    if(!screen){
+      screen=document.createElement('section');
+      screen.className='screen';
+      screen.id='screen-operations';
+      q('.content')?.appendChild(screen);
+    }
+    if(!isStore())return screen;
 
-    const productModal=document.createElement('div');
-    productModal.className='modal';productModal.id='opsProductModal';
-    productModal.innerHTML='<form class="modalBox" id="opsProductForm"><h3 id="opsProductModalTitle"></h3><div class="field"><label id="opsSkuLabel"></label><input id="opsSku" maxlength="80" required></div><div class="field"><label id="opsNameLabel"></label><input id="opsName" maxlength="160" required></div><div class="field"><label id="opsPriceLabel"></label><input id="opsPrice" type="number" min="0" step="0.01" required></div><div class="field"><label id="opsQtyLabel"></label><input id="opsQty" type="number" min="0" step="1" required></div><div class="modalActions"><button type="button" class="secondary" id="opsProductCancel"></button><button class="primary" id="opsProductSave" type="submit"></button></div></form>';
-    document.body.appendChild(productModal);
+    // A service business may have owned this shared screen before the workspace switched to Store.
+    // Store mode must reclaim it instead of leaving the stale service form in place.
+    if(!q('#opsBody')){
+      screen.innerHTML='<div class=\"hero\"><div><h1 id=\"opsTitle\"></h1><p id=\"opsDesc\"></p></div><button class=\"primary\" id=\"opsAddProduct\" type=\"button\"></button></div><div id=\"opsBody\"></div>';
+    }
+    q('#svcModal')?.classList.remove('open');
 
-    const stockModal=document.createElement('div');
-    stockModal.className='modal';stockModal.id='opsStockModal';
-    stockModal.innerHTML='<form class="modalBox" id="opsStockForm"><h3 id="opsStockTitle"></h3><input id="opsStockProductId" type="hidden"><div class="field"><label id="opsStockQtyLabel"></label><input id="opsStockQty" type="number" min="0" step="1" required></div><div class="modalActions"><button type="button" class="secondary" id="opsStockCancel"></button><button class="primary" id="opsStockSave" type="submit"></button></div></form>';
-    document.body.appendChild(stockModal);
+    if(!q('#opsProductModal')){
+      const productModal=document.createElement('div');
+      productModal.className='modal';productModal.id='opsProductModal';
+      productModal.innerHTML='<form class=\"modalBox\" id=\"opsProductForm\"><h3 id=\"opsProductModalTitle\"></h3><div class=\"field\"><label id=\"opsNameLabel\"></label><input id=\"opsName\" maxlength=\"160\" required></div><div class=\"field\"><label id=\"opsPriceLabel\"></label><input id=\"opsPrice\" type=\"number\" min=\"0\" step=\"0.01\" required></div><div class=\"field\"><label id=\"opsQtyLabel\"></label><input id=\"opsQty\" type=\"number\" min=\"0\" step=\"1\" required></div><div class=\"modalActions\"><button type=\"button\" class=\"secondary\" id=\"opsProductCancel\"></button><button class=\"primary\" id=\"opsProductSave\" type=\"submit\"></button></div></form>';
+      document.body.appendChild(productModal);
 
+      const stockModal=document.createElement('div');
+      stockModal.className='modal';stockModal.id='opsStockModal';
+      stockModal.innerHTML='<form class=\"modalBox\" id=\"opsStockForm\"><h3 id=\"opsStockTitle\"></h3><input id=\"opsStockProductId\" type=\"hidden\"><div class=\"field\"><label id=\"opsStockQtyLabel\"></label><input id=\"opsStockQty\" type=\"number\" min=\"0\" step=\"1\" required></div><div class=\"modalActions\"><button type=\"button\" class=\"secondary\" id=\"opsStockCancel\"></button><button class=\"primary\" id=\"opsStockSave\" type=\"submit\"></button></div></form>';
+      document.body.appendChild(stockModal);
+
+      q('#opsProductCancel').onclick=()=>q('#opsProductModal').classList.remove('open');
+      q('#opsStockCancel').onclick=()=>q('#opsStockModal').classList.remove('open');
+      q('#opsProductForm').onsubmit=createProduct;
+      q('#opsStockForm').onsubmit=saveStock;
+      [productModal,stockModal].forEach(modal=>modal.addEventListener('click',event=>{if(event.target===modal)modal.classList.remove('open')}));
+    }
     q('#opsAddProduct').onclick=()=>q('#opsProductModal').classList.add('open');
-    q('#opsProductCancel').onclick=()=>q('#opsProductModal').classList.remove('open');
-    q('#opsStockCancel').onclick=()=>q('#opsStockModal').classList.remove('open');
-    q('#opsProductForm').onsubmit=createProduct;
-    q('#opsStockForm').onsubmit=saveStock;
-    [productModal,stockModal].forEach(modal=>modal.addEventListener('click',event=>{if(event.target===modal)modal.classList.remove('open')}));
     applyCopy();
     return screen;
   }
 
   function applyCopy(){
+    if(!isStore())return;
     const t=text();
     if(q('#opsTitle'))q('#opsTitle').textContent=t.title;
     if(q('#opsDesc'))q('#opsDesc').textContent=t.desc;
     if(q('#opsAddProduct'))q('#opsAddProduct').textContent=t.add;
     if(q('#opsProductModalTitle'))q('#opsProductModalTitle').textContent=t.add;
-    if(q('#opsSkuLabel'))q('#opsSkuLabel').textContent=t.sku;
     if(q('#opsNameLabel'))q('#opsNameLabel').textContent=t.name;
-    if(q('#opsPriceLabel'))q('#opsPriceLabel').textContent=t.price;
+    if(q('#opsPriceLabel'))q('#opsPriceLabel').textContent=t.price+' ('+currencyCode()+')';
     if(q('#opsQtyLabel'))q('#opsQtyLabel').textContent=t.qty;
     if(q('#opsProductCancel'))q('#opsProductCancel').textContent=t.cancel;
     if(q('#opsProductSave'))q('#opsProductSave').textContent=t.save;
@@ -121,16 +133,16 @@ const script=String.raw`(()=>{
   function statusOptions(current){
     const t=text();
     const labels={draft:t.draft,reserved:t.reservedStatus,confirmed:t.confirmed,cancelled:t.cancelled,completed:t.completed};
-    return Object.entries(labels).map(([value,label])=>'<option value="'+value+'" '+(value===current?'selected':'')+'>'+escapeHtml(label)+'</option>').join('');
+    return Object.entries(labels).map(([value,label])=>'<option value=\"'+value+'\" '+(value===current?'selected':'')+'>'+escapeHtml(label)+'</option>').join('');
   }
 
   function render(){
     const body=q('#opsBody');
-    if(!body)return;
+    if(!body||!isStore())return;
     const t=text();
-    if(loading&&!data){body.innerHTML='<div class="empty">'+escapeHtml(t.loading)+'</div>';return}
-    if(data?.error){body.innerHTML='<div class="empty">'+escapeHtml(t.failed)+' — '+escapeHtml(data.error)+'</div>';return}
-    if(!data){body.innerHTML='<div class="empty">'+escapeHtml(t.loading)+'</div>';return}
+    if(loading&&!data){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.loading)+'</div>';return}
+    if(data?.error){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.failed)+' — '+escapeHtml(data.error)+'</div>';return}
+    if(!data){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.loading)+'</div>';return}
     const m=data.metrics||{};
     const low=data.low_stock||[];
     const realOrders=(data.orders||[]).filter(order=>order.simulated===false);
@@ -139,17 +151,17 @@ const script=String.raw`(()=>{
 
     const metrics=[
       [t.products,m.active_products||0],[t.stock,m.inventory_units||0],[t.low,m.low_stock_products||0],[t.sales,money(m.recognized_sales_aed||0)]
-    ].map(([label,value])=>'<div class="opsMetric"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
+    ].map(([label,value])=>'<div class=\"opsMetric\"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
 
-    const lowHtml='<div class="opsLow"><b>'+escapeHtml(t.lowTitle)+'</b><div style="margin-top:5px">'+(low.length?low.slice(0,8).map(p=>escapeHtml(p.name)+' · '+escapeHtml(p.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
+    const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(p=>escapeHtml(p.name)+' · '+escapeHtml(p.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
 
-    const productRows=products.length?products.map(product=>'<div class="opsRow"><div class="opsName"><b>'+escapeHtml(product.name)+'</b><small>'+escapeHtml(product.sku)+'</small></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.available)+'</span><span class="opsReserved">'+escapeHtml(product.reserved)+'</span>'+(data.can_manage?'<button class="opsAction" data-ops-stock="'+escapeHtml(product.id)+'" data-ops-qty="'+escapeHtml(product.quantity)+'">'+escapeHtml(t.editStock)+'</button>':'<span></span>')+'</div>').join(''):'<div class="empty">'+escapeHtml(t.noProducts)+'</div>';
-    const productsHtml='<div class="opsSection"><h2>'+escapeHtml(t.products)+'</h2><div class="opsTable"><div class="opsRow head"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.available)+'</span><span class="opsReserved">'+escapeHtml(t.reserved)+'</span><span></span></div>'+productRows+'</div></div>';
+    const productRows=products.length?products.map(product=>'<div class=\"opsRow\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b><small>'+escapeHtml(product.sku)+'</small></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.available)+'</span><span class=\"opsReserved\">'+escapeHtml(product.reserved)+'</span>'+(data.can_manage?'<button class=\"opsAction\" data-ops-stock=\"'+escapeHtml(product.id)+'\" data-ops-qty=\"'+escapeHtml(product.quantity)+'\">'+escapeHtml(t.editStock)+'</button>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
+    const productsHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.products)+'</h2><div class=\"opsTable\"><div class=\"opsRow head\"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.available)+'</span><span class=\"opsReserved\">'+escapeHtml(t.reserved)+'</span><span></span></div>'+productRows+'</div></div>';
 
-    const orderRows=realOrders.length?realOrders.map(order=>'<div class="opsRow opsOrderRow"><div class="opsName"><b>'+escapeHtml(order.customer_name||t.customer)+'</b><small>'+escapeHtml(String(order.id||'').slice(0,8))+'</small></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class="opsOrderSelect" data-ops-order="'+escapeHtml(order.id)+'">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class="opsDate">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class="empty">'+escapeHtml(t.noOrders)+'</div>';
-    const ordersHtml='<div class="opsSection"><h2>'+escapeHtml(t.orders)+'</h2><div class="opsTable"><div class="opsRow opsOrderRow head"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class="opsDate">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class="truth" style="margin-top:9px">'+escapeHtml(t.simulated)+'</div></div>';
+    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b><small>'+escapeHtml(String(order.id||'').slice(0,8))+'</small></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
+    const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" style=\"margin-top:9px\">'+escapeHtml(t.simulated)+'</div></div>';
 
-    body.innerHTML='<div class="opsMetrics">'+metrics+'</div>'+lowHtml+'<div class="opsGrid"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
+    body.innerHTML='<div class=\"opsMetrics\">'+metrics+'</div>'+lowHtml+'<div class=\"opsGrid\"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
     qa('[data-ops-stock]').forEach(button=>button.onclick=()=>{
       q('#opsStockProductId').value=button.dataset.opsStock;
       q('#opsStockQty').value=button.dataset.opsQty||0;
@@ -169,7 +181,7 @@ const script=String.raw`(()=>{
     event.preventDefault();
     const t=text();const button=q('#opsProductSave');if(button)button.disabled=true;
     try{
-      await mutate({action:'create_product',sku:q('#opsSku').value,name:q('#opsName').value,price_aed:q('#opsPrice').value,quantity:q('#opsQty').value});
+      await mutate({action:'create_product',sku:productSku(),name:q('#opsName').value,price_aed:q('#opsPrice').value,quantity:q('#opsQty').value});
       q('#opsProductForm').reset();q('#opsProductModal').classList.remove('open');notify(t.created);data=null;await load(true);
     }catch(error){notify(t.failed+' — '+error.message)}finally{if(button)button.disabled=false}
   }
@@ -189,27 +201,27 @@ const script=String.raw`(()=>{
   }
 
   function syncOperationsUi(){
+    if(!isStore())return;
     ensureScreen();
     applyCopy();
     if(current==='operations')load();
   }
 
   function activateOperations({target}={}){
-    if(target!=='operations')return;
+    if(target!=='operations'||!isStore())return;
     ensureScreen();
     if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;
     load();
   }
 
-  ensureScreen();
   const lifecycle=window.__dabbirUiLifecycle;
   if(lifecycle?.on){
     lifecycle.on('afterRender','owner-operations',syncOperationsUi);
     lifecycle.on('afterNavigate','owner-operations',activateOperations);
+    lifecycle.on('afterLanguage','owner-operations-language',syncOperationsUi);
   }
 
-  new MutationObserver(applyCopy).observe(document.documentElement,{attributes:true,attributeFilter:['lang','dir']});
-  setTimeout(()=>{ensureScreen();if(isStore())load()},600);
+  setTimeout(()=>{if(isStore()){ensureScreen();load()}},600);
 })();`;
 
 export default function handler(req,res){
