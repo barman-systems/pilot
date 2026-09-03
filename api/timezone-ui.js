@@ -1,15 +1,37 @@
 const script=String.raw`(()=>{
   if(window.__dabbirTimezoneLoaded)return;
   window.__dabbirTimezoneLoaded=true;
-  const DABBIR_TIME_ZONE='Asia/Dubai';
-  const DABBIR_UTC_OFFSET='+04:00';
-  window.__dabbirTimeZone=DABBIR_TIME_ZONE;
 
-  function locale(){
-    try{return typeof lang!=='undefined'&&lang==='en'?'en-AE':'ar-AE'}catch{return document.documentElement.lang==='en'?'en-AE':'ar-AE'}
+  const GCC=Object.freeze({
+    AE:{currency:'AED',timezone:'Asia/Dubai',offset:'+04:00',prefix:'+971',moneyAr:'درهم'},
+    SA:{currency:'SAR',timezone:'Asia/Riyadh',offset:'+03:00',prefix:'+966',moneyAr:'ريال سعودي'},
+    KW:{currency:'KWD',timezone:'Asia/Kuwait',offset:'+03:00',prefix:'+965',moneyAr:'دينار كويتي'},
+    QA:{currency:'QAR',timezone:'Asia/Qatar',offset:'+03:00',prefix:'+974',moneyAr:'ريال قطري'},
+    BH:{currency:'BHD',timezone:'Asia/Bahrain',offset:'+03:00',prefix:'+973',moneyAr:'دينار بحريني'},
+    OM:{currency:'OMR',timezone:'Asia/Muscat',offset:'+04:00',prefix:'+968',moneyAr:'ريال عماني'},
+  });
+
+  function businessGeo(){
+    let business=null;
+    try{business=workspace?.business||null}catch{}
+    const code=String(business?.country_code||document.documentElement.dataset.dabbirCountry||'AE').toUpperCase();
+    const base=GCC[code]||GCC.AE;
+    return {
+      countryCode:GCC[code]?code:'AE',
+      currency:String(business?.currency_code||base.currency),
+      timezone:String(business?.timezone||base.timezone),
+      offset:base.offset,
+      prefix:String(business?.phone_country_prefix||base.prefix),
+      moneyAr:base.moneyAr,
+    };
   }
 
-  function dubaiFormat(value){
+  function locale(){
+    const geo=businessGeo();
+    try{return typeof lang!=='undefined'&&lang==='en'?`en-${geo.countryCode}`:`ar-${geo.countryCode}`}catch{return document.documentElement.lang==='en'?`en-${geo.countryCode}`:`ar-${geo.countryCode}`}
+  }
+
+  function businessFormat(value){
     if(!value){
       try{return typeof T==='function'?T().unknown:'—'}catch{return '—'}
     }
@@ -17,12 +39,12 @@ const script=String.raw`(()=>{
       return new Intl.DateTimeFormat(locale(),{
         dateStyle:'medium',
         timeStyle:'short',
-        timeZone:DABBIR_TIME_ZONE,
+        timeZone:businessGeo().timezone,
       }).format(new Date(value));
     }catch{return String(value)}
   }
 
-  function dubaiLocalToIso(value){
+  function businessLocalToIso(value){
     const raw=String(value||'').trim();
     if(!raw)return null;
     if(/[zZ]$|[+-]\d\d:\d\d$/.test(raw)){
@@ -30,23 +52,31 @@ const script=String.raw`(()=>{
       return Number.isNaN(absolute.getTime())?null:absolute.toISOString();
     }
     const normalized=raw.length===16?raw+':00':raw;
-    const date=new Date(normalized+DABBIR_UTC_OFFSET);
+    const date=new Date(normalized+businessGeo().offset);
     return Number.isNaN(date.getTime())?null:date.toISOString();
   }
 
-  try{fmt=dubaiFormat}catch{}
-  window.fmt=dubaiFormat;
-  window.dabbirFormatTime=dubaiFormat;
-  window.dabbirLocalTimeToIso=dubaiLocalToIso;
+  function syncAuthorities(){
+    const geo=businessGeo();
+    window.__dabbirTimeZone=geo.timezone;
+    window.dabbirFormatTime=businessFormat;
+    window.dabbirLocalTimeToIso=businessLocalToIso;
+    try{fmt=businessFormat}catch{}
+    window.fmt=businessFormat;
+    document.documentElement.dataset.dabbirCountry=geo.countryCode;
+    document.documentElement.dataset.dabbirCurrency=geo.currency;
+    document.documentElement.dataset.dabbirTimezone=geo.timezone;
+  }
+  syncAuthorities();
 
   const appointmentForm=document.querySelector('#appointmentForm');
   const appointmentModal=document.querySelector('#appointmentModal');
   const appointmentTime=document.querySelector('#apptTime');
   const appointmentFields={
-    salon:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['specialist','text','الموظفة / المختصة','Specialist'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر (درهم)','Price (AED)'],['status','select','حالة الموعد','Status'],['notes','text','ملاحظات','Notes']],
+    salon:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['specialist','text','الموظفة / المختصة','Specialist'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر','Price'],['status','select','حالة الموعد','Status'],['notes','text','ملاحظات','Notes']],
     clinic:[['phone','tel','رقم الهاتف','Phone'],['service','text','نوع الموعد','Appointment type'],['specialist','text','الطبيب / المختص','Doctor / specialist'],['duration','number','المدة بالدقائق','Duration (minutes)'],['status','select','حالة الموعد','Status'],['notes','text','ملاحظات إدارية','Administrative notes']],
-    car_wash:[['phone','tel','رقم الهاتف','Phone'],['vehicle','text','نوع السيارة','Vehicle type'],['service','text','الخدمة / الباقة','Service / package'],['location','text','الموقع','Location'],['price','number','السعر (درهم)','Price (AED)'],['notes','text','ملاحظات','Notes']],
-    services:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['location','text','الموقع','Location'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر (درهم)','Price (AED)'],['notes','text','ملاحظات','Notes']],
+    car_wash:[['phone','tel','رقم الهاتف','Phone'],['vehicle','text','نوع السيارة','Vehicle type'],['service','text','الخدمة / الباقة','Service / package'],['location','text','الموقع','Location'],['price','number','السعر','Price'],['notes','text','ملاحظات','Notes']],
+    services:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة','Service'],['location','text','الموقع','Location'],['duration','number','المدة بالدقائق','Duration (minutes)'],['price','number','السعر','Price'],['notes','text','ملاحظات','Notes']],
     other:[['phone','tel','رقم الهاتف','Phone'],['service','text','الخدمة / سبب الموعد','Service / purpose'],['notes','text','ملاحظات','Notes']],
   };
 
@@ -54,14 +84,21 @@ const script=String.raw`(()=>{
     try{return workspace?.business?.business_type||'other'}catch{return'other'}
   }
   function isArabic(){return document.documentElement.lang!=='en'}
+  function fieldLabel(key,arLabel,enLabel){
+    if(key!=='price')return isArabic()?arLabel:enLabel;
+    const geo=businessGeo();
+    return isArabic()?`${arLabel} (${geo.moneyAr})`:`${enLabel} (${geo.currency})`;
+  }
   function renderAdaptiveFields(){
     if(!appointmentForm||!appointmentTime)return;
+    syncAuthorities();
     appointmentForm.querySelector('#adaptiveApptFields')?.remove();
     const wrap=document.createElement('div');wrap.id='adaptiveApptFields';
     const fields=appointmentFields[businessType()]||appointmentFields.other;
+    const geo=businessGeo();
     for(const [key,type,arLabel,enLabel] of fields){
       const field=document.createElement('div');field.className='field';
-      const label=document.createElement('label');label.textContent=isArabic()?arLabel:enLabel;
+      const label=document.createElement('label');label.textContent=fieldLabel(key,arLabel,enLabel);
       let input;
       if(type==='select'){
         input=document.createElement('select');
@@ -71,8 +108,8 @@ const script=String.raw`(()=>{
       }else{
         input=document.createElement('input');input.type=type;
         if(type==='text')input.maxLength=500;
-        if(type==='tel')input.maxLength=40;
-        if(type==='number'){input.min='0';input.step=key==='price'?'0.01':'5';}
+        if(type==='tel'){input.maxLength=40;input.placeholder=`${geo.prefix} …`;input.inputMode='tel';}
+        if(type==='number'){input.min='0';input.step=key==='price'?'0.001':'5';}
       }
       input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
     }
@@ -131,19 +168,19 @@ const script=String.raw`(()=>{
     card.dataset.aiAssistant='true';
   }
 
-  function refreshMobileUtilityUi(){fixMobileHeaderSearch();ensureSettingsInMore();markOwnerCopilotAsAi()}
+  function refreshMobileUtilityUi(){syncAuthorities();fixMobileHeaderSearch();ensureSettingsInMore();markOwnerCopilotAsAi()}
   const utilityObserver=new MutationObserver(()=>requestAnimationFrame(refreshMobileUtilityUi));
   if(document.body)utilityObserver.observe(document.body,{subtree:true,childList:true});
   document.addEventListener('click',event=>{if(event.target?.closest?.('#menuBtn,[data-screen="more"],.topActions,#dabbirOwnerCopilot'))setTimeout(refreshMobileUtilityUi,0)},true);
 
-  if(appointmentForm&&!appointmentForm.dataset.dabbirDubaiTime){
-    appointmentForm.dataset.dabbirDubaiTime='v2-adaptive';
+  if(appointmentForm&&!appointmentForm.dataset.dabbirBusinessTime){
+    appointmentForm.dataset.dabbirBusinessTime='v3-gcc';
     appointmentForm.addEventListener('submit',async event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
       const input=document.querySelector('#apptTime');
       const customer=document.querySelector('#apptCustomer');
-      const startsAt=dubaiLocalToIso(input&&input.value);
+      const startsAt=businessLocalToIso(input&&input.value);
       if(!startsAt){
         try{if(typeof toast==='function')toast(typeof T==='function'?T().invalid:'Invalid time')}catch{}
         return;
@@ -178,8 +215,9 @@ const script=String.raw`(()=>{
     },true);
   }
 
-  document.documentElement.dataset.dabbirTimezone=DABBIR_TIME_ZONE;
+  syncAuthorities();
   setTimeout(()=>{
+    syncAuthorities();
     try{if(typeof workspace!=='undefined'&&workspace&&typeof renderAll==='function')renderAll()}catch{}
     refreshMobileUtilityUi();
   },0);
@@ -196,6 +234,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-timezone','Asia/Dubai');
+  res.setHeader('x-dabbir-timezone','business-profile');
   return res.end(script);
 }
