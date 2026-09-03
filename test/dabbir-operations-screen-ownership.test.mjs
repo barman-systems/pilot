@@ -28,5 +28,5 @@ test('service screen ownership remains activity-gated without owning primary nav
   assert.doesNotMatch(source,/function\s+ensureNav\s*\(/);
   assert.doesNotMatch(source,/dabbirServicesNav/);
   assert.doesNotMatch(source,/\.dataset\.screen\s*=/);
-  assert.match(source,/x-dabbir-service-operations-ui','v3'/);
+  assert.match(source,/x-dabbir-service-operations-ui','v4-owner-control'/);
 });
