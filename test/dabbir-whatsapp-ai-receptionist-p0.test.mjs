@@ -55,10 +55,12 @@ test('LLM cannot supply arbitrary UUIDs to final booking; selected verified pend
   must(core,/service_name and worker_name must exactly match a name in VERIFIED CONTEXT/);
 });
 
-test('availability and final trigger use business market timezone, not Dubai fallback',()=>{
+test('availability and booking confirmation use verified business timezone without Dubai fallback',()=>{
   must(actions,/select b\.timezone into v_timezone/);
   assert.doesNotMatch(actions,/Asia\/Dubai/);
   must(patch,/v_business\.timezone/);
+  must(core,/BOOKING_TIMEZONE_UNVERIFIED/);
+  assert.doesNotMatch(core,/result\?\.timezone\s*\|\|\s*['"]Asia\/Dubai['"]/);
 });
 
 test('cancel and reschedule are scoped to the conversation customer and stop after handoff',()=>{
