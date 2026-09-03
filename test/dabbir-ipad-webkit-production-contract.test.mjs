@@ -9,6 +9,7 @@ const wrapper=read('test/run-ai-full-customer-journey-en.mjs');
 const canonicalWorkflow=read('.github/workflows/dabbir-ai-customer-journey.yml');
 const broker=read('supabase/functions/barman-qa-suite-runner/index.ts');
 const deploymentClassifier=read('vercel-ignore-if-unaffected.sh');
+const shell=read('index.html');
 
 test('iPad WebKit journey runs inside the already-authorized canonical customer journey identity',()=>{
   assert.equal(fs.existsSync(pathUrl('.github/workflows/dabbir-ipad-webkit-production.yml')),false,'standalone privileged iPad workflow must be retired');
@@ -24,16 +25,37 @@ test('iPad WebKit journey runs inside the already-authorized canonical customer 
   assert.match(wrapper,/IPAD_WEBKIT_JOURNEY_PASS/);
 });
 
-test('iPad journey adapts to the real visible responsive navigation instead of forcing phone-only controls',()=>{
-  assert.match(wrapper,/#nav \[data-screen=\"conversations\"\]:visible, #bottomNav \[data-screen=\"conversations\"\]:visible/);
-  assert.match(wrapper,/#nav \[data-screen=\"operations\"\]:visible, #bottomNav \[data-screen=\"operations\"\]:visible/);
-  assert.match(wrapper,/BROWSER_VISIBLE_CONVERSATIONS_NAV_COUNT_/);
-  assert.match(wrapper,/BROWSER_VISIBLE_OPERATIONS_NAV_COUNT_/);
-  assert.match(wrapper,/DABBIR_RESPONSIVE_OPERATIONS_NAV_STATE/);
+test('iPad test follows the real 701-920px shell contract: menu button opens transformed sidebar before navigation',()=>{
+  assert.match(shell,/@media\(max-width:920px\)\{[^}]*\.shell\{grid-template-columns:1fr\}\.side\{position:fixed;/);
+  assert.match(shell,/\.side\.open\{transform:translateX\(0\)!important\}/);
+  assert.match(shell,/\.mobileMenu\{display:block;/);
+  assert.match(shell,/@media\(max-width:700px\)[\s\S]*?\.bottomNav\{position:fixed;display:grid;/);
+  assert.match(wrapper,/#menuBtn:visible/);
+  assert.match(wrapper,/#side\.open #nav \[data-screen=\"conversations\"\]:visible/);
+  assert.match(wrapper,/#side\.open #nav \[data-screen=\"operations\"\]:visible/);
+  assert.match(wrapper,/BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING/);
+  assert.match(wrapper,/BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING/);
+});
+
+test('iPad sidebar targets must be truly inside the viewport and pointer-hit-testable before Playwright clicks',()=>{
+  assert.match(wrapper,/DABBIR_IPAD_CONVERSATIONS_NAV_STATE/);
+  assert.match(wrapper,/DABBIR_IPAD_OPERATIONS_NAV_STATE/);
+  assert.match(wrapper,/inside_viewport:/);
   assert.match(wrapper,/centre_hits_target/);
   assert.match(wrapper,/pointer_events/);
-  assert.match(wrapper,/visible-responsive-nav/);
+  assert.match(wrapper,/width >= 40/);
+  assert.match(wrapper,/height >= 40/);
+  assert.match(wrapper,/rect\.left < window\.innerWidth && rect\.right > 0/);
   assert.doesNotMatch(wrapper,/style\.display\s*=\s*['\"](?:flex|block|grid)['\"]/);
+  assert.doesNotMatch(wrapper,/dispatchEvent\(/);
+});
+
+test('each iPad sidebar navigation proves the responsive shell closes after a successful destination change',()=>{
+  assert.match(wrapper,/DABBIR_IPAD_CONVERSATIONS_TRANSITION/);
+  assert.match(wrapper,/conversationsTransition\.active && !conversationsTransition\.sidebar_open/);
+  assert.match(wrapper,/DABBIR_IPAD_OPERATIONS_TRANSITION/);
+  assert.match(wrapper,/operationsTransition\.active && !operationsTransition\.sidebar_open/);
+  assert.match(wrapper,/menu-opened-responsive-sidebar/);
 });
 
 test('iPad responsive source transformation fails closed if the canonical navigation contract moves',()=>{
