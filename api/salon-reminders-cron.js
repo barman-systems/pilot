@@ -67,26 +67,34 @@ function templateParameters(item){
     clean(datePart(item),160),
   ];
 }
-async function finalize(req,key,item,status,providerMessageId=null,error=null){
-  if(key)return rpc(key,'dabbir_finalize_workflow_notification',{
+function retryableError(error,code){
+  if(error?.ambiguous===true)return false;
+  const status=Number(error?.providerStatus||error?.status||0);
+  if(status===408||status===425||status===429||status>=500)return true;
+  return ['WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED'].includes(code);
+}
+async function finalize(req,key,item,status,providerMessageId=null,error=null,retryable=false){
+  if(key)return rpc(key,'dabbir_finalize_workflow_notification_v2',{
     p_notification_id:item.notification_id,
     p_status:status,
     p_provider_message_id:providerMessageId,
     p_error:error,
+    p_retryable:retryable,
   });
   return edge(req,'finalize',{
     notification_id:item.notification_id,
     status,
     provider_message_id:providerMessageId,
     error,
+    retryable,
   });
 }
 async function deliver(req,key,item){
   try{
     const connection=key?await loadBusinessConnectionWithServiceKey(key,item.business_id):item.connection;
     if(!connection||connection.status!=='connected'){
-      await finalize(req,key,item,'failed',null,'WHATSAPP_TENANT_NOT_LINKED');
-      return {id:item.notification_id,status:'failed',error:'WHATSAPP_TENANT_NOT_LINKED'};
+      const state=await finalize(req,key,item,'failed',null,'WHATSAPP_TENANT_NOT_LINKED',true);
+      return {id:item.notification_id,status:String(state||'failed'),error:'WHATSAPP_TENANT_NOT_LINKED'};
     }
     const sent=await sendMetaTemplate({
       connection,
@@ -96,13 +104,15 @@ async function deliver(req,key,item){
       language:item.template_language,
       parameters:templateParameters(item),
     });
-    await finalize(req,key,item,'sent',sent.providerMessageId,null);
+    await finalize(req,key,item,'sent',sent.providerMessageId,null,false);
     return {id:item.notification_id,status:'sent'};
   }catch(error){
     const code=clean(error?.message||'SALON_REMINDER_FAILED',160);
     const status=error?.ambiguous===true?'ambiguous':'failed';
-    await finalize(req,key,item,status,null,code).catch(()=>null);
-    return {id:item.notification_id,status,error:code};
+    const ambiguous=status==='ambiguous';
+    const retryable=retryableError(error,code);
+    const state=await finalize(req,key,item,status,null,code,retryable).catch(()=>null);
+    return {id:item.notification_id,status:String(state||status),error:code,retryable,ambiguous};
   }
 }
 
@@ -117,8 +127,15 @@ export default async function handler(req,res){
       :(await edge(req,'claim',{limit:25})).items;
     const results=[];
     for(const item of Array.isArray(claimed)?claimed:[])results.push(await deliver(req,key,item));
-    const summary={ok:true,claimed:results.length,sent:results.filter(x=>x.status==='sent').length,failed:results.filter(x=>x.status==='failed').length,ambiguous:results.filter(x=>x.status==='ambiguous').length,results};
-    console.info('dabbir_salon_reminder_cron',{auth_mode:authMode,claimed:summary.claimed,sent:summary.sent,failed:summary.failed,ambiguous:summary.ambiguous});
+    const summary={
+      ok:true,claimed:results.length,
+      sent:results.filter(x=>x.status==='sent').length,
+      retry:results.filter(x=>x.status==='pending').length,
+      failed:results.filter(x=>x.status==='failed').length,
+      ambiguous:results.filter(x=>x.status==='ambiguous').length,
+      results,
+    };
+    console.info('dabbir_salon_reminder_cron',{auth_mode:authMode,claimed:summary.claimed,sent:summary.sent,retry:summary.retry,failed:summary.failed,ambiguous:summary.ambiguous});
     return json(res,200,summary);
   }catch(error){
     const code=clean(error?.message||'SALON_REMINDER_CRON_FAILED',160);
