@@ -5,10 +5,10 @@ const css=String.raw`
 
 const script=String.raw`(()=>{
   if(window.__dabbirBranchContextUi)return;
-  window.__dabbirBranchContextUi='v2-server-scoped-whatsapp';
+  window.__dabbirBranchContextUi='v3-server-scoped-whatsapp';
   const PREFIX='dabbir_active_branch_scope:';
   let activeBusiness=null,context=null,loading=null,apiPatched=false,fetchPatched=false;
-  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v2';document.head.append(style);
+  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v3';document.head.append(style);
 
   function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return''}}
   function key(id){return PREFIX+String(id||'')}
@@ -81,7 +81,7 @@ const script=String.raw`(()=>{
       const raw=typeof input==='string'?input:String(input?.url||'');
       let parsed;try{parsed=new URL(raw,location.origin)}catch{return original(input,options)}
       const path=parsed.pathname;
-      if(!['/api/dabbir-whatsapp-embedded-complete','/api/dabbir-whatsapp-status','/api/dabbir-whatsapp-disconnect'].includes(path)){
+      if(!['/api/dabbir-whatsapp-embedded-complete','/api/dabbir-whatsapp-embedded-config','/api/dabbir-whatsapp-status','/api/dabbir-whatsapp-disconnect'].includes(path)){
         return original(input,options);
       }
       const body=parseBody(options);
@@ -99,7 +99,7 @@ const script=String.raw`(()=>{
         return original(input,options);
       }
 
-      if(scope&&scope!=='all'&&path==='/api/dabbir-whatsapp-status'&&method==='GET'){
+      if(scope&&scope!=='all'&&['/api/dabbir-whatsapp-embedded-config','/api/dabbir-whatsapp-status'].includes(path)&&method==='GET'){
         parsed.searchParams.set('business_id',bid);parsed.searchParams.set('branch_id',scope);
         return original(parsed.pathname+parsed.search,options);
       }
@@ -198,6 +198,6 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-branch-context','server-scoped-v2-whatsapp');
+  res.setHeader('x-dabbir-branch-context','server-scoped-v3-whatsapp');
   return res.end(script);
 }
