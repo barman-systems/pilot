@@ -71,12 +71,11 @@ export default async function handler(req,res){
       return json(res,200,{ok:true,...claim});
     }
 
-    const commandId=uuid(body.command_id);
-    if(!commandId)return json(res,400,{ok:false,error:'COMMAND_ID_INVALID'});
-    const reference=`github-actions-verifier-run:${clean(claims.run_id,40)}`;
-    const details=safeDetails(body.details);
-
     if(phase==='verify'){
+      const commandId=uuid(body.command_id);
+      if(!commandId)return json(res,400,{ok:false,error:'COMMAND_ID_INVALID'});
+      const reference=`github-actions-verifier-run:${clean(claims.run_id,40)}`;
+      const details=safeDetails(body.details);
       const verified=await adminRpc(key,'barman_executive_verify_command_v1',{
         p_command_id:commandId,
         p_verifier:verifierId,
@@ -85,19 +84,6 @@ export default async function handler(req,res){
         p_details:details,
       });
       return json(res,200,{ok:true,verified});
-    }
-
-    if(phase==='fail'){
-      const reason=clean(body.reason,2000);
-      if(!reason)return json(res,400,{ok:false,error:'FAILURE_REASON_REQUIRED'});
-      const failed=await adminRpc(key,'barman_executive_fail_verification_v1',{
-        p_command_id:commandId,
-        p_verifier:verifierId,
-        p_reason:reason,
-        p_reference:reference,
-        p_details:details,
-      });
-      return json(res,200,{ok:true,failed});
     }
 
     return json(res,400,{ok:false,error:'PHASE_INVALID'});
