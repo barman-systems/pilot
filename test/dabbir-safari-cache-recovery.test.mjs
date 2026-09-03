@@ -24,8 +24,8 @@ function renderCanonicalRoot(){
   return {body,headers,status:res.statusCode};
 }
 
-test('root shell preserves the shared Safari UI bundle version', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
+test('root shell advances Safari UI assets through the final rewrite generation', () => {
+  assert.match(recovery, /UI_CACHE_BUST = '20260903-webkit-owner-compile-v5'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
