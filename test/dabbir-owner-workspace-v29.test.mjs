@@ -4,9 +4,12 @@ import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
+const flattener=fs.readFileSync(new URL('../scripts/build-owner-command-center-runtime.mjs',import.meta.url),'utf8');
 
-test('v29 is the active owner workspace and preserves the complete reviewed chain',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('v29 remains the final numbered source layer while Production uses one flat runtime',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
+  assert.match(flattener,/OWNER_COMMAND_CENTER_SOURCE_MANIFEST/);
   assert.match(ui,/owner-command-center-v28\.js/);
 });
 
