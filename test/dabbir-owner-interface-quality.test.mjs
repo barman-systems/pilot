@@ -22,8 +22,8 @@ test('mobile conversation sizing respects dynamic viewport and safe areas',()=>{
 test('owner surfaces follow active workspace and business timezone',()=>{
   assert.match(owner,/workspaceNow=/);
   assert.match(action,/workspaceNow=/);
-  assert.match(owner,/businessTimeZone=/);
-  assert.match(action,/businessTimeZone=/);
+  assert.match(owner,/function businessTimeZone\(\)/);
+  assert.match(action,/const businessTimeZone=\(\)=>/);
   assert.doesNotMatch(owner,/timeZone:['"]Asia\/Dubai['"]/);
   assert.doesNotMatch(action,/timeZone:['"]Asia\/Dubai['"]/);
 });
