@@ -86,7 +86,8 @@ function slotsText(slots,lang){
   return lang==='ar'?`المتاح:\n${lines.join('\n')}\nاختر الوقت المناسب.`:`Available:\n${lines.join('\n')}\nChoose the time that works for you.`;
 }
 function bookingText(result,lang){
-  const when=fmtWhen(result?.starts_at,result?.timezone||'Asia/Dubai',lang),service=clean(result?.service_name,160),worker=clean(result?.worker_name,120);
+  const timezone=clean(result?.timezone,80);if(!timezone)throw Object.assign(new Error('BOOKING_TIMEZONE_UNVERIFIED'),{code:'BOOKING_TIMEZONE_UNVERIFIED'});
+  const when=fmtWhen(result?.starts_at,timezone,lang),service=clean(result?.service_name,160),worker=clean(result?.worker_name,120);
   if(result?.confirmation_gate==='deposit'&&result?.status!=='confirmed'){
     const amount=Number(result?.deposit_required_amount||0),currency=clean(result?.deposit_currency_code||result?.currency_code,8);
     return lang==='ar'?`تم تسجيل موعدك ✅ ${service?`${service} — `:''}${when}${worker?` مع ${worker}`:''}. يحتاج عربون ${amount} ${currency} للتأكيد.`:`Your appointment is recorded ✅ ${service?`${service} — `:''}${when}${worker?` with ${worker}`:''}. A ${amount} ${currency} deposit is required to confirm it.`;
