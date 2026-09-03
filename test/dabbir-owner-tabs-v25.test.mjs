@@ -7,8 +7,9 @@ const ui26=fs.readFileSync(new URL('../api/owner-command-center-v26.js',import.m
 const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner dashboard preserves v25 tabs inside the active reviewed chain',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('owner dashboard preserves v25 tabs inside the flattened reviewed source chain',()=>{
+  assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);
+  assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/);
   assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui26,/owner-command-center-v25\.js/);
   assert.match(ui,/owner-command-center-v24\.js/);
