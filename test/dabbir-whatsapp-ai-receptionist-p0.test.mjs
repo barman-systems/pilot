@@ -11,7 +11,7 @@ const patch=fs.readFileSync(path.join(root,'supabase/migrations/20260903105100_d
 const core=fs.readFileSync(path.join(root,'api/_dabbir-whatsapp-ai-core.js'),'utf8');
 const worker=fs.readFileSync(path.join(root,'api/dabbir-whatsapp-ai-worker.js'),'utf8');
 const cron=fs.readFileSync(path.join(root,'api/dabbir-whatsapp-ai-cron.js'),'utf8');
-const vercel=fs.readFileSync(path.join(root,'vercel.json'),'utf8');
+const vercel=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8'));
 
 const must=(src,re,msg)=>assert.match(src,re,msg);
 
@@ -95,8 +95,9 @@ test('worker requires a UUID capability token and does not expose execution stat
 
 test('recovery cron is protected and scheduled every five minutes',()=>{
   must(cron,/cronAuthMode\(req\)/);must(cron,/CRON_AUTH_REQUIRED/);
-  must(vercel,/"path": "\/api\/dabbir-whatsapp-ai-cron"[\s\S]{0,100}"schedule": "\*\/5 \* \* \* \*"/);
-  must(vercel,/"api\/dabbir-whatsapp-ai-worker\.js"[\s\S]{0,80}"maxDuration": 60/);
+  const recoveryCron=(vercel.crons||[]).find(item=>item?.path==='/api/dabbir-whatsapp-ai-cron');
+  assert.deepEqual(recoveryCron,{path:'/api/dabbir-whatsapp-ai-cron',schedule:'*/5 * * * *'});
+  assert.equal(vercel.functions?.['api/dabbir-whatsapp-ai-worker.js']?.maxDuration,60);
 });
 
 test('operation ledger makes create cancel and reschedule replay safe',()=>{
