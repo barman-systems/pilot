@@ -1,21 +1,24 @@
 import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
+import { ownerContext } from './_whatsapp-embedded-core.js';
 import {
-  embeddedPlatformConfig,
-  loadBusinessConnection,
-  openAccessToken,
-  ownerContext,
-  removeBusinessConnection,
-  unsubscribeWaba,
-} from './_whatsapp-embedded-core.js';
+  deleteExactBusinessConnection,
+  loadBusinessBranchConnection,
+  loadPrimaryBusinessConnection,
+} from './_whatsapp-branch-connection.js';
 
-export function verifiedDeletion(rows, businessId) {
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
+
+export function verifiedDeletion(value, businessId, connectionId = null) {
+  const rows=Array.isArray(value)?value:[value].filter(Boolean);
+  if(rows.length!==1)return false;
+  const row=rows[0];
   return Boolean(
-    Array.isArray(rows)
-    && rows.length === 1
-    && rows[0]
-    && typeof rows[0] === 'object'
-    && !Array.isArray(rows[0])
-    && String(rows[0].business_id || '') === String(businessId)
+    row
+    && typeof row==='object'
+    && !Array.isArray(row)
+    && String(row.business_id||'')===String(businessId)
+    && (!connectionId||String(row.id||'')===String(connectionId))
   );
 }
 
@@ -25,32 +28,33 @@ export default async function handler(req, res) {
 
   try {
     const body = await readJsonBody(req, 4096);
-    const businessId = String(body?.business_id || '').trim();
+    const businessId = safeId(body?.business_id);
+    const branchRaw=String(body?.branch_id||'').trim();
+    const branchId=branchRaw?safeId(branchRaw):null;
     if (!businessId) return json(res, 400, { ok: false, error: 'BUSINESS_REQUIRED' });
+    if(branchRaw&&!branchId)return json(res,400,{ok:false,error:'VALID_BRANCH_REQUIRED'});
 
     const owner = await ownerContext(req, businessId);
-    const row = await loadBusinessConnection(owner.accessToken, businessId);
-    if (!row) return json(res, 200, { ok: true, connected: false, already_disconnected: true });
+    // Backward-compatible callers without branch_id operate on the primary branch only.
+    // A branch disconnect must never delete all connections for the business.
+    const row = branchId
+      ? await loadBusinessBranchConnection(owner.accessToken,businessId,branchId)
+      : await loadPrimaryBusinessConnection(owner.accessToken,businessId);
+    if (!row) return json(res, 200, { ok: true, connected: false, already_disconnected: true, branch_id: branchId });
 
-    const platform = embeddedPlatformConfig();
-    let remoteUnsubscribed = false;
-    if (platform.appSecret && platform.encryptionSecret) {
-      try {
-        const token = openAccessToken(row, platform, businessId);
-        remoteUnsubscribed = await unsubscribeWaba(platform, token, row.waba_id);
-      } catch {
-        remoteUnsubscribed = false;
-      }
-    }
-
-    const deleted = await removeBusinessConnection(owner.accessToken, businessId);
-    if (!verifiedDeletion(deleted, businessId)) {
+    const deleted = await deleteExactBusinessConnection(owner.accessToken,businessId,row.id);
+    if (!verifiedDeletion(deleted, businessId, row.id)) {
       throw Object.assign(new Error('WHATSAPP_CONNECTION_DELETE_UNVERIFIED'), { status: 502 });
     }
+
     return json(res, 200, {
       ok: true,
       connected: false,
-      remote_unsubscribed: remoteUnsubscribed,
+      branch_id: row.branch_id,
+      connection_id: row.id,
+      phone_number_id: row.phone_number_id,
+      remote_unsubscribed: false,
+      remote_unsubscribe_skipped_reason: 'BRANCH_SAFE_LOCAL_DISCONNECT',
       secrets_exposed: false,
     });
   } catch (error) {
