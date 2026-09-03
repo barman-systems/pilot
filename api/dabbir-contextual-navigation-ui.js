@@ -189,14 +189,17 @@ const script=String.raw`(()=>{
     try{if(typeof setLanguage==='function')setLanguage(ar()?'en':'ar');else if(typeof applyLang==='function')applyLang(ar()?'en':'ar')}catch{}
   }
   function parseClock(value){const match=String(value||'').match(/^(\d{2}):(\d{2})$/);return match?Number(match[1])*60+Number(match[2]):NaN}
-  function currentDubai(){
+  function businessTimeZone(){
+    return String(currentWorkspace()?.business?.timezone||document.documentElement.dataset.dabbirTimezone||window.__dabbirTimeZone||'Asia/Dubai');
+  }
+  function currentBusinessClock(){
     try{
-      const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Dubai',weekday:'long',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+      const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:businessTimeZone(),weekday:'long',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
       return {day:parts.weekday,minute:Number(parts.hour)*60+Number(parts.minute)};
     }catch{return null}
   }
   function businessOpenNow(){
-    const now=currentDubai();if(!now)return false;
+    const now=currentBusinessClock();if(!now)return false;
     const raw=String(q('#dk-business_hours')?.value||currentWorkspace()?.business?.business_hours||'');
     const line=raw.split(';').map(value=>value.trim()).find(value=>value.startsWith(now.day+' '));
     const match=line?.match(/^[A-Za-z]+\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);if(!match)return false;
@@ -241,20 +244,18 @@ const script=String.raw`(()=>{
     syncApprovedSettings();
   }
 
-  try{
-    const baseRenderAll=renderAll;
-    renderAll=function(){const result=baseRenderAll.apply(this,arguments);setTimeout(enforce,0);return result};
-  }catch{}
-
-  try{
-    const baseApplyLang=applyLang;
-    applyLang=function(){const result=baseApplyLang.apply(this,arguments);setTimeout(enforce,0);return result};
-  }catch{}
+  function queueEnforce(){setTimeout(enforce,0)}
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterRender','contextual-navigation',queueEnforce);
+    lifecycle.on('afterNavigate','contextual-navigation',queueEnforce);
+    lifecycle.on('afterLanguage','contextual-navigation',queueEnforce);
+  }
 
   setTimeout(enforce,0);
   setTimeout(enforce,650);
   setTimeout(enforce,1600);
-  window.__dabbirContextualNavigation={refresh:enforce,version:'v6',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true,team_access:'more-and-sidebar',owner_assistant_access:'more',approved_settings_ui:true};
+  window.__dabbirContextualNavigation={refresh:enforce,version:'v7',authority:'primary-context-router',workspace_source:'global-lexical-first',mobile_menu_resync:true,team_access:'more-and-sidebar',owner_assistant_access:'more',approved_settings_ui:true,lifecycle_driven:true,business_timezone_status:true};
 })();`;
 
 export default function handler(req,res){
@@ -262,6 +263,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-contextual-navigation','v6');
+  res.setHeader('x-dabbir-contextual-navigation','v7');
   return res.status(200).send(script);
 }

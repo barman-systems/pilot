@@ -40,9 +40,9 @@ const UI_MODULE_ORDER = [
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260903-lifecycle-authority-v1';
+const UI_BUNDLE_VERSION = '20260903-context-language-lifecycle-v2';
 
-// One shell-level lifecycle authority owns the final render/navigation entry points.
+// One shell-level lifecycle authority owns the final render/navigation/language entry points.
 // Legacy modules may still wrap them during migration; reconcile() reasserts the
 // outer authority without creating recursion, while older lifecycle wrappers become inert.
 const UI_LIFECYCLE_BOOTSTRAP = `<script>
@@ -51,17 +51,21 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
     window.__dabbirUiLifecycle.reconcile?.();
     return;
   }
-  const hooks=new Map([['afterRender',new Map()],['afterNavigate',new Map()]]);
+  const hooks=new Map([['afterRender',new Map()],['afterNavigate',new Map()],['afterLanguage',new Map()]]);
   const routes=new Map();
   let renderGeneration=0;
   let navigationGeneration=0;
+  let languageGeneration=0;
   let renderWrapper=null;
   let navigationWrapper=null;
+  let languageWrapper=null;
   let renderReconciliations=0;
   let navigationReconciliations=0;
+  let languageReconciliations=0;
 
   function safeCurrent(){try{return typeof current==='undefined'?null:current}catch{return null}}
   function safeWorkspace(){try{return typeof workspace==='undefined'?null:workspace}catch{return null}}
+  function safeLanguage(){try{return typeof lang==='undefined'?(document.documentElement.lang||null):lang}catch{return document.documentElement.lang||null}}
   function emit(event,payload){
     const group=hooks.get(event);
     if(!group)return;
@@ -116,6 +120,21 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
     navigationReconciliations++;
     return true;
   }
+  function wrapLanguage(){
+    if(typeof applyLang!=='function')return false;
+    if(applyLang===languageWrapper)return true;
+    const base=applyLang;
+    const generation=++languageGeneration;
+    const wrapper=function(){
+      const result=base.apply(this,arguments);
+      if(generation===languageGeneration)emit('afterLanguage',{language:safeLanguage(),current:safeCurrent(),workspace:safeWorkspace()});
+      return result;
+    };
+    languageWrapper=wrapper;
+    applyLang=wrapper;
+    languageReconciliations++;
+    return true;
+  }
   const api={
     version:'ui-lifecycle-v1',
     on(event,id,fn){
@@ -133,10 +152,11 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
     reconcile(){
       const render=wrapRender();
       const navigation=wrapNavigation();
-      return {render,navigation,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations};
+      const language=wrapLanguage();
+      return {render,navigation,language,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations};
     },
     status(){
-      return {version:this.version,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,render_hooks:hooks.get('afterRender').size,navigation_hooks:hooks.get('afterNavigate').size,route_resolvers:routes.size};
+      return {version:this.version,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations,render_hooks:hooks.get('afterRender').size,navigation_hooks:hooks.get('afterNavigate').size,language_hooks:hooks.get('afterLanguage').size,route_resolvers:routes.size};
     }
   };
   window.__dabbirUiLifecycle=api;
@@ -175,8 +195,7 @@ const BOOKING_TIME_GUARD = `<script>
 (()=>{
   if(window.__dabbirBookingTimeGuard)return;
   window.__dabbirBookingTimeGuard=true;
-  const TZ='Asia/Dubai';
-  const OFFSET='+04:00';
+  const GCC_OFFSETS={AE:'+04:00',SA:'+03:00',KW:'+03:00',QA:'+03:00',BH:'+03:00',OM:'+04:00'};
 
   function copy(){
     const ar=String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
@@ -185,9 +204,13 @@ const BOOKING_TIME_GUARD = `<script>
       : {past:'Bookings cannot be created in the past. Choose the current time or a later time.'};
   }
 
-  function dubaiMinute(date=new Date()){
+  function businessTimeZone(){
+    return String(document.documentElement.dataset.dabbirTimezone||window.__dabbirTimeZone||'Asia/Dubai');
+  }
+
+  function businessMinute(date=new Date()){
     const fmt=new Intl.DateTimeFormat('en-CA',{
-      timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',
+      timeZone:businessTimeZone(),year:'numeric',month:'2-digit',day:'2-digit',
       hour:'2-digit',minute:'2-digit',hourCycle:'h23'
     });
     const parts=Object.fromEntries(fmt.formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
@@ -197,7 +220,16 @@ const BOOKING_TIME_GUARD = `<script>
   function selectedMs(value){
     const raw=String(value||'').trim();
     if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}/.test(raw))return NaN;
-    return new Date(raw.slice(0,16)+':00'+OFFSET).getTime();
+    try{
+      if(typeof window.dabbirLocalTimeToIso==='function'){
+        const iso=window.dabbirLocalTimeToIso(raw.slice(0,16));
+        const ms=iso?new Date(iso).getTime():NaN;
+        if(Number.isFinite(ms))return ms;
+      }
+    }catch{}
+    const country=String(document.documentElement.dataset.dabbirCountry||'AE').toUpperCase();
+    const offset=GCC_OFFSETS[country]||GCC_OFFSETS.AE;
+    return new Date(raw.slice(0,16)+':00'+offset).getTime();
   }
 
   function currentMinuteMs(){return Math.floor(Date.now()/60000)*60000}
@@ -205,7 +237,7 @@ const BOOKING_TIME_GUARD = `<script>
   function syncMin(){
     const input=document.querySelector('#apptTime');
     if(!input)return;
-    const min=dubaiMinute();
+    const min=businessMinute();
     if(input.min!==min)input.min=min;
     if(input.value&&selectedMs(input.value)<currentMinuteMs())input.value='';
     input.setCustomValidity('');
@@ -232,6 +264,8 @@ const BOOKING_TIME_GUARD = `<script>
   },true);
   document.addEventListener('submit',event=>{if(event.target?.id==='appointmentForm')rejectPast(event)},true);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncMin()});
+  window.__dabbirUiLifecycle?.on?.('afterRender','booking-time-guard',syncMin);
+  window.__dabbirUiLifecycle?.on?.('afterLanguage','booking-time-guard',syncMin);
   setTimeout(syncMin,0);
 })();
 </script>`;
