@@ -2,7 +2,7 @@ import { singleQueryValue } from '../_request-query.js';
 import { accessTokenFromRequest, getVerifiedUser, json, readJsonBody, readRpcJson, requireSameOrigin, rpcErrorCode, supabaseRpc } from '../_auth-core.js';
 
 const roles = new Set(['admin','manager','employee','staff','viewer','agent']);
-const permissions = new Set(['view_business','manage_business','manage_team','view_integrations','manage_integrations','view_customers','edit_customers','view_conversations','reply_conversations','view_appointments','manage_appointments','manage_automations','view_analytics','manage_billing','export_data','view_services','manage_services','view_knowledge','manage_knowledge','view_quality','manage_handoffs']);
+const permissions = new Set(['view_business','manage_business','manage_store_operations','manage_team','view_integrations','manage_integrations','view_customers','edit_customers','view_conversations','reply_conversations','view_appointments','manage_appointments','manage_automations','view_analytics','manage_billing','export_data','view_services','manage_services','view_knowledge','manage_knowledge','view_quality','manage_handoffs']);
 
 function normalizePermissions(value) {
   if (!Array.isArray(value)) return [];
