@@ -1,5 +1,3 @@
-begin;
-
 create or replace function public.dabbir_platform_auth_user_by_email_v1(p_email text)
 returns jsonb language plpgsql security definer set search_path='pg_catalog','auth' as $$
 declare v jsonb;
@@ -139,5 +137,3 @@ grant execute on function public.dabbir_platform_staff_list_v1(uuid) to service_
 grant execute on function public.dabbir_platform_staff_list_v2(uuid) to service_role;
 grant execute on function public.dabbir_platform_staff_update_v1(uuid,uuid,text,text[],text) to service_role;
 grant execute on function public.dabbir_platform_staff_invite_delivery_v1(uuid,text) to service_role;
-
-commit;
