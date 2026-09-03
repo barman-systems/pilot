@@ -40,10 +40,58 @@ async function restCount(token,path,fallback){
   return total;
 }
 
-function dubaiDay(now=new Date()){
-  const dateKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
-  const start=new Date(`${dateKey}T00:00:00+04:00`);
-  return {dateKey,start:start.toISOString(),end:new Date(start.getTime()+86400000).toISOString()};
+function dateParts(value,timeZone,{withTime=false}={}){
+  const options=withTime
+    ? {timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}
+    : {timeZone,year:'numeric',month:'2-digit',day:'2-digit'};
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',options).formatToParts(value).filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+  return parts;
+}
+
+function localDateKey(value,timeZone){
+  const parts=dateParts(value,timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function nextDateKey(dateKey){
+  const [year,month,day]=String(dateKey).split('-').map(Number);
+  const next=new Date(Date.UTC(year,month-1,day)+86400000);
+  const pad=value=>String(value).padStart(2,'0');
+  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth()+1)}-${pad(next.getUTCDate())}`;
+}
+
+function zonedMidnight(dateKey,timeZone){
+  const [year,month,day]=String(dateKey).split('-').map(Number);
+  const target=Date.UTC(year,month-1,day,0,0,0);
+  let guess=target;
+  for(let attempt=0;attempt<3;attempt++){
+    const parts=dateParts(new Date(guess),timeZone,{withTime:true});
+    const represented=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour),Number(parts.minute),Number(parts.second));
+    guess=target-(represented-guess);
+  }
+  return new Date(guess);
+}
+
+function businessDay(timeZone,now=new Date()){
+  const timezone=clean(timeZone,64);
+  if(!timezone)throw Object.assign(new Error('BUSINESS_TIMEZONE_REQUIRED'),{status:502});
+  try{
+    const dateKey=localDateKey(now,timezone);
+    const start=zonedMidnight(dateKey,timezone);
+    const end=zonedMidnight(nextDateKey(dateKey),timezone);
+    return {dateKey,start:start.toISOString(),end:end.toISOString(),timezone};
+  }catch(error){
+    if(error?.status)throw error;
+    throw Object.assign(new Error('BUSINESS_TIMEZONE_INVALID'),{status:502});
+  }
+}
+
+async function loadBusinessProfile(token,businessId){
+  const rows=await rest(token,`dabbir_businesses?select=id,name,business_type,locale,country_code,currency_code,timezone,phone_country_prefix&id=eq.${enc(businessId)}&limit=1`,'BUSINESS_LOOKUP_FAILED');
+  const business=Array.isArray(rows)?rows[0]||null:null;
+  if(!business?.id)throw Object.assign(new Error('BUSINESS_NOT_FOUND'),{status:404});
+  if(!business.country_code||!business.currency_code||!business.timezone)throw Object.assign(new Error('BUSINESS_GCC_PROFILE_REQUIRED'),{status:502});
+  return business;
 }
 
 async function authContext(req,res,businessId){
@@ -63,10 +111,9 @@ async function authContext(req,res,businessId){
   return {token,user,membership};
 }
 
-async function verifiedOutcomes(token,businessId){
-  const day=dubaiDay();
+async function verifiedOutcomes(token,businessId,day){
   try{
-    const rows=await rest(token,`dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${enc(day.start)}&order=completed_at.desc&limit=100`,'VERIFIED_OUTCOMES_LOOKUP_FAILED');
+    const rows=await rest(token,`dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${enc(day.start)}&completed_at=lt.${enc(day.end)}&order=completed_at.desc&limit=100`,'VERIFIED_OUTCOMES_LOOKUP_FAILED');
     const safeRows=Array.isArray(rows)?rows:[];
     const estimates=safeRows.map(row=>Number(row.estimated_manual_seconds)).filter(value=>Number.isFinite(value)&&value>=0);
     const seconds=estimates.reduce((sum,value)=>sum+value,0);
@@ -95,6 +142,13 @@ function recommendScreen(message,snapshot){
   return 'dashboard';
 }
 
+function moneyText(value,snapshot,arabic){
+  const currency=clean(snapshot.currency_code||snapshot.business?.currency_code,3);
+  const country=clean(snapshot.country_code||snapshot.business?.country_code,2);
+  const amount=Number(value||0);
+  try{return new Intl.NumberFormat(`${arabic?'ar':'en'}-${country}`,{style:'currency',currency,maximumFractionDigits:3}).format(amount)}catch{return `${amount.toFixed(2)} ${currency}`}
+}
+
 function fallbackAnswer(message,language,snapshot){
   const ar=language==='ar'||(language!=='en'&&/[\u0600-\u06FF]/.test(message));
   const text=String(message||'').toLowerCase();
@@ -109,12 +163,18 @@ function fallbackAnswer(message,language,snapshot){
     const time=proof.estimated_manual_minutes_saved==null?(ar?'، ولا يوجد تقدير موثق للوقت الموفر بعد':', and there is no verified time-saved estimate yet'):(ar?`، بوقت يدوي مقدر تم توفيره ${proof.estimated_manual_minutes_saved} دقيقة`:` with an estimated ${proof.estimated_manual_minutes_saved} minutes of manual work avoided`);
     return ar?`أنجز دبّر ${proof.verified_autonomous_actions} إجراءً موثقًا تلقائيًا اليوم${time}.`:`DABBIR completed ${proof.verified_autonomous_actions} verified autonomous action(s) today${time}.`;
   }
-  if(/مبيعات|بيع|sales|revenue|دخل/.test(text))return ar?`المبيعات المكتملة الموثقة اليوم ${m.sales_today_aed.toFixed(2)} درهم عبر ${m.completed_sales_today} عملية. التحصيل المسجل ${m.cash_collected_today_aed.toFixed(2)} درهم، والمبالغ غير المسددة ${m.receivables_today_aed.toFixed(2)} درهم. هذه قراءة ليوم دبي الحالي وليست ربحًا محاسبيًا.`:`Verified completed sales today are AED ${m.sales_today_aed.toFixed(2)} across ${m.completed_sales_today} sale(s). Recorded collections are AED ${m.cash_collected_today_aed.toFixed(2)} and unpaid amounts are AED ${m.receivables_today_aed.toFixed(2)}. This is the current Dubai-day view, not accounting profit.`;
+  if(/مبيعات|بيع|sales|revenue|دخل/.test(text)){
+    const sales=moneyText(m.sales_today,snapshot,ar),collected=moneyText(m.cash_collected_today,snapshot,ar),receivables=moneyText(m.receivables_today,snapshot,ar);
+    return ar?`المبيعات المكتملة الموثقة اليوم ${sales} عبر ${m.completed_sales_today} عملية. التحصيل المسجل ${collected}، والمبالغ غير المسددة ${receivables}. هذه قراءة لليوم المحلي للنشاط (${snapshot.timezone}) وليست ربحًا محاسبيًا.`:`Verified completed sales today are ${sales} across ${m.completed_sales_today} sale(s). Recorded collections are ${collected} and unpaid amounts are ${receivables}. This is the business-local day view (${snapshot.timezone}), not accounting profit.`;
+  }
   if(/مخزون|inventory|منتج|product/.test(text)){
     if(snapshot.store.low_stock.length){const names=snapshot.store.low_stock.map(item=>`${item.name} (${item.available})`).join('، ');return ar?`لديك ${m.low_stock_products} منتجات عند حد المخزون المنخفض: ${names}. افتح إدارة المتجر لاستلام شحنة أو تعديل الجرد.`:`You have ${m.low_stock_products} low-stock product(s): ${names}. Open Store operations to receive stock or adjust the count.`}
     return ar?'لا توجد منتجات عند حد المخزون المنخفض ضمن البيانات الموثقة الآن.':'No products are currently at the low-stock threshold in verified data.';
   }
-  if(/مصروف|expense|expenses/.test(text))return ar?`المصروفات المسجلة اليوم ${m.expenses_today_aed.toFixed(2)} درهم. لا أحول هذا الرقم إلى ربح محاسبي لأنه لا يتضمن بالضرورة تكلفة البضاعة أو الضرائب أو الرسوم.`:`Recorded expenses today are AED ${m.expenses_today_aed.toFixed(2)}. I do not present this as accounting profit because cost of goods, taxes, and fees may not all be represented.`;
+  if(/مصروف|expense|expenses/.test(text)){
+    const expenses=moneyText(m.expenses_today,snapshot,ar);
+    return ar?`المصروفات المسجلة اليوم ${expenses}. لا أحول هذا الرقم إلى ربح محاسبي لأنه لا يتضمن بالضرورة تكلفة البضاعة أو الضرائب أو الرسوم.`:`Recorded expenses today are ${expenses}. I do not present this as accounting profit because cost of goods, taxes, and fees may not all be represented.`;
+  }
   if(/كم.*عميل|customers?/.test(text))return ar?`لديك ${m.customers} عميلًا موثقًا في النشاط.`:`You have ${m.customers} verified customer(s) in this business.`;
   if(/موعد|appointment/.test(text))return ar?`لديك ${snapshot.appointments.length} موعدًا حقيقيًا موثقًا خلال الـ24 ساعة القادمة.`:`You have ${snapshot.appointments.length} verified non-simulated appointment(s) in the next 24 hours.`;
   const attention=m.active_handoffs+m.open_followups;
@@ -125,10 +185,10 @@ async function buildSnapshot(token,businessId){
   const now=Date.now();
   const next24=new Date(now+86400000).toISOString();
   const nowIso=new Date(now).toISOString();
-  const day=dubaiDay(new Date(now));
+  const business=await loadBusinessProfile(token,businessId);
+  const day=businessDay(business.timezone,new Date(now));
   const b=enc(businessId);
-  const [businessRows,knowledge,followups,handoffs,appointments,customers,products,inventory,storeOrders,storeExpenses,metrics,proof]=await Promise.all([
-    rest(token,`dabbir_businesses?select=id,name,business_type,locale&id=eq.${b}&limit=1`,'BUSINESS_LOOKUP_FAILED'),
+  const [knowledge,followups,handoffs,appointments,customers,products,inventory,storeOrders,storeExpenses,metrics,proof]=await Promise.all([
     rest(token,`dabbir_business_knowledge?select=knowledge_key,value,status&business_id=eq.${b}&status=eq.approved&order=updated_at.desc&limit=30`,'BUSINESS_KNOWLEDGE_LOOKUP_FAILED').catch(()=>[]),
     rest(token,`dabbir_followups?select=customer_id,status,reason,due_at,blocked_reason&business_id=eq.${b}&status=not.in.(completed,cancelled,sent)&due_at=lte.${enc(next24)}&order=due_at.asc&limit=20`,'FOLLOWUPS_LOOKUP_FAILED'),
     rest(token,`dabbir_handoffs?select=customer_id,state,priority,reason,summary,updated_at&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&order=updated_at.desc&limit=20`,'HANDOFFS_LOOKUP_FAILED'),
@@ -146,7 +206,7 @@ async function buildSnapshot(token,businessId){
       restCount(token,`dabbir_messages?select=id&business_id=eq.${b}&sender_type=eq.ai&simulated=eq.false&limit=1`,'AI_MESSAGES_COUNT_FAILED'),
       restCount(token,`dabbir_appointments?select=id&business_id=eq.${b}&starts_at=gte.${enc(day.start)}&starts_at=lt.${enc(day.end)}&simulated=eq.false&limit=1`,'TODAY_APPOINTMENTS_COUNT_FAILED'),
     ]),
-    verifiedOutcomes(token,businessId),
+    verifiedOutcomes(token,businessId,day),
   ]);
   const [customersCount,activeChats,openFollowups,activeHandoffs,aiMessages,todayAppointments]=metrics;
   const names=new Map((customers||[]).map(row=>[row.id,clean(row.display_name,120)||null]));
@@ -160,21 +220,29 @@ async function buildSnapshot(token,businessId){
     const available=quantity-reserved;
     return {name:clean(product.name,120),sku:clean(product.sku,80),available,quantity,reserved,low_stock:available<=3};
   }).filter(product=>product.low_stock).slice(0,6);
-  const salesToday=(storeOrders||[]).reduce((sum,row)=>sum+asNumber(row.total_aed),0);
-  const cashCollectedToday=(storeOrders||[]).reduce((sum,row)=>sum+asNumber(row.paid_aed),0);
-  const receivablesToday=(storeOrders||[]).reduce((sum,row)=>sum+Math.max(0,asNumber(row.total_aed)-asNumber(row.paid_aed)),0);
-  const expensesToday=(storeExpenses||[]).reduce((sum,row)=>sum+asNumber(row.amount_aed),0);
+  const salesToday=Number((storeOrders||[]).reduce((sum,row)=>sum+asNumber(row.total_aed),0).toFixed(2));
+  const cashCollectedToday=Number((storeOrders||[]).reduce((sum,row)=>sum+asNumber(row.paid_aed),0).toFixed(2));
+  const receivablesToday=Number((storeOrders||[]).reduce((sum,row)=>sum+Math.max(0,asNumber(row.total_aed)-asNumber(row.paid_aed)),0).toFixed(2));
+  const expensesToday=Number((storeExpenses||[]).reduce((sum,row)=>sum+asNumber(row.amount_aed),0).toFixed(2));
   return {
-    business:businessRows?.[0]||null,
+    business,
+    country_code:business.country_code,
+    currency_code:business.currency_code,
     knowledge:(knowledge||[]).map(row=>({key:clean(row.knowledge_key,80),value:clean(valueText(row.value),600)})).filter(row=>row.key&&row.value),
-    metrics:{customers:customersCount,active_chats:activeChats,open_followups:openFollowups,active_handoffs:activeHandoffs,ai_messages:aiMessages,today_appointments:todayAppointments,sales_today_aed:Number(salesToday.toFixed(2)),cash_collected_today_aed:Number(cashCollectedToday.toFixed(2)),receivables_today_aed:Number(receivablesToday.toFixed(2)),expenses_today_aed:Number(expensesToday.toFixed(2)),low_stock_products:lowStock.length,completed_sales_today:(storeOrders||[]).length},
-    store:{low_stock:lowStock,expense_categories:(storeExpenses||[]).slice(0,5).map(row=>({category:clean(row.category,24),amount_aed:Number(asNumber(row.amount_aed).toFixed(2))}))},
+    metrics:{
+      customers:customersCount,active_chats:activeChats,open_followups:openFollowups,active_handoffs:activeHandoffs,ai_messages:aiMessages,today_appointments:todayAppointments,
+      currency_code:business.currency_code,sales_today:salesToday,cash_collected_today:cashCollectedToday,receivables_today:receivablesToday,expenses_today:expensesToday,
+      sales_today_aed:salesToday,cash_collected_today_aed:cashCollectedToday,receivables_today_aed:receivablesToday,expenses_today_aed:expensesToday,
+      low_stock_products:lowStock.length,completed_sales_today:(storeOrders||[]).length,
+    },
+    store:{low_stock:lowStock,expense_categories:(storeExpenses||[]).slice(0,5).map(row=>({category:clean(row.category,24),amount:Number(asNumber(row.amount_aed).toFixed(2)),amount_aed:Number(asNumber(row.amount_aed).toFixed(2))}))},
     followups:(followups||[]).map(decorate),
     handoffs:(handoffs||[]).map(decorate),
     appointments:(appointments||[]).map(decorate),
     proof,
     generated_at:new Date().toISOString(),
-    timezone:'Asia/Dubai',
+    business_date:day.dateKey,
+    timezone:business.timezone,
   };
 }
 
@@ -185,15 +253,16 @@ function promptContext(snapshot){
   const appointments=snapshot.appointments.slice(0,6).map(row=>`${row.customer||'customer'} | ${row.starts_at} | ${row.status}`).join('\n');
   return [
     'OWNER OPERATIONS SNAPSHOT — VERIFIED TENANT DATA ONLY.',
-    `Business: ${clean(snapshot.business?.name,120)} | type=${clean(snapshot.business?.business_type,40)}.`,
-    `Exact metrics: customers=${snapshot.metrics.customers}; active_web_chats=${snapshot.metrics.active_chats}; open_followups=${snapshot.metrics.open_followups}; active_handoffs=${snapshot.metrics.active_handoffs}; ai_messages=${snapshot.metrics.ai_messages}; today_real_appointments=${snapshot.metrics.today_appointments}; completed_sales_today_aed=${snapshot.metrics.sales_today_aed}; cash_collected_today_aed=${snapshot.metrics.cash_collected_today_aed}; receivables_today_aed=${snapshot.metrics.receivables_today_aed}; expenses_today_aed=${snapshot.metrics.expenses_today_aed}; low_stock_products=${snapshot.metrics.low_stock_products}.`,
+    `Business: ${clean(snapshot.business?.name,120)} | type=${clean(snapshot.business?.business_type,40)} | country=${snapshot.country_code} | currency=${snapshot.currency_code} | timezone=${snapshot.timezone}.`,
+    `Exact metrics for business-local date ${snapshot.business_date}: customers=${snapshot.metrics.customers}; active_web_chats=${snapshot.metrics.active_chats}; open_followups=${snapshot.metrics.open_followups}; active_handoffs=${snapshot.metrics.active_handoffs}; ai_messages=${snapshot.metrics.ai_messages}; today_real_appointments=${snapshot.metrics.today_appointments}; sales_today=${snapshot.metrics.sales_today}; cash_collected_today=${snapshot.metrics.cash_collected_today}; receivables_today=${snapshot.metrics.receivables_today}; expenses_today=${snapshot.metrics.expenses_today}; currency=${snapshot.currency_code}; low_stock_products=${snapshot.metrics.low_stock_products}.`,
     snapshot.proof.available?`Verified autonomous outcomes today=${snapshot.proof.verified_autonomous_actions}; estimated manual minutes avoided=${snapshot.proof.estimated_manual_minutes_saved==null?'UNAVAILABLE':snapshot.proof.estimated_manual_minutes_saved}.`:'Verified autonomous outcome evidence is unavailable; do not treat it as zero.',
     facts?`Owner-approved business knowledge:\n${facts}`:'No owner-approved business knowledge was supplied.',
     followups?`Follow-ups due within 24h:\n${followups}`:'No verified follow-ups due within 24h.',
     handoffs?`Active human handoffs:\n${handoffs}`:'No active human handoffs.',
     appointments?`Real non-simulated appointments within 24h:\n${appointments}`:'No verified real appointments within 24h.',
     snapshot.store.low_stock.length?`Low-stock products (available units):\n${snapshot.store.low_stock.map(item=>`${item.name} | SKU ${item.sku} | available ${item.available}`).join('\n')}`:'No low-stock products are verified.',
-    snapshot.store.expense_categories.length?`Today expenses by recent entry: ${snapshot.store.expense_categories.map(item=>`${item.category} AED ${item.amount_aed}`).join('; ')}`:'No store expenses are verified for today.',
+    snapshot.store.expense_categories.length?`Today expenses by recent entry: ${snapshot.store.expense_categories.map(item=>`${item.category} ${snapshot.currency_code} ${item.amount}`).join('; ')}`:'No store expenses are verified for today.',
+    `All monetary amounts above are in the business currency ${snapshot.currency_code}. Legacy database fields ending in _aed are storage-compatibility names only and must not be described as AED unless currency_code is AED.`,
     'This owner copilot is read-only. Never claim you executed, sent, changed, booked, paid, cancelled, or contacted anyone. Never call sales minus expenses profit. Recommend the exact next screen when action is needed: conversations, tasks, appointments, operations, integrations, or settings.',
   ].join('\n').slice(0,3900);
 }
@@ -207,8 +276,10 @@ export default async function handler(req,res){
   const ctx=await authContext(req,res,businessId);if(!ctx)return;
   try{
     if(req.method==='GET'){
-      const proof=await verifiedOutcomes(ctx.token,businessId);
-      return json(res,200,{ok:true,business_id:businessId,proof,mode:'READ_ONLY_VERIFIED_OWNER_COPILOT',external_side_effects:false});
+      const business=await loadBusinessProfile(ctx.token,businessId);
+      const day=businessDay(business.timezone);
+      const proof=await verifiedOutcomes(ctx.token,businessId,day);
+      return json(res,200,{ok:true,business_id:businessId,country_code:business.country_code,currency_code:business.currency_code,timezone:business.timezone,business_date:day.dateKey,proof,mode:'READ_ONLY_VERIFIED_OWNER_COPILOT',external_side_effects:false});
     }
     const message=clean(body?.message,800);
     if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
@@ -223,6 +294,8 @@ export default async function handler(req,res){
     return json(res,200,{
       ok:true,
       business_id:businessId,
+      country_code:snapshot.country_code,
+      currency_code:snapshot.currency_code,
       answer:ai?.ok?ai.reply:fallback,
       answer_source:ai?.ok?'AI_GROUNDED_ON_VERIFIED_OWNER_SNAPSHOT':'DETERMINISTIC_VERIFIED_FALLBACK',
       provider_state:ai?.state||'FALLBACK',
@@ -232,8 +305,9 @@ export default async function handler(req,res){
       mode:'READ_ONLY_VERIFIED_OWNER_COPILOT',
       external_side_effects:false,
       generated_at:snapshot.generated_at,
+      business_date:snapshot.business_date,
       timezone:snapshot.timezone,
-      truth:{tenant_rls:true,exact_counts:true,owner_only:true,unverified_numbers_forbidden:true,simulated_appointments_excluded:true,store_metrics_are_dubai_day_facts:true,accounting_profit_not_asserted:true},
+      truth:{tenant_rls:true,exact_counts:true,owner_only:true,unverified_numbers_forbidden:true,simulated_appointments_excluded:true,store_metrics_are_business_day_facts:true,legacy_aed_field_names_are_storage_compatibility:true,accounting_profit_not_asserted:true},
     });
   }catch(error){
     const status=Number(error?.status||500);
