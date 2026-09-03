@@ -1,40 +1,57 @@
 # DABBIR Golden Canary v1
 
-Status: implementation candidate
+Status: implementation candidate pending governed merge and first successful live run
 Contract: `DABBIR_GOLDEN_CANARY_V1`
 
-## Purpose
+## Release contract
 
-Prevent a candidate release from reaching production unless the exact candidate has passed an isolated canary validation path.
+`candidate SHA -> exact protected Vercel Preview -> unprivileged candidate tests -> trusted main-only verifier -> exact Preview smoke -> disposable full customer journey -> no-drift proof -> immutable commit status -> governed merge -> existing Release Guardian -> production`
 
-## Required release path
+## Security boundary
 
-`candidate -> Vercel preview/canary URL -> Golden Canary gate -> governed PR -> main -> existing Release Guardian -> production`
+- Candidate code is executed only in `candidate-tests`, which has read-only repository permission and no OIDC or status-write permission.
+- The privileged verifier always checks out `main`, never the candidate branch, so a candidate cannot rewrite the harness that judges it.
+- Vercel protected Preview access uses short-lived GitHub OIDC.
+- Disposable QA bootstrap/seed/cleanup uses the isolated `dabbir-golden-canary-qa` Supabase Edge Function.
+- That Edge Function accepts only GitHub OIDC for `barman-systems/pilot`, `refs/heads/main`, `workflow_dispatch`, and `.github/workflows/dabbir-golden-canary.yml@refs/heads/main`.
+- No permanent Golden Canary owner password, WhatsApp password, or service-role credential is exposed to the workflow.
 
-## Fail-closed rules
+## Exactness rules
 
-- No production promotion on missing canary URL.
-- HTTPS is mandatory.
-- Static syntax checks and full repository tests must pass.
-- Authenticated protected smoke must pass.
-- The live customer journey must pass when required.
-- A missing required test script is a failure, never a skip.
-- Sensitive credentials are supplied only through GitHub Actions secrets.
-- The gate emits a machine-readable receipt proving candidate ref and successful gates.
+The gate fails closed unless `/api/release-evidence` proves all of the following before testing:
 
-## Required configuration
+- candidate commit SHA exactly matches the requested SHA;
+- environment is `preview`;
+- Vercel project is `prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq`;
+- repository is `barman-systems/pilot`;
+- a concrete `dpl_*` deployment ID exists.
 
-GitHub Actions variable:
-- `DABBIR_GOLDEN_CANARY_URL`: isolated Vercel preview/custom canary URL for the exact candidate.
+The same SHA and deployment ID must still be active after the full journey, otherwise promotion is denied.
 
-GitHub Actions secrets:
-- `DABBIR_GOLDEN_CANARY_OWNER_EMAIL`
-- `DABBIR_GOLDEN_CANARY_OWNER_PASSWORD`
-- `DABBIR_GOLDEN_CANARY_WHATSAPP_TO`
-- `DABBIR_GOLDEN_CANARY_VERIFY_TOKEN` when required by the journey verifier.
+## Required tests
 
-## Critical customer journey
+1. `npm run check:syntax` and full `npm test` on the exact candidate without privileged credentials.
+2. Protected Preview identity and exact-release proof.
+3. iPhone WebKit Arabic login/authentication fail-closed smoke using the trusted harness.
+4. Full disposable owner + employee + customer + AI journey against the exact Preview using the existing production-grade journey harness.
+5. Cleanup of the disposable QA tenant/users.
+6. Post-journey deployment drift check.
 
-`WhatsApp inbound -> DABBIR AI -> service/availability decision -> booking write -> calendar visibility -> owner/customer notification -> evidence verification`
+## Promotion evidence
 
-This document is evidence of the release contract only. The gate is considered operational only after the workflow executes successfully against the isolated canary URL and produces its artifact receipt.
+On success the workflow emits a 30-day artifact receipt containing the candidate SHA, Preview URL, deployment ID, run ID, PASS gates, `promotion_allowed=true`, and `fail_closed=true`.
+
+It also writes the commit status context `DABBIR Golden Canary` directly onto the exact candidate SHA. Main branch protection is changed to require both `test` and `DABBIR Golden Canary`; therefore a missing, failed, or stale Canary result blocks merge.
+
+## Inputs
+
+The trusted workflow accepts only:
+
+- `candidate_sha`: exact lowercase 40-character SHA.
+- `canary_url`: bare HTTPS `*.vercel.app` Preview origin.
+
+There are no reusable Canary user credentials in GitHub Actions.
+
+## Operational completion condition
+
+This implementation is not considered operational until PR #441 is merged, native main protection reports `DABBIR Golden Canary` as a required context, and a real workflow run against an exact Vercel Preview finishes successfully with an evidence artifact and SUCCESS commit status.
