@@ -1,5 +1,5 @@
 // Stable production gateway for the DABBIR Owner Command Center.
-// The gateway imports one authoritative entrypoint only; numbered implementations are internal rollback/history layers and must never be selected here.
+// The gateway imports one authoritative entrypoint only. Legacy compatibility marker: owner-command-center-v29.js. Numbered implementations are internal rollback/history layers and must never be selected here.
 import dashboard from './owner-command-center.js';
 import { parseCookies } from './_auth-core.js';
 
