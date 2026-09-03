@@ -1,6 +1,7 @@
 // Stable production gateway for the DABBIR Owner Command Center.
 // The gateway imports one authoritative entrypoint only. Numbered implementations are legacy rollback/history layers and must never be selected here.
 import dashboard from './owner-command-center.js';
+import { OWNER_PLATFORM_TEAM_UI } from './_owner-platform-team-ui.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -22,10 +23,22 @@ async function verifyOwnerSession(token) {
   return payload?.authenticated === true && ['ROOT_OWNER','OWNER_DELEGATE'].includes(String(payload?.authority_role||''));
 }
 
+function injectTeamWorkspace(res){
+  const end=res.end.bind(res);let body='';
+  res.end=(chunk,...args)=>{
+    body+=chunk?String(chunk):'';
+    const output=body.includes('</body>')&&!body.includes('ownerPlatformTeamStyles')?body.replace('</body>',OWNER_PLATFORM_TEAM_UI+'</body>'):body;
+    return end(output,...args);
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.setHeader('allow', 'GET, HEAD'); return res.end('Method Not Allowed'); }
   const sessionToken = parseCookies(req.headers.cookie || '')[SESSION_COOKIE];
   if (!sessionToken) return redirectToOwner(res);
-  try { if (!(await verifyOwnerSession(sessionToken))) return redirectToOwner(res, true); return dashboard(req, res); }
-  catch { return redirectToOwner(res, true); }
+  try {
+    if (!(await verifyOwnerSession(sessionToken))) return redirectToOwner(res, true);
+    injectTeamWorkspace(res);
+    return dashboard(req, res);
+  } catch { return redirectToOwner(res, true); }
 }
