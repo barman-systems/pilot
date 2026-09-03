@@ -167,13 +167,10 @@ try{
   console.log('INDEPENDENT_VERIFICATION_PASSED',JSON.stringify({command_id:commandId,checks,verified:verified.verified||null}));
 }catch(error){
   const message=clean(error?.message||error,1800);
+  // Fail closed: a mismatch never calls the promotion RPC. The command remains
+  // DONE + INDEPENDENT_REQUIRED + VERIFYING and is retried by a later run.
   if(error instanceof VerificationMismatch&&commandId){
-    try{
-      await broker({phase:'fail',command_id:commandId,reason:message,details:{verifier:'github-oidc-independent-verifier',failed_at:new Date().toISOString()}});
-      console.error('INDEPENDENT_VERIFICATION_FAILED',commandId,message);
-    }catch(failError){
-      console.error('INDEPENDENT_VERIFICATION_FAIL_CLOSE_ERROR',clean(failError?.message||failError,800));
-    }
+    console.error('INDEPENDENT_VERIFICATION_MISMATCH_UNPROMOTED',commandId,message);
   }else{
     console.error('INDEPENDENT_VERIFICATION_TRANSIENT',message);
   }
