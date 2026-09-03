@@ -5,21 +5,26 @@ import fs from 'node:fs';
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v27.js',import.meta.url),'utf8');
 const reviewed=fs.readFileSync(new URL('../api/owner-command-center-v28.js',import.meta.url),'utf8');
 const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
+const canonical=fs.readFileSync(new URL('../api/owner-command-center.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/owner-ceo-command.js',import.meta.url),'utf8');
+const decisionsApi=fs.readFileSync(new URL('../api/owner-decision.js',import.meta.url),'utf8');
 const edge=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-ceo-command/index.ts',import.meta.url),'utf8');
 const queue=fs.readFileSync(new URL('../supabase/migrations/20260902113149_dabbir_ceo_command_queue_v1.sql',import.meta.url),'utf8');
 const privileges=fs.readFileSync(new URL('../supabase/migrations/20260902113212_dabbir_ceo_command_queue_privileges_v1.sql',import.meta.url),'utf8');
 const rpc=fs.readFileSync(new URL('../supabase/migrations/20260902113432_dabbir_ceo_command_rpc_v1.sql',import.meta.url),'utf8');
+const mission=fs.readFileSync(new URL('../supabase/migrations/20260903102239_dabbir_owner_ceo_mission_control_v2.sql',import.meta.url),'utf8');
 
-test('owner gateway routes through v29 and reviewed v28 then CEO command desk v27 while preserving v26',()=>{
-  assert.match(gateway,/owner-command-center-v29\.js/);
+test('owner gateway has one stable authority while legacy chain remains internal rollback history',()=>{
+  assert.match(gateway,/owner-command-center\.js/);
+  assert.doesNotMatch(gateway,/import dashboard from '.\/owner-command-center-v\d+\.js'/);
+  assert.match(canonical,/owner-command-center-v29\.js/);
   assert.match(active,/owner-command-center-v28\.js/);
   assert.match(reviewed,/owner-command-center-v27\.js/);
   assert.match(ui,/owner-command-center-v26\.js/);
 });
 
-test('CEO command desk is visible, trackable and truth-preserving',()=>{
+test('legacy CEO command desk stays truth-preserving under authoritative Mission Control',()=>{
   for(const token of ['أمر إلى CEO','BARMAN Executive OS','CEO COMMAND DESK','إرسال إلى CEO','تحديث الحالات','QUEUED','IN_PROGRESS','DONE','BLOCKED']) assert.match(ui,new RegExp(token));
   assert.match(ui,/\/api\/owner-ceo-command/);
   assert.match(ui,/credentials:'same-origin'/);
@@ -28,16 +33,27 @@ test('CEO command desk is visible, trackable and truth-preserving',()=>{
   assert.doesNotMatch(ui,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
 });
 
-test('same-origin API requires owner session and bounded input',()=>{
+test('CEO mission API is same-origin, owner-session protected and brokered through v2 actions',()=>{
   assert.match(api,/ownerSessionToken/);
   assert.match(api,/requireSameOrigin/);
-  assert.match(api,/readJsonBody\(req,8192\)/);
-  assert.match(api,/COMMAND_TEXT_INVALID/);
-  assert.match(api,/PRIORITY_INVALID/);
-  assert.match(api,/dabbir-owner-ceo-command/);
+  assert.match(api,/readJsonBody\(req,16384\)/);
+  for(const token of ['ceo_commands','ceo_command_create','ceo_command_update','objective','acceptance_criteria','due_at','add_guidance','cancel','resume'])assert.match(api,new RegExp(token));
+  assert.match(api,/DABBIR_OWNER_BROKER_URL/);
+  assert.doesNotMatch(api,/DABBIR_OWNER_CEO_COMMAND_URL|functions\/v1\/dabbir-owner-ceo-command/);
+  assert.doesNotMatch(api,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
 });
 
-test('edge endpoint verifies platform-owner session before CEO command RPCs',()=>{
+test('owner decision API is brokered, same-origin on writes, and bounded to explicit resolutions',()=>{
+  assert.match(decisionsApi,/ownerSessionToken/);
+  assert.match(decisionsApi,/requireSameOrigin/);
+  assert.match(decisionsApi,/data_action:dataAction/);
+  assert.match(decisionsApi,/decision_resolve/);
+  assert.match(decisionsApi,/approve','reject','modify/);
+  assert.match(decisionsApi,/MODIFICATION_NOTE_REQUIRED/);
+  assert.doesNotMatch(decisionsApi,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
+});
+
+test('legacy edge endpoint still fails closed while canonical API no longer depends on it',()=>{
   assert.match(edge,/dabbir_owner_session_verify_v1/);
   assert.match(edge,/platform_owner/);
   assert.match(edge,/dabbir_ceo_command_create_v1/);
@@ -45,7 +61,7 @@ test('edge endpoint verifies platform-owner session before CEO command RPCs',()=
   assert.match(edge,/OWNER_SESSION_REQUIRED/);
 });
 
-test('CEO command queue is RLS protected and service role cannot delete',()=>{
+test('historical public queue was RLS protected before the private-schema migration',()=>{
   assert.match(queue,/alter table public\.dabbir_ceo_commands enable row level security/i);
   assert.match(queue,/revoke all on table public\.dabbir_ceo_commands from anon, authenticated/i);
   assert.match(privileges,/revoke all on table public\.dabbir_ceo_commands from service_role/i);
@@ -59,4 +75,12 @@ test('owner command becomes an executive event instead of a chat-only note',()=>
   assert.match(rpc,/'ceo_command'/);
   assert.match(rpc,/'open'/);
   assert.match(rpc,/executive_event_status/);
+});
+
+test('Mission Control v2 is private, evidence-aware, owner-decision capable and service-role only',()=>{
+  assert.match(mission,/dabbir_private\.dabbir_ceo_commands/);
+  for(const token of ['objective','acceptance_criteria','due_at','guidance','dabbir_ceo_command_create_v2','dabbir_ceo_commands_recent_v2','dabbir_ceo_command_update_v2','dabbir_owner_decisions_recent_v1','dabbir_owner_decision_resolve_v1'])assert.match(mission,new RegExp(token));
+  assert.match(mission,/dabbir_private\.executive_evidence/);
+  assert.match(mission,/revoke all on function public\.dabbir_ceo_command_create_v2[\s\S]*from public,anon,authenticated/i);
+  assert.match(mission,/grant execute on function public\.dabbir_ceo_command_create_v2[\s\S]*to service_role/i);
 });
