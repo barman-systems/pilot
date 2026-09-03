@@ -1,0 +1,81 @@
+name: DABBIR Runtime Guardian
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dabbir-runtime-guardian
+  cancel-in-progress: true
+
+jobs:
+  production-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: https://dabbir.bmalman.com
+      ISSUE_TITLE: '[Runtime Guardian] DABBIR production health failure'
+    steps:
+      - name: Probe production with retries
+        id: probe
+        shell: bash
+        run: |
+          set +e
+          failed=''
+          details=''
+          for path in / /team /owner /api/runtime-health; do
+            ok=0
+            for attempt in 1 2 3; do
+              code="$(curl -sS -L --max-time 15 -o /tmp/dabbir-body -w '%{http_code}' "${BASE_URL}${path}")"
+              if [[ "$code" =~ ^2[0-9][0-9]$ || "$code" =~ ^3[0-9][0-9]$ ]]; then ok=1; break; fi
+              sleep $((attempt * 3))
+            done
+            if [ "$ok" -ne 1 ]; then
+              failed="${failed} ${path}"
+              details="${details}${path}=HTTP_${code}; "
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "details=${details}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "healthy=true" >> "$GITHUB_OUTPUT"
+          echo "details=all production probes passed" >> "$GITHUB_OUTPUT"
+
+      - name: Open or refresh incident issue
+        if: steps.probe.outputs.healthy != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DETAILS: ${{ steps.probe.outputs.details }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number // empty')"
+          body="Production Runtime Guardian detected a persistent DABBIR failure after 3 retries.\n\nEvidence: ${DETAILS}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nDetected (UTC): $(date -u +%FT%TZ)\n\nBooking truth must remain in Supabase; external integrations are expected to degrade/retry rather than block booking."
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body "$body"
+          fi
+
+      - name: Close recovered incident issue
+        if: steps.probe.outputs.healthy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "Runtime Guardian recovery verified at $(date -u +%FT%TZ). All production probes passed."
+          fi
+
+      - name: Fail the guardian run on incident
+        if: steps.probe.outputs.healthy != 'true'
+        run: exit 1
