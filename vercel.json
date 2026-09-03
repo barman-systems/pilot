@@ -17,6 +17,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/dabbir-whatsapp-ai-cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/barman-executive-cron",
       "schedule": "*/5 * * * *"
     }
@@ -26,6 +30,12 @@
       "maxDuration": 60
     },
     "api/calendar-outbox-cron.js": {
+      "maxDuration": 60
+    },
+    "api/dabbir-whatsapp-ai-cron.js": {
+      "maxDuration": 60
+    },
+    "api/dabbir-whatsapp-ai-worker.js": {
       "maxDuration": 60
     },
     "api/barman-executive-cron.js": {
