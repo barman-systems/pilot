@@ -20,12 +20,13 @@ test('iPad WebKit journey runs inside the already-authorized canonical customer 
   assert.match(wrapper,/hasTouch:\\s\*true/);
   assert.match(wrapper,/dabbir-ai-customer-journey-report-ipad\.json/);
   assert.match(wrapper,/25_mobile_webkit_owner_journey/);
+  assert.match(wrapper,/label: 'IPAD_WEBKIT'/);
   assert.match(wrapper,/IPAD_WEBKIT_JOURNEY_PASS/);
 });
 
 test('canonical iPad journey remains fail closed and persists its PASS summary into uploaded canonical evidence',()=>{
-  assert.match(wrapper,/IPAD_WEBKIT_REPORT_MISSING/);
-  assert.match(wrapper,/IPAD_WEBKIT_JOURNEY_NOT_PASS/);
+  assert.match(wrapper,/\$\{label\}_REPORT_MISSING/);
+  assert.match(wrapper,/\$\{label\}_JOURNEY_NOT_PASS/);
   assert.match(wrapper,/report\.verdict !== 'PASS'/);
   assert.match(wrapper,/mobileStep\?\.status !== 'PASS'/);
   assert.match(wrapper,/english\.report\.ipad_webkit/);
