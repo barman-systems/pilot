@@ -40,9 +40,9 @@ const UI_MODULE_ORDER = [
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260903-context-language-lifecycle-v2';
+const UI_BUNDLE_VERSION = '20260903-chat-render-lifecycle-v3';
 
-// One shell-level lifecycle authority owns the final render/navigation/language entry points.
+// One shell-level lifecycle authority owns final render/navigation/language/chat render entry points.
 // Legacy modules may still wrap them during migration; reconcile() reasserts the
 // outer authority without creating recursion, while older lifecycle wrappers become inert.
 const UI_LIFECYCLE_BOOTSTRAP = `<script>
@@ -51,21 +51,34 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
     window.__dabbirUiLifecycle.reconcile?.();
     return;
   }
-  const hooks=new Map([['afterRender',new Map()],['afterNavigate',new Map()],['afterLanguage',new Map()]]);
+  const hooks=new Map([
+    ['afterRender',new Map()],
+    ['afterNavigate',new Map()],
+    ['afterLanguage',new Map()],
+    ['afterChats',new Map()],
+    ['afterMessages',new Map()]
+  ]);
   const routes=new Map();
   let renderGeneration=0;
   let navigationGeneration=0;
   let languageGeneration=0;
+  let chatsGeneration=0;
+  let messagesGeneration=0;
   let renderWrapper=null;
   let navigationWrapper=null;
   let languageWrapper=null;
+  let chatsWrapper=null;
+  let messagesWrapper=null;
   let renderReconciliations=0;
   let navigationReconciliations=0;
   let languageReconciliations=0;
+  let chatsReconciliations=0;
+  let messagesReconciliations=0;
 
   function safeCurrent(){try{return typeof current==='undefined'?null:current}catch{return null}}
   function safeWorkspace(){try{return typeof workspace==='undefined'?null:workspace}catch{return null}}
   function safeLanguage(){try{return typeof lang==='undefined'?(document.documentElement.lang||null):lang}catch{return document.documentElement.lang||null}}
+  function safeConversationId(){try{return typeof selectedConversationId==='undefined'?null:selectedConversationId}catch{return null}}
   function emit(event,payload){
     const group=hooks.get(event);
     if(!group)return;
@@ -135,6 +148,36 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
     languageReconciliations++;
     return true;
   }
+  function wrapChats(){
+    if(typeof renderChats!=='function')return false;
+    if(renderChats===chatsWrapper)return true;
+    const base=renderChats;
+    const generation=++chatsGeneration;
+    const wrapper=function(){
+      const result=base.apply(this,arguments);
+      if(generation===chatsGeneration)emit('afterChats',{current:safeCurrent(),workspace:safeWorkspace(),conversation_id:safeConversationId()});
+      return result;
+    };
+    chatsWrapper=wrapper;
+    renderChats=wrapper;
+    chatsReconciliations++;
+    return true;
+  }
+  function wrapMessages(){
+    if(typeof renderMessages!=='function')return false;
+    if(renderMessages===messagesWrapper)return true;
+    const base=renderMessages;
+    const generation=++messagesGeneration;
+    const wrapper=function(){
+      const result=base.apply(this,arguments);
+      if(generation===messagesGeneration)emit('afterMessages',{current:safeCurrent(),workspace:safeWorkspace(),conversation_id:safeConversationId()});
+      return result;
+    };
+    messagesWrapper=wrapper;
+    renderMessages=wrapper;
+    messagesReconciliations++;
+    return true;
+  }
   const api={
     version:'ui-lifecycle-v1',
     on(event,id,fn){
@@ -153,10 +196,12 @@ const UI_LIFECYCLE_BOOTSTRAP = `<script>
       const render=wrapRender();
       const navigation=wrapNavigation();
       const language=wrapLanguage();
-      return {render,navigation,language,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations};
+      const chats=wrapChats();
+      const messages=wrapMessages();
+      return {render,navigation,language,chats,messages,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations,chats_reconciliations:chatsReconciliations,messages_reconciliations:messagesReconciliations};
     },
     status(){
-      return {version:this.version,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations,render_hooks:hooks.get('afterRender').size,navigation_hooks:hooks.get('afterNavigate').size,language_hooks:hooks.get('afterLanguage').size,route_resolvers:routes.size};
+      return {version:this.version,render_reconciliations:renderReconciliations,navigation_reconciliations:navigationReconciliations,language_reconciliations:languageReconciliations,chats_reconciliations:chatsReconciliations,messages_reconciliations:messagesReconciliations,render_hooks:hooks.get('afterRender').size,navigation_hooks:hooks.get('afterNavigate').size,language_hooks:hooks.get('afterLanguage').size,chats_hooks:hooks.get('afterChats').size,messages_hooks:hooks.get('afterMessages').size,route_resolvers:routes.size};
     }
   };
   window.__dabbirUiLifecycle=api;
