@@ -6,8 +6,8 @@ const ui=fs.readFileSync(new URL('../api/owner-command-center-v22.js',import.met
 const ui23=fs.readFileSync(new URL('../api/owner-command-center-v23.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner dashboard keeps v22 operational truth under v23 without invented metrics',()=>{
-  assert.match(gateway,/owner-command-center-v23\.js/);
+test('owner dashboard keeps v22 operational truth under the active reviewed chain without invented metrics',()=>{
+  assert.match(gateway,/owner-command-center-v28\.js/);
   assert.match(ui23,/owner-command-center-v22\.js/);
   assert.match(ui,/\/api\/qa-capability/);
   assert.match(ui,/\/api\/release-evidence/);
