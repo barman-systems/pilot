@@ -1,7 +1,6 @@
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
-const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||'').trim();
 const SLUG_RE=/^[a-z0-9][a-z0-9_-]{2,119}$/i;
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,13 +19,19 @@ function query(req,name){try{return new URL(String(req.url||'/'),'https://dabbir
 function clean(value,max){return String(value??'').trim().slice(0,max)}
 function slug(value){const v=clean(value,120);return SLUG_RE.test(v)?v:null}
 function readBody(req,max=12000){return new Promise((resolve,reject)=>{let n=0;const parts=[];req.on('data',chunk=>{n+=chunk.length;if(n>max){reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'),{status:413}));req.destroy();return}parts.push(chunk)});req.on('end',()=>{try{resolve(JSON.parse(Buffer.concat(parts).toString('utf8')||'{}'))}catch{reject(Object.assign(new Error('INVALID_JSON'),{status:400}))}});req.on('error',reject)})}
+function serviceRoleKey(){
+  const key=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
+  if(!key||key.startsWith('sb_publishable_'))throw Object.assign(new Error('PUBLIC_BOOKING_STORAGE_NOT_CONFIGURED'),{status:503});
+  return key;
+}
 async function rpc(name,params){
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',headers:supabaseKeyHeaders(SUPABASE_PUBLISHABLE_KEY,{accept:'application/json','content-type':'application/json'}),body:JSON.stringify(params),cache:'no-store'});
+  const key=serviceRoleKey();
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',headers:supabaseKeyHeaders(key,{accept:'application/json','content-type':'application/json'}),body:JSON.stringify(params),cache:'no-store',signal:AbortSignal.timeout(12000)});
   const text=await response.text();let payload=null;try{payload=text?JSON.parse(text):null}catch{}
   if(!response.ok){const error=new Error(String(payload?.message||payload?.code||'PUBLIC_BOOKING_FAILED').slice(0,120));error.status=response.status;throw error}
   return payload;
 }
-function safeStatus(error){return [400,403,404,405,409,413,422,429].includes(Number(error?.status))?Number(error.status):500}
+function safeStatus(error){return [400,403,404,405,409,413,422,429,503].includes(Number(error?.status))?Number(error.status):500}
 
 export default async function handler(req,res){
   try{
