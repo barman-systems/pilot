@@ -5,10 +5,10 @@ const css=String.raw`
 
 const script=String.raw`(()=>{
   if(window.__dabbirBranchContextUi)return;
-  window.__dabbirBranchContextUi='v1-server-scoped';
+  window.__dabbirBranchContextUi='v2-server-scoped-whatsapp';
   const PREFIX='dabbir_active_branch_scope:';
-  let activeBusiness=null,context=null,loading=null,apiPatched=false;
-  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v1';document.head.append(style);
+  let activeBusiness=null,context=null,loading=null,apiPatched=false,fetchPatched=false;
+  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v2';document.head.append(style);
 
   function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return''}}
   function key(id){return PREFIX+String(id||'')}
@@ -59,6 +59,59 @@ const script=String.raw`(()=>{
     window.api=function(url,options){return routedApi(original,url,options)};
     window.api.__dabbirBranchScoped=true;
     apiPatched=true;
+    return true;
+  }
+
+  async function persistWhatsAppIntent(original,bid,scope){
+    const response=await original('/api/whatsapp-branch-intent',{
+      method:'POST',cache:'no-store',
+      headers:{'content-type':'application/json','accept':'application/json','x-dabbir-client':'web'},
+      body:JSON.stringify({business_id:bid,branch_id:scope&&scope!=='all'?scope:null}),
+    });
+    const payload=await response.clone().json().catch(()=>({}));
+    if(!response.ok||!payload.ok)throw new Error(payload.error||'WHATSAPP_BRANCH_INTENT_REQUIRED');
+    return payload;
+  }
+
+  function patchFetch(){
+    if(fetchPatched)return true;
+    if(typeof window.fetch!=='function')return false;
+    const original=window.fetch.bind(window);
+    window.fetch=async function(input,options){
+      const raw=typeof input==='string'?input:String(input?.url||'');
+      let parsed;try{parsed=new URL(raw,location.origin)}catch{return original(input,options)}
+      const path=parsed.pathname;
+      if(!['/api/dabbir-whatsapp-embedded-complete','/api/dabbir-whatsapp-status','/api/dabbir-whatsapp-disconnect'].includes(path)){
+        return original(input,options);
+      }
+      const body=parseBody(options);
+      const method=String(options?.method||'GET').toUpperCase();
+      const bid=String(parsed.searchParams.get('business_id')||body?.business_id||businessId()||'').trim();
+      if(!bid)return original(input,options);
+      const scope=currentScope(bid);
+
+      if(path==='/api/dabbir-whatsapp-embedded-complete'&&method==='POST'){
+        try{await persistWhatsAppIntent(original,bid,scope)}catch(error){
+          return new Response(JSON.stringify({ok:false,error:String(error?.message||'WHATSAPP_BRANCH_INTENT_REQUIRED')}),{
+            status:409,headers:{'content-type':'application/json'}
+          });
+        }
+        return original(input,options);
+      }
+
+      if(scope&&scope!=='all'&&path==='/api/dabbir-whatsapp-status'&&method==='GET'){
+        parsed.searchParams.set('business_id',bid);parsed.searchParams.set('branch_id',scope);
+        return original(parsed.pathname+parsed.search,options);
+      }
+
+      if(scope&&scope!=='all'&&path==='/api/dabbir-whatsapp-disconnect'&&method==='POST'&&body){
+        const next=Object.assign({},body,{business_id:bid,branch_id:scope});
+        return original(input,Object.assign({},options,{body:JSON.stringify(next)}));
+      }
+      return original(input,options);
+    };
+    window.fetch.__dabbirWhatsAppBranchScoped=true;
+    fetchPatched=true;
     return true;
   }
 
@@ -116,7 +169,7 @@ const script=String.raw`(()=>{
   }
 
   async function sync(){
-    patchApi();
+    patchFetch();patchApi();
     const id=businessId();
     if(!id){activeBusiness=null;context=null;render();return}
     if(id!==activeBusiness){
@@ -131,7 +184,7 @@ const script=String.raw`(()=>{
     refresh:sync,
   };
 
-  let ticks=0;const timer=setInterval(()=>{sync();ticks++;if(ticks>120&&apiPatched&&businessId())clearInterval(timer)},250);
+  let ticks=0;const timer=setInterval(()=>{sync();ticks++;if(ticks>120&&apiPatched&&fetchPatched&&businessId())clearInterval(timer)},250);
   document.addEventListener('click',()=>setTimeout(sync,0),true);
   window.addEventListener('dabbir:language-changed',render);
   sync();
@@ -145,6 +198,6 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-branch-context','server-scoped-v1');
+  res.setHeader('x-dabbir-branch-context','server-scoped-v2-whatsapp');
   return res.end(script);
 }
