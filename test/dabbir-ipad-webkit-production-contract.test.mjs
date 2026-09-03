@@ -5,7 +5,9 @@ import fs from 'node:fs';
 const root=new URL('../',import.meta.url);
 const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 const runner=read('test/run-ai-full-customer-journey-ipad.mjs');
-const workflow=read('.github/workflows/dabbir-ipad-webkit-production.yml');
+const bridge=read('test/run-ai-full-customer-journey-en.mjs');
+const canonical=read('.github/workflows/dabbir-ai-customer-journey.yml');
+const broker=read('supabase/functions/barman-qa-suite-runner/index.ts');
 const deploymentClassifier=read('vercel-ignore-if-unaffected.sh');
 
 test('iPad runner reuses the canonical full journey and changes only the touch viewport',()=>{
@@ -17,27 +19,31 @@ test('iPad runner reuses the canonical full journey and changes only the touch v
   assert.match(runner,/dabbir-ai-customer-journey-report-ipad\.json/);
 });
 
-test('iPad Production workflow is exact-SHA, OIDC protected, and fail closed on the real WebKit journey',()=>{
-  assert.match(workflow,/name: DABBIR iPad WebKit Production/);
-  assert.match(workflow,/refs\/heads\/main/);
-  assert.match(workflow,/id-token: write/);
-  assert.match(workflow,/VERCEL_TRUSTED_OIDC_TOKEN/);
-  assert.match(workflow,/\/api\/release-evidence/);
-  assert.match(workflow,/observed.*GITHUB_SHA/);
-  assert.match(workflow,/run-ai-full-customer-journey-ipad\.mjs/);
-  assert.match(workflow,/25_mobile_webkit_owner_journey/);
-  assert.match(workflow,/IPAD_WEBKIT_FULL_JOURNEY_PASS/);
-  assert.match(workflow,/STABLE_IPAD_PRODUCTION_SHA/);
-  assert.doesNotMatch(workflow,/continue-on-error:\s*true/);
+test('iPad executes inside the already-authorized canonical Production journey',()=>{
+  assert.match(canonical,/name: DABBIR AI Full Customer Journey/);
+  assert.match(canonical,/refs\/heads\/main/);
+  assert.match(canonical,/id-token: write/);
+  assert.match(canonical,/VERCEL_TRUSTED_OIDC_TOKEN/);
+  assert.match(canonical,/\/api\/release-evidence/);
+  assert.match(canonical,/run-ai-full-customer-journey-en\.mjs/);
+  assert.match(bridge,/run-ai-full-customer-journey-ipad\.mjs/);
+  assert.match(bridge,/IPAD_WEBKIT_JOURNEY_PASS/);
+  assert.match(bridge,/25_mobile_webkit_owner_journey/);
+  assert.match(bridge,/required_failures/);
+  assert.match(bridge,/device_matrix/);
+  assert.match(bridge,/viewport:\s*'820x1180'/);
+  assert.doesNotMatch(canonical,/continue-on-error:\s*true/);
 });
 
-test('iPad exact-SHA workflow tracks the Vercel release classifier that can allow or cancel its Production SHA',()=>{
-  assert.match(workflow,/- 'vercel-ignore-if-unaffected\.sh'/);
+test('standalone iPad workflow is retired instead of widening Supabase QA authority',()=>{
+  assert.equal(fs.existsSync(new URL('.github/workflows/dabbir-ipad-webkit-production.yml',root)),false);
+  assert.match(broker,/dabbir-ai-customer-journey\.yml@refs\/heads\/main/);
+  assert.doesNotMatch(broker,/dabbir-ipad-webkit-production\.yml@refs\/heads\/main/);
 });
 
-test('all iPad exact-SHA QA contract files force a truthful Production deployment',()=>{
+test('canonical and iPad QA contracts force truthful exact-SHA Production deployment',()=>{
   for(const path of [
-    '.github/workflows/dabbir-ipad-webkit-production.yml',
+    '.github/workflows/dabbir-ai-customer-journey.yml',
     'test/run-ai-full-customer-journey-ipad.mjs',
     'test/dabbir-ipad-webkit-production-contract.test.mjs',
   ]){
