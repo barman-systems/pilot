@@ -28,10 +28,11 @@ test('owner command center production gateway imports only the generated flat ru
   assert.doesNotMatch(gateway,/from '\.\/owner-command-center(?:-v\d+)?\.js'/);
 });
 
-test('verification and deployment hooks always generate the flat owner runtime first',()=>{
-  for(const name of ['pretest','precheck:syntax','dabbir:build']){
+test('verification and deployment lifecycle hooks always generate the flat owner runtime first',()=>{
+  for(const name of ['pretest','precheck:syntax','predabbir:build']){
     assert.match(String(packageJson.scripts?.[name]||''),/build-owner-command-center-runtime\.mjs/,name);
   }
+  assert.equal(packageJson.scripts?.['dabbir:build'],'node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs');
 });
 
 test('flat runtime generator is fail-closed and produces an import-free single module',async()=>{
