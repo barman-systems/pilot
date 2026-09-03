@@ -132,7 +132,7 @@ try {
     const page = await context.newPage();
     const pageErrors = [];
     const consoleErrors = [];
-    page.on('pageerror', error => pageErrors.push(String(error?.message || error)));
+    page.on('pageerror', error => pageErrors.push(String(error?.stack || error?.message || error)));
     page.on('console', message => {
       if (message.type() !== 'error') return;
       const text = message.text();
@@ -148,11 +148,19 @@ try {
     await page.locator('#authPassword').waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('#authSubmit').waitFor({ state: 'visible', timeout: 10_000 });
 
-    const authority = await page.evaluate(() => window.__dabbirUiAuthority || null);
-    assert(authority?.version === 'owner-first-v4', `UI_AUTHORITY_INVALID_${JSON.stringify(authority)}`);
-
     await page.screenshot({ path: 'dabbir-protected-live-smoke.png', fullPage: true });
     report.artifacts.screenshot = 'dabbir-protected-live-smoke.png';
+
+    const diagnostics = await page.evaluate(() => ({
+      authority: window.__dabbirUiAuthority || null,
+      inline_state: window.__dabbirOwnerFirstInlineState || null,
+      init_error: window.__dabbirOwnerFirstInitError || null,
+      owner_flag: window.__dabbirOwnerFirstUiV4 || null,
+    }));
+    if (diagnostics?.authority?.version !== 'owner-first-v4') {
+      throw new Error(`UI_AUTHORITY_INVALID_${JSON.stringify(diagnostics)}_PAGE_ERRORS_${JSON.stringify(pageErrors.slice(0,8))}_CONSOLE_ERRORS_${JSON.stringify(consoleErrors.slice(0,8))}`);
+    }
+    assert(diagnostics?.inline_state?.stage === 'ready', `UI_INLINE_STATE_INVALID_${JSON.stringify(diagnostics)}`);
 
     const logo = authGate.locator('.authCard .brand .logo');
     assert(await logo.count() === 1, `AUTH_APPROVED_LOGO_COUNT_${await logo.count()}`);
