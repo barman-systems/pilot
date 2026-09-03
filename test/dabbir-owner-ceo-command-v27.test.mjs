@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v27.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v28.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/owner-ceo-command.js',import.meta.url),'utf8');
 const edge=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-ceo-command/index.ts',import.meta.url),'utf8');
@@ -10,9 +11,9 @@ const queue=fs.readFileSync(new URL('../supabase/migrations/20260902113149_dabbi
 const privileges=fs.readFileSync(new URL('../supabase/migrations/20260902113212_dabbir_ceo_command_queue_privileges_v1.sql',import.meta.url),'utf8');
 const rpc=fs.readFileSync(new URL('../supabase/migrations/20260902113432_dabbir_ceo_command_rpc_v1.sql',import.meta.url),'utf8');
 
-test('owner gateway routes through CEO command desk v27 while preserving v26',()=>{
-  assert.match(gateway,/owner-command-center-v27\.js/);
-  assert.match(gateway,/owner-command-center-v26\.js/);
+test('owner gateway routes through reviewed v28 then CEO command desk v27 while preserving v26',()=>{
+  assert.match(gateway,/owner-command-center-v28\.js/);
+  assert.match(active,/owner-command-center-v27\.js/);
   assert.match(ui,/owner-command-center-v26\.js/);
 });
 
