@@ -11,6 +11,7 @@ import {
 import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const IDEMPOTENCY_RE=/^[A-Za-z0-9:_-]{16,160}$/;
 const ACTIVE_STATUSES=new Set(['new','confirmed','arrived','in_progress']);
 const ALL_STATUSES=new Set([...ACTIVE_STATUSES,'completed','cancelled','no_show']);
 const PAYMENT_METHODS=new Set(['cash','card','payment_link','other','unpaid']);
@@ -74,7 +75,7 @@ async function snapshot(ctx,businessId,range){
     rest(ctx.token,`dabbir_commissions?select=id,worker_id,appointment_id,appointment_service_id,commission_type,commission_value,revenue_aed,commission_aed,salon_gross_aed,status,generated_at&business_id=eq.${enc(businessId)}&generated_at=gte.${enc(range.from)}&generated_at=lte.${enc(range.to)}&order=generated_at.desc&limit=1000`,{},'COMMISSIONS_LOOKUP_FAILED'),
     rest(ctx.token,`dabbir_operational_payments?select=id,appointment_id,customer_id,amount_aed,method,status,reference,created_at&business_id=eq.${enc(businessId)}&created_at=gte.${enc(range.from)}&created_at=lte.${enc(range.to)}&order=created_at.desc&limit=1000`,{},'PAYMENTS_LOOKUP_FAILED'),
     rest(ctx.token,`dabbir_waitlist_entries?select=id,customer_id,service_id,preferred_worker_id,desired_date,window_start,window_end,expires_at,status,matched_appointment_id,created_at&business_id=eq.${enc(businessId)}&status=in.(waiting,matched,contacted)&order=created_at.asc&limit=200`,{},'WAITLIST_LOOKUP_FAILED'),
-    rest(ctx.token,`dabbir_workflow_notifications?select=id,appointment_id,customer_id,waitlist_entry_id,channel,notification_type,scheduled_for,status,provider_message_id,sent_at,last_error,created_at&business_id=eq.${enc(businessId)}&created_at=gte.${enc(range.from)}&order=created_at.desc&limit=500`,{},'NOTIFICATIONS_LOOKUP_FAILED'),
+    rest(ctx.token,`dabbir_workflow_notifications?select=id,appointment_id,customer_id,waitlist_entry_id,channel,notification_type,scheduled_for,status,provider_message_id,sent_at,last_error,attempt_count,max_attempts,next_attempt_at,dead_lettered_at,created_at&business_id=eq.${enc(businessId)}&created_at=gte.${enc(range.from)}&order=created_at.desc&limit=500`,{},'NOTIFICATIONS_LOOKUP_FAILED'),
   ]);
   return {ok:true,mode:'salon',business,settings:settings?.[0]||null,workers,worker_services:workerServices,schedules,time_off:timeOff,services,appointments,customers,commissions,payments,waitlist,notifications,range};
 }
@@ -145,9 +146,15 @@ async function handlePost(req,ctx,businessId,membership,body){
   const action=clean(body.action,60);await verifySalon(ctx,businessId);
   if(!canManageSalon(membership))return {status:403,body:{ok:false,error:'SALON_MANAGEMENT_REQUIRED'}};
   if(action==='quick_book'){
-    const result=await rpc(ctx.token,'dabbir_salon_quick_book',{p_business_id:businessId,p_customer_name:clean(body.customer_name,120),p_customer_phone:clean(body.customer_phone,30),p_service_id:safeId(body.service_id),p_worker_id:safeId(body.worker_id),p_starts_at:body.starts_at,p_discount_aed:number(body.discount_aed),p_notes:clean(body.notes,2000),p_source:clean(body.source||'internal',30)},'QUICK_BOOKING_FAILED');
+    const source=clean(body.source||'internal',30);
+    const idempotencyKey=clean(body.idempotency_key||body.request_id,160);
+    if(idempotencyKey&&!IDEMPOTENCY_RE.test(idempotencyKey))return {status:400,body:{ok:false,error:'INVALID_BOOKING_IDEMPOTENCY_KEY'}};
+    const common={p_business_id:businessId,p_customer_name:clean(body.customer_name,120),p_customer_phone:clean(body.customer_phone,30),p_service_id:safeId(body.service_id),p_worker_id:safeId(body.worker_id),p_starts_at:body.starts_at,p_discount_aed:number(body.discount_aed),p_notes:clean(body.notes,2000),p_source:source};
+    const result=idempotencyKey
+      ?await rpc(ctx.token,'dabbir_salon_quick_book_idempotent',{...common,p_idempotency_key:idempotencyKey},'QUICK_BOOKING_FAILED')
+      :await rpc(ctx.token,'dabbir_salon_quick_book',common,'QUICK_BOOKING_FAILED');
     let calendar_sync=[];try{calendar_sync=await syncBusinessCalendars(req,businessId)}catch(error){calendar_sync=[{ok:false,error:clean(error?.message,140)}]}
-    return {status:201,body:{ok:true,booking:result,calendar_sync}};
+    return {status:result?.idempotent_replay?200:201,body:{ok:true,booking:result,calendar_sync}};
   }
   if(action==='transition'){
     const status=clean(body.status,30);if(!ALL_STATUSES.has(status))return {status:400,body:{ok:false,error:'INVALID_APPOINTMENT_STATUS'}};
@@ -228,7 +235,7 @@ export default async function handler(req,res){
     body.business_id=businessId;
     const result=await handlePost(req,ctx,businessId,membership,body);return json(res,result.status,result.body);
   }catch(error){
-    const message=clean(error?.message||'SALON_OPERATION_FAILED',160);const raw=Number(error?.status||500);const status=[400,401,403,404,409,413,429,500,502,503].includes(raw)?raw:(/CONFLICT|UNAVAILABLE|SCHEDULE|TRANSITION/.test(message)?409:500);
+    const message=clean(error?.message||'SALON_OPERATION_FAILED',160);const raw=Number(error?.status||500);const status=[400,401,403,404,409,413,429,500,502,503].includes(raw)?raw:(/CONFLICT|UNAVAILABLE|SCHEDULE|TRANSITION|IDEMPOTENCY/.test(message)?409:500);
     console.error('dabbir_salon_operation_failed',{status,error:message});return json(res,status,{ok:false,error:message});
   }
 }
