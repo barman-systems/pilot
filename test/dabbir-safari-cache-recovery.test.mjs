@@ -38,7 +38,7 @@ test('owner-first authority is parsed, probed, server-inlined, and executed befo
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_AUTHORITY_MISSING/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_UNSAFE_SCRIPT_CLOSE/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_INLINE_PARSE_/);
-  assert.match(recovery,/new Function\(payload\)/);
+  assert.match(recovery,/new Script\(payload/);
   assert.match(recovery,/dabbir-owner-first-probe/);
   assert.match(recovery,/DABBIR_OWNER_FIRST_SCRIPT_COUNT_/);
   assert.match(recovery,/DABBIR_AUTH_BOOT_ANCHOR_COUNT_/);
