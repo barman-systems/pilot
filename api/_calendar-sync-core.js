@@ -16,11 +16,21 @@ function iso(value){const d=value instanceof Date?value:new Date(value);return N
 function hash(value){return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')}
 function eventCancelled(provider,event){return provider==='google'?String(event?.status||'').toLowerCase()==='cancelled':Boolean(event?.isCancelled)}
 function outlookIso(value){const raw=String(value||'').trim();if(!raw)return null;return /(?:z|[+\-]\d\d:\d\d)$/i.test(raw)?raw:`${raw}Z`}
+function googleEventId(appointmentId){return `dabbir${crypto.createHash('sha256').update(String(appointmentId)).digest('hex').slice(0,40)}`}
+function retryableProviderStatus(status){return status===408||status===425||status===429||status>=500}
 
 async function providerJson(url,options={},fallback='CALENDAR_PROVIDER_REQUEST_FAILED'){
-  const response=await fetch(url,{...options,cache:'no-store',signal:options.signal||AbortSignal.timeout(15000)});
+  let response;
+  try{response=await fetch(url,{...options,cache:'no-store',signal:options.signal||AbortSignal.timeout(15000)})}
+  catch(error){const out=calendarError(fallback,503);out.retryable=true;out.providerStatus=0;out.detail=String(error?.name||'NETWORK_FAILURE');throw out}
   const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
-  if(!response.ok){const error=calendarError(fallback,[400,401,403,404,409,429,503].includes(response.status)?response.status:502);error.detail=data?.error?.message||data?.error_description||data?.message||null;throw error}
+  if(!response.ok){
+    const error=calendarError(fallback,[400,401,403,404,409,429,503].includes(response.status)?response.status:502);
+    error.detail=data?.error?.message||data?.error_description||data?.message||null;
+    error.providerStatus=response.status;
+    error.retryable=retryableProviderStatus(response.status);
+    throw error;
+  }
   return data;
 }
 
@@ -71,15 +81,26 @@ function eventTimes(provider,event){
 }
 
 function providerEventPayload(provider,appointment,title){
-  const start=iso(appointment.starts_at),end=iso(new Date(new Date(start).getTime()+DEFAULT_DURATION_MS));
+  const start=iso(appointment.starts_at),end=iso(appointment.ends_at||new Date(new Date(start).getTime()+DEFAULT_DURATION_MS));
   if(provider==='google')return {summary:title,description:`DABBIR appointment ${appointment.id}`,start:{dateTime:start},end:{dateTime:end},extendedProperties:{private:{dabbir_appointment_id:appointment.id}}};
   const graphStart=start.replace(/Z$/,''),graphEnd=end.replace(/Z$/,'');
   return {subject:title,body:{contentType:'text',content:`DABBIR_APPOINTMENT_ID:${appointment.id}`},start:{dateTime:graphStart,timeZone:'UTC'},end:{dateTime:graphEnd,timeZone:'UTC'},transactionId:appointment.id.replace(/-/g,'').slice(0,32)};
 }
 
-async function createProviderEvent(provider,accessToken,payload){
+async function getGoogleEvent(accessToken,eventId){
+  return providerJson(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${enc(eventId)}`,{headers:{authorization:`Bearer ${accessToken}`,accept:'application/json'}},'GOOGLE_CALENDAR_GET_FAILED');
+}
+
+async function createProviderEvent(provider,accessToken,payload,appointmentId){
   const url=provider==='google'?'https://www.googleapis.com/calendar/v3/calendars/primary/events':'https://graph.microsoft.com/v1.0/me/events';
-  return providerJson(url,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify(payload)},provider==='google'?'GOOGLE_CALENDAR_CREATE_FAILED':'OUTLOOK_CALENDAR_CREATE_FAILED');
+  const body=provider==='google'?{id:googleEventId(appointmentId),...payload}:payload;
+  try{
+    return await providerJson(url,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)},provider==='google'?'GOOGLE_CALENDAR_CREATE_FAILED':'OUTLOOK_CALENDAR_CREATE_FAILED');
+  }catch(error){
+    // A timed-out/duplicated Google create is reconciled by deterministic event id.
+    if(provider==='google'&&Number(error?.providerStatus||error?.code)===409)return getGoogleEvent(accessToken,googleEventId(appointmentId));
+    throw error;
+  }
 }
 
 async function updateProviderEvent(provider,accessToken,eventId,payload){
@@ -89,9 +110,11 @@ async function updateProviderEvent(provider,accessToken,eventId,payload){
 
 async function deleteProviderEvent(provider,accessToken,eventId){
   const url=provider==='google'?`https://www.googleapis.com/calendar/v3/calendars/primary/events/${enc(eventId)}`:`https://graph.microsoft.com/v1.0/me/events/${enc(eventId)}`;
-  const response=await fetch(url,{method:'DELETE',headers:{authorization:`Bearer ${accessToken}`,accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(15000)});
+  let response;
+  try{response=await fetch(url,{method:'DELETE',headers:{authorization:`Bearer ${accessToken}`,accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(15000)})}
+  catch(error){const out=calendarError(provider==='google'?'GOOGLE_CALENDAR_DELETE_FAILED':'OUTLOOK_CALENDAR_DELETE_FAILED',503);out.retryable=true;out.detail=String(error?.name||'NETWORK_FAILURE');throw out}
   if(response.ok||response.status===404||response.status===410)return true;
-  const text=await response.text().catch(()=>null);const error=calendarError(provider==='google'?'GOOGLE_CALENDAR_DELETE_FAILED':'OUTLOOK_CALENDAR_DELETE_FAILED',[400,401,403,409,429,503].includes(response.status)?response.status:502);error.detail=String(text||'').slice(0,240);throw error;
+  const text=await response.text().catch(()=>null);const error=calendarError(provider==='google'?'GOOGLE_CALENDAR_DELETE_FAILED':'OUTLOOK_CALENDAR_DELETE_FAILED',[400,401,403,409,429,503].includes(response.status)?response.status:502);error.detail=String(text||'').slice(0,240);error.providerStatus=response.status;error.retryable=retryableProviderStatus(response.status);throw error;
 }
 
 async function upsertLink(connectionId,appointmentId,event,syncHash){
@@ -106,7 +129,7 @@ export async function syncCalendarConnection(req,connection){
   const accessToken=await refreshAccessToken(req,connection,credential);
   const now=Date.now(),start=new Date(now-SYNC_PAST_DAYS*86400000).toISOString(),end=new Date(now+SYNC_FUTURE_DAYS*86400000).toISOString();
   const [appointments,customers,links,events]=await Promise.all([
-    serviceRest(`dabbir_appointments?select=id,customer_id,starts_at,status&business_id=eq.${enc(businessId)}&starts_at=gte.${enc(start)}&starts_at=lt.${enc(end)}&order=starts_at.asc&limit=1000`),
+    serviceRest(`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status&business_id=eq.${enc(businessId)}&starts_at=gte.${enc(start)}&starts_at=lt.${enc(end)}&order=starts_at.asc&limit=1000`),
     serviceRest(`dabbir_customers?select=id,display_name&business_id=eq.${enc(businessId)}&limit=1000`),
     serviceRest(`dabbir_calendar_event_links?select=connection_id,appointment_id,provider_event_id,provider_etag,sync_hash,last_provider_start,last_synced_at&connection_id=eq.${enc(connection.id)}&limit=2000`),
     listProviderEvents(provider,accessToken,start,end),
@@ -138,9 +161,9 @@ export async function syncCalendarConnection(req,connection){
       if(link&&event&&!eventCancelled(provider,event))await deleteProviderEvent(provider,accessToken,link.provider_event_id).catch(error=>{if(error?.code!==404)throw error});
       continue;
     }
-    const title=String(customerMap.get(appointment.customer_id)||'Customer').slice(0,160),payload=providerEventPayload(provider,appointment,title),syncHash=hash({start:appointment.starts_at,status:appointment.status,title});
+    const title=String(customerMap.get(appointment.customer_id)||'Customer').slice(0,160),payload=providerEventPayload(provider,appointment,title),syncHash=hash({start:appointment.starts_at,end:appointment.ends_at,status:appointment.status,title});
     if(!link||!event){
-      event=await createProviderEvent(provider,accessToken,payload);event.__provider=provider;
+      event=await createProviderEvent(provider,accessToken,payload,appointment.id);event.__provider=provider;
       await upsertLink(connection.id,appointment.id,event,syncHash);link={connection_id:connection.id,appointment_id:appointment.id,provider_event_id:event.id,sync_hash:syncHash};linkMap.set(appointment.id,link);eventMap.set(String(event.id),event);pushed++;continue;
     }
     if(link.sync_hash!==syncHash){
@@ -165,14 +188,16 @@ export async function syncCalendarConnection(req,connection){
 }
 
 export async function syncBusinessCalendars(req,businessId){
-  const rows=await serviceRest(`dabbir_calendar_connections?select=id,business_id,provider,status,sync_enabled,sync_direction,provider_email&business_id=eq.${enc(businessId)}&status=eq.active&sync_enabled=eq.true&order=provider.asc`);
+  const rows=await serviceRest(`dabbir_calendar_connections?select=id,business_id,provider,status,sync_enabled,sync_direction,provider_email&business_id=eq.${enc(businessId)}&status=in.(active,error)&sync_enabled=eq.true&order=provider.asc`);
   const results=[];
   for(const connection of rows||[]){
     try{results.push({ok:true,...await syncCalendarConnection(req,connection)})}
     catch(error){
       const message=String(error?.message||'CALENDAR_SYNC_FAILED').slice(0,160);
+      const code=Number(error?.providerStatus||error?.code||500);
+      const retryable=error?.retryable===true||retryableProviderStatus(code);
       await serviceRest(`dabbir_calendar_connections?id=eq.${enc(connection.id)}`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({status:'error',last_error:message,updated_at:new Date().toISOString()})}).catch(()=>null);
-      results.push({ok:false,connection_id:connection.id,provider:connection.provider,error:message});
+      results.push({ok:false,connection_id:connection.id,provider:connection.provider,error:message,code,retryable});
     }
   }
   return results;
