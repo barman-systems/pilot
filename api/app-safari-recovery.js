@@ -8,27 +8,26 @@ const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(work
 const OWNER_FIRST_SCRIPT_RE = /<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g;
 const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
 const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
-  if(window.__dabbirDesignAuthorityTailV1)return;
-  window.__dabbirDesignAuthorityTailV1=true;
+  if(window.__dabbirDesignAuthorityHeadV2)return;
+  window.__dabbirDesignAuthorityHeadV2=true;
   let frame=0;
   let observer=null;
-  function moveAuthority(){
+  function reassertAuthority(){
     frame=0;
     const style=document.querySelector('style[data-dabbir-design-system="executive-calm-v1"]');
-    if(!style||!document.body)return false;
-    if(style.parentNode!==document.body||style!==document.body.lastElementChild)document.body.appendChild(style);
-    document.body.dataset.dabbirDesign='executive-calm-v1';
+    if(!style||!document.head)return false;
+    if(style.parentNode!==document.head||style!==document.head.lastElementChild)document.head.appendChild(style);
+    if(document.body)document.body.dataset.dabbirDesign='executive-calm-v1';
     return true;
   }
   function schedule(){
     if(frame)return;
-    if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(moveAuthority);
-    else frame=setTimeout(moveAuthority,0);
+    if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(reassertAuthority);
+    else frame=setTimeout(reassertAuthority,0);
   }
   try{
     observer=new MutationObserver(schedule);
     if(document.head)observer.observe(document.head,{childList:true});
-    if(document.body)observer.observe(document.body,{childList:true});
   }catch(_error){}
   try{
     window.__dabbirUiLifecycle?.on?.('afterRender','executive-calm-authority',schedule);
@@ -39,7 +38,7 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
   schedule();
   setTimeout(schedule,250);
   setTimeout(schedule,1400);
-  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'single-style-tail-reassert',pollingLoops:0,presentationObservers:1};
+  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0};
 })();`;
 
 function bustUiAssetVersion(body) {
@@ -117,10 +116,10 @@ function injectSafariAuthFailOpen(body) {
   if (!next.includes('/api/dabbir-safari-auth-fail-open-ui')) {
     next = next.replace('</body>', `<script src="${SAFARI_AUTH_FAIL_OPEN}"></script>\n</body>`);
   }
-  if (!next.includes('data-dabbir-design-authority-tail="executive-calm-v1"')) {
+  if (!next.includes('data-dabbir-design-authority-head="executive-calm-v1"')) {
     next = next.replace(
       '</body>',
-      `<script data-dabbir-design-authority-tail="executive-calm-v1">\n${DESIGN_AUTHORITY_SCRIPT}\n</script>\n</body>`,
+      `<script data-dabbir-design-authority-head="executive-calm-v1">\n${DESIGN_AUTHORITY_SCRIPT}\n</script>\n</body>`,
     );
   }
   return next;
