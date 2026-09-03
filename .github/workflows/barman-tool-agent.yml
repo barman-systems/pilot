@@ -1,6 +1,9 @@
 name: BARMAN Persistent Tool Agent
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     - cron: '*/5 * * * *'
@@ -18,6 +21,7 @@ concurrency:
 
 jobs:
   execute:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -28,6 +32,11 @@ jobs:
         with:
           node-version-file: package.json
           package-manager-cache: false
+      - name: Wait for exact Production broker on push wake-up
+        if: github.event_name == 'push'
+        env:
+          BARMAN_EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/wait-dabbir-production-sha.mjs
       - name: Execute one BARMAN tool-agent command
         env:
           GITHUB_TOKEN: ${{ github.token }}
