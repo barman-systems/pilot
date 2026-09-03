@@ -4,6 +4,11 @@
   "regions": ["bom1"],
   "buildCommand": "npm run dabbir:build",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "env": {
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com"
   },

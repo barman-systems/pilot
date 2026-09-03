@@ -11,6 +11,7 @@ permissions:
   pull-requests: write
   actions: write
   checks: read
+  deployments: read
 
 concurrency:
   group: barman-persistent-tool-agent

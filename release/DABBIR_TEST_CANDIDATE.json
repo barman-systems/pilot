@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "product": "DABBIR",
+  "channel": "preview",
+  "status": "AWAITING_OWNER_APPROVAL",
+  "candidate_sha": null,
+  "preview_url": null,
+  "owner_approval": {
+    "required": true,
+    "approved": false,
+    "approved_at": null,
+    "approval_source": "explicit_owner_message_only"
+  },
+  "production": {
+    "automatic_git_deploy": false,
+    "promotion_allowed": false
+  },
+  "rules": [
+    "Every runtime change must be presented as a Preview candidate before Production.",
+    "Production promotion requires explicit owner approval after the Preview is reviewed.",
+    "A merge to main must not automatically publish a Production deployment.",
+    "The candidate SHA and Preview URL must be recorded here before asking for owner approval."
+  ]
+}
