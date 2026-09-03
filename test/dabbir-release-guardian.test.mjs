@@ -14,7 +14,7 @@ test('Vercel build gate fails closed on syntax, dependency audit, and full tests
   assert.match(buildGate,/process\.exit\(exitCode\)/);
 });
 
-test('release guardian auto-reverts failed main heads without stale rollback or loops',()=>{
+test('release guardian creates a governed rollback PR without bypassing protected main',()=>{
   for(const workflow of [
     'DABBIR CI',
     'DABBIR Mobile CI',
@@ -24,12 +24,22 @@ test('release guardian auto-reverts failed main heads without stale rollback or 
     'DABBIR Main Lineage Guard',
   ]) assert.ok(guardian.includes(`- ${workflow}`));
 
-  assert.match(guardian,/permissions:[\s\S]*contents: write/);
+  assert.match(guardian,/permissions:[\s\S]*contents: write[\s\S]*pull-requests: write/);
   assert.match(guardian,/current_sha=.*origin\/main/);
   assert.match(guardian,/current_sha.*FAILED_SHA/);
   assert.match(guardian,/revert\\\(guardian\\\):/);
+  assert.match(guardian,/branch="guardian\/revert-\$\{short_sha\}"/);
+  assert.match(guardian,/git ls-remote --exit-code --heads origin "\$branch"/);
+  assert.match(guardian,/duplicate rollback suppressed/);
   assert.match(guardian,/git revert/);
-  assert.match(guardian,/git push origin HEAD:main/);
+  assert.match(guardian,/git push origin HEAD:"\$branch"/);
+  assert.match(guardian,/gh pr create/);
+  assert.match(guardian,/--base main/);
+  assert.match(guardian,/--head "\$branch"/);
+  assert.match(guardian,/Governed rollback PR created/);
+  assert.match(guardian,/gh pr merge "\$pr_url" --auto --squash/);
+  assert.match(guardian,/Auto-merge unavailable; rollback PR remains governed and open/);
+  assert.doesNotMatch(guardian,/git push origin HEAD:main/);
 });
 
 test('main lineage guard requires a merged PR and only exempts Guardian rollback commits',()=>{
