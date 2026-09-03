@@ -1,8 +1,10 @@
+import { waitUntil } from '@vercel/functions';
 import { singleQueryValue } from './_request-query.js';
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
+import { enqueueWhatsAppAiAction, processWhatsAppAgentJobs } from './_dabbir-action-core.js';
 
 export const config = {
   api: {
@@ -54,9 +56,7 @@ async function readRawBody(req) {
 
   const chunks = [];
   try {
-    for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
+    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   } catch {
     return null;
   }
@@ -174,12 +174,13 @@ export default async function handler(req, res) {
   }
 
   const events = extractWhatsAppEvents(payload);
-  const routed = events.map((event) => ({ ...event, ...classifyDABBIREvent(event, project) }));
+  const routed = events.map(event => ({ ...event, ...classifyDABBIREvent(event, project) }));
   const messageCount = routed.filter(e => e.type === 'message').length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
   let persistedMessages = 0;
   let duplicateMessages = 0;
+  let queuedAiActions = 0;
   let matchedStatuses = 0;
   let providerVerifiedStatuses = 0;
   let unlinkedMessages = 0;
@@ -191,6 +192,14 @@ export default async function handler(req, res) {
           const result = await persistSignedInbound(event);
           if (result.persisted) persistedMessages += 1;
           if (result.duplicate) duplicateMessages += 1;
+          if (result.persisted && !result.duplicate && String(event.text || '').trim()) {
+            await enqueueWhatsAppAiAction({
+              phoneNumberId: event.phoneNumberId,
+              conversationId: result.conversationId,
+              messageId: result.messageId,
+            });
+            queuedAiActions += 1;
+          }
         } catch (error) {
           if (unlinkedTenant(error)) {
             unlinkedMessages += 1;
@@ -229,6 +238,27 @@ export default async function handler(req, res) {
     }, cid);
   }
 
+  if (queuedAiActions > 0) {
+    waitUntil(processWhatsAppAgentJobs({ delayMs: 2200, limit: Math.min(8, queuedAiActions) })
+      .then(summary => logEvent('info', {
+        correlation_id: cid,
+        component: 'whatsapp_ai_actions',
+        operation: 'background_processing',
+        outcome: 'VERIFIED_SUCCESS',
+        claimed: summary.claimed,
+        completed: summary.completed,
+        handoffs: summary.handoffs,
+      }))
+      .catch(error => logEvent('error', {
+        correlation_id: cid,
+        component: 'whatsapp_ai_actions',
+        operation: 'background_processing',
+        outcome: 'FAILED',
+        failure_class: 'BACKGROUND_RETRYABLE',
+        error: String(error?.code || error?.message || 'AI_ACTION_BACKGROUND_FAILED').slice(0, 160),
+      })));
+  }
+
   const persistenceVerified = messageCount === 0 || persistedMessages === messageCount - unlinkedMessages;
   const state = unlinkedMessages > 0 && persistedMessages === 0
     ? 'TENANT_NOT_LINKED'
@@ -246,6 +276,7 @@ export default async function handler(req, res) {
     classifications,
     persisted_messages: persistedMessages,
     duplicate_messages: duplicateMessages,
+    queued_ai_actions: queuedAiActions,
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
     unlinked_messages: unlinkedMessages,
@@ -265,6 +296,8 @@ export default async function handler(req, res) {
     persisted: persistedMessages > 0,
     persistence_verified: persistenceVerified,
     duplicate_messages: duplicateMessages,
+    queued_ai_actions: queuedAiActions,
+    background_processing_scheduled: queuedAiActions > 0,
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
     tenant_unlinked_events: unlinkedMessages,
