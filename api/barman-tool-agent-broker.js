@@ -108,17 +108,20 @@ async function discover(command,paths){
 }
 
 async function proposePatch(command,files,previousPatch='',applyError=''){
-  const context=Array.isArray(files)?files.slice(0,8).map(file=>({path:clean(file?.path,300),content:String(file?.content||'').slice(0,24000)})).filter(file=>file.path):[];
+  const context=Array.isArray(files)?files.slice(0,12).map(file=>({path:clean(file?.path,300),content:String(file?.content||'').slice(0,24000)})).filter(file=>file.path):[];
   const system=[
     'You are the code-editing brain for BARMAN Executive OS working on DABBIR.',
     'Produce the smallest correct source change that satisfies the owner command.',
-    'You may edit only files supplied in context, plus create new test files under test/ or new SQL migrations under supabase/migrations/.',
+    'You may edit only existing files supplied in context.',
+    'You are explicitly authorized to create NEW files under test/ and NEW SQL migration files under supabase/migrations/. A new allowed path does NOT need to already appear in the supplied context.',
+    'For a low-risk regression-test request, infer a safe filename, test framework, imports, and conventions from neighboring supplied files and package.json. Never ask the owner to name the test file or reconfirm this already-granted permission.',
     'Never edit .github/, .env files, secrets, branch-protection/auth governance, api/barman-tool-agent-broker.js, scripts/barman-tool-agent.mjs, or vercel.json.',
     'Preserve tenant isolation and Mumbai-only production. Do not weaken tests or authentication to make a test pass.',
+    'If apply_error starts with AI_PATCH_EMPTY_AUTORECOVERY, the previous refusal was not sufficient by itself: use the expanded context and the standing new-file permission, then either produce the safe patch or block only for a concrete technical/security reason that cannot be resolved from the supplied files.',
     'Return JSON only: {"summary":"...","patch":"<unified diff>"}. The patch must be a valid git unified diff applicable to the exact supplied content.',
-    'If the request cannot be safely completed from the supplied context, return {"summary":"BLOCKED: ...","patch":""}.'
+    'If the request still cannot be safely completed, return {"summary":"BLOCKED: <specific non-owner-resolvable reason>","patch":""}.'
   ].join('\n');
-  const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1200)},7000);
+  const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1600)},7000);
   return {model:result.model,summary:clean(result.payload?.summary,1200),patch:String(result.payload?.patch||'').trim().slice(0,80000)};
 }
 

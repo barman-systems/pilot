@@ -14,7 +14,11 @@ function sh(file,args=[],options={}){
   return execFileSync(file,args,{encoding:'utf8',stdio:options.stdio||['ignore','pipe','pipe'],...options}).trim();
 }
 function git(args,options={}){return sh('git',args,options)}
-function changedFiles(){return git(['diff','--name-only','HEAD']).split('\n').map(x=>x.trim()).filter(Boolean)}
+function changedFiles(){
+  const tracked=git(['diff','--name-only','HEAD']).split('\n').map(x=>x.trim()).filter(Boolean);
+  const untracked=git(['ls-files','--others','--exclude-standard']).split('\n').map(x=>x.trim()).filter(Boolean);
+  return [...new Set([...tracked,...untracked])];
+}
 function forbiddenPath(path){
   return path.startsWith('.github/')
     ||/(^|\/)\.env(?:\.|$)/.test(path)
@@ -90,16 +94,60 @@ function grepFiles(term){
   if(![0,1].includes(r.status))return [];
   return String(r.stdout||'').split('\n').map(x=>x.trim()).filter(Boolean);
 }
+function readContextFile(path,allPaths){
+  if(!path||!allPaths.includes(path)||forbiddenPath(path))return null;
+  try{
+    const stat=fs.statSync(path);
+    if(!stat.isFile()||stat.size>24000)return null;
+    const content=fs.readFileSync(path,'utf8');
+    if(content.includes('\0'))return null;
+    return {path,content};
+  }catch{return null}
+}
 function buildContext(discovery,allPaths){
-  const selected=[];const add=path=>{if(!path||selected.includes(path)||!allPaths.includes(path)||forbiddenPath(path))return;try{const stat=fs.statSync(path);if(!stat.isFile()||stat.size>24000)return;const content=fs.readFileSync(path,'utf8');if(content.includes('\0'))return;selected.push(path)}catch{}};
+  const selected=[];const add=path=>{if(!path||selected.includes(path))return;const file=readContextFile(path,allPaths);if(file)selected.push(path)};
   for(const hint of discovery.file_hints||[])add(hint);
   for(const term of discovery.search_terms||[])for(const path of grepFiles(term))add(path);
   for(const hint of [...selected]){
     const base=hint.split('/').pop()?.replace(/\.[^.]+$/,'');
     if(!base)continue;
-    for(const path of allPaths){if(selected.length>=8)break;if(path.startsWith('test/')&&path.toLowerCase().includes(base.toLowerCase()))add(path)}
+    for(const path of allPaths){if(selected.length>=10)break;if(path.startsWith('test/')&&path.toLowerCase().includes(base.toLowerCase()))add(path)}
   }
-  return selected.slice(0,8).map(path=>({path,content:fs.readFileSync(path,'utf8')}));
+  return selected.slice(0,10).map(path=>readContextFile(path,allPaths)).filter(Boolean);
+}
+function expandContext(context,discovery,allPaths,commandText){
+  const selected=new Map(context.map(file=>[file.path,file]));
+  const add=path=>{if(selected.size>=12||selected.has(path))return;const file=readContextFile(path,allPaths);if(file)selected.set(path,file)};
+  add('package.json');
+
+  const tokens=new Set();
+  const addToken=value=>{
+    for(const part of String(value||'').toLowerCase().split(/[^a-z0-9_-]+/)){
+      for(const token of part.split(/[-_]+/))if(token.length>=4&&!['test','tests','file','code','dabbir'].includes(token))tokens.add(token);
+    }
+  };
+  for(const term of discovery.search_terms||[])addToken(term);
+  for(const file of context){
+    const base=file.path.split('/').pop()?.replace(/\.[^.]+$/,'')||'';
+    addToken(base);
+  }
+  for(const word of String(commandText||'').match(/[A-Za-z][A-Za-z0-9_-]{3,}/g)||[])addToken(word);
+
+  for(const file of context){
+    const base=file.path.split('/').pop()?.replace(/\.[^.]+$/,'').toLowerCase()||'';
+    if(!base)continue;
+    for(const path of allPaths){
+      if(selected.size>=12)break;
+      if(path.startsWith('test/')&&path.toLowerCase().includes(base))add(path);
+    }
+  }
+  for(const path of allPaths){
+    if(selected.size>=12)break;
+    const lower=path.toLowerCase();
+    if(!path.startsWith('test/'))continue;
+    if([...tokens].some(token=>lower.includes(token)))add(path);
+  }
+  return [...selected.values()].slice(0,12);
 }
 function applyPatch(patch){
   const check=spawnSync('git',['apply','--check','--whitespace=error-all','-'],{input:patch,encoding:'utf8'});
@@ -129,6 +177,7 @@ async function refreshBranch(branch){
 }
 
 let execution=null;
+let terminalPersisted=false;
 async function finalize(outcome,summary,evidence=[],error=''){
   if(!execution)return null;
   try{return await broker({phase:'finalize',command_id:execution.commandId,run_id:execution.runId,action_id:execution.actionId,outcome,summary,evidence,error})}
@@ -167,8 +216,20 @@ try{
 
   let proposal=await broker({phase:'patch',command:commandText,files:context});
   if(!proposal.patch){
-    await finalize('BLOCKED',proposal.summary||'تعذر إنشاء تعديل آمن من السياق المتاح.',[], 'AI_PATCH_EMPTY');
-    process.exit(0);
+    const firstSummary=proposal.summary||'AI_PATCH_EMPTY';
+    context=expandContext(context,discovery,allPaths,commandText);
+    console.log(`PATCH_EMPTY_RECOVERY context_files=${context.map(file=>file.path).join(',')}`);
+    proposal=await broker({
+      phase:'patch',
+      command:commandText,
+      files:context,
+      previous_patch:'',
+      apply_error:`AI_PATCH_EMPTY_AUTORECOVERY: The first attempt returned no patch. New files under test/ and supabase/migrations/ are already authorized and do not need to pre-exist. Infer conventions from the expanded context and execute the smallest safe change. First summary: ${clean(firstSummary,900)}`,
+    });
+    if(!proposal.patch){
+      await finalize('BLOCKED',proposal.summary||firstSummary,[], 'AI_PATCH_EMPTY_AFTER_AUTORECOVERY');
+      process.exit(0);
+    }
   }
   if(patchTouchesForbidden(proposal.patch))throw new Error('PATCH_TOUCHED_GOVERNANCE_FILE');
   let applied=applyPatch(proposal.patch);
@@ -221,10 +282,25 @@ try{
   ];
   const summary=`BARMAN نفّذ الأمر ودمج التغيير بعد CI ثم تحقق من Production وFull Customer Journey. PR #${pr.number}, commit ${mergeSha.slice(0,12)}.`;
   const result=await finalize('DONE',summary,evidence,'');
-  console.log('DONE',JSON.stringify({command_id:execution.commandId,pr:prUrl,merge_sha:mergeSha,notification:result?.notification||null}));
+  if(result?.finalized?.ok!==true)throw new Error('FINALIZE_DONE_NOT_PERSISTED');
+  terminalPersisted=true;
+  if(result.finalized.verification_status!=='INDEPENDENT_REQUIRED')throw new Error(`FINALIZE_TRUST_STATE_INVALID_${clean(result.finalized.verification_status||'missing',80)}`);
+
+  let verifierWake='DISPATCHED';
+  try{
+    await dispatch('barman-independent-verifier.yml','main',{});
+  }catch(error){
+    verifierWake=`FAILED_UNPROMOTED_${clean(error?.message||error,240)}`;
+    console.error('VERIFIER_WAKE_FAILED_UNPROMOTED',verifierWake);
+  }
+  console.log('DONE_AWAITING_INDEPENDENT_VERIFICATION',JSON.stringify({command_id:execution.commandId,pr:prUrl,merge_sha:mergeSha,verification_status:result.finalized.verification_status,verifier_wake:verifierWake,notification:result?.notification||null}));
 }catch(error){
   const message=clean(error?.stack||error?.message||error,1800);
   console.error('BARMAN_TOOL_AGENT_FAILED',message);
-  await finalize('RETRY','تعذر إكمال دورة التنفيذ الآلية؛ ستعاد المحاولة بعد معالجة السبب.',[],message);
+  if(!terminalPersisted){
+    await finalize('RETRY','تعذر إكمال دورة التنفيذ الآلية؛ ستعاد المحاولة بعد معالجة السبب.',[],message);
+  }else{
+    console.error('POST_FINALIZE_FAILURE_COMMAND_REMAINS_UNPROMOTED',execution?.commandId||'unknown');
+  }
   process.exitCode=1;
 }
