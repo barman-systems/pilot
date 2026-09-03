@@ -5,10 +5,12 @@ import fs from 'node:fs';
 const root=new URL('../',import.meta.url);
 const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 
-test('shell has one bundle-order source and no permanent booking polling',()=>{
+test('shell compatibility mirror exactly matches the bundle manifest and booking guard is event-driven',()=>{
   const shell=read('api/app-recovery.js');
-  assert.doesNotMatch(shell,/const UI_MODULE_ORDER\s*=/,'bundle order must not be duplicated outside dabbir-ui-bundles.json');
-  assert.match(shell,/config\/dabbir-ui-bundles\.json is the single source of truth/);
+  const manifest=JSON.parse(read('config/dabbir-ui-bundles.json'));
+  const block=shell.match(/const UI_MODULE_ORDER = \[([\s\S]*?)\];/)?.[1]||'';
+  const mirror=[...block.matchAll(/'([^']+)'/g)].map(match=>match[1]);
+  assert.deepEqual(mirror,[...manifest.critical,...manifest.deferred],'shell module mirror drifted from the build manifest');
   assert.doesNotMatch(shell,/setInterval\s*\(/,'shell booking guard must remain event-driven');
 });
 
