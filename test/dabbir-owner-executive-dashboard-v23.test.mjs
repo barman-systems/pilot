@@ -61,13 +61,14 @@ test('v23 remains responsive for iPhone-sized viewports',()=>{
   assert.match(ui,/grid-template-columns:1fr/);
 });
 
-test('executive data remains brokered and owner-session protected',()=>{
+test('executive data remains brokered, owner-session protected and root-only',()=>{
   assert.match(data,/\['overview','search','executive'\]/);
   assert.match(data,/__Host-dabbir_owner_session/);
   assert.match(data,/action:'owner_data'/);
   assert.doesNotMatch(data,/SUPABASE_SERVICE_ROLE_KEY|apikey:|authorization:`Bearer/);
   assert.match(broker,/action==='executive'/);
-  assert.match(broker,/dabbir_platform_owner_executive_v1/);
+  assert.match(broker,/dabbir_platform_owner_executive_v2/);
+  assert.match(broker,/requireRoot\(session\)/);
   assert.match(broker,/verifySession/);
   assert.match(broker,/database_rpc_latency_ms/);
 });

@@ -3,135 +3,151 @@ const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 const JSON_HEADERS={'content-type':'application/json','cache-control':'no-store'};
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CUSTOMER_NO_RE=/^DAB-[0-9]{6,}$/i;
+const ALL_PERMISSIONS=['manage_customers','manage_businesses','manage_orders','manage_bookings','manage_products','manage_services','manage_support','manage_incidents','manage_integrations','manage_employees','manage_system','manage_releases','manage_ceo_commands','view_financials','manage_financial_operations'];
+const PRESETS:Record<string,string[]>={
+ full:[...ALL_PERMISSIONS],
+ full_manager:[...ALL_PERMISSIONS],
+ operations:['manage_customers','manage_businesses','manage_orders','manage_bookings','manage_products','manage_services','manage_incidents','manage_integrations'],
+ support:['manage_customers','manage_support','manage_incidents'],
+ technical:['manage_incidents','manage_integrations','manage_system','manage_releases','manage_ceo_commands'],
+ finance:['view_financials','manage_financial_operations'],
+ financial:['view_financials','manage_financial_operations'],
+ custom:[]
+};
 const serviceKeyIsJwt=()=>SERVICE_KEY.split('.').length===3;
-const sbHeaders=()=>{const headers:Record<string,string>={'apikey':SERVICE_KEY,'content-type':'application/json'};if(serviceKeyIsJwt())headers.authorization=`Bearer ${SERVICE_KEY}`;return headers};
+const sbHeaders=()=>{const h:Record<string,string>={'apikey':SERVICE_KEY,'content-type':'application/json'};if(serviceKeyIsJwt())h.authorization=`Bearer ${SERVICE_KEY}`;return h};
 const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:JSON_HEADERS});
-const bytesToHex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
-async function sha(value:string){return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))))}
+const hex=(b:Uint8Array)=>Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');
+async function sha(v:string){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))))}
 async function otpHash(id:string,otp:string){return sha(`${SERVICE_KEY}:dabbir-owner-otp:${id}:${otp}`)}
-async function tokenHash(token:string){return sha(`${SERVICE_KEY}:dabbir-owner-session:${token}`)}
-function randomToken(bytes=36){const data=new Uint8Array(bytes);crypto.getRandomValues(data);return btoa(String.fromCharCode(...data)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function tokenHash(t:string){return sha(`${SERVICE_KEY}:dabbir-owner-session:${t}`)}
+function randomToken(bytes=36){const d=new Uint8Array(bytes);crypto.getRandomValues(d);return btoa(String.fromCharCode(...d)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function randomOtp(){const x=new Uint32Array(1);crypto.getRandomValues(x);return String(x[0]%1000000).padStart(6,'0')}
-function safeEqual(a:string,b:string){if(a.length!==b.length)return false;let out=0;for(let i=0;i<a.length;i++)out|=a.charCodeAt(i)^b.charCodeAt(i);return out===0}
+function safeEqual(a:string,b:string){if(a.length!==b.length)return false;let o=0;for(let i=0;i<a.length;i++)o|=a.charCodeAt(i)^b.charCodeAt(i);return o===0}
 function clean(v:unknown,max=4000){return String(v??'').trim().slice(0,max)}
+function permissionList(v:unknown){return Array.isArray(v)?[...new Set(v.map(x=>clean(x,80)).filter(x=>ALL_PERMISSIONS.includes(x)))]:[]}
 async function sb(path:string,init:RequestInit={}){return fetch(`${SUPABASE_URL}${path}`,{...init,headers:{...sbHeaders(),...(init.headers||{})}})}
-async function activeAdmin(){
- const r=await sb('/rest/v1/dabbir_platform_admins?active=eq.true&select=user_id&order=created_at.asc&limit=1');
- if(!r.ok)return null;const rows=await r.json().catch(()=>[]);return Array.isArray(rows)&&rows[0]?.user_id?String(rows[0].user_id):null;
-}
-async function adminEmail(userId:string){
- const r=await sb(`/auth/v1/admin/users/${encodeURIComponent(userId)}`);
- if(!r.ok)return null;const u=await r.json().catch(()=>null);return u?.email?String(u.email):null;
-}
-async function verifySession(token:string){
- if(!token||token.length<24||token.length>256)return null;
- const h=await tokenHash(token);
- const r=await sb('/rest/v1/rpc/dabbir_owner_session_verify_v1',{method:'POST',body:JSON.stringify({p_token_hash:h})});
- if(!r.ok)return null;const p=await r.json().catch(()=>null);return p?.authenticated===true&&p?.role==='platform_owner'&&p?.actor_user_id?p:null;
-}
+async function rpc(name:string,params:Record<string,unknown>={}){const r=await sb(`/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify(params)});const p=await r.json().catch(()=>null);return{ok:r.ok,status:r.status,payload:p}}
+const sessionPermissions=(s:any)=>Array.isArray(s?.permissions)?s.permissions.map(String):[];
+const can=(s:any,p:string)=>s?.authority_role==='ROOT_OWNER'||sessionPermissions(s).includes(p);
+const requirePermission=(s:any,p:string)=>can(s,p)?null:reply(403,{ok:false,error:'PLATFORM_PERMISSION_REQUIRED',permission:p});
+const requireRoot=(s:any)=>s?.authority_role==='ROOT_OWNER'?null:reply(403,{ok:false,error:'ROOT_OWNER_REQUIRED'});
+
+async function resolveLogin(login:string){const r=await rpc('dabbir_platform_login_identity_v1',{p_login:clean(login,254).toLowerCase()});if(!r.ok||!r.payload?.user_id||!r.payload?.email)return null;return r.payload}
+async function verifySession(t:string){if(!t||t.length<24||t.length>256)return null;const r=await rpc('dabbir_owner_session_verify_v1',{p_token_hash:await tokenHash(t)});const p=r.payload;return r.ok&&p?.authenticated===true&&p?.actor_user_id&&['ROOT_OWNER','OWNER_DELEGATE'].includes(String(p?.authority_role||''))?p:null}
+
 async function requestOtp(body:any){
- const resendKey=String(body?.resend_key||'').trim();
- if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+ const resendKey=clean(body?.resend_key,500);if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+ const identity=await resolveLogin(String(body?.login||body?.identifier||body?.username||'__root__'));if(!identity)return reply(404,{ok:false,error:'PLATFORM_IDENTITY_NOT_FOUND'});
  const since=new Date(Date.now()-10*60*1000).toISOString();
- const countRes=await sb(`/rest/v1/dabbir_owner_otp_challenges?created_at=gte.${encodeURIComponent(since)}&select=id`,{headers:{prefer:'count=exact'}});
- if(countRes.ok){const range=countRes.headers.get('content-range')||'';const total=Number(range.split('/')[1]);if(Number.isFinite(total)&&total>=3)return reply(429,{ok:false,error:'OTP_RATE_LIMITED'})}
- const actor=await activeAdmin();if(!actor)return reply(503,{ok:false,error:'PLATFORM_OWNER_NOT_CONFIGURED'});
- const email=await adminEmail(actor);if(!email)return reply(503,{ok:false,error:'PLATFORM_OWNER_EMAIL_NOT_CONFIGURED'});
+ const c=await sb(`/rest/v1/dabbir_owner_otp_challenges?actor_user_id=eq.${encodeURIComponent(identity.user_id)}&created_at=gte.${encodeURIComponent(since)}&select=id`,{headers:{prefer:'count=exact'}});
+ if(c.ok){const total=Number((c.headers.get('content-range')||'').split('/')[1]);if(Number.isFinite(total)&&total>=3)return reply(429,{ok:false,error:'OTP_RATE_LIMITED'})}
  const id=crypto.randomUUID(),otp=randomOtp(),expires=new Date(Date.now()+10*60*1000).toISOString();
- const insert=await sb('/rest/v1/dabbir_owner_otp_challenges',{method:'POST',headers:{prefer:'return=minimal'},body:JSON.stringify({id,otp_hash:await otpHash(id,otp),token_hash:await sha(`${SERVICE_KEY}:challenge:${id}:${randomToken(18)}`),expires_at:expires,attempts:0})});
- if(!insert.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});
- const from=String(Deno.env.get('DABBIR_RESEND_FROM')||'DABBIR <onboarding@resend.dev>');
- const sent=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${resendKey}`,'content-type':'application/json'},body:JSON.stringify({from,to:[email],subject:'DABBIR owner verification code',text:`رمز دخول مالك دبّر: ${otp}\n\nينتهي الرمز خلال 10 دقائق.\nDABBIR owner verification code: ${otp}\nExpires in 10 minutes.`})});
+ const ins=await sb('/rest/v1/dabbir_owner_otp_challenges',{method:'POST',headers:{prefer:'return=minimal'},body:JSON.stringify({id,actor_user_id:identity.user_id,invitation_id:identity.invitation_id||null,otp_hash:await otpHash(id,otp),token_hash:await sha(`${SERVICE_KEY}:challenge:${id}:${randomToken(18)}`),expires_at:expires,attempts:0})});
+ if(!ins.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});
+ const sent=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${resendKey}`,'content-type':'application/json'},body:JSON.stringify({from:String(Deno.env.get('DABBIR_RESEND_FROM')||'DABBIR <onboarding@resend.dev>'),to:[identity.email],subject:'DABBIR verification code',text:`رمز دخول دبّر: ${otp}\n\nينتهي الرمز خلال 10 دقائق.\nDABBIR verification code: ${otp}\nExpires in 10 minutes.`})});
  if(!sent.ok){await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}`,{method:'DELETE'});return reply(503,{ok:false,error:'OWNER_OTP_DELIVERY_FAILED'})}
  return reply(200,{ok:true,challenge_id:id,otp_required:true});
 }
+
 async function verifyOtp(body:any){
- const id=String(body?.challenge_id||'').trim(),otp=String(body?.otp||'').trim();
- if(!/^[0-9a-f-]{36}$/i.test(id)||!/^\d{6}$/.test(otp))return reply(401,{ok:false,error:'INVALID_OWNER_OTP'});
- const r=await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&select=id,otp_hash,expires_at,attempts,consumed_at&limit=1`);
- if(!r.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});const rows=await r.json().catch(()=>[]),row=Array.isArray(rows)?rows[0]:null;
- if(!row||row.consumed_at||new Date(row.expires_at).getTime()<=Date.now()||Number(row.attempts||0)>=5)return reply(401,{ok:false,error:'INVALID_OWNER_OTP'});
- const good=safeEqual(String(row.otp_hash||''),await otpHash(id,otp));
- if(!good){await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&consumed_at=is.null`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({attempts:Number(row.attempts||0)+1})});return reply(401,{ok:false,error:'INVALID_OWNER_OTP'})}
- const actor=await activeAdmin();if(!actor)return reply(503,{ok:false,error:'PLATFORM_OWNER_NOT_CONFIGURED'});
- const sessionToken=randomToken(48),h=await tokenHash(sessionToken),expiresIn=43200,sessionExpires=new Date(Date.now()+expiresIn*1000).toISOString();
- const issue=await sb('/rest/v1/rpc/dabbir_owner_session_issue_v1',{method:'POST',body:JSON.stringify({p_actor_user_id:actor,p_token_hash:h,p_expires_at:sessionExpires})});
- if(!issue.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});
- await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&consumed_at=is.null`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({consumed_at:new Date().toISOString(),attempts:Number(row.attempts||0)+1})});
- return reply(200,{ok:true,authenticated:true,role:'platform_owner',session_token:sessionToken,expires_in:expiresIn});
+ const id=clean(body?.challenge_id,80),otp=clean(body?.otp,10);if(!UUID_RE.test(id)||!/^\d{6}$/.test(otp))return reply(401,{ok:false,error:'INVALID_OWNER_OTP'});
+ const r=await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&select=id,actor_user_id,invitation_id,otp_hash,expires_at,attempts,consumed_at&limit=1`);if(!r.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});
+ const rows=await r.json().catch(()=>[]),row=Array.isArray(rows)?rows[0]:null;
+ if(!row?.actor_user_id||row.consumed_at||new Date(row.expires_at).getTime()<=Date.now()||Number(row.attempts||0)>=5)return reply(401,{ok:false,error:'INVALID_OWNER_OTP'});
+ if(!safeEqual(String(row.otp_hash||''),await otpHash(id,otp))){await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&consumed_at=is.null`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({attempts:Number(row.attempts||0)+1})});return reply(401,{ok:false,error:'INVALID_OWNER_OTP'})}
+ if(row.invitation_id){const accepted=await rpc('dabbir_platform_staff_accept_for_user_v1',{p_user_id:row.actor_user_id});if(!accepted.ok||accepted.payload?.accepted===false)return reply(401,{ok:false,error:'INVITATION_ACCEPT_FAILED'})}
+ const token=randomToken(48),expiresIn=43200,expires=new Date(Date.now()+expiresIn*1000).toISOString();
+ const issue=await rpc('dabbir_owner_session_issue_v1',{p_actor_user_id:row.actor_user_id,p_token_hash:await tokenHash(token),p_expires_at:expires});if(!issue.ok)return reply(503,{ok:false,error:'OWNER_AUTH_UNAVAILABLE'});
+ const consumed=await sb(`/rest/v1/dabbir_owner_otp_challenges?id=eq.${encodeURIComponent(id)}&consumed_at=is.null`,{method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({consumed_at:new Date().toISOString(),attempts:Number(row.attempts||0)+1})});
+ if(!consumed.ok){return reply(503,{ok:false,error:'OWNER_CHALLENGE_CONSUME_FAILED'})}
+ const session=await verifySession(token);if(!session)return reply(503,{ok:false,error:'OWNER_SESSION_ISSUE_FAILED'});
+ return reply(200,{ok:true,authenticated:true,role:'platform_owner',authority_role:session.authority_role,permissions:session.permissions||[],root_owner:session.root_owner===true,session_token:token,expires_in:expiresIn});
 }
-async function incidentRead(body:any){
+
+async function ensureAuthUser(email:string,displayName:string){
+ const found=await rpc('dabbir_platform_auth_user_by_email_v1',{p_email:email});if(found.ok&&found.payload?.user_id)return String(found.payload.user_id);
+ const r=await sb('/auth/v1/admin/users',{method:'POST',body:JSON.stringify({email,email_confirm:true,user_metadata:{display_name:displayName,platform_invited:true}})});const p=await r.json().catch(()=>null);return r.ok&&p?.id?String(p.id):null;
+}
+
+async function teamList(session:any){const denied=requirePermission(session,'manage_employees');if(denied)return{response:denied,payload:null};const r=await rpc('dabbir_platform_staff_list_v2',{p_actor:session.actor_user_id});return r.ok?{response:null,payload:r.payload}:{response:reply(503,{ok:false,error:'TEAM_READ_FAILED'}),payload:null}}
+async function teamInvite(session:any,body:any){
+ const denied=requirePermission(session,'manage_employees');if(denied)return denied;
+ const email=clean(body?.email,254).toLowerCase(),displayName=clean(body?.display_name,160),preset=clean(body?.preset,40).toLowerCase()||'custom';
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return reply(400,{ok:false,error:'EMAIL_INVALID'});
+ if(!Object.prototype.hasOwnProperty.call(PRESETS,preset))return reply(400,{ok:false,error:'PERMISSION_PRESET_INVALID'});
+ const perms=preset==='custom'?permissionList(body?.permissions):permissionList(PRESETS[preset]);if(!perms.length)return reply(400,{ok:false,error:'PERMISSIONS_REQUIRED'});
+ const target=await ensureAuthUser(email,displayName);if(!target)return reply(503,{ok:false,error:'INVITED_USER_CREATE_FAILED'});
+ const expires=new Date(Date.now()+7*86400000).toISOString(),hash=await sha(`${SERVICE_KEY}:platform-invite:${randomToken(40)}`);
+ const r=await rpc('dabbir_platform_staff_invite_create_v1',{p_actor:session.actor_user_id,p_target_user_id:target,p_email:email,p_display_name:displayName||null,p_permissions:perms,p_preset:preset,p_token_hash:hash,p_expires_at:expires});
+ if(!r.ok)return reply(403,{ok:false,error:'TEAM_INVITE_FAILED',details:r.payload});
+ const resendKey=clean(body?.resend_key,500);let sent=false;
+ if(resendKey&&r.payload?.id){const mail=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${resendKey}`,'content-type':'application/json'},body:JSON.stringify({from:String(Deno.env.get('DABBIR_RESEND_FROM')||'DABBIR <onboarding@resend.dev>'),to:[email],subject:'دعوة لإدارة DABBIR | دبّر',text:`تمت دعوتك لإدارة DABBIR بحساب مستقل. افتح https://dabbir.cloud/owner واستخدم بريدك ${email}. سيصلك رمز OTP مستقل عند تسجيل الدخول.\n\nلا تشارك رمزك مع أي شخص.`})});sent=mail.ok;await rpc('dabbir_platform_staff_invite_delivery_v1',{p_invitation_id:r.payload.id,p_status:sent?'SENT':'FAILED'})}
+ return sent?reply(200,{ok:true,payload:r.payload}):reply(503,{ok:false,error:'TEAM_INVITE_DELIVERY_FAILED',payload:r.payload});
+}
+async function teamUpdate(session:any,body:any){
+ const denied=requirePermission(session,'manage_employees');if(denied)return denied;
+ const target=clean(body?.target_user_id,80),op=clean(body?.operation,40).toLowerCase();if(!UUID_RE.test(target)||!['set_permissions','suspend','reactivate','revoke_sessions','remove'].includes(op))return reply(400,{ok:false,error:'TEAM_UPDATE_INVALID'});
+ const perms=op==='set_permissions'?permissionList(body?.permissions):null;if(op==='set_permissions'&&!perms?.length)return reply(400,{ok:false,error:'PERMISSIONS_REQUIRED'});
+ const r=await rpc('dabbir_platform_staff_update_v1',{p_actor:session.actor_user_id,p_target:target,p_action:op.toUpperCase(),p_permissions:perms,p_reason:clean(body?.reason,500)||null});
+ return r.ok?reply(200,{ok:true,payload:r.payload}):reply(403,{ok:false,error:'TEAM_UPDATE_DENIED',details:r.payload});
+}
+async function teamAction(session:any,body:any){const op=clean(body?.operation,40).toLowerCase();if(op==='list'||!op){const x=await teamList(session);return x.response||reply(200,{ok:true,payload:x.payload})}if(op==='invite')return teamInvite(session,body);return teamUpdate(session,body)}
+
+async function incidentRead(session:any,body:any){
+ const denied=requirePermission(session,'manage_incidents');if(denied)return denied;
  const incidentId=clean(body?.incident_id,80),customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);
- if(incidentId&&!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});
- if(customerNo&&!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});
- if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
- const q=new URLSearchParams({select:'*',order:'updated_at.desc',limit:'100'});
- if(incidentId)q.set('id',`eq.${incidentId}`);
- if(customerNo)q.set('customer_no',`eq.${customerNo}`);
- if(businessId)q.set('business_id',`eq.${businessId}`);
- const r=await sb(`/rest/v1/dabbir_platform_owner_incidents?${q.toString()}`);
- if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_READ_FAILED'});
- const incidents=await r.json().catch(()=>[]);
- let events:any[]=[];
- if(incidentId){
-  const e=await sb(`/rest/v1/dabbir_platform_owner_incident_events?incident_id=eq.${encodeURIComponent(incidentId)}&select=*&order=created_at.asc&limit=200`);
-  if(!e.ok)return reply(503,{ok:false,error:'INCIDENT_EVENT_READ_FAILED'});
-  const rows=await e.json().catch(()=>[]);events=Array.isArray(rows)?rows:[];
- }
- return reply(200,{ok:true,payload:{incidents:Array.isArray(incidents)?incidents:[],events}});
+ if(incidentId&&!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});if(customerNo&&!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
+ const q=new URLSearchParams({select:'*',order:'updated_at.desc',limit:'100'});if(incidentId)q.set('id',`eq.${incidentId}`);if(customerNo)q.set('customer_no',`eq.${customerNo}`);if(businessId)q.set('business_id',`eq.${businessId}`);
+ const r=await sb(`/rest/v1/dabbir_platform_owner_incidents?${q}`);if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_READ_FAILED'});const incidents=await r.json().catch(()=>[]);
+ let events:any[]=[];if(incidentId){const e=await sb(`/rest/v1/dabbir_platform_owner_incident_events?incident_id=eq.${encodeURIComponent(incidentId)}&select=*&order=created_at.asc&limit=200`);if(!e.ok)return reply(503,{ok:false,error:'INCIDENT_EVENT_READ_FAILED'});events=await e.json().catch(()=>[])}
+ return reply(200,{ok:true,payload:{incidents:Array.isArray(incidents)?incidents:[],events:Array.isArray(events)?events:[]}});
 }
-async function incidentAction(body:any){
- const operation=clean(body?.operation,20).toLowerCase();
- if(operation==='create'){
-  const customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);
-  if(!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});
-  if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_create_v1',{method:'POST',body:JSON.stringify({p_customer_no:customerNo,p_business_id:businessId||null,p_category:clean(body?.category,30),p_priority:clean(body?.priority,20),p_summary:clean(body?.summary,200),p_description:clean(body?.description,4000)||null,p_assigned_queue:clean(body?.assigned_queue,40)||'owner'})});
-  if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_CREATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
- }
- if(operation==='update'){
-  const incidentId=clean(body?.incident_id,80);if(!UUID_RE.test(incidentId))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_incident_update_v1',{method:'POST',body:JSON.stringify({p_incident_id:incidentId,p_status:clean(body?.status,30)||null,p_priority:clean(body?.priority,20)||null,p_assigned_queue:clean(body?.assigned_queue,40)||null,p_root_cause:clean(body?.root_cause,4000)||null,p_resolution:clean(body?.resolution,4000)||null,p_note:clean(body?.note,4000)||null})});
-  if(!r.ok)return reply(503,{ok:false,error:'INCIDENT_UPDATE_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
- }
+async function incidentAction(session:any,body:any){
+ const denied=requirePermission(session,'manage_incidents');if(denied)return denied;const op=clean(body?.operation,20).toLowerCase();
+ if(op==='create'){const customerNo=clean(body?.customer_no,40).toUpperCase(),businessId=clean(body?.business_id,80);if(!CUSTOMER_NO_RE.test(customerNo))return reply(400,{ok:false,error:'INVALID_CUSTOMER_NUMBER'});if(businessId&&!UUID_RE.test(businessId))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});const r=await rpc('dabbir_platform_incident_create_authorized_v1',{p_actor:session.actor_user_id,p_customer_no:customerNo,p_business_id:businessId||null,p_category:clean(body?.category,30),p_priority:clean(body?.priority,20),p_summary:clean(body?.summary,200),p_description:clean(body?.description,4000)||null,p_assigned_queue:clean(body?.assigned_queue,40)||'owner'});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'INCIDENT_CREATE_FAILED',details:r.payload})}
+ if(op==='update'){const id=clean(body?.incident_id,80);if(!UUID_RE.test(id))return reply(400,{ok:false,error:'INVALID_INCIDENT_ID'});const r=await rpc('dabbir_platform_incident_update_authorized_v1',{p_actor:session.actor_user_id,p_incident_id:id,p_status:clean(body?.status,30)||null,p_priority:clean(body?.priority,20)||null,p_assigned_queue:clean(body?.assigned_queue,40)||null,p_root_cause:clean(body?.root_cause,4000)||null,p_resolution:clean(body?.resolution,4000)||null,p_note:clean(body?.note,4000)||null});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'INCIDENT_UPDATE_FAILED',details:r.payload})}
  return reply(400,{ok:false,error:'UNKNOWN_INCIDENT_OPERATION'});
 }
+
 async function ownerData(body:any){
- const session=await verifySession(String(body?.session_token||''));if(!session)return reply(401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
- const action=String(body?.data_action||'overview').trim().toLowerCase();
- if(action==='overview'){
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_overview',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id})});
-  if(!r.ok)return reply(503,{ok:false,error:'OWNER_DATA_FAILED'});const payload=await r.json().catch(()=>null);return reply(200,{ok:true,payload});
- }
- if(action==='executive'){
-  const started=performance.now();
-  const r=await sb('/rest/v1/rpc/dabbir_platform_owner_executive_v1',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id})});
-  const elapsed=Math.round((performance.now()-started)*10)/10;
-  if(!r.ok)return reply(503,{ok:false,error:'OWNER_EXECUTIVE_DATA_FAILED'});
-  const payload=await r.json().catch(()=>null);
-  if(payload&&typeof payload==='object')payload.reliability={...(payload.reliability||{}),database_rpc_latency_ms:elapsed,database_rpc_latency_state:'MEASURED_AT_BROKER'};
-  return reply(200,{ok:true,payload});
- }
- if(action==='search'){
-  const q=String(body?.q||'').trim().slice(0,160);
-  const r=await sb('/rest/v1/rpc/dabbir_platform_customer_search',{method:'POST',body:JSON.stringify({p_actor_user_id:session.actor_user_id,p_query:q,p_limit:50})});
-  if(!r.ok)return reply(503,{ok:false,error:'OWNER_SEARCH_FAILED'});const rows=await r.json().catch(()=>[]);return reply(200,{ok:true,payload:{accounts:Array.isArray(rows)?rows:[]}});
- }
- if(action==='incidents')return incidentRead(body);
- if(action==='incident_action')return incidentAction(body);
+ const session=await verifySession(clean(body?.session_token,300));if(!session)return reply(401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
+ const action=clean(body?.data_action,60).toLowerCase();
+ if(action==='identity'||action==='session')return reply(200,{ok:true,payload:{authority_role:session.authority_role,permissions:session.permissions||[],root_owner:session.root_owner===true,display_name:session.display_name||null,expires_at:session.expires_at}});
+ if(action==='team')return teamAction(session,body);
+ if(action==='team_invite')return teamInvite(session,body);
+ if(action==='team_update')return teamUpdate(session,body);
+ if(action==='overview'){const r=await rpc('dabbir_platform_command_center_overview_v1',{p_actor:session.actor_user_id});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(403,{ok:false,error:'OVERVIEW_FORBIDDEN',details:r.payload})}
+ if(action==='executive'){const denied=requireRoot(session);if(denied)return denied;const started=performance.now();const r=await rpc('dabbir_platform_owner_executive_v2',{p_actor_user_id:session.actor_user_id});if(!r.ok)return reply(503,{ok:false,error:'OWNER_EXECUTIVE_DATA_FAILED'});const p=r.payload;if(p&&typeof p==='object')p.reliability={...(p.reliability||{}),database_rpc_latency_ms:Math.round((performance.now()-started)*10)/10,database_rpc_latency_state:'MEASURED_AT_BROKER'};return reply(200,{ok:true,payload:p})}
+ if(action==='search'){const denied=requirePermission(session,'manage_customers');if(denied)return denied;const r=await rpc('dabbir_platform_customer_search_v2',{p_actor:session.actor_user_id,p_query:clean(body?.q,160)||null,p_limit:50});return r.ok?reply(200,{ok:true,payload:{accounts:Array.isArray(r.payload)?r.payload:[]}}):reply(503,{ok:false,error:'CUSTOMER_SEARCH_FAILED'})}
+ if(action==='customer360'){const denied=requirePermission(session,'manage_customers');if(denied)return denied;const id=clean(body?.user_id,80);if(!UUID_RE.test(id))return reply(400,{ok:false,error:'INVALID_USER_ID'});const r=await rpc('dabbir_platform_customer_360_v1',{p_actor:session.actor_user_id,p_target_user_id:id});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(404,{ok:false,error:'CUSTOMER_NOT_FOUND',details:r.payload})}
+ if(action==='support'){const denied=requirePermission(session,'manage_support');if(denied)return denied;const r=await rpc('dabbir_platform_support_list_v2',{p_actor:session.actor_user_id,p_customer_no:clean(body?.customer_no,40)||null});return r.ok?reply(200,{ok:true,payload:{cases:Array.isArray(r.payload)?r.payload:[]}}):reply(503,{ok:false,error:'SUPPORT_READ_FAILED'})}
+ if(action==='support_action'){const denied=requirePermission(session,'manage_support');if(denied)return denied;const r=await rpc('dabbir_platform_support_action_v2',{p_actor:session.actor_user_id,p_action:body?.operation,p_case_id:body?.case_id||null,p_target_user_id:body?.target_user_id||null,p_customer_no:body?.customer_no||null,p_business_id:body?.business_id||null,p_category:body?.category||null,p_priority:body?.priority||null,p_subject:body?.subject||null,p_note:body?.note||null,p_status:body?.status||null,p_diagnostic:body?.diagnostic||null,p_resolution:body?.resolution||null,p_sla_due_at:body?.sla_due_at||null});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'SUPPORT_ACTION_FAILED',details:r.payload})}
+ if(action==='feedback'){const denied=requirePermission(session,'manage_customers');if(denied)return denied;const r=await rpc('dabbir_platform_feedback_list_v1',{p_actor:session.actor_user_id,p_limit:100});return r.ok?reply(200,{ok:true,payload:{feedback:Array.isArray(r.payload)?r.payload:[]}}):reply(503,{ok:false,error:'FEEDBACK_READ_FAILED'})}
+ if(action==='feedback_update'){const denied=requirePermission(session,'manage_customers');if(denied)return denied;const r=await rpc('dabbir_platform_feedback_update_v1',{p_actor:session.actor_user_id,p_feedback_id:body?.feedback_id,p_status:body?.status,p_linked_entity_type:body?.linked_entity_type||null,p_linked_entity_id:body?.linked_entity_id||null});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'FEEDBACK_UPDATE_FAILED',details:r.payload})}
+ if(action==='feedback_convert'){const denied=requirePermission(session,'manage_customers');if(denied)return denied;const r=await rpc('dabbir_platform_feedback_convert_v1',{p_actor:session.actor_user_id,p_feedback_id:body?.feedback_id,p_target:body?.target});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'FEEDBACK_CONVERT_FAILED',details:r.payload})}
+ if(action==='audit'){const denied=requirePermission(session,'manage_system');if(denied)return denied;const r=await rpc('dabbir_platform_audit_list_v1',{p_actor:session.actor_user_id,p_limit:Math.max(1,Math.min(Number(body?.limit)||100,300))});return r.ok?reply(200,{ok:true,payload:{entries:Array.isArray(r.payload)?r.payload:[]}}):reply(503,{ok:false,error:'AUDIT_READ_FAILED'})}
+ if(action==='operations'){const r=await rpc('dabbir_platform_operational_snapshot_v1',{p_actor:session.actor_user_id,p_limit:80});return r.ok?reply(200,{ok:true,payload:{businesses:Array.isArray(r.payload)?r.payload:[]}}):reply(403,{ok:false,error:'OPERATIONAL_READ_FORBIDDEN',details:r.payload})}
+ if(action==='operation_entities'){const id=clean(body?.business_id,80);if(!UUID_RE.test(id))return reply(400,{ok:false,error:'INVALID_BUSINESS_ID'});const r=await rpc('dabbir_platform_operational_entities_v1',{p_actor:session.actor_user_id,p_business_id:id,p_entity_type:clean(body?.entity_type,30),p_limit:100});return r.ok?reply(200,{ok:true,payload:{entities:Array.isArray(r.payload)?r.payload:[]}}):reply(403,{ok:false,error:'OPERATIONAL_ENTITY_READ_FORBIDDEN',details:r.payload})}
+ if(action==='operation_execute'){const id=clean(body?.business_id,80),entity=clean(body?.entity_id,80);if(!UUID_RE.test(id)||!UUID_RE.test(entity))return reply(400,{ok:false,error:'INVALID_OPERATION_TARGET'});const r=await rpc('dabbir_platform_operational_action_v2',{p_actor:session.actor_user_id,p_business_id:id,p_action:clean(body?.operation,60),p_entity_id:entity,p_reason:clean(body?.reason,500),p_confirmation:clean(body?.confirmation,120),p_payload:body?.payload&&typeof body.payload==='object'?body.payload:{}});return r.ok?reply(200,{ok:true,payload:r.payload}):reply(400,{ok:false,error:'OPERATION_REJECTED',details:r.payload})}
+ if(action==='incidents')return incidentRead(session,body);
+ if(action==='incident_action')return incidentAction(session,body);
+ if(action==='ceo_commands'){const denied=requirePermission(session,'manage_ceo_commands');if(denied)return denied;const r=await rpc('dabbir_ceo_commands_authorized_v1',{p_actor:session.actor_user_id,p_limit:Math.max(1,Math.min(Number(body?.limit)||30,50))});const commands=Array.isArray(r.payload)?r.payload:(Array.isArray(r.payload?.commands)?r.payload.commands:[]);return r.ok?reply(200,{ok:true,payload:{commands}}):reply(503,{ok:false,error:'CEO_COMMAND_READ_FAILED'})}
+ if(action==='ceo_command_create'){const denied=requirePermission(session,'manage_ceo_commands');if(denied)return denied;const text=clean(body?.command_text,4000),priority=clean(body?.priority,4).toUpperCase()||'P1',objective=clean(body?.objective,1000)||null,due=body?.due_at?String(body.due_at):null,acceptance=Array.isArray(body?.acceptance_criteria)?body.acceptance_criteria.map((x:any)=>clean(x,500)).filter(Boolean).slice(0,20):[];if(text.length<4||!['P0','P1','P2','P3'].includes(priority))return reply(400,{ok:false,error:'COMMAND_INVALID'});const r=await rpc('dabbir_ceo_command_create_authorized_v1',{p_actor:session.actor_user_id,p_command_text:text,p_priority:priority,p_objective:objective,p_acceptance_criteria:acceptance,p_due_at:due});return r.ok?reply(200,{ok:true,payload:{command:r.payload}}):reply(503,{ok:false,error:'CEO_COMMAND_CREATE_FAILED',details:r.payload})}
+ if(action==='ceo_command_update'){const denied=requirePermission(session,'manage_ceo_commands');if(denied)return denied;const id=clean(body?.command_id,80),op=clean(body?.operation,30).toLowerCase();if(!UUID_RE.test(id)||!['reprioritize','set_due_at','add_guidance','cancel','resume'].includes(op))return reply(400,{ok:false,error:'COMMAND_UPDATE_INVALID'});const r=await rpc('dabbir_ceo_command_update_authorized_v1',{p_actor:session.actor_user_id,p_command_id:id,p_operation:op,p_priority:body?.priority||null,p_due_at:body?.due_at||null,p_guidance:clean(body?.guidance,2000)||null});return r.ok?reply(200,{ok:true,payload:{command:r.payload}}):reply(503,{ok:false,error:'CEO_COMMAND_UPDATE_FAILED',details:r.payload})}
+ if(action==='decisions'){const denied=requireRoot(session);if(denied)return denied;const r=await rpc('dabbir_owner_decisions_recent_v1',{p_actor_user_id:session.actor_user_id,p_limit:Math.max(1,Math.min(Number(body?.limit)||30,100))});return r.ok?reply(200,{ok:true,payload:{decisions:Array.isArray(r.payload)?r.payload:[]}}):reply(503,{ok:false,error:'OWNER_DECISIONS_READ_FAILED'})}
+ if(action==='decision_resolve'){const denied=requireRoot(session);if(denied)return denied;const id=clean(body?.escalation_id,80),resolution=clean(body?.resolution,20).toLowerCase(),note=clean(body?.note,2000)||null;if(!UUID_RE.test(id)||!['approve','reject','modify'].includes(resolution))return reply(400,{ok:false,error:'OWNER_DECISION_INVALID'});const r=await rpc('dabbir_owner_decision_resolve_v1',{p_actor_user_id:session.actor_user_id,p_escalation_id:id,p_resolution:resolution,p_note:note});return r.ok?reply(200,{ok:true,payload:{decision:r.payload}}):reply(503,{ok:false,error:'OWNER_DECISION_UPDATE_FAILED'})}
  return reply(400,{ok:false,error:'UNKNOWN_OWNER_DATA_ACTION'});
 }
+
 Deno.serve(async(req:Request)=>{
- if(req.method!=='POST')return reply(405,{ok:false,error:'METHOD_NOT_ALLOWED'});
- if(!SUPABASE_URL||!SERVICE_KEY)return reply(503,{ok:false,error:'OWNER_BROKER_NOT_CONFIGURED'});
+ if(req.method!=='POST')return reply(405,{ok:false,error:'METHOD_NOT_ALLOWED'});if(!SUPABASE_URL||!SERVICE_KEY)return reply(503,{ok:false,error:'OWNER_BROKER_NOT_CONFIGURED'});
  let body:any;try{body=await req.json()}catch{return reply(400,{ok:false,error:'INVALID_JSON'})}
- const action=String(body?.action||'').trim().toLowerCase();
+ const action=clean(body?.action,60).toLowerCase();
  try{
   if(action==='owner_otp_request')return requestOtp(body);
   if(action==='owner_otp_verify')return verifyOtp(body);
-  if(action==='owner_session_verify'){
-   const session=await verifySession(String(body?.session_token||''));return session?reply(200,{ok:true,authenticated:true,role:'platform_owner',actor_user_id:session.actor_user_id,expires_at:session.expires_at}):reply(401,{ok:false,authenticated:false,error:'OWNER_SESSION_REQUIRED'});
-  }
+  if(action==='owner_session_verify'){const s=await verifySession(clean(body?.session_token,300));return s?reply(200,{ok:true,authenticated:true,role:'platform_owner',authority_role:s.authority_role,permissions:s.permissions||[],root_owner:s.root_owner===true,display_name:s.display_name||null,actor_user_id:s.actor_user_id,expires_at:s.expires_at}):reply(401,{ok:false,authenticated:false,error:'OWNER_SESSION_REQUIRED'})}
   if(action==='owner_data')return ownerData(body);
   return reply(400,{ok:false,error:'UNKNOWN_ACTION'});
  }catch{return reply(503,{ok:false,error:'OWNER_BROKER_UNAVAILABLE'})}
