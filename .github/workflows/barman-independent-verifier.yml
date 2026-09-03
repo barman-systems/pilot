@@ -1,0 +1,35 @@
+name: BARMAN Independent Verifier
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  id-token: write
+
+concurrency:
+  group: barman-independent-verifier
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify BARMAN executor evidence independently
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/barman-independent-verifier.mjs
