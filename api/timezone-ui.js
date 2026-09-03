@@ -2,28 +2,20 @@ const script=String.raw`(()=>{
   if(window.__dabbirTimezoneLoaded)return;
   window.__dabbirTimezoneLoaded=true;
 
-  const GCC=Object.freeze({
-    AE:{currency:'AED',timezone:'Asia/Dubai',offset:'+04:00',prefix:'+971',moneyAr:'درهم'},
-    SA:{currency:'SAR',timezone:'Asia/Riyadh',offset:'+03:00',prefix:'+966',moneyAr:'ريال سعودي'},
-    KW:{currency:'KWD',timezone:'Asia/Kuwait',offset:'+03:00',prefix:'+965',moneyAr:'دينار كويتي'},
-    QA:{currency:'QAR',timezone:'Asia/Qatar',offset:'+03:00',prefix:'+974',moneyAr:'ريال قطري'},
-    BH:{currency:'BHD',timezone:'Asia/Bahrain',offset:'+03:00',prefix:'+973',moneyAr:'دينار بحريني'},
-    OM:{currency:'OMR',timezone:'Asia/Muscat',offset:'+04:00',prefix:'+968',moneyAr:'ريال عماني'},
-  });
-
+  function currencyMinorUnits(currency){
+    try{return new Intl.NumberFormat('en',{style:'currency',currency}).resolvedOptions().maximumFractionDigits??2}catch{return 2}
+  }
+  function currencyNameAr(currency){
+    try{return new Intl.DisplayNames(['ar'],{type:'currency'}).of(currency)||currency}catch{return currency}
+  }
   function businessGeo(){
     let business=null;
     try{business=workspace?.business||null}catch{}
-    const code=String(business?.country_code||document.documentElement.dataset.dabbirCountry||'AE').toUpperCase();
-    const base=GCC[code]||GCC.AE;
-    return {
-      countryCode:GCC[code]?code:'AE',
-      currency:String(business?.currency_code||base.currency),
-      timezone:String(business?.timezone||base.timezone),
-      offset:base.offset,
-      prefix:String(business?.phone_country_prefix||base.prefix),
-      moneyAr:base.moneyAr,
-    };
+    const countryCode=String(business?.country_code||document.documentElement.dataset.dabbirCountry||'AE').toUpperCase();
+    const currency=String(business?.currency_code||document.documentElement.dataset.dabbirCurrency||'AED').toUpperCase();
+    const timezone=String(business?.timezone||document.documentElement.dataset.dabbirTimezone||'Asia/Dubai');
+    const prefix=String(business?.phone_country_prefix||'');
+    return {countryCode,currency,timezone,prefix,moneyAr:currencyNameAr(currency),minorUnits:currencyMinorUnits(currency)};
   }
 
   function locale(){
@@ -44,6 +36,15 @@ const script=String.raw`(()=>{
     }catch{return String(value)}
   }
 
+  function offsetMinutesAt(instantMs,timeZone){
+    const date=new Date(instantMs);
+    const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{
+      timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+    }).formatToParts(date).filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+    const represented=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour),Number(parts.minute),Number(parts.second));
+    return Math.round((represented-Math.floor(instantMs/1000)*1000)/60000);
+  }
+
   function businessLocalToIso(value){
     const raw=String(value||'').trim();
     if(!raw)return null;
@@ -51,9 +52,19 @@ const script=String.raw`(()=>{
       const absolute=new Date(raw);
       return Number.isNaN(absolute.getTime())?null:absolute.toISOString();
     }
-    const normalized=raw.length===16?raw+':00':raw;
-    const date=new Date(normalized+businessGeo().offset);
-    return Number.isNaN(date.getTime())?null:date.toISOString();
+    const match=raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if(!match)return null;
+    const [,year,month,day,hour,minute,second='00']=match;
+    const wallUtc=Date.UTC(Number(year),Number(month)-1,Number(day),Number(hour),Number(minute),Number(second));
+    const zone=businessGeo().timezone;
+    try{
+      let offset=offsetMinutesAt(wallUtc,zone);
+      let instant=wallUtc-offset*60000;
+      const corrected=offsetMinutesAt(instant,zone);
+      if(corrected!==offset)instant=wallUtc-corrected*60000;
+      const date=new Date(instant);
+      return Number.isNaN(date.getTime())?null:date.toISOString();
+    }catch{return null}
   }
 
   function syncAuthorities(){
@@ -108,8 +119,8 @@ const script=String.raw`(()=>{
       }else{
         input=document.createElement('input');input.type=type;
         if(type==='text')input.maxLength=500;
-        if(type==='tel'){input.maxLength=40;input.placeholder=geo.prefix+' …';input.inputMode='tel';}
-        if(type==='number'){input.min='0';input.step=key==='price'?'0.001':'5';}
+        if(type==='tel'){input.maxLength=40;input.placeholder=(geo.prefix||'+')+' …';input.inputMode='tel';}
+        if(type==='number'){input.min='0';input.step=key==='price'?(geo.minorUnits===0?'1':'0.'+'0'.repeat(Math.max(0,geo.minorUnits-1))+'1'):'5';}
       }
       input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
     }
@@ -174,7 +185,7 @@ const script=String.raw`(()=>{
   document.addEventListener('click',event=>{if(event.target?.closest?.('#menuBtn,[data-screen="more"],.topActions,#dabbirOwnerCopilot'))setTimeout(refreshMobileUtilityUi,0)},true);
 
   if(appointmentForm&&!appointmentForm.dataset.dabbirBusinessTime){
-    appointmentForm.dataset.dabbirBusinessTime='v3-gcc';
+    appointmentForm.dataset.dabbirBusinessTime='v4-market';
     appointmentForm.addEventListener('submit',async event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -234,6 +245,6 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-timezone','business-profile');
+  res.setHeader('x-dabbir-timezone','market-agnostic-business-profile');
   return res.end(script);
 }
