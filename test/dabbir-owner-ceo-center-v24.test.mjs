@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v24.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v28.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
-test('owner dashboard routes through CEO center v24 while preserving v23',()=>{
-  assert.match(gateway,/owner-command-center-v24\.js/);
+test('owner dashboard keeps CEO center v24 in the active reviewed chain while preserving v23',()=>{
+  assert.match(gateway,/owner-command-center-v28\.js/);
+  assert.match(active,/owner-command-center-v27\.js/);
   assert.match(ui,/owner-command-center-v23\.js/);
 });
 
