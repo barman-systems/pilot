@@ -17,6 +17,7 @@ const publicBooking=read('api/public-car-wash.js');
 const guardian=read('.github/workflows/dabbir-runtime-guardian.yml');
 const releaseGuardian=read('.github/workflows/dabbir-release-guardian.yml');
 const vercel=JSON.parse(read('vercel.json'));
+const bookingLock=read('supabase/migrations/20260902073500_dabbir_booking_calendar_transaction_lock_v1.sql');
 const salonBase=read('supabase/migrations/20260831090000_dabbir_salon_mode_p0.sql');
 const whatsapp=read('api/dabbir-whatsapp-webhook.js');
 const stripe=read('supabase/functions/barman-stripe-checkout/index.ts');
@@ -26,7 +27,8 @@ const has=(source,...markers)=>{for(const marker of markers)assert.ok(source.inc
 test('booking truth is idempotent and active duplicates fail closed',()=>{
   has(base,'idempotency_key text','dabbir_appointments_business_idempotency_uq','dabbir_create_appointment_idempotent','IDEMPOTENCY_KEY_REUSE_CONFLICT');
   has(duplicate,'dabbir_appointments_active_customer_slot_uq',"status not in ('cancelled','completed','no_show')");
-  has(salonBase,'pg_advisory_xact_lock','prevent_appointment_calendar_conflict','APPOINTMENT_CONFLICT');
+  has(bookingLock,'pg_advisory_xact_lock','lock_booking_calendar_business');
+  has(salonBase,'prevent_appointment_calendar_conflict');
 });
 
 test('appointments are cancelled, never hard deleted by normal authenticated users',()=>{
