@@ -37,5 +37,17 @@ test('human takeover and manual reply behavior remains present after lifecycle m
   assert.match(human,/await chatControl\('human_message',message\)/);
   assert.match(human,/conversation\.state!=='human_active'/);
   assert.match(human,/window\.__dabbirHumanChatUiVersion='v3-lifecycle'/);
-  assert.match(human,/x-dabbir-chat-ui','v3-lifecycle'/);
+  assert.match(human,/x-dabbir-chat-ui','v3-lifecycle-readable'/);
+});
+
+test('chat status labels and actions remain readable and tappable on iPhone',()=>{
+  assert.match(human,/\.dabbirOwnerChip\{[^}]*font-size:12px/);
+  assert.match(human,/\.dabbirTakeover\{[^}]*min-height:44px!important[^}]*font-size:12px!important/);
+  assert.match(human,/#screen-conversations #translateAll\{[^}]*font-size:12px!important[^}]*min-height:44px!important/);
+  assert.match(human,/#screen-conversations \.meta button\{[^}]*min-height:44px!important[^}]*font-size:11px!important/);
+  assert.match(human,/\.dabbirSenderLabel\{font-size:11px/);
+  assert.match(human,/#screen-conversations #chatState\{font-size:11px!important/);
+  assert.match(human,/#screen-conversations\+\.truth,#screen-conversations \.truth\{font-size:12px!important/);
+  assert.doesNotMatch(human,/\.dabbirTakeover\{[^}]*min-height:(?:36|38)px/);
+  assert.doesNotMatch(human,/#screen-conversations #translateAll\{[^}]*min-height:38px/);
 });
