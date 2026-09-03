@@ -11,7 +11,7 @@ const GH_REPOSITORY='barman-systems/pilot';
 const GH_REF='refs/heads/main';
 const GH_EVENTS=new Set(['push','schedule','workflow_dispatch']);
 const OIDC_PROFILES={
-  ai:{audience:'dabbir-ai-qa',workflowRefs:new Set(['barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main','barman-systems/pilot/.github/workflows/dabbir-owner-away-production.yml@refs/heads/main'])},
+  ai:{audience:'dabbir-ai-qa',workflowRefs:new Set(['barman-systems/pilot/.github/workflows/dabbir-ai-customer-journey.yml@refs/heads/main','barman-systems/pilot/.github/workflows/dabbir-owner-away-production.yml@refs/heads/main','barman-systems/pilot/.github/workflows/dabbir-ipad-webkit-production.yml@refs/heads/main'])},
   readiness:{audience:'dabbir-bar12-readiness',workflowRef:'barman-systems/pilot/.github/workflows/dabbir-bar12-readiness.yml@refs/heads/main'},
 } as const;
 
