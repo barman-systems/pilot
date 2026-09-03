@@ -4,10 +4,12 @@ import fs from 'node:fs';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center-v22.js',import.meta.url),'utf8');
 const ui23=fs.readFileSync(new URL('../api/owner-command-center-v23.js',import.meta.url),'utf8');
+const active=fs.readFileSync(new URL('../api/owner-command-center-v29.js',import.meta.url),'utf8');
 const gateway=fs.readFileSync(new URL('../api/owner-dashboard-gateway.js',import.meta.url),'utf8');
 
 test('owner dashboard keeps v22 operational truth under the active reviewed chain without invented metrics',()=>{
-  assert.match(gateway,/owner-command-center-v28\.js/);
+  assert.match(gateway,/owner-command-center-v29\.js/);
+  assert.match(active,/owner-command-center-v28\.js/);
   assert.match(ui23,/owner-command-center-v22\.js/);
   assert.match(ui,/\/api\/qa-capability/);
   assert.match(ui,/\/api\/release-evidence/);

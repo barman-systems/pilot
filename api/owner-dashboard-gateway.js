@@ -1,5 +1,5 @@
-// v28 is the reviewed owner-dashboard UX layer. It preserves the v27→v22 truth/security chain and only hardens readability, mobile behavior and accessibility.
-import dashboard from './owner-command-center-v28.js';
+// v29 is the active owner-dashboard workspace layer. It preserves the complete v28→v22 truth/security chain while splitting leadership into usable tabs, repairing support/feedback routing, and removing the redundant global customer search.
+import dashboard from './owner-command-center-v29.js';
 import { parseCookies } from './_auth-core.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
