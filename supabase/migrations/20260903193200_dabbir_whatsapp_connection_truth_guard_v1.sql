@@ -1,5 +1,3 @@
-begin;
-
 -- A connection is never connected merely because a row exists. The verified Embedded
 -- Signup completion path explicitly writes status='connected' together with
 -- last_verified_at after Meta authorization succeeds. Any other path must remain
@@ -12,5 +10,3 @@ alter table public.dabbir_whatsapp_connections
 alter table public.dabbir_whatsapp_connections
   add constraint dabbir_whatsapp_connected_requires_verification
   check(status <> 'connected' or last_verified_at is not null);
-
-commit;
