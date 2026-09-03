@@ -9,7 +9,9 @@ const read=path=>readFileSync(resolve(here,'..',path),'utf8');
 const migration=read('supabase/migrations/20260903092000_dabbir_gcc_business_profile_v1.sql');
 const createApi=read('api/gcc-create-business.js');
 const profileApi=read('api/gcc-business-profile.js');
+const adaptiveAppointment=read('api/adaptive-appointment.js');
 const ui=read('api/gcc-readiness-ui.js');
+const timezoneUi=read('api/timezone-ui.js');
 const bundles=JSON.parse(read('config/dabbir-ui-bundles.json'));
 
 const expected={
@@ -50,6 +52,27 @@ test('runtime is enriched with tenant-scoped country profile and dynamic time/mo
   assert.match(ui,/timeZone:g\.timezone/);
   assert.match(profileApi,/getBusinessMemberships/);
   assert.match(profileApi,/BUSINESS_ACCESS_DENIED/);
+});
+
+test('deferred appointment UI cannot overwrite GCC timezone or price labels with UAE-only constants',()=>{
+  assert.match(timezoneUi,/function businessGeo\(\)/);
+  assert.match(timezoneUi,/business\?\.timezone\|\|base\.timezone/);
+  assert.match(timezoneUi,/business\?\.currency_code\|\|base\.currency/);
+  assert.match(timezoneUi,/businessLocalToIso/);
+  assert.match(timezoneUi,/geo\.prefix/);
+  assert.doesNotMatch(timezoneUi,/const DABBIR_TIME_ZONE='Asia\/Dubai'/);
+  assert.doesNotMatch(timezoneUi,/Price \(AED\)/);
+  assert.doesNotMatch(timezoneUi,/السعر \(درهم\)/);
+  assert.match(timezoneUi,/x-dabbir-timezone','business-profile/);
+});
+
+test('appointment phone normalization follows business prefix but remains optional',()=>{
+  assert.match(adaptiveAppointment,/phone_country_prefix/);
+  assert.match(adaptiveAppointment,/phone_e164:e164\(rawPhone,business\.phone_country_prefix\)/);
+  assert.match(adaptiveAppointment,/if\(!raw\)return null/);
+  assert.doesNotMatch(adaptiveAppointment,/PHONE_REQUIRED/);
+  assert.match(adaptiveAppointment,/currency_code:business\.currency_code/);
+  assert.match(adaptiveAppointment,/timezone:business\.timezone/);
 });
 
 test('GCC readiness loads in the critical bundle so country is available during onboarding',()=>{
