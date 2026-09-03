@@ -13,12 +13,19 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/calendar-outbox-cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/barman-executive-cron",
       "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
     "api/salon-reminders-cron.js": {
+      "maxDuration": 60
+    },
+    "api/calendar-outbox-cron.js": {
       "maxDuration": 60
     },
     "api/barman-executive-cron.js": {

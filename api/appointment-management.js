@@ -7,7 +7,6 @@ import {
   requireSameOrigin,
   supabaseRest,
 } from './_auth-core.js';
-import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
@@ -47,7 +46,7 @@ function membershipFor(memberships,businessId){
 async function appointmentFor(token,businessId,appointmentId){
   const rows=await rest(
     token,
-    `dabbir_appointments?select=id,business_id,customer_id,service_id,starts_at,status,simulated,created_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&limit=1`,
+    `dabbir_appointments?select=id,business_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&limit=1`,
     {},
     'APPOINTMENT_LOOKUP_FAILED',
   );
@@ -59,6 +58,12 @@ function validStart(value){
   if(Number.isNaN(date.getTime()))return null;
   return date;
 }
+function durationMs(appointment){
+  const start=new Date(appointment?.starts_at||0).getTime(),end=new Date(appointment?.ends_at||0).getTime();
+  const duration=end-start;
+  return Number.isFinite(duration)&&duration>=5*60000&&duration<=24*60*60000?duration:60*60000;
+}
+const calendarOutboxTruth=()=>({mode:'durable_outbox',business_truth_committed_first:true,external_sync_async:true});
 
 async function updateAppointment(req,ctx,body,businessId,appointmentId){
   const current=await appointmentFor(ctx.token,businessId,appointmentId);
@@ -69,7 +74,10 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
     const start=validStart(body.starts_at);
     if(start===null)return {status:400,body:{ok:false,error:'VALID_START_TIME_REQUIRED'}};
     const currentStart=validStart(current.starts_at);
-    if(!currentStart||start.getTime()!==currentStart.getTime())patch.starts_at=start.toISOString();
+    if(!currentStart||start.getTime()!==currentStart.getTime()){
+      patch.starts_at=start.toISOString();
+      patch.ends_at=new Date(start.getTime()+durationMs(current)).toISOString();
+    }
   }
   if(body.status!==undefined){
     const status=String(body.status||'').trim().toLowerCase();
@@ -84,7 +92,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
         action:'update',
         state:'NO_CHANGE',
         appointment:current,
-        calendar_sync:[],
+        calendar_sync:calendarOutboxTruth(),
         truth:{state:'VERIFIED',source:'SUPABASE_READ',entity:'appointment',entity_id:current.id,verified_at:new Date().toISOString()},
       },
     };
@@ -92,7 +100,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
 
   const rows=await rest(
     ctx.token,
-    `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,customer_id,service_id,starts_at,status,simulated,created_at`,
+    `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
     {
       method:'PATCH',
       headers:{prefer:'return=representation'},
@@ -103,10 +111,6 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
   const updated=rows?.[0]||null;
   if(!updated)return {status:403,body:{ok:false,error:'APPOINTMENT_MANAGEMENT_REQUIRED'}};
 
-  let calendarSync=[];
-  try{calendarSync=await syncBusinessCalendars(req,businessId)}catch(error){
-    calendarSync=[{ok:false,error:String(error?.message||'CALENDAR_SYNC_FAILED').slice(0,140)}];
-  }
   return {
     status:200,
     body:{
@@ -114,7 +118,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
       action:'update',
       state:'VERIFIED_PERSISTED',
       appointment:updated,
-      calendar_sync:calendarSync,
+      calendar_sync:calendarOutboxTruth(),
       truth:{state:'VERIFIED',source:'SUPABASE_RETURN_REPRESENTATION',entity:'appointment',entity_id:updated.id,verified_at:new Date().toISOString()},
     },
   };
@@ -124,55 +128,31 @@ async function deleteAppointment(req,ctx,businessId,appointmentId){
   const current=await appointmentFor(ctx.token,businessId,appointmentId);
   if(!current)return {status:404,body:{ok:false,error:'APPOINTMENT_NOT_FOUND'}};
 
-  // Cancel first so Google/Outlook receive a provider-side delete before the
-  // internal appointment and its calendar link are removed.
+  // "Delete" is intentionally a cancellation. Operational history is retained and
+  // the database trigger queues Google/Outlook reconciliation independently.
+  let row=current;
   if(String(current.status||'').toLowerCase()!=='cancelled'){
     const cancelled=await rest(
       ctx.token,
-      `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,status`,
+      `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
       {method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({status:'cancelled'})},
-      'APPOINTMENT_CANCEL_BEFORE_DELETE_FAILED',
+      'APPOINTMENT_CANCEL_FAILED',
     );
-    if(!cancelled?.[0]?.id)return {status:403,body:{ok:false,error:'APPOINTMENT_MANAGEMENT_REQUIRED'}};
+    row=cancelled?.[0]||null;
+    if(!row)return {status:403,body:{ok:false,error:'APPOINTMENT_MANAGEMENT_REQUIRED'}};
   }
-
-  let calendarSync=[];
-  try{calendarSync=await syncBusinessCalendars(req,businessId)}catch(error){
-    calendarSync=[{ok:false,error:String(error?.message||'CALENDAR_SYNC_FAILED').slice(0,140)}];
-  }
-  const syncFailed=calendarSync.some(item=>item?.ok===false);
-  if(syncFailed){
-    return {
-      status:502,
-      body:{
-        ok:false,
-        action:'delete',
-        state:'CANCELLED_PENDING_EXTERNAL_DELETE',
-        error:'CALENDAR_DELETE_NOT_VERIFIED',
-        appointment_id:appointmentId,
-        calendar_sync:calendarSync,
-      },
-    };
-  }
-
-  const deleted=await rest(
-    ctx.token,
-    `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,starts_at,status`,
-    {method:'DELETE',headers:{prefer:'return=representation'}},
-    'APPOINTMENT_DELETE_FAILED',
-  );
-  const row=deleted?.[0]||null;
-  if(!row)return {status:403,body:{ok:false,error:'APPOINTMENT_MANAGEMENT_REQUIRED'}};
 
   return {
     status:200,
     body:{
       ok:true,
       action:'delete',
-      state:'VERIFIED_DELETED',
+      state:'VERIFIED_CANCELLED',
       appointment_id:appointmentId,
-      calendar_sync:calendarSync,
-      truth:{state:'VERIFIED',source:'SUPABASE_RETURN_REPRESENTATION',entity:'appointment',entity_id:appointmentId,deleted:true,verified_at:new Date().toISOString()},
+      appointment:row,
+      retained_history:true,
+      calendar_sync:calendarOutboxTruth(),
+      truth:{state:'VERIFIED',source:'SUPABASE_RETURN_REPRESENTATION',entity:'appointment',entity_id:appointmentId,cancelled:true,hard_deleted:false,verified_at:new Date().toISOString()},
     },
   };
 }
