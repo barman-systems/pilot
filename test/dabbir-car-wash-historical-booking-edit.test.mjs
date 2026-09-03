@@ -45,7 +45,7 @@ test('car-wash historical editor persists date and status through the canonical 
   assert.match(ui,/location\.reload\(\)/);
 });
 
-test('historical booking editor follows the selected GCC business timezone',()=>{
+test('historical booking editor follows the selected GCC business timezone authority',()=>{
   assert.match(ui,/function businessTimezone\(\)/);
   assert.match(ui,/business\.timezone\|\|document\.documentElement\.dataset\.dabbirTimezone\|\|window\.__dabbirTimeZone/);
   assert.match(ui,/window\.dabbirLocalTimeToIso/);
