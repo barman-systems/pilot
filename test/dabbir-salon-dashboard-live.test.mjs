@@ -29,8 +29,9 @@ test('Salon Today refreshes from the authoritative Salon snapshot without contin
   assert.match(source,/salon\.refresh\(\)/);
   assert.match(source,/visibilitychange/);
   assert.match(source,/pageshow/);
-  assert.match(source,/baseShowScreen/);
-  assert.match(source,/baseRenderAllSalonFreshness/);
+  assert.match(source,/window\.__dabbirUiLifecycle\?\.on/);
+  assert.match(source,/\.on\('afterRender','navigation-event-bridge-salon',refreshSalonAfterRender\)/);
+  assert.match(source,/lifecycle\.on\('afterNavigate','navigation-event-bridge'/);
   assert.match(source,/SALON_REFRESH_STALE_MS=8000/);
   assert.doesNotMatch(source,/setInterval\s*\(/);
   assert.doesNotMatch(source,/business_type/);
@@ -43,4 +44,5 @@ test('navigation bridge still exposes its canonical route marker with Salon fres
   assert.equal(res.statusCode,200);
   assert.equal(res.headers['x-dabbir-navigation-event-bridge'],'v6-real-iphone-touch');
   assert.match(res.body,/salon_snapshot_refresh_event_scoped:true/);
+  assert.match(res.body,/lifecycle_router_authority:/);
 });
