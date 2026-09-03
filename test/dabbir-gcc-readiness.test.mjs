@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url';
 const here=dirname(fileURLToPath(import.meta.url));
 const read=path=>readFileSync(resolve(here,'..',path),'utf8');
 const migration=read('supabase/migrations/20260903092000_dabbir_gcc_business_profile_v1.sql');
+const publicBookingMigration=read('supabase/migrations/20260903060929_dabbir_public_booking_gcc_timezone.sql');
 const createApi=read('api/gcc-create-business.js');
 const profileApi=read('api/gcc-business-profile.js');
 const adaptiveAppointment=read('api/adaptive-appointment.js');
+const publicBookingApi=read('api/public-car-wash.js');
+const publicBookingUi=read('api/gcc-public-booking-ui.js');
+const publicBookingPage=read('api/car-wash-booking.js');
 const ui=read('api/gcc-readiness-ui.js');
 const timezoneUi=read('api/timezone-ui.js');
 const bundles=JSON.parse(read('config/dabbir-ui-bundles.json'));
@@ -73,6 +77,30 @@ test('appointment phone normalization follows business prefix but remains option
   assert.doesNotMatch(adaptiveAppointment,/PHONE_REQUIRED/);
   assert.match(adaptiveAppointment,/currency_code:business\.currency_code/);
   assert.match(adaptiveAppointment,/timezone:business\.timezone/);
+});
+
+test('public booking database derives slots and validation dates from the business timezone',()=>{
+  assert.match(publicBookingMigration,/b\.timezone/);
+  assert.match(publicBookingMigration,/at time zone v_timezone/);
+  assert.match(publicBookingMigration,/'currency_code', b\.currency_code/);
+  assert.match(publicBookingMigration,/'phone_country_prefix', b\.phone_country_prefix/);
+  assert.doesNotMatch(publicBookingMigration,/at time zone 'Asia\/Dubai'/);
+});
+
+test('public booking privileged RPC authority stays server-side',()=>{
+  assert.match(publicBookingApi,/SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(publicBookingApi,/serviceRoleKey\(\)/);
+  assert.doesNotMatch(publicBookingApi,/SUPABASE_PUBLISHABLE_KEY/);
+});
+
+test('public booking page renders currency, timezone and phone prefix from catalog profile',()=>{
+  assert.match(publicBookingPage,/gcc-public-booking-ui/);
+  assert.match(publicBookingUi,/profile\?\.timezone/);
+  assert.match(publicBookingUi,/profile\?\.currency_code/);
+  assert.match(publicBookingUi,/profile\?\.phone_country_prefix/);
+  assert.match(publicBookingUi,/style:'currency',currency:currency\(\)/);
+  assert.match(publicBookingUi,/searchParams\.set\('from_date',dateKey\(now\)\)/);
+  assert.match(publicBookingUi,/data-slot/);
 });
 
 test('GCC readiness loads in the critical bundle so country is available during onboarding',()=>{
