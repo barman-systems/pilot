@@ -1,5 +1,3 @@
-begin;
-
 drop function if exists public.dabbir_ceo_command_create_authorized_v1(uuid,text,text,text,text[],timestamptz);
 
 create or replace function public.dabbir_ceo_command_create_authorized_v1(
@@ -25,5 +23,3 @@ $$;
 
 revoke all on function public.dabbir_ceo_command_create_authorized_v1(uuid,text,text,text,jsonb,timestamptz) from public,anon,authenticated;
 grant execute on function public.dabbir_ceo_command_create_authorized_v1(uuid,text,text,text,jsonb,timestamptz) to service_role;
-
-commit;
