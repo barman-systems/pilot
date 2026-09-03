@@ -42,6 +42,20 @@ test('owner login UI never asks for email or password', async () => {
   assert.doesNotMatch(source, /\/api\/auth\/login/);
 });
 
+test('owner login is readable and iPhone-safe without changing the OTP flow', async () => {
+  const source = await read('api/owner-login.js');
+  assert.match(source, /html,body\{[^}]*font-size:16px/);
+  assert.match(source, /p\{font-size:14px/);
+  assert.match(source, /\.field label\{[^}]*font-size:13px/);
+  assert.match(source, /\.field input\{[^}]*font-size:16px/);
+  assert.match(source, /\.msg\{[^}]*font-size:13px/);
+  assert.match(source, /min-height:100dvh/);
+  assert.match(source, /safe-area-inset-top/);
+  assert.match(source, /@media\(max-width:430px\)/);
+  assert.match(source, /prefers-reduced-motion:reduce/);
+  assert.match(source, /button:focus-visible,input:focus-visible/);
+});
+
 test('canonical owner routes use the OTP gate and authenticated dashboard gateway', async () => {
   const source = await read('vercel.json');
   const config = JSON.parse(source);
