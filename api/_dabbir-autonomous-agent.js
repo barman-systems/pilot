@@ -2,10 +2,10 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { ToolLoopAgent, jsonSchema, stepCountIs, tool } from 'ai';
 import { supabaseRest } from './_auth-core.js';
 
-export const OPERATOR_VERSION='v3.3-resilient-operator';
+export const OPERATOR_VERSION='v3.2-resilient-operator';
 export const RUN_STATES=['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled'];
 export const READ_TOOLS=['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals'];
-export const WRITE_TOOLS=['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment'];
+export const WRITE_TOOLS=['create_service','create_product','set_inventory','receive_stock','create_expense','book_available_appointment'];
 export const MAX_STEPS=6;
 const MODEL=process.env.DABBIR_AI_GATEWAY_MODEL||'minimax/minimax-m3-free';
 const hash=v=>createHash('sha256').update(String(v)).digest('hex');
