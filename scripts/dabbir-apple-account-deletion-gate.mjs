@@ -21,12 +21,12 @@ const appleSignIn = read('api/_apple-signin-core.js');
 const mobileApi = read('mobile/src/api.ts');
 const subscription = read('mobile/src/SubscriptionCard.tsx');
 const migration = read('supabase/migrations/20260905011500_dabbir_account_deletion_apple_revoke_preflight_v1.sql');
+const preflightIndex = accountDelete.indexOf("supabaseRpc('dabbir_delete_current_user_account_preflight'");
+const revokeIndex = accountDelete.indexOf('await revokeAppleAuthorizationForDeletion(');
+const deleteIndex = accountDelete.lastIndexOf("supabaseRpc('dabbir_delete_current_user_account'");
 
 requireStatic(
-  accountDelete.includes('dabbir_delete_current_user_account_preflight')
-    && accountDelete.includes('revokeAppleAuthorizationForDeletion')
-    && accountDelete.indexOf('dabbir_delete_current_user_account_preflight') < accountDelete.indexOf('revokeAppleAuthorizationForDeletion')
-    && accountDelete.indexOf('revokeAppleAuthorizationForDeletion') < accountDelete.lastIndexOf("supabaseRpc('dabbir_delete_current_user_account'"),
+  preflightIndex >= 0 && revokeIndex > preflightIndex && deleteIndex > revokeIndex,
   'APPLE_DELETE_ORDER',
   'Deletion runs DABBIR blocker preflight, then Apple token revocation, then destructive DABBIR deletion.',
 );
