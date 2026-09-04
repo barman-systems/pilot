@@ -183,6 +183,7 @@ export default async function handler(req,res){
       provider_status:providerStatus,
       cause_name:clean(error?.name||error?.cause?.name||'Error',80),
       diagnostic,
+      provider_attempts:Array.isArray(error?.operatorAttempts)?error.operatorAttempts.slice(0,3):null,
       external_side_effects:false,
       money_movement:false
     });

@@ -171,7 +171,7 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
       `At most ${MAX_STEPS} model steps. Respond in ${language==='en'?'English':'Arabic'} with a concise plan summary, not chain-of-thought.`
     ].join('\n');
   const candidates=operatorModelCandidates(),attempts=[];let result=null,selected=null,lastError=null;
-  const perAttemptTimeout=Math.max(5000,Math.floor(MODEL_TIMEOUT_MS/candidates.length));
+  const perAttemptTimeout=MODEL_TIMEOUT_MS;
   for(const candidate of candidates){
     const attemptTrace=[],attemptProposals=[];
     const gatewayOptions=candidate.providerOptions?{gateway:{...candidate.providerOptions.gateway,user:userId,tags:['feature:ai-business-operator','env:production']}}:undefined;
@@ -179,7 +179,7 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
     try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(perAttemptTimeout)});selected=candidate;trace=attemptTrace;proposals=attemptProposals;attempts.push({provider:candidate.name,state:'succeeded'});break}
     catch(error){lastError=error;attempts.push({provider:candidate.name,state:'failed',error:clean(error?.name||'Error',80)});}
   }
-  if(!result){await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:lastError?.name==='AbortError'||lastError?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model_candidates:candidates.map(x=>x.name),attempts,error:clean(lastError?.message||lastError,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw lastError||new Error('AI_PROVIDER_UNAVAILABLE')}
+  if(!result){const failure=lastError||new Error('AI_PROVIDER_UNAVAILABLE');failure.operatorAttempts=attempts;await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:failure?.name==='AbortError'||failure?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model_candidates:candidates.map(x=>x.name),attempts,error:clean(failure?.message||failure,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw failure}
   const cost=await generationCost(result);
   const finalized=await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'VERIFIED_SUCCESS',failureClass:null,actualCostUsd:cost.total_cost_usd,metadata:{provider:selected.name,model:selected.modelId,attempts,generation:cost,state:cost.total_cost_usd==null?'RESERVATION_RETAINED':'ACTUAL_COST_VERIFIED'}}).then(()=>true).catch(()=>false);
   const budgetEvidence={hard_limit_aed:HARD_MONTHLY_AI_BUDGET_AED,reservation_microusd:budget.reserve_microusd,gateway_spend_usd_before:budget.external_spend_usd,generation:cost,ledger_finalized:finalized};
