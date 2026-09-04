@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const landing = fs.readFileSync(new URL('../try.html', import.meta.url), 'utf8');
 const shell = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const previewHandler = fs.readFileSync(new URL('../api/dabbir-market-preview.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('public activation page communicates vertical, outcome, approvals, evidence and price before signup', () => {
@@ -40,7 +41,10 @@ test('root login gate offers value before account while retaining the existing a
 });
 
 test('Vercel exposes the public try route without changing the protected root runtime route', () => {
-  assert.ok(vercel.routes.some(route => route.src === '^/try/?$' && route.dest === '/try.html'));
-  assert.ok(vercel.rewrites.some(route => route.source === '/try' && route.destination === '/try.html'));
+  assert.ok(vercel.routes.some(route => route.src === '^/try/?$' && route.dest === '/api/dabbir-market-preview'));
+  assert.ok(vercel.rewrites.some(route => route.source === '/try' && route.destination === '/api/dabbir-market-preview'));
+  assert.equal(vercel.functions['api/dabbir-market-preview.js'].includeFiles, 'try.html');
+  assert.match(previewHandler, /readFileSync\(new URL\('\.\.\/try\.html'/);
+  assert.match(previewHandler, /x-dabbir-market-preview/);
   assert.ok(vercel.routes.some(route => route.src === '^/$' && route.dest === '/api/app-safari-recovery'));
 });
