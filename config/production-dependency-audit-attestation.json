@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "audit_level": "high",
+  "package_json_blob": "aacef4f6e1c2fb8f19bf270cec1ede4bd145e89a",
+  "package_lock_blob": "f52882cf4b34e9fddb7b19fa4c8ffbc7cd0ecf40",
+  "source": {
+    "workflow": "DABBIR CI",
+    "workflow_run_id": 33837388247,
+    "workflow_conclusion": "success",
+    "verified_step": "Audit production dependencies",
+    "source_pr": 450,
+    "source_head_sha": "d903420acde59cff68c9a4bb5e1ba791c766ba01",
+    "main_commit_after_merge": "fd4feeb8bafbe5308ae2178adb6673f6a0002f09"
+  }
+}
