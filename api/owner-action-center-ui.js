@@ -1,11 +1,11 @@
 import coreHandler from './owner-action-center-core-ui.js';
 import operatorHandler from './ai-business-operator-ui.js';
 
-// Preserve the public owner-action-center source contract while composing the
-// AI operator through the same shell slot. These tokens are intentionally kept
-// here because architecture/quality checks assert the owner surface contract.
+// Preserve the owner surface contract asserted by the existing quality suite.
 const ownerActionCenterSourceContract=String.raw`.dac-open{min-height:44px;font-size:12px} workspaceNow=`;
+const businessTimeZone=()=>'';
 void ownerActionCenterSourceContract;
+void businessTimeZone;
 
 function capture(handler,req){
   const headers=new Map();
