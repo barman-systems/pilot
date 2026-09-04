@@ -79,7 +79,10 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
     }:null,
   };
 
-  const reviewedWarnings=Array.isArray(security.reviewed_warnings)?security.reviewed_warnings:[];
+  const reviewedFunctions=new Set([
+    ...(Array.isArray(security.reviewed_warnings)?security.reviewed_warnings:[]),
+    ...(Array.isArray(security.reviewed_functions)?security.reviewed_functions:[]),
+  ]);
   const basis=security.review_basis||{};
   const expectedWarnings=[
     'public.dabbir_public_car_wash_book',
@@ -94,9 +97,9 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
     String(security.project_ref||'')===EXPECTED_PROJECT_REF&&
     String(security.verdict||'').toUpperCase()==='PASS'&&
     Number(security.blocking_findings)===0&&
-    String(security.advisor_max_level||'').toUpperCase()==='WARN'&&
+    ['INFO','WARN'].includes(String(security.advisor_max_level||'').toUpperCase())&&
     fresh(security.reviewed_at,now)&&
-    expectedWarnings.every(name=>reviewedWarnings.includes(name))&&
+    expectedWarnings.every(name=>reviewedFunctions.has(name))&&
     basis.security_advisor_rerun===true&&
     basis.public_definer_functions_reviewed===true&&
     basis.anonymous_direct_table_dml_for_booking_requests===false&&
