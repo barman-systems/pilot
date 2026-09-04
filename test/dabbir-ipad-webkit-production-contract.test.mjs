@@ -45,7 +45,10 @@ test('iPad sidebar targets must be truly inside the viewport and pointer-hit-tes
   assert.match(wrapper,/pointer_events/);
   assert.match(wrapper,/width >= 40/);
   assert.match(wrapper,/height >= 40/);
-  assert.match(wrapper,/rect\.left < window\.innerWidth && rect\.right > 0/);
+  assert.equal((wrapper.match(/rect\.left >= 0/g)||[]).length,2);
+  assert.equal((wrapper.match(/rect\.right <= window\.innerWidth/g)||[]).length,2);
+  assert.equal((wrapper.match(/rect\.top >= 0/g)||[]).length,2);
+  assert.equal((wrapper.match(/rect\.bottom <= window\.innerHeight/g)||[]).length,2);
   assert.doesNotMatch(wrapper,/style\.display\s*=\s*['\"](?:flex|block|grid)['\"]/);
   assert.doesNotMatch(wrapper,/dispatchEvent\(/);
 });

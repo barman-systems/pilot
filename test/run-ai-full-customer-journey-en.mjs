@@ -17,7 +17,12 @@ const tabletConversationNavigation = `  const ipadMenuForConversations = page.lo
     const side = document.querySelector('#side');
     if (!side || !side.classList.contains('open')) return false;
     const rect = side.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && rect.left < window.innerWidth && rect.right > 0;
+    return rect.width > 0
+      && rect.height > 0
+      && rect.left >= 0
+      && rect.right <= window.innerWidth
+      && rect.top >= 0
+      && rect.bottom <= window.innerHeight;
   }, null, { timeout: 10_000 });
   const visibleConversationsNav = page.locator('#side.open #nav [data-screen="conversations"]:visible');
   const visibleConversationsCount = await visibleConversationsNav.count();
@@ -72,7 +77,12 @@ const tabletOperationsNavigation = `  const ipadMenuForOperations = page.locator
     const side = document.querySelector('#side');
     if (!side || !side.classList.contains('open')) return false;
     const rect = side.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && rect.left < window.innerWidth && rect.right > 0;
+    return rect.width > 0
+      && rect.height > 0
+      && rect.left >= 0
+      && rect.right <= window.innerWidth
+      && rect.top >= 0
+      && rect.bottom <= window.innerHeight;
   }, null, { timeout: 10_000 });
   const visibleOperationsNav = page.locator('#side.open #nav [data-screen="operations"]:visible');
   const visibleOperationsCount = await visibleOperationsNav.count();
