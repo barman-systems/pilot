@@ -1,20 +1,20 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
-    "deployment_id": "dpl_8628zYGW7ZW4xuxzapUoHA7L4u12",
+    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
+    "deployment_id": "dpl_2LqMp5GDHguKSsWvxMqFrNMSC4T7",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-04T12:46:15.097Z",
+    "checked_at": "2026-09-04T13:01:59.264Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
   "alert_delivery": {
-    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
-    "deployment_id": "dpl_8628zYGW7ZW4xuxzapUoHA7L4u12",
+    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
+    "deployment_id": "dpl_2LqMp5GDHguKSsWvxMqFrNMSC4T7",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-04T12:46:15.097Z",
+    "verified_at": "2026-09-04T13:02:05.738Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
@@ -24,12 +24,12 @@
     "readback_verified": true,
     "test_only": true,
     "contains_secrets_or_customer_data": false,
-    "notes": "A test-only BAR-12 operational alert containing only the exact current public Production release identity was delivered to the reserved owner alert channel and read back from Slack at the same message timestamp."
+    "notes": "The single permitted test-only BAR-12 operational alert was updated in place with the exact current public Production release identity and read back from Slack at the same message timestamp; it contains no secrets or customer data."
   },
   "security": {
-    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
+    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
     "project_ref": "fphpoysqdsceniwduxjq",
-    "reviewed_at": "2026-09-04T12:37:37.837Z",
+    "reviewed_at": "2026-09-04T13:00:31.202Z",
     "verdict": "PASS",
     "blocking_findings": 0,
     "advisor_max_level": "INFO",
