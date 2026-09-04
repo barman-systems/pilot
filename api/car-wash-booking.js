@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { applyExecutiveCalmPage, executiveCalmHeaders } from './_executive-calm-page.js';
 
 const BOOKING_HTML=readFileSync(new URL('../booking.html', import.meta.url), 'utf8');
 const BOOKING_INTERFACE_HARDENING=`<style id="dabbir-public-booking-hardening-v1">
@@ -17,7 +18,7 @@ button{touch-action:manipulation}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>`;
 const GCC_PUBLIC_BOOKING_SCRIPT='<script src="/api/gcc-public-booking-ui" defer></script>';
-const BOOKING_PAGE=BOOKING_HTML.replace('</head>',`${BOOKING_INTERFACE_HARDENING}</head>`).replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`);
+const BOOKING_PAGE=applyExecutiveCalmPage(BOOKING_HTML.replace('</head>',`${BOOKING_INTERFACE_HARDENING}</head>`).replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`));
 const HEADERS={
   'content-type':'text/html; charset=utf-8',
   'cache-control':'no-store',
@@ -36,7 +37,8 @@ export default function handler(req,res){
     return res.end(JSON.stringify({ok:false,error:'METHOD_NOT_ALLOWED'}));
   }
   for(const [key,value] of Object.entries(HEADERS))res.setHeader(key,value);
-  res.setHeader('x-dabbir-booking-page','public-v1.2-gcc-authority');
+  executiveCalmHeaders(res);
+  res.setHeader('x-dabbir-booking-page','public-v1.3-executive-calm');
   res.statusCode=200;
   return res.end(BOOKING_PAGE);
 }
