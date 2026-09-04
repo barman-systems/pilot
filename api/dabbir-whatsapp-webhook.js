@@ -2,7 +2,7 @@ import { singleQueryValue } from './_request-query.js';
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
-import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
+import { applySignedStatus, persistSignedInbound, serviceRpc } from './_whatsapp-live-core.js';
 
 export const config = {
   api: {
@@ -92,7 +92,8 @@ export function extractWhatsAppEvents(payload = {}) {
       const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
         .map(contact => [String(contact?.wa_id || ''), String(contact?.profile?.name || '').slice(0, 120)]));
       for (const message of value.messages || []) {
-        const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
+        const mediaId = message.audio?.id || null;
+        const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || (mediaId ? '[VOICE_NOTE_TRANSCRIPTION_UNAVAILABLE]' : '');
         events.push({
           type: 'message',
           messageId: message.id || null,
@@ -101,6 +102,10 @@ export function extractWhatsAppEvents(payload = {}) {
           timestamp: message.timestamp || null,
           messageType: message.type || null,
           text: String(text || '').slice(0, 4000),
+          mediaId,
+          mediaMimeType: message.audio?.mime_type || null,
+          voice: message.audio?.voice === true,
+          transcriptionAvailable: false,
           phoneNumberId,
           displayPhoneNumber,
         });
@@ -123,6 +128,7 @@ export function extractWhatsAppEvents(payload = {}) {
 
 export function classifyDABBIREvent(event, project = 'generic') {
   if (event.type !== 'message') return { classification: 'MESSAGE_STATUS', workflow: ['STATUS_UPDATE'] };
+  if (event.messageType === 'audio') return { classification: 'VOICE_NOTE_REQUIRES_TRANSCRIPTION', workflow: ['PERSIST', 'HUMAN_ESCALATION'] };
   if (project === 'dabbir_clinics') {
     const classification = classifyClinicMessage(event.text);
     return { classification, workflow: classification === 'APPOINTMENT_REQUEST' ? ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'BOOKING', 'TASK', 'FOLLOW_UP'] : ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
@@ -136,6 +142,12 @@ export function classifyDABBIREvent(event, project = 'generic') {
 
 function unlinkedTenant(error) {
   return String(error?.code || error?.message || '').includes('WHATSAPP_TENANT_CONNECTION_NOT_FOUND');
+}
+
+function providerOccurredAt(timestamp) {
+  const seconds = Number(timestamp);
+  const value = Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : new Date();
+  return value.toISOString();
 }
 
 export default async function handler(req, res) {
@@ -182,6 +194,8 @@ export default async function handler(req, res) {
   let duplicateMessages = 0;
   let matchedStatuses = 0;
   let providerVerifiedStatuses = 0;
+  let killerJobReconciledStatuses = 0;
+  let killerJobReconciliationFailures = 0;
   let unlinkedMessages = 0;
 
   try {
@@ -202,6 +216,20 @@ export default async function handler(req, res) {
         const result = await applySignedStatus(event);
         if (result.matched) matchedStatuses += 1;
         if (result.providerVerified) providerVerifiedStatuses += 1;
+        if (result.matched) {
+          try {
+            const reconciliation = await serviceRpc('dabbir_reconcile_car_wash_message_status', {
+              p_provider_message_id: event.messageId,
+              p_status: event.status,
+              p_occurred_at: providerOccurredAt(event.timestamp),
+            });
+            if (reconciliation?.matched === true) killerJobReconciledStatuses += 1;
+          } catch {
+            // Generic provider status remains authoritative. A missing P0 migration or
+            // reconciliation failure must not make Meta redeliver an already persisted event.
+            killerJobReconciliationFailures += 1;
+          }
+        }
       }
     }
   } catch (error) {
@@ -248,6 +276,8 @@ export default async function handler(req, res) {
     duplicate_messages: duplicateMessages,
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
+    killer_job_reconciled_statuses: killerJobReconciledStatuses,
+    killer_job_reconciliation_failures: killerJobReconciliationFailures,
     unlinked_messages: unlinkedMessages,
     outbound_messages_sent: false,
   });
@@ -267,6 +297,8 @@ export default async function handler(req, res) {
     duplicate_messages: duplicateMessages,
     matched_statuses: matchedStatuses,
     provider_verified_statuses: providerVerifiedStatuses,
+    killer_job_reconciled_statuses: killerJobReconciledStatuses,
+    killer_job_reconciliation_failures: killerJobReconciliationFailures,
     tenant_unlinked_events: unlinkedMessages,
     outbound_messages_sent: false,
     external_side_effects: false,

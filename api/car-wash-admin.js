@@ -14,6 +14,7 @@ const OPERATIONS_ROLES=['owner','admin','manager','employee','staff'];
 const MANAGER_ROLES=['owner','admin'];
 const ORDER_STATUSES=['new','confirmed','en_route','arrived','washing','completed','paid','cancelled'];
 const EXTENSION_NOT_READY='CAR_WASH_OPERATIONS_MIGRATION_REQUIRED';
+const KILLER_JOB_NOT_READY='CAR_WASH_KILLER_JOB_MIGRATION_REQUIRED';
 const id=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 const clean=(value,max)=>String(value??'').trim().slice(0,max);
 const number=value=>Number.isFinite(Number(value))?Number(value):NaN;
@@ -50,6 +51,33 @@ async function extensionData(ctx,businessId){
   return {ready,customers:Array.isArray(customers)?customers:[],vehicles:vehicles||[],histories:histories||[],photos:photos||[],recurring:recurring||[],bookingExtras:bookingExtras||[]};
 }
 
+async function killerJobData(ctx,businessId){
+  const [receipts,operatorConfig]=await Promise.all([
+    rest(ctx.token,`dabbir_car_wash_owner_receipts?business_id=eq.${businessId}&select=*&order=updated_at.desc&limit=100`,{},'KILLER_JOB_LOOKUP_FAILED').catch(()=>null),
+    rest(ctx.token,`dabbir_car_wash_settings?business_id=eq.${businessId}&select=operator_mode,shadow_started_at,kill_switch,operator_permissions,confidence_threshold,service_areas,default_travel_minutes,max_concurrent_bookings,max_quote_aed,max_discount_pct,max_messages_per_inquiry,ai_target_monthly_aed,ai_hard_cap_monthly_aed,ai_usage_month_aed&limit=1`,{},'KILLER_JOB_SETTINGS_LOOKUP_FAILED').then(rows=>rows?.[0]||null).catch(()=>null),
+  ]);
+  if(!Array.isArray(receipts))return {ready:false,error:KILLER_JOB_NOT_READY,receipts:[],summary:null};
+  const dubaiDay=value=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}catch{return ''}};
+  const today=dubaiDay(Date.now());
+  const todayReceipts=receipts.filter(row=>dubaiDay(row.created_at||row.updated_at)===today);
+  const openStates=new Set(['inquiry','qualified','offered','confirmed']);
+  const confirmedStates=new Set(['confirmed','assigned','reminded','completed','paid']);
+  const summary={
+    inquiries:todayReceipts.length,
+    confirmed:todayReceipts.filter(row=>confirmedStates.has(String(row.state))).length,
+    stalled:receipts.filter(row=>openStates.has(String(row.state))).length,
+    needs_owner:receipts.filter(row=>String(row.state)==='inquiry'||String(row.state)==='offered').length,
+    booking_value:todayReceipts.filter(row=>String(row.state)!=='lost').reduce((sum,row)=>sum+Math.max(0,Number(row.booking_value)||0),0),
+    verified_revenue:todayReceipts.reduce((sum,row)=>sum+Math.max(0,Number(row?.outcomes?.verified)||0),0),
+    recovered_revenue:todayReceipts.reduce((sum,row)=>sum+Math.max(0,Number(row?.outcomes?.recovered)||0),0),
+    lost_revenue:todayReceipts.reduce((sum,row)=>sum+Math.max(0,Number(row?.outcomes?.lost)||0),0),
+    errors:todayReceipts.reduce((sum,row)=>sum+(Array.isArray(row.transitions)?row.transitions.filter(step=>step.failure_reason).length:0)+(Array.isArray(row.messages)?row.messages.filter(message=>message.error).length:0),0),
+    lost_count:todayReceipts.filter(row=>String(row.state)==='lost').length,
+    lost:todayReceipts.filter(row=>String(row.state)==='lost').map(row=>({job_id:row.job_id,reason:row.lost_reason||'UNSPECIFIED',amount:Number(row.booking_value)||0})),
+  };
+  return {ready:true,receipts,summary,operatorConfig};
+}
+
 async function getData(ctx,businessId){
   if(!operationMembership(ctx,businessId))return {error:'BUSINESS_ACCESS_DENIED'};
   const [businesses,settings,offers,bookings]=await Promise.all([
@@ -59,11 +87,11 @@ async function getData(ctx,businessId){
     rest(ctx.token,`dabbir_car_wash_booking_requests?business_id=eq.${businessId}&select=id,offer_id,vehicle_type,starts_at,customer_name,customer_phone,location_lat,location_lng,location_label,status,created_at,updated_at&order=starts_at.asc&limit=100`,{},'BOOKING_REQUESTS_LOOKUP_FAILED'),
   ]);
   const business=businesses?.[0];if(!business||business.business_type!=='car_wash')return {error:'CAR_WASH_BUSINESS_REQUIRED'};
-  const operations=await extensionData(ctx,businessId);
+  const [operations,killerJob]=await Promise.all([extensionData(ctx,businessId),killerJobData(ctx,businessId)]);
   const extras=new Map(operations.bookingExtras.map(row=>[row.id,row]));
   const enrichedBookings=(bookings||[]).map(booking=>({...booking,...(extras.get(booking.id)||{}),attention_reason:attentionFor(booking,Date.now())}));
   const overdueRecurring=operations.recurring.filter(plan=>plan.status==='active'&&new Date(`${plan.renewal_on}T23:59:59Z`).getTime()<Date.now()).map(plan=>({...plan,attention_reason:'اشتراك متكرر لم يُنشأ في موعده'}));
-  return {business,settings:settings?.[0]||{business_id:businessId,public_booking_enabled:true,slot_interval_minutes:30,booking_horizon_days:14,open_time:'08:00:00',close_time:'20:00:00',working_days:[0,1,2,3,4,5,6]},offers:offers||[],bookings:enrichedBookings,operations:{...operations,needsAction:enrichedBookings.filter(item=>item.attention_reason),overdueRecurring},canManageCatalog:Boolean(managerMembership(ctx,businessId)),canManageOperations:true};
+  return {business,settings:settings?.[0]||{business_id:businessId,public_booking_enabled:true,slot_interval_minutes:30,booking_horizon_days:14,open_time:'08:00:00',close_time:'20:00:00',working_days:[0,1,2,3,4,5,6]},offers:offers||[],bookings:enrichedBookings,operations:{...operations,needsAction:enrichedBookings.filter(item=>item.attention_reason),overdueRecurring},killerJob,canManageCatalog:Boolean(managerMembership(ctx,businessId)),canManageOperations:true};
 }
 
 async function requireOperations(ctx,res,businessId){if(!operationMembership(ctx,businessId)){json(res,403,{ok:false,error:'BUSINESS_OPERATIONS_REQUIRED'});return false}return true}
@@ -76,6 +104,18 @@ function attachmentName(value){return clean(value,180).replace(/[^a-zA-Z0-9._-]/
 async function post(ctx,res,body,businessId){
   const action=clean(body.action,40).toLowerCase();
   if(!await requireOperations(ctx,res,businessId))return;
+  if(action==='save_operator_policy'){
+    if(!managerMembership(ctx,businessId))return json(res,403,{ok:false,error:'BUSINESS_MANAGEMENT_REQUIRED'});
+    const mode=clean(body.operator_mode,24);const current=await killerJobData(ctx,businessId);if(!current.ready||!current.operatorConfig)return json(res,409,{ok:false,error:KILLER_JOB_NOT_READY});
+    if(!['shadow','controlled_live','paused'].includes(mode))return json(res,400,{ok:false,error:'INVALID_OPERATOR_MODE'});
+    if(mode==='controlled_live'&&Date.now()-new Date(current.operatorConfig.shadow_started_at).getTime()<48*60*60*1000)return json(res,409,{ok:false,error:'SHADOW_48_HOURS_REQUIRED'});
+    const permissions={};for(const key of ['READ','MESSAGE','QUOTE','BOOK','ASSIGN','REMIND','CHARGE'])permissions[key]=body.operator_permissions?.[key]===true;
+    permissions.READ=true;if(mode!=='controlled_live'){for(const key of ['MESSAGE','BOOK','ASSIGN','REMIND','CHARGE'])permissions[key]=false}
+    const threshold=number(body.confidence_threshold),travel=Math.trunc(number(body.default_travel_minutes)),concurrency=Math.trunc(number(body.max_concurrent_bookings)),maxQuote=number(body.max_quote_aed),maxDiscount=number(body.max_discount_pct),maxMessages=Math.trunc(number(body.max_messages_per_inquiry));
+    if(!Number.isFinite(threshold)||threshold<0.5||threshold>1||travel<0||travel>180||concurrency<1||concurrency>15||!Number.isFinite(maxQuote)||maxQuote<0||maxQuote>100000||!Number.isFinite(maxDiscount)||maxDiscount<0||maxDiscount>100||maxMessages<1||maxMessages>20)return json(res,400,{ok:false,error:'INVALID_OPERATOR_LIMITS'});
+    const rows=await rest(ctx.token,`dabbir_car_wash_settings?business_id=eq.${businessId}`,{method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({operator_mode:mode,kill_switch:body.kill_switch===true,operator_permissions:permissions,confidence_threshold:threshold,default_travel_minutes:travel,max_concurrent_bookings:concurrency,max_quote_aed:maxQuote,max_discount_pct:maxDiscount,max_messages_per_inquiry:maxMessages})},'OPERATOR_POLICY_SAVE_FAILED');
+    return json(res,200,{ok:true,operatorConfig:rows?.[0]||null});
+  }
   if(action==='save_settings'||action==='save_offer'||action==='deactivate_offer'){
     if(!managerMembership(ctx,businessId))return json(res,403,{ok:false,error:'BUSINESS_MANAGEMENT_REQUIRED'});
     if(action==='save_settings'){
@@ -97,7 +137,31 @@ async function post(ctx,res,body,businessId){
     await ensureExtension(ctx,businessId);const bookingId=id(body.booking_id);const vehicleId=id(body.vehicle_id);const customerId=id(body.customer_id);if(!bookingId||!vehicleId||!customerId)return json(res,400,{ok:false,error:'BOOKING_VEHICLE_CUSTOMER_REQUIRED'});const rows=await rest(ctx.token,`dabbir_car_wash_booking_requests?business_id=eq.${businessId}&id=eq.${bookingId}`,{method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({vehicle_id:vehicleId,customer_id:customerId,maps_url:clean(body.maps_url,500),service_notes:clean(body.service_notes,1000),quoted_price_aed:Number.isFinite(number(body.quoted_price_aed))?Number(number(body.quoted_price_aed).toFixed(2)):null})},'BOOKING_LINK_FAILED');return json(res,200,{ok:true,booking:rows?.[0]||null});
   }
   if(action==='update_booking_status'){
-    const bookingId=id(body.booking_id);const status=clean(body.status,20).toLowerCase();if(!bookingId||!ORDER_STATUSES.includes(status))return json(res,400,{ok:false,error:'INVALID_BOOKING_STATUS'});const current=await bookingFor(ctx,businessId,bookingId);if(!current)return json(res,404,{ok:false,error:'BOOKING_NOT_FOUND'});const rows=await rest(ctx.token,`dabbir_car_wash_booking_requests?business_id=eq.${businessId}&id=eq.${bookingId}`,{method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({status})},'BOOKING_STATUS_UPDATE_FAILED');try{await ensureExtension(ctx,businessId);await rest(ctx.token,'dabbir_car_wash_booking_status_history',{method:'POST',headers:{prefer:'return=minimal'},body:JSON.stringify({booking_id:bookingId,business_id:businessId,from_status:current.status,to_status:status,note:clean(body.note,1000),changed_by:ctx.user.id})},'STATUS_HISTORY_CREATE_FAILED')}catch(error){if(String(error?.message||'')!==EXTENSION_NOT_READY)throw error}return json(res,200,{ok:true,booking:rows?.[0]||null});
+    const bookingId=id(body.booking_id);const status=clean(body.status,20).toLowerCase();if(!bookingId||!ORDER_STATUSES.includes(status))return json(res,400,{ok:false,error:'INVALID_BOOKING_STATUS'});const current=await bookingFor(ctx,businessId,bookingId);if(!current)return json(res,404,{ok:false,error:'BOOKING_NOT_FOUND'});
+    const killer=await killerJobData(ctx,businessId);if(!killer.ready)return json(res,409,{ok:false,error:KILLER_JOB_NOT_READY});
+    const receipt=killer.receipts.find(row=>row.booking_request_id===bookingId);if(!receipt)return json(res,409,{ok:false,error:'CAR_WASH_JOB_NOT_FOUND'});
+    const targets={new:'inquiry',confirmed:current.assigned_worker_id?'assigned':'confirmed',en_route:'assigned',arrived:'assigned',washing:'assigned',completed:'completed',paid:'paid',cancelled:'lost'};
+    const target=targets[status];const operation=clean(body.operation_id,160)||`owner:${bookingId}:${receipt.state}:${target}`;const reason=clean(body.note,500)||(target==='lost'?'owner_cancelled':'owner_status_update');
+    const transitions=[];const path={inquiry:['qualified','offered','confirmed'],qualified:['offered','confirmed'],offered:['confirmed'],confirmed:current.assigned_worker_id?['assigned']:[],assigned:[],reminded:[],completed:[],paid:[],lost:[]};
+    let cursor=String(receipt.state||'inquiry');let steps=[];
+    if(target==='confirmed'&&['inquiry','qualified','offered'].includes(cursor))steps=path[cursor]||[];
+    else if(target==='assigned'&&['inquiry','qualified','offered','confirmed'].includes(cursor))steps=[...(path[cursor]||[]),...(cursor==='confirmed'||(path[cursor]||[]).includes('confirmed')?['assigned']:[])];
+    else if(target==='completed'&&['assigned','reminded'].includes(cursor))steps=['completed'];
+    else if(target==='paid'&&cursor==='completed')steps=['paid'];
+    else if(target==='lost'&&!['paid','lost'].includes(cursor))steps=['lost'];
+    else if(target===cursor)steps=[];
+    else return json(res,409,{ok:false,error:'ILLEGAL_CAR_WASH_STATUS_CHANGE'});
+    for(let index=0;index<steps.length;index+=1){
+      const next=steps[index];const evidence=next==='paid'?body.payment_evidence||{}:(next==='completed'?{reference:`owner:${ctx.user.id}`,service_completed:true}:{reference:`owner:${ctx.user.id}`});
+      const result=await rest(ctx.token,'rpc/dabbir_car_wash_transition_job',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({p_business_id:businessId,p_job_id:receipt.job_id,p_to_state:next,p_actor_type:'human',p_idempotency_key:`${operation}:${index}:${next}`,p_permission_used:null,p_reason:reason,p_decision:{legacy_status:status},p_evidence:evidence,p_action:{source:'car_wash_admin'},p_external_result:{state:'OWNER_RECORDED'},p_owner_override:false})},'KILLER_JOB_TRANSITION_FAILED');
+      transitions.push(result);cursor=next;
+    }
+    const checkpoint={confirmed:'crew_accepted',en_route:'en_route',arrived:'arrived',washing:'service_started'}[status];
+    if(checkpoint&&['assigned','reminded'].includes(cursor)){
+      const result=await rest(ctx.token,'rpc/dabbir_car_wash_record_checkpoint',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({p_business_id:businessId,p_job_id:receipt.job_id,p_checkpoint:checkpoint,p_idempotency_key:`${operation}:checkpoint:${checkpoint}`,p_evidence:{reference:`owner:${ctx.user.id}`,recorded_at:new Date().toISOString()}})},'KILLER_JOB_CHECKPOINT_FAILED');
+      transitions.push(result);
+    }
+    const booking=await bookingFor(ctx,businessId,bookingId);return json(res,200,{ok:true,booking,job:{id:receipt.job_id,state:cursor},transitions});
   }
   if(action==='add_photo'){
     await ensureExtension(ctx,businessId);const bookingId=id(body.booking_id);const vehicleId=id(body.vehicle_id);const phase=clean(body.phase,10);const mimeType=clean(body.mime_type,80).toLowerCase();const filename=attachmentName(body.filename);const bytes=base64Bytes(body.data_base64);if(!bookingId||!vehicleId||!['before','after'].includes(phase)||!/^image\/(jpeg|png|webp)$/.test(mimeType)||!bytes||bytes.length>2*1024*1024)return json(res,400,{ok:false,error:'INVALID_EVIDENCE_IMAGE'});const booking=await bookingFor(ctx,businessId,bookingId);if(!booking)return json(res,404,{ok:false,error:'BOOKING_NOT_FOUND'});const ext=mimeType.split('/')[1];const storagePath=`${businessId}/${bookingId}/${phase}/${crypto.randomUUID()}.${ext}`;const uploaded=await supabaseStorage(`object/dabbir-car-wash-evidence/${storagePath}`,ctx.token,{method:'POST',headers:{'content-type':mimeType,'x-upsert':'false'},body:bytes});if(!uploaded.ok)throw Object.assign(new Error('EVIDENCE_UPLOAD_FAILED'),{status:uploaded.status});const rows=await rest(ctx.token,'dabbir_car_wash_booking_photos',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({booking_id:bookingId,business_id:businessId,vehicle_id:vehicleId,phase,storage_path:storagePath,filename,created_by:ctx.user.id})},'EVIDENCE_RECORD_CREATE_FAILED');return json(res,200,{ok:true,photo:rows?.[0]||null});
