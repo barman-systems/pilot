@@ -26,6 +26,14 @@ test('vertical parser extracts a complete Arabic and English mixed inquiry witho
   assert.ok(parsed.confidence.overall >= 0.9);
 });
 
+test('generic wash wording cannot override an explicit premium package', () => {
+  const parsed = parseCarWashInquiry('premium wash لسيارة SUV في دبي مارينا غداً الساعة 10 صباحاً', { now });
+  assert.equal(parsed.complete, true);
+  assert.equal(parsed.package.key, 'premium');
+  assert.equal(parsed.vehicle.key, 'suv');
+  assert.equal(parsed.package.prices.suv, 220);
+});
+
 test('low-information inquiry asks exactly one specific question', () => {
   const parsed = parseCarWashInquiry('مرحبا، أريد غسيل سيارة', { now });
   assert.equal(parsed.complete, false);

@@ -61,7 +61,7 @@ const DEMO_AREAS = Object.freeze([
 ]);
 
 const DEMO_PACKAGES = Object.freeze([
-  Object.freeze({ key: 'essential', nameAr: 'الغسيل الأساسي', nameEn: 'Essential wash', tokens: ['اساسي', 'أساسي', 'عادي', 'basic', 'essential', 'wash'], durationMinutes: 60, prices: { saloon: 120, suv: 150 } }),
+  Object.freeze({ key: 'essential', nameAr: 'الغسيل الأساسي', nameEn: 'Essential wash', tokens: ['اساسي', 'أساسي', 'عادي', 'basic', 'essential'], durationMinutes: 60, prices: { saloon: 120, suv: 150 } }),
   Object.freeze({ key: 'premium', nameAr: 'الغسيل والتلميع', nameEn: 'Wash & polish', tokens: ['تلميع', 'بريميوم', 'بولش', 'polish', 'premium', 'detailing'], durationMinutes: 90, prices: { saloon: 180, suv: 220 } }),
 ]);
 
