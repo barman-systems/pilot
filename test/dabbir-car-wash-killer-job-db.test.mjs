@@ -56,6 +56,8 @@ test('shadow, granular permissions, confidence, kill switch and AI hard cap fail
   assert.match(migration, /SHADOW_MODE_NO_EXTERNAL_ACTION/);
   assert.match(migration, /CAR_WASH_KILL_SWITCH_ACTIVE/);
   assert.match(migration, /LOW_CONFIDENCE_HUMAN_ESCALATION/);
+  assert.match(migration, /greatest\(0,least\(1,coalesce\(p_confidence,0\)\)\)<v_settings\.confidence_threshold/);
+  assert.match(migration, /'state','HUMAN_REQUIRED',[\s\S]*?'reason','LOW_CONFIDENCE'/);
   assert.match(migration, /ai_target_monthly_aed between 0 and 30/i);
   assert.match(migration, /ai_hard_cap_monthly_aed between 1 and 60/i);
 });
@@ -83,6 +85,10 @@ test('real booking creation carries branch, atomic capacity and mandatory appoin
   assert.match(migration, /add column if not exists branch_id uuid references public\.dabbir_business_branches/i);
   assert.match(migration, /insert into public\.dabbir_appointments\(business_id,branch_id/i);
   assert.match(migration, /deposit_currency_code/);
+  const appointmentInsert = migration.match(/insert into public\.dabbir_appointments\(([^)]*)\)/i)?.[1] || '';
+  const bookingInsert = migration.match(/insert into public\.dabbir_car_wash_booking_requests\(([\s\S]*?)\) values\(/i)?.[1] || '';
+  assert.doesNotMatch(appointmentInsert, /(?:^|,)\s*(?:currency_code|quoted_price_amount)\s*(?:,|$)/i);
+  assert.doesNotMatch(bookingInsert, /(?:^|,)\s*quoted_price_amount\s*(?:,|$)/i);
   assert.match(migration, /'whatsapp','unpaid','customer',v_location/i);
   assert.doesNotMatch(migration, /'whatsapp','unpaid','customer_address'/i);
   assert.match(migration, /for update of j skip locked/i);
@@ -91,6 +97,8 @@ test('real booking creation carries branch, atomic capacity and mandatory appoin
 test('reminder delivery is leased, idempotent, provider-verified and escalates ambiguous sends', () => {
   for (const marker of ['dabbir_claim_car_wash_reminders','dabbir_finish_car_wash_reminder','dabbir_reconcile_car_wash_message_status','dabbir_car_wash_record_external_message']) assert.match(migration, new RegExp(marker));
   assert.match(migration, /reminder_attempt_count<3/);
+  assert.match(migration, /update public\.dabbir_car_wash_jobs j set reminder_state='leased'/);
+  assert.match(migration, /where j\.id=v\.id and j\.business_id=v\.business_id/);
   assert.match(migration, /then 'ambiguous' else 'failed'/);
   assert.match(migration, /provider_verified/);
   assert.match(migration, /Car-wash reminder delivery needs human review/);
@@ -99,4 +107,10 @@ test('reminder delivery is leased, idempotent, provider-verified and escalates a
 test('production migration is explicitly gated in the artifact', () => {
   assert.match(migration, /PRODUCTION GATE/);
   assert.match(migration, /must not be applied/i);
+});
+
+test('legacy migration helpers are not exposed through PostgREST', () => {
+  assert.match(migration, /alter table if exists public\.migration_auth_fk_specs force row level security/i);
+  assert.match(migration, /revoke all on table public\.migration_auth_fk_specs from public,anon,authenticated/i);
+  assert.match(migration, /revoke all on function public\.migration_apply_auth_fks_v1\(\) from public,anon,authenticated/i);
 });

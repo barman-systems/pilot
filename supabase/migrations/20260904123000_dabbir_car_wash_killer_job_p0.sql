@@ -528,6 +528,15 @@ begin
   select * into v_offer from public.dabbir_car_wash_offers o where o.id=p_offer_id and o.business_id=p_business_id and o.active;
   if v_business.id is null or v_settings.business_id is null or v_conversation.id is null then raise exception 'CAR_WASH_CONTEXT_UNVERIFIED'; end if;
   if v_offer.id is null then return jsonb_build_object('ok',false,'state','NEED_SERVICE'); end if;
+  if greatest(0,least(1,coalesce(p_confidence,0)))<v_settings.confidence_threshold then
+    return jsonb_build_object(
+      'ok',false,
+      'state','HUMAN_REQUIRED',
+      'reason','LOW_CONFIDENCE',
+      'confidence',greatest(0,least(1,coalesce(p_confidence,0))),
+      'confidence_threshold',v_settings.confidence_threshold
+    );
+  end if;
   if v_settings.kill_switch or v_settings.operator_mode='paused' then return jsonb_build_object('ok',false,'state','HUMAN_REQUIRED','reason','OPERATOR_STOPPED'); end if;
   if jsonb_typeof(v_settings.service_areas)='array' and jsonb_array_length(v_settings.service_areas)>0
     and not exists(select 1 from jsonb_array_elements_text(v_settings.service_areas) area where lower(trim(p_location_label)) like '%'||lower(trim(area))||'%')
@@ -644,17 +653,17 @@ begin
   if v_offer.id is null then raise exception 'CAR_WASH_OFFER_NOT_AVAILABLE'; end if;
   v_vehicle:=v_job.extracted->>'vehicle_type';v_location:=left(v_job.extracted->>'location_label',240);
   perform pg_advisory_xact_lock(hashtextextended('dabbir:car-wash-capacity:'||p_business_id::text,0));
-  insert into public.dabbir_appointments(business_id,branch_id,customer_id,worker_id,starts_at,ends_at,status,simulated,quoted_price_aed,discount_aed,notes,booking_source,payment_status,location_type,service_address,travel_minutes,currency_code,deposit_currency_code,quoted_price_amount)
-  values(p_business_id,v_conversation.branch_id,v_conversation.customer_id,v_worker,v_start,v_end,'new',false,v_job.booking_value,0,'Mobile car wash booked by DABBIR from verified WhatsApp conversation.','whatsapp','unpaid','customer',v_location,v_settings.default_travel_minutes,v_job.currency_code,v_job.currency_code,v_job.booking_value)
+  insert into public.dabbir_appointments(business_id,branch_id,customer_id,worker_id,starts_at,ends_at,status,simulated,quoted_price_aed,discount_aed,notes,booking_source,payment_status,location_type,service_address,travel_minutes,deposit_currency_code)
+  values(p_business_id,v_conversation.branch_id,v_conversation.customer_id,v_worker,v_start,v_end,'new',false,v_job.booking_value,0,'Mobile car wash booked by DABBIR from verified WhatsApp conversation.','whatsapp','unpaid','customer',v_location,v_settings.default_travel_minutes,v_job.currency_code)
   returning * into v_appt;
   insert into public.dabbir_car_wash_booking_requests(
     business_id,branch_id,offer_id,vehicle_type,starts_at,ends_at,customer_name,customer_phone,location_lat,location_lng,location_label,status,source,
-    customer_id,quoted_price_aed,quoted_price_amount,currency_code,assigned_worker_id,appointment_id,conversation_id,idempotency_key
+    customer_id,quoted_price_aed,currency_code,assigned_worker_id,appointment_id,conversation_id,idempotency_key
   ) values(
     p_business_id,v_conversation.branch_id,v_offer.id,case when v_vehicle='suv' then 'station' else 'saloon' end,v_start,v_end,
     coalesce((select c.display_name from public.dabbir_customers c where c.id=v_conversation.customer_id and c.business_id=p_business_id),'WhatsApp Customer'),
     coalesce((select c.phone_e164 from public.dabbir_customers c where c.id=v_conversation.customer_id and c.business_id=p_business_id),'0000000'),
-    null,null,v_location,'confirmed','whatsapp',v_conversation.customer_id,v_job.booking_value,v_job.booking_value,v_job.currency_code,v_worker,v_appt.id,p_conversation_id,v_job.idempotency_key
+    null,null,v_location,'confirmed','whatsapp',v_conversation.customer_id,v_job.booking_value,v_job.currency_code,v_worker,v_appt.id,p_conversation_id,v_job.idempotency_key
   ) returning * into v_booking;
   update public.dabbir_car_wash_jobs set booking_request_id=v_booking.id,appointment_id=v_appt.id,assigned_worker_id=v_booking.assigned_worker_id,reminder_due_at=v_start-interval '2 hours',reminder_state='pending',updated_at=now() where id=v_job.id and business_id=p_business_id;
   v_result:=public.dabbir_car_wash_transition_job(p_business_id,v_job.id,'confirmed','rule',v_key||':confirmed','BOOK',null,jsonb_build_object('slot',p_slot),jsonb_build_object('booking_request_id',v_booking.id,'appointment_id',v_appt.id),'{}',jsonb_build_object('booking_persisted',true,'capacity_verified',true),false);
@@ -771,9 +780,9 @@ begin
     limit greatest(1,least(coalesce(p_limit,20),50))
   loop
     v_lock:=gen_random_uuid();
-    update public.dabbir_car_wash_jobs set reminder_state='leased',reminder_lock_token=v_lock,reminder_locked_until=now()+interval '90 seconds',
-      reminder_attempt_count=reminder_attempt_count+1,last_failure_reason=null,updated_at=now()
-    where id=v.id and business_id=v.business_id;
+    update public.dabbir_car_wash_jobs j set reminder_state='leased',reminder_lock_token=v_lock,reminder_locked_until=now()+interval '90 seconds',
+      reminder_attempt_count=j.reminder_attempt_count+1,last_failure_reason=null,updated_at=now()
+    where j.id=v.id and j.business_id=v.business_id;
     job_id:=v.id;business_id:=v.business_id;conversation_id:=v.conversation_id;lock_token:=v_lock;
     attempt_count:=v.reminder_attempt_count+1;starts_at:=v.starts_at;timezone:=v.timezone;business_name:=v.business_name;template_language:=v.template_language;
     offer_name_ar:=v.offer_name_ar;offer_name_en:=v.offer_name_en;worker_name:=v.worker_name;
@@ -907,3 +916,10 @@ on conflict (business_id,action_key) do nothing;
 comment on table public.dabbir_car_wash_jobs is 'One mobile-car-wash inquiry lifecycle. It links to existing conversations, booking requests and appointments; it is not a parallel booking calendar.';
 comment on table public.dabbir_car_wash_outcome_ledger is 'Signal-to-outcome evidence. Estimated, verified, recovered and lost values are separate and recovered requires verified payment attribution.';
 comment on function public.dabbir_car_wash_transition_job(uuid,uuid,text,text,text,text,text,jsonb,jsonb,jsonb,jsonb,boolean) is 'The only job state mutation surface. Enforces legal transitions, tenant permission, mode, kill switch, confidence, idempotency, audit and outcome attribution.';
+
+-- A legacy migration helper may still exist after restoring older database snapshots.
+-- It contains migration metadata only and must never be exposed through PostgREST.
+alter table if exists public.migration_auth_fk_specs enable row level security;
+alter table if exists public.migration_auth_fk_specs force row level security;
+revoke all on table public.migration_auth_fk_specs from public,anon,authenticated;
+revoke all on function public.migration_apply_auth_fks_v1() from public,anon,authenticated;
