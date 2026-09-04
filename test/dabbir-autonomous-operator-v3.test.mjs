@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { MAX_STEPS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, isTodayAppointmentCountGoal, runDeterministicReadGoal, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
-import { deterministicPlan, validate } from '../api/ai-business-operator.js';
+import { deterministicPlan, deterministicWritePlan, parseInventoryCommand, validate } from '../api/ai-business-operator.js';
 
 const core=fs.readFileSync(new URL('../api/_dabbir-autonomous-agent.js',import.meta.url),'utf8');
 const endpoint=fs.readFileSync(new URL('../api/ai-business-operator.js',import.meta.url),'utf8');
@@ -126,6 +126,52 @@ test('Arabic car-wash package command builds an exact approval plan without AI',
   assert.match(endpoint,/cost_mode:'NO_MODEL_REQUIRED',deterministic:true/);
 });
 
+test('Arabic product commands build exact approval plans without AI',()=>{
+  const cases=[
+    ['ضف zaje1001 قيمتها 170 درهم الكميه 50',{sku:'zaje1001',name:'zaje1001',price_aed:170,quantity:50}],
+    ['أضف منتج شامبو كود SHAMP-1 بسعر 25 درهم الكمية 10',{sku:'SHAMP-1',name:'شامبو',price_aed:25,quantity:10}],
+    ['add product Towel SKU TWL-2 priced at 15 AED qty 40',{sku:'TWL-2',name:'Towel',price_aed:15,quantity:40}]
+  ];
+  for(const [command,expected] of cases){
+    const plan=deterministicPlan(command);
+    assert.equal(plan.tool,'create_product');
+    assert.deepEqual(plan.args,expected);
+    assert.deepEqual(validate(plan),{action:'create_product',...expected});
+  }
+});
+
+test('routine inventory commands parse without the AI provider',()=>{
+  const cases=[
+    ['اجعل كمية zaje1001 إلى 60',{tool:'set_inventory',product_ref:'zaje1001',quantity:60}],
+    ['حدث مخزون zaje1001 الى 45',{tool:'set_inventory',product_ref:'zaje1001',quantity:45}],
+    ['set inventory zaje1001 to 30',{tool:'set_inventory',product_ref:'zaje1001',quantity:30}],
+    ['استلم 20 من zaje1001',{tool:'receive_stock',product_ref:'zaje1001',quantity:20}],
+    ['أضف 10 إلى المخزون zaje1001',{tool:'receive_stock',product_ref:'zaje1001',quantity:10}],
+    ['receive 5 product zaje1001',{tool:'receive_stock',product_ref:'zaje1001',quantity:5}]
+  ];
+  for(const [command,expected] of cases){const parsed=parseInventoryCommand(command);assert.deepEqual({tool:parsed.tool,product_ref:parsed.product_ref,quantity:parsed.quantity},expected)}
+});
+
+test('inventory product references resolve inside the selected tenant and remain approval-only',async t=>{
+  const originalFetch=globalThis.fetch,calls=[];t.after(()=>{globalThis.fetch=originalFetch});
+  globalThis.fetch=async url=>{calls.push(String(url));return new Response(JSON.stringify([{id:'00000000-0000-4000-8000-000000000009',sku:'ZAJE1001',name:'Zaje product',active:true}]),{status:200})};
+  const result=await deterministicWritePlan({token:'owner-token',businessId:'11111111-1111-4111-8111-111111111111',message:'استلم 20 من zaje1001',language:'ar'});
+  assert.equal(result.raw.action,'receive_stock');assert.equal(result.raw.product_id,'00000000-0000-4000-8000-000000000009');assert.equal(result.raw.quantity,20);
+  assert.equal(result.approval[0].risk,'MEDIUM');assert.equal(calls.length,1);assert.match(calls[0],/business_id=eq\.11111111-1111-4111-8111-111111111111/);
+});
+
+test('inventory references fail closed instead of falling through to AI',async t=>{
+  const originalFetch=globalThis.fetch;t.after(()=>{globalThis.fetch=originalFetch});
+  globalThis.fetch=async()=>new Response('[]',{status:200});
+  await assert.rejects(()=>deterministicWritePlan({token:'owner-token',businessId:'11111111-1111-4111-8111-111111111111',message:'اجعل كمية missing إلى 3'}),/PRODUCT_NOT_FOUND/);
+  assert.match(endpoint,/DETERMINISTIC_WRITE_FAILED/);
+});
+
+test('product command stays fail-closed when price or quantity is missing',()=>{
+  assert.equal(deterministicPlan('ضف zaje1001 الكمية 50'),null);
+  assert.equal(deterministicPlan('ضف zaje1001 قيمتها 170 درهم'),null);
+});
+
 test('high-risk capabilities are absent from the allowlist',()=>{
   assert.deepEqual(WRITE_TOOLS,['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment']);
   for(const forbidden of ['delete','payment','transfer','mass_message','permission_change'])assert.ok(!WRITE_TOOLS.includes(forbidden));
@@ -139,5 +185,6 @@ test('paid operator model is protected by the 300 AED monthly hard cap',()=>{
   assert.match(core,/finalizeAiBudget/);
   assert.match(core,/HARD_MONTHLY_AI_BUDGET_AED/);
   assert.match(core,/PAID_MODEL_MONTHLY_HARD_CAP/);
+  assert.match(core,/models:\['openai\/gpt-5\.4-nano'\]/);
   assert.doesNotMatch(core,/minimax\/minimax-m3-free|FREE_TIER_ONLY/);
 });

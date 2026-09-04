@@ -33,7 +33,7 @@ function toolCatalog(){return [
 function parseJsonObject(text){const raw=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{const value=JSON.parse(raw);return value&&typeof value==='object'&&!Array.isArray(value)?value:null}catch{return null}}
 export function deterministicPlan(message){
   const text=String(message||'').replace(/ـ/g,'').trim();
-  const addPrefix=/^(?:أضف|اضف|أضيف|اضيف|أضفي|اضفي|أضيفي|اضيفي|ضيف|ضيفي|أنشئ|انشئ|create|add)\s+/i;
+  const addPrefix=/^(?:أضف|اضف|ضف|أضيف|اضيف|أضفي|اضفي|أضيفي|اضيفي|ضيف|ضيفي|أنشئ|انشئ|create|add)\s+/i;
   if(addPrefix.test(text)&&/(?:اشتراك|باقة|باقه|غسلات|washes|subscription|package)/i.test(text)){
     const priceMatch=text.match(/([0-9]+(?:\.[0-9]+)?)(?=[^0-9]{0,30}(?:درهم|aed))/iu),washesMatch=text.match(/([0-9]+)\s*(?:غسلات|غسلة|غسله|washes?)/iu),code=text.match(/\b([a-z][a-z0-9_-]{1,30})\b/i)?.[1]?.toUpperCase()||'VVIP',washes=Math.trunc(num(washesMatch?.[1])??0),descriptionAr=clean(text.replace(addPrefix,'').replace(/^(?:خدمة|خدمه|عرض)\s+/i,''),500);
     return {tool:'create_car_wash_offer',args:{name_ar:`اشتراك باقة ${code}`,name_en:`${code} subscription package`,description_ar:descriptionAr,description_en:washes>0?`${washes} washes plus one free`:'Subscription package',price_aed:num(priceMatch?.[1]),duration_minutes:60},summary:'Create car-wash subscription offer'};
@@ -45,12 +45,34 @@ export function deterministicPlan(message){
     const name=after.replace(/(?:بسعر|ب)?\s*[:=]?\s*[0-9]+(?:\.[0-9]+)?\s*(?:درهم|aed)/ig,'').replace(/(?:لمدة|مدة)?\s*[:=]?\s*[0-9]+\s*(?:دقيقة|دقائق|minutes?|mins?)/ig,'').replace(/[،,]+$/,'').trim();
     return {tool:'create_service',args:{name:clean(name,160),price_aed:num(priceMatch?.[1])??0,duration_minutes:Math.trunc(num(durationMatch?.[1])??30)},summary:'Create service'};
   }
+  if(addPrefix.test(text)){
+    const after=text.replace(addPrefix,'').replace(/^(?:منتج|product)\s+/i,'');
+    const pricePattern=/(?:بسعر|سعره|سعرها|قيمته|قيمتها|price(?:d)?(?:\s+at)?|cost(?:s)?(?:\s+at)?)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:درهم|aed)/iu;
+    const quantityPattern=/(?:الكمية|الكميه|كمية|كميه|المخزون|quantity|qty|stock)\s*[:=]?\s*([0-9]+)/iu;
+    const priceMatch=after.match(pricePattern),quantityMatch=after.match(quantityPattern);
+    if(priceMatch&&quantityMatch){
+      const explicitSku=after.match(/(?:sku|كود|رمز)\s*[:=]?\s*([\p{L}\p{N}_-]{1,80})/iu)?.[1]||'';
+      const name=clean(after.replace(pricePattern,'').replace(quantityPattern,'').replace(/(?:sku|كود|رمز)\s*[:=]?\s*[\p{L}\p{N}_-]{1,80}/iu,'').replace(/[،,;:=-]+$/u,'').trim(),160)||clean(explicitSku,160);
+      const sku=clean(explicitSku||name.replace(/\s+/g,'-'),80);
+      return {tool:'create_product',args:{sku,name,price_aed:num(priceMatch[1]),quantity:Math.trunc(num(quantityMatch[1])??-1)},summary:'Create product with opening inventory'};
+    }
+  }
   const customer=text.match(/(?:العميل|عميل|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|عايز|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
   if(customer&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)&&/(?:اليوم|today)/iu.test(text)&&/(?:العصر|afternoon|بعد الظهر)/iu.test(text)){
     return {tool:'book_available_appointment',args:{customer_name:clean(customer[1],120),day:'today',period:'afternoon',duration_minutes:30},summary:'Find and book first free afternoon slot'};
   }
   const expense=text.match(/(?:سجل|أضف|اضف|record|add).*?(?:مصروف|expense).*?([0-9]+(?:\.[0-9]+)?)/i);
   if(expense)return {tool:'create_expense',args:{amount_aed:num(expense[1]),category:'other',note:clean(text,240)},summary:'Record expense'};
+  return null;
+}
+export function parseInventoryCommand(message){
+  const text=String(message||'').replace(/ـ/g,'').trim();
+  const receive=text.match(/^(?:استلم|استقبل|ورد|ورّد|receive|received|restock)\s+(?:كمية\s+)?([0-9]+)\s+(?:من\s+)?(?:المنتج\s+|product\s+)?([\p{L}\p{N}_-]{1,160})$/iu)
+    ||text.match(/^(?:أضف|اضف|ضيف|add)\s+([0-9]+)\s+(?:إلى|الى|لـ?|to)\s+(?:مخزون|المخزون|stock(?:\s+of)?)\s+(?:المنتج\s+|product\s+)?([\p{L}\p{N}_-]{1,160})$/iu);
+  if(receive)return {tool:'receive_stock',product_ref:clean(receive[2],160),quantity:Math.trunc(num(receive[1])??-1),summary:'Receive stock for an existing product'};
+  const set=text.match(/^(?:اجعل|إجعل|خلي|خلّي|حدث|حدّث|عدل|عدّل|set|update)\s+(?:كمية|كميه|مخزون|المخزون|inventory|stock)\s+(?:المنتج\s+|product\s+)?([\p{L}\p{N}_-]{1,160})\s+(?:إلى|الى|تساوي|=|to|at)\s*([0-9]+)$/iu)
+    ||text.match(/^(?:اجعل|إجعل|خلي|خلّي|set)\s+(?:المنتج\s+|product\s+)?([\p{L}\p{N}_-]{1,160})\s+(?:كمية|كميه|مخزون|inventory|stock)?\s*(?:إلى|الى|تساوي|=|to|at)\s*([0-9]+)$/iu);
+  if(set)return {tool:'set_inventory',product_ref:clean(set[1],160),quantity:Math.trunc(num(set[2])??-1),summary:'Set inventory for an existing product'};
   return null;
 }
 async function aiPlan(message,language){
@@ -109,7 +131,26 @@ async function executeApproved(ctx,businessId,approvalToken){
   transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:true,version:OPERATOR_VERSION,goal:approved.goal,receipts,transitions};
 }
 
-function fallbackPlan(message,language){const plan=deterministicPlan(message),payload=validate(plan);if(!payload)return null;const raw={...payload,step:1,reason:clean(plan.summary,160),idempotency_key:`dao:${Buffer.from(`${message}:${payload.action}`).toString('base64url').slice(0,40)}`};return {raw,approval:describeApproval([raw],language)}}
+export async function deterministicWritePlan({token,businessId,message,language='ar'}){
+  let plan=deterministicPlan(message),payload=validate(plan);
+  if(!payload){
+    const inventory=parseInventoryCommand(message);
+    if(!inventory)return null;
+    if(inventory.quantity<0)throw Object.assign(new Error('INVENTORY_QUANTITY_INVALID'),{status:400});
+    const products=await rest(token,`dabbir_products?select=id,sku,name,active&business_id=eq.${businessId}&limit=100`,{},'PRODUCT_LOOKUP_FAILED');
+    const ref=inventory.product_ref.toLocaleLowerCase('en-US');
+    const skuMatches=(products||[]).filter(x=>String(x.sku||'').trim().toLocaleLowerCase('en-US')===ref);
+    const nameMatches=(products||[]).filter(x=>String(x.name||'').trim().toLocaleLowerCase('en-US')===ref);
+    const matches=skuMatches.length?skuMatches:nameMatches;
+    if(matches.length===0)throw Object.assign(new Error('PRODUCT_NOT_FOUND'),{status:404});
+    if(matches.length!==1)throw Object.assign(new Error('PRODUCT_REFERENCE_AMBIGUOUS'),{status:409});
+    plan={tool:inventory.tool,args:{product_id:matches[0].id,quantity:inventory.quantity,note:clean(message,240)},summary:inventory.summary};
+    payload=validate(plan);
+    if(!payload)throw Object.assign(new Error('INVENTORY_PLAN_INVALID'),{status:400});
+  }
+  const raw={...payload,step:1,reason:clean(plan.summary,160),idempotency_key:`dao:${Buffer.from(`${message}:${payload.action}`).toString('base64url').slice(0,40)}`};
+  return {raw,approval:describeApproval([raw],language)};
+}
 function deterministicApproval(ctx,businessId,message,language,fallback){const issued=Date.now(),payload={v:1,business_id:businessId,user_id:ctx.user.id,issued_at:issued,expires_at:issued+600000,goal:message,language,plan:[fallback.raw]},raw=Buffer.from(JSON.stringify(payload)).toString('base64url'),signature=createHmac('sha256',`dabbir-owner-approval:${ctx.token}`).update(raw).digest('base64url');return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',deterministic:true,goal:message,plan:[fallback.raw],approval:fallback.approval,approval_token:`${raw}.${signature}`,summary:language==='ar'?'تم إعداد خطة محكومة من بيانات الأمر، وتحتاج موافقتك قبل التنفيذ.':'A controlled plan was prepared from the command and requires your approval before execution.'}}
 
 export default async function handler(req,res){
@@ -120,7 +161,7 @@ export default async function handler(req,res){
   if(action==='approve'){try{return json(res,200,await executeApproved(ctx,businessId,clean(body?.approval_token,16000)))}catch(error){const status=[400,403,409].includes(Number(error?.status))?Number(error.status):500;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'APPROVAL_EXECUTION_FAILED',140)})}}
   if(action!=='plan')return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});const message=clean(body?.message,800);if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
   try{const direct=await runDeterministicReadGoal({token:ctx.token,businessId,goal:message,language});if(direct)return json(res,200,direct)}catch(error){return json(res,502,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'VERIFIED_READ_FAILED',140)})}
-  const directWrite=fallbackPlan(message,language);if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite));
+  try{const directWrite=await deterministicWritePlan({token:ctx.token,businessId,message,language});if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite))}catch(error){const status=[400,404,409].includes(Number(error?.status))?Number(error.status):502;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'DETERMINISTIC_WRITE_FAILED',140)})}
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
     const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
