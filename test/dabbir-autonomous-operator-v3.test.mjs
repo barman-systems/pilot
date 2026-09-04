@@ -140,6 +140,16 @@ test('Arabic product commands build exact approval plans without AI',()=>{
   }
 });
 
+test('exact Arabic and English timed bookings build approval plans without AI',()=>{
+  const cases=[
+    ['Wqqe يبا يغسل الساعه 9م',{customer_name:'Wqqe',day:'today',period:'exact',exact_time:'21:00',duration_minutes:30}],
+    ['سالم يريد حجز الساعة 9:30 ص',{customer_name:'سالم',day:'today',period:'exact',exact_time:'09:30',duration_minutes:30}],
+    ['John wants a wash at 7 pm',{customer_name:'John',day:'today',period:'exact',exact_time:'19:00',duration_minutes:30}]
+  ];
+  for(const [command,args] of cases){const plan=deterministicPlan(command);assert.equal(plan.tool,'book_available_appointment');assert.deepEqual(plan.args,args);assert.deepEqual(validate(plan),{action:'book_available_appointment',...args})}
+  assert.match(endpoint,/REQUESTED_TIME_UNAVAILABLE/);assert.match(endpoint,/EXACT_REQUESTED_SLOT/);assert.match(endpoint,/ends_at:slotEnd/);
+});
+
 test('routine inventory commands parse without the AI provider',()=>{
   const cases=[
     ['اجعل كمية zaje1001 إلى 60',{tool:'set_inventory',product_ref:'zaje1001',quantity:60}],
