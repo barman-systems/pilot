@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.112.2";
 const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false}});
 const legacyCors={"access-control-allow-origin":"https://bm-uae-store.vercel.app","access-control-allow-headers":"content-type","access-control-allow-methods":"POST,OPTIONS","content-type":"application/json","cache-control":"no-store"};
-const DABBIR_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT';
+const DABBIR_PRICE_ID='price_1UC4GNPxQ9s8ILDGU8LTapgz';
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let cachedVaultSecrets:{secretKey:string,webhookSecret:string}|null=null;
 function json(body:any,status=200){return new Response(JSON.stringify(body),{status,headers:legacyCors});}
@@ -19,9 +19,8 @@ async function dabbirBilling(body:any){
  try{
   if(action==='dabbir_checkout'){
    const userId=String(body?.user_id||'');if(!validUuid(userId))return json({ok:false,error:'USER_ID_REQUIRED',livemode:false},400);
-   const p=new URLSearchParams();p.set('mode','subscription');p.set('client_reference_id',businessId);p.set('line_items[0][price]',DABBIR_PRICE_ID);p.set('line_items[0][quantity]','1');p.set('subscription_data[metadata][app]','dabbir');p.set('subscription_data[metadata][business_id]',businessId);p.set('subscription_data[metadata][plan]','owner');p.set('metadata[app]','dabbir');p.set('metadata[business_id]',businessId);p.set('metadata[plan]','owner');p.set('metadata[environment]','sandbox');p.set('payment_method_collection','always');p.set('allow_promotion_codes','false');p.set('billing_address_collection','auto');p.set('locale','auto');p.set('success_url',`${origin}/?billing=success&session_id={CHECKOUT_SESSION_ID}`);p.set('cancel_url',`${origin}/?billing=cancelled`);
+   const p=new URLSearchParams();p.set('mode','subscription');p.set('client_reference_id',businessId);p.set('line_items[0][price]',DABBIR_PRICE_ID);p.set('line_items[0][quantity]','1');p.set('subscription_data[metadata][app]','dabbir');p.set('subscription_data[metadata][business_id]',businessId);p.set('subscription_data[metadata][plan]','owner');p.set('subscription_data[metadata][offer]','299_aed_monthly');p.set('metadata[app]','dabbir');p.set('metadata[business_id]',businessId);p.set('metadata[plan]','owner');p.set('metadata[environment]','sandbox');p.set('metadata[trial_model]','dabbir_app_14d_no_card');p.set('payment_method_collection','always');p.set('allow_promotion_codes','false');p.set('billing_address_collection','auto');p.set('locale','auto');p.set('success_url',`${origin}/?billing=success&session_id={CHECKOUT_SESSION_ID}`);p.set('cancel_url',`${origin}/?billing=cancelled`);
    const customer=String(body?.stripe_customer_id||'');const email=String(body?.customer_email||'').trim();if(customer){if(!/^cus_[A-Za-z0-9]+$/.test(customer))return json({ok:false,error:'INVALID_STRIPE_CUSTOMER',livemode:false},400);p.set('customer',customer)}else if(email&&email.length<=254)p.set('customer_email',email);
-   if(body?.trial_available===true)p.set('subscription_data[trial_period_days]','7');
    const bucket=Math.floor(Date.now()/600000);const digest=await sha256(`${businessId}:${userId}:${bucket}`);const data=await stripePost('/checkout/sessions',p,`dabbir_checkout_${digest.slice(0,32)}`);if(!data?.url)throw new Error('CHECKOUT_URL_MISSING');return json({ok:true,url:data.url,session_id:data.id,livemode:false});
   }
   if(action==='dabbir_portal'){
