@@ -32,6 +32,8 @@ on:
       - 'scripts/dabbir-production-origin-gate.mjs'
       - 'config/barman-integration-contract.json'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
+      - '.github/scripts/dabbir-bar12-*'
+      - 'test/dabbir-bar12-*'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
       - 'supabase/functions/dabbir-qa-suite-runner/**'

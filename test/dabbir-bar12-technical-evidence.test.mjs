@@ -76,6 +76,7 @@ test('security PASS rejects an advisor ERROR while accepting a clean INFO-only r
 
 test('BAR-12 workflow imports technical evidence before evaluation and keeps external WhatsApp/financial/legal fail closed',()=>{
   const workflow=fs.readFileSync(new URL('../.github/workflows/dabbir-bar12-readiness.yml',import.meta.url),'utf8');
+  const journeyWorkflow=fs.readFileSync(new URL('../.github/workflows/dabbir-ai-customer-journey.yml',import.meta.url),'utf8');
   const mergeAt=workflow.indexOf('Merge verified technical readiness evidence');
   const evaluateAt=workflow.indexOf('Evaluate BAR-12 readiness');
   assert.ok(mergeAt>0&&evaluateAt>mergeAt);
@@ -84,4 +85,6 @@ test('BAR-12 workflow imports technical evidence before evaluation and keeps ext
   assert.match(workflow,/real_external_connection:false/);
   assert.match(workflow,/financial:null/);
   assert.match(workflow,/legal:null/);
+  assert.match(journeyWorkflow,/- '\.github\/scripts\/dabbir-bar12-\*'/);
+  assert.match(journeyWorkflow,/- 'test\/dabbir-bar12-\*'/);
 });
