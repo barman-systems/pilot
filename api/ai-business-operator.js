@@ -123,6 +123,15 @@ export default async function handler(req,res){
   const directWrite=fallbackPlan(message,language);if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite));
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
-    return json(res,budgetCode==='AI_MONTHLY_BUDGET_REACHED'?429:503,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE'),monthly_ai_hard_limit_aed:budgetCode?300:undefined});
+    const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
+    console.error('dabbir_ai_business_operator_plan_failed',{
+      version:OPERATOR_VERSION,
+      error:publicError,
+      budget_code:budgetCode||null,
+      failure_class:publicError==='AGENT_TIMEOUT'?'TIMEOUT':'AI',
+      external_side_effects:false,
+      money_movement:false
+    });
+    return json(res,budgetCode==='AI_MONTHLY_BUDGET_REACHED'?429:503,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:publicError,monthly_ai_hard_limit_aed:budgetCode?300:undefined});
   }
 }

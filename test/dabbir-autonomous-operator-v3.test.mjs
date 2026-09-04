@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { MAX_STEPS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
+import { MAX_STEPS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, isTodayAppointmentCountGoal, runDeterministicReadGoal, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
 import { deterministicPlan, validate } from '../api/ai-business-operator.js';
 
 const core=fs.readFileSync(new URL('../api/_dabbir-autonomous-agent.js',import.meta.url),'utf8');
@@ -78,11 +78,41 @@ test('staff activity is verified without pretending appointment activity is atte
 });
 
 test('common owner KPI questions do not depend on the AI provider',()=>{
+  assert.equal(isTodayAppointmentCountGoal('كم حجز اليوم عندنا'),true);
+  assert.equal(isTodayAppointmentCountGoal('How many bookings do we have today?'),true);
+  assert.equal(isTodayAppointmentCountGoal('أنشئ خدمة جديدة'),false);
+  assert.match(core,/inspect_today_appointments/);
   assert.match(core,/runDeterministicReadGoal/);
   assert.match(core,/NO_MODEL_REQUIRED/);
   assert.match(core,/unique_completed_customers/);
   assert.match(core,/simulated_excluded:true/);
   assert.match(endpoint,/await runDeterministicReadGoal/);
+});
+
+test('today booking count is read from tenant data without AI or simulated rows',async t=>{
+  const originalFetch=globalThis.fetch,calls=[];
+  t.after(()=>{globalThis.fetch=originalFetch});
+  const now=new Date(),yesterday=new Date(now.getTime()-24*60*60*1000);
+  globalThis.fetch=async url=>{
+    calls.push(String(url));
+    if(String(url).includes('dabbir_businesses?'))return new Response(JSON.stringify([{id:'11111111-1111-4111-8111-111111111111',timezone:'Asia/Dubai'}]),{status:200});
+    if(String(url).includes('dabbir_appointments?'))return new Response(JSON.stringify([
+      {id:'1',starts_at:now.toISOString(),status:'confirmed',simulated:false},
+      {id:'2',starts_at:now.toISOString(),status:'completed',simulated:false},
+      {id:'3',starts_at:now.toISOString(),status:'cancelled',simulated:false},
+      {id:'4',starts_at:now.toISOString(),status:'confirmed',simulated:true},
+      {id:'5',starts_at:yesterday.toISOString(),status:'confirmed',simulated:false}
+    ]),{status:200});
+    throw new Error(`unexpected read: ${url}`);
+  };
+  const result=await runDeterministicReadGoal({token:'owner-token',businessId:'11111111-1111-4111-8111-111111111111',goal:'كم حجز اليوم عندنا',language:'ar'});
+  assert.equal(result.cost_mode,'NO_MODEL_REQUIRED');
+  assert.equal(result.executed,false);
+  assert.equal(result.evidence.total_appointments,3);
+  assert.equal(result.evidence.active_appointments,2);
+  assert.deepEqual(result.evidence.status_counts,{confirmed:1,completed:1,cancelled:1});
+  assert.equal(result.evidence.simulated_excluded,true);
+  assert.equal(calls.length,2);
 });
 
 test('Arabic car-wash package command builds an exact approval plan without AI',()=>{
