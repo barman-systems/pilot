@@ -57,7 +57,12 @@ export function deterministicPlan(message){
       return {tool:'create_product',args:{sku,name,price_aed:num(priceMatch[1]),quantity:Math.trunc(num(quantityMatch[1])??-1)},summary:'Create product with opening inventory'};
     }
   }
-  const customer=text.match(/(?:العميل|عميل|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|عايز|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
+  const timedBooking=text.match(/^(?:العميل(?:ة)?\s+|عميل(?:ة)?\s+|customer\s+)?([\p{L}\p{N}_-]{2,80})\s+(?:يبا|يبغى|يريد|تريد|تبي|تبغى|تحتاج|عايز|عايزة|wants|needs|ابي|أبي|يبى)\s+.*?(?:الساعة|الساعه|at)\s*([0-9]{1,2})(?::([0-9]{2}))?\s*(ص|م|صباحا|صباحاً|مساء|مساءً|am|pm)\s*$/iu);
+  if(timedBooking&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)){
+    const marker=timedBooking[4].toLowerCase(),rawHour=Math.trunc(num(timedBooking[2])??-1),minute=Math.trunc(num(timedBooking[3])??0),day=/(?:غد(?:ا|اً|ى)|بكره|بكرة|tomorrow)/iu.test(text)?'tomorrow':'today';
+    if(rawHour>=1&&rawHour<=12&&minute>=0&&minute<=59){const pm=marker==='م'||marker==='pm'||marker.startsWith('مساء'),hour=pm?(rawHour%12)+12:rawHour%12;return {tool:'book_available_appointment',args:{customer_name:clean(timedBooking[1],120),day,period:'exact',exact_time:`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`,duration_minutes:30},summary:'Book the requested exact time if available'}}
+  }
+  const customer=text.match(/(?:العميل(?:ة)?|عميل(?:ة)?|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|تريد|تبي|تبغى|تحتاج|عايز|عايزة|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
   if(customer&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)&&/(?:اليوم|today)/iu.test(text)&&/(?:العصر|afternoon|بعد الظهر)/iu.test(text)){
     return {tool:'book_available_appointment',args:{customer_name:clean(customer[1],120),day:'today',period:'afternoon',duration_minutes:30},summary:'Find and book first free afternoon slot'};
   }
@@ -76,7 +81,7 @@ export function parseInventoryCommand(message){
   return null;
 }
 async function aiPlan(message,language){
-  const prompt=['Map the owner command to exactly one DABBIR tool.','Return JSON only: {"tool":"tool_name","args":{},"summary":"short"}.','For free-time booking requests, use book_available_appointment with customer_name, day and period.','Never invent database IDs. Allowed tools: '+JSON.stringify(toolCatalog()),'Owner command: '+message].join('\n');
+  const prompt=['Map the owner command to exactly one DABBIR tool.','Return JSON only: {"tool":"tool_name","args":{},"summary":"short"}.','For booking requests, use day today or tomorrow only and period afternoon or exact.','Never invent database IDs. Allowed tools: '+JSON.stringify(toolCatalog()),'Owner command: '+message].join('\n');
   try{const task=generateDABBIRAiReply({project:'dabbir_businesses',message:prompt,language,businessContext:'Tool selection only. Server validates and executes.'});const timeout=new Promise(resolve=>setTimeout(()=>resolve(null),3500));const out=await Promise.race([task,timeout]);return out?.ok?parseJsonObject(out.reply):null}catch{return null}
 }
 export function validate(plan){
@@ -86,32 +91,36 @@ export function validate(plan){
   if(plan.tool==='create_product'){const sku=clean(a.sku,80),name=clean(a.name,160),price=num(a.price_aed),quantity=Math.trunc(num(a.quantity)??-1);if(!sku||!name||price==null||price<0||quantity<0)return null;return {action:'create_product',sku,name,price_aed:price,quantity}}
   if(plan.tool==='set_inventory'||plan.tool==='receive_stock'){const product_id=safeId(a.product_id),quantity=Math.trunc(num(a.quantity)??-1);if(!product_id||quantity<0)return null;return {action:plan.tool,product_id,quantity,note:clean(a.note,240)}}
   if(plan.tool==='create_expense'){const amount=num(a.amount_aed),category=clean(a.category||'other',24).toLowerCase();if(amount==null||amount<=0)return null;return {action:'create_expense',amount_aed:amount,category:['rent','utilities','supplies','salaries','marketing','transport','other'].includes(category)?category:'other',note:clean(a.note,240),occurred_on:clean(a.occurred_on,10)}}
-  if(plan.tool==='book_available_appointment'){const customer_name=clean(a.customer_name,120),day=clean(a.day||'today',20).toLowerCase(),period=clean(a.period||'afternoon',20).toLowerCase(),duration=Math.trunc(num(a.duration_minutes)??30);if(!customer_name||!['today'].includes(day)||!['afternoon'].includes(period)||duration<15||duration>180)return null;return {action:'book_available_appointment',customer_name,day,period,duration_minutes:duration}}
+  if(plan.tool==='book_available_appointment'){const customer_name=clean(a.customer_name,120),day=clean(a.day||'today',20).toLowerCase(),period=clean(a.period||'afternoon',20).toLowerCase(),exact_time=clean(a.exact_time,5),duration=Math.trunc(num(a.duration_minutes)??30);if(!customer_name||!['today','tomorrow'].includes(day)||!['afternoon','exact'].includes(period)||duration<15||duration>180||period==='exact'&&!/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(exact_time))return null;return {action:'book_available_appointment',customer_name,day,period,...(period==='exact'?{exact_time}:{}),duration_minutes:duration}}
   return null;
 }
 function todayDubai(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch{return new Date().toISOString().slice(0,10)}}
+function nextDubaiDay(dateKey){const [y,m,d]=dateKey.split('-').map(Number),n=new Date(Date.UTC(y,m-1,d)+86400000);return `${n.getUTCFullYear()}-${String(n.getUTCMonth()+1).padStart(2,'0')}-${String(n.getUTCDate()).padStart(2,'0')}`}
 function dubaiIso(dateKey,hour,minute=0){return new Date(`${dateKey}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00+04:00`).toISOString()}
-async function bookFirstFreeAfternoon(token,businessId,payload){
+async function bookAvailableAppointment(token,businessId,payload){
   const idempotencyKey=clean(payload.idempotency_key,120);
   if(idempotencyKey){const replay=await rest(token,`dabbir_appointments?select=id,customer_id,service_id,starts_at,status,idempotency_key,created_at&business_id=eq.${businessId}&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`,{},'APPOINTMENT_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}
-  const date=todayDubai();
+  const today=todayDubai(),date=payload.day==='tomorrow'?nextDubaiDay(today):today;
   const now=Date.now();
-  const start=dubaiIso(date,15,0),end=dubaiIso(date,18,0);
-  if(now>=new Date(end).getTime())throw Object.assign(new Error('AFTERNOON_WINDOW_PASSED'),{status:409});
-  const existing=await rest(token,`dabbir_appointments?select=id,customer_id,starts_at,status,simulated&business_id=eq.${businessId}&starts_at=gte.${encodeURIComponent(start)}&starts_at=lt.${encodeURIComponent(end)}&status=neq.cancelled&order=starts_at.asc&limit=100`,{},'APPOINTMENTS_LOOKUP_FAILED');
-  const occupied=new Set((existing||[]).filter(x=>x.simulated===false).map(x=>new Date(x.starts_at).getTime()));
+  const exact=payload.period==='exact';
+  const [requestedHour,requestedMinute]=exact?payload.exact_time.split(':').map(Number):[null,null];
+  const start=exact?dubaiIso(date,requestedHour,requestedMinute):dubaiIso(date,15,0),end=exact?new Date(new Date(start).getTime()+payload.duration_minutes*60000).toISOString():dubaiIso(date,18,0);
+  if(now>=new Date(end).getTime()||exact&&new Date(start).getTime()<=now+10*60000)throw Object.assign(new Error(exact?'TIME_SLOT_PASSED':'AFTERNOON_WINDOW_PASSED'),{status:409});
+  const existing=await rest(token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}&starts_at=lt.${encodeURIComponent(end)}&ends_at=gt.${encodeURIComponent(start)}&status=neq.cancelled&order=starts_at.asc&limit=100`,{},'APPOINTMENTS_LOOKUP_FAILED');
   const step=Math.max(30,payload.duration_minutes)*60000;
-  let slot=null;
-  for(let t=new Date(start).getTime();t<new Date(end).getTime();t+=step){if(t>now+10*60000&&!occupied.has(t)){slot=new Date(t).toISOString();break}}
+  let slot=exact?start:null;
+  if(exact&&(existing||[]).some(x=>x.simulated===false))throw Object.assign(new Error('REQUESTED_TIME_UNAVAILABLE'),{status:409});
+  if(!exact)for(let t=new Date(start).getTime();t<new Date(end).getTime();t+=step){const candidateEnd=t+payload.duration_minutes*60000,overlap=(existing||[]).some(x=>x.simulated===false&&new Date(x.starts_at).getTime()<candidateEnd&&new Date(x.ends_at||new Date(new Date(x.starts_at).getTime()+3600000)).getTime()>t);if(t>now+10*60000&&!overlap){slot=new Date(t).toISOString();break}}
   if(!slot)throw Object.assign(new Error('NO_FREE_AFTERNOON_SLOT'),{status:409});
   const q=encodeURIComponent(payload.customer_name.replace(/[%*]/g,''));
   const found=await rest(token,`dabbir_customers?select=id,display_name,lead_status&business_id=eq.${businessId}&display_name=ilike.*${q}*&limit=5`,{},'CUSTOMER_LOOKUP_FAILED');
   let customer=(found||[]).find(x=>String(x.display_name||'').trim()===payload.customer_name)||found?.[0]||null;
   if(!customer){const rows=await rest(token,'dabbir_customers?select=id,display_name,lead_status,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,display_name:payload.customer_name,lead_status:'new',metadata:{source:'dabbir_ai_business_operator'}})},'CUSTOMER_CREATE_FAILED');customer=rows?.[0]||null;if(!customer?.id)throw Object.assign(new Error('CUSTOMER_CREATE_UNVERIFIED'),{status:502})}
   const fingerprint=idempotencyKey?await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${businessId}:${customer.id}:${slot}`)).then(x=>Buffer.from(x).toString('hex')):null;
-  const rows=await rest(token,'dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,idempotency_key,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,customer_id:customer.id,service_id:null,starts_at:slot,status:'requested',simulated:false,booking_source:'dabbir_ai_business_operator',...(idempotencyKey?{idempotency_key:idempotencyKey,idempotency_fingerprint:fingerprint}:{})})},'APPOINTMENT_CREATE_FAILED');
+  const slotEnd=new Date(new Date(slot).getTime()+payload.duration_minutes*60000).toISOString();
+  const rows=await rest(token,'dabbir_appointments?select=id,customer_id,service_id,starts_at,ends_at,status,simulated,idempotency_key,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,customer_id:customer.id,service_id:null,starts_at:slot,ends_at:slotEnd,status:'requested',simulated:false,booking_source:'dabbir_ai_business_operator',...(idempotencyKey?{idempotency_key:idempotencyKey,idempotency_fingerprint:fingerprint}:{})})},'APPOINTMENT_CREATE_FAILED');
   const appt=rows?.[0];if(!appt?.id)throw Object.assign(new Error('APPOINTMENT_CREATE_UNVERIFIED'),{status:502});
-  return {...appt,customer_name:customer.display_name,selected_as:'FIRST_FREE_AFTERNOON_SLOT'};
+  return {...appt,customer_name:customer.display_name,selected_as:exact?'EXACT_REQUESTED_SLOT':'FIRST_FREE_AFTERNOON_SLOT'};
 }
 export async function executeTool(token,businessId,payload){
   const key=clean(payload.idempotency_key,120);
@@ -121,7 +130,7 @@ export async function executeTool(token,businessId,payload){
   if(payload.action==='set_inventory')return await rpc(token,'dabbir_owner_set_inventory',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity},'INVENTORY_UPDATE_FAILED');
   if(payload.action==='receive_stock'){if(key){const replay=await rest(token,`dabbir_inventory_movements?select=id,product_id,quantity_delta,quantity_after,reference_note,created_at&business_id=eq.${businessId}&product_id=eq.${payload.product_id}&reference_note=like.*${encodeURIComponent(key)}*&limit=1`,{},'STOCK_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}return await rpc(token,'dabbir_owner_receive_stock',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity,p_note:key?`${payload.note||''} [${key}]`.trim():payload.note||''},'STOCK_RECEIPT_FAILED')}
   if(payload.action==='create_expense'){if(key){const replay=await rest(token,`dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at&business_id=eq.${businessId}&note=like.*${encodeURIComponent(key)}*&limit=1`,{},'EXPENSE_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}const rows=await rest(token,'dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,amount_aed:Number(payload.amount_aed.toFixed(2)),category:payload.category,note:key?`${payload.note||''} [${key}]`.trim():payload.note||'',occurred_on:/^\d{4}-\d{2}-\d{2}$/.test(payload.occurred_on)?payload.occurred_on:todayDubai()})},'EXPENSE_CREATE_FAILED');const result=rows?.[0];if(!result?.id)throw Object.assign(new Error('EXPENSE_CREATE_UNVERIFIED'),{status:502});return result}
-  if(payload.action==='book_available_appointment')return await bookFirstFreeAfternoon(token,businessId,payload);
+  if(payload.action==='book_available_appointment')return await bookAvailableAppointment(token,businessId,payload);
   throw Object.assign(new Error('UNSUPPORTED_TOOL'),{status:400});
 }
 async function executeApproved(ctx,businessId,approvalToken){
@@ -151,7 +160,7 @@ export async function deterministicWritePlan({token,businessId,message,language=
   const raw={...payload,step:1,reason:clean(plan.summary,160),idempotency_key:`dao:${Buffer.from(`${message}:${payload.action}`).toString('base64url').slice(0,40)}`};
   return {raw,approval:describeApproval([raw],language)};
 }
-function deterministicApproval(ctx,businessId,message,language,fallback){const issued=Date.now(),payload={v:1,business_id:businessId,user_id:ctx.user.id,issued_at:issued,expires_at:issued+600000,goal:message,language,plan:[fallback.raw]},raw=Buffer.from(JSON.stringify(payload)).toString('base64url'),signature=createHmac('sha256',`dabbir-owner-approval:${ctx.token}`).update(raw).digest('base64url');return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',deterministic:true,goal:message,plan:[fallback.raw],approval:fallback.approval,approval_token:`${raw}.${signature}`,summary:language==='ar'?'تم إعداد خطة محكومة من بيانات الأمر، وتحتاج موافقتك قبل التنفيذ.':'A controlled plan was prepared from the command and requires your approval before execution.'}}
+function deterministicApproval(ctx,businessId,message,language,fallback){const issued=Date.now(),payload={v:1,business_id:businessId,user_id:ctx.user.id,issued_at:issued,expires_at:issued+600000,goal:message,language,plan:[fallback.raw]},raw=Buffer.from(JSON.stringify(payload)).toString('base64url'),signature=createHmac('sha256',`dabbir-owner-approval:${ctx.token}`).update(raw).digest('base64url');return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',deterministic:true,goal:message,plan:[fallback.raw],approval:fallback.approval,approval_token:`${raw}.${signature}`,summary:language==='ar'?'جاهز للتنفيذ بعد موافقتك.':'Ready to execute after approval.'}}
 
 export default async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
@@ -165,11 +174,17 @@ export default async function handler(req,res){
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
     const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
+    const providerStatus=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status)||null;
+    const diagnostic=clean(error?.message||error?.cause?.message||error?.name||'UNKNOWN_AI_ERROR',200).replace(/(?:sk|key|token)[-_][A-Za-z0-9_-]{12,}/gi,'[REDACTED]');
     console.error('dabbir_ai_business_operator_plan_failed',{
       version:OPERATOR_VERSION,
       error:publicError,
       budget_code:budgetCode||null,
       failure_class:publicError==='AGENT_TIMEOUT'?'TIMEOUT':'AI',
+      provider_status:providerStatus,
+      cause_name:clean(error?.name||error?.cause?.name||'Error',80),
+      diagnostic,
+      provider_attempts:Array.isArray(error?.operatorAttempts)?error.operatorAttempts.slice(0,3):null,
       external_side_effects:false,
       money_movement:false
     });
