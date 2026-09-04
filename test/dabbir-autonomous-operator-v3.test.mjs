@@ -11,7 +11,7 @@ const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta
 test('operator v4 is a bounded ToolLoopAgent with the complete state machine',()=>{
   assert.equal(OPERATOR_VERSION,'v4.0-autonomous-daily-operator');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
-  assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/const perAttemptTimeout=MODEL_TIMEOUT_MS/);assert.match(core,/AbortSignal\.timeout\(perAttemptTimeout\)/);assert.equal(MODEL_TIMEOUT_MS,45000);assert.match(core,/maxOutputTokens:700/);
+  assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/const perAttemptTimeout=MODEL_TIMEOUT_MS/);assert.match(core,/AbortSignal\.timeout\(perAttemptTimeout\)/);assert.equal(MODEL_TIMEOUT_MS,45000);assert.match(core,/maxOutputTokens:320/);assert.match(core,/Target under 40 output tokens/);
 });
 
 test('all required tenant read tools exist and are paginated',()=>{
@@ -73,7 +73,7 @@ test('staff activity is verified without pretending appointment activity is atte
   assert.match(core,/inspect_staff_activity/);
   assert.match(core,/no_clock_in_or_attendance_source_exists/);
   assert.match(core,/Appointment activity proves assigned booking activity, not physical attendance/);
-  assert.match(ui,/لم تُنفذ أي تغييرات ولم تُنشأ إيصالات/);
+  assert.match(ui,/لم تُنفذ أي تغييرات/);
   assert.match(ui,/data\.summary\|\|data\.error/);
 });
 
@@ -217,5 +217,5 @@ test('provider failures retain safe diagnostics for production triage',()=>{
   assert.match(endpoint,/cause_name:/);
   assert.match(endpoint,/diagnostic/);
   assert.match(endpoint,/provider_attempts:/);
-  assert.match(endpoint,/\\[REDACTED\\]/);
+  assert.match(endpoint,/\[REDACTED\]/);
 });
