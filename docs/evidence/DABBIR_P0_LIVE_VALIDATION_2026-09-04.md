@@ -112,3 +112,50 @@ Projected Supabase cost for a 48-hour Shadow window is `$0.64512`, approximately
 - Run Controlled Live only in the Test tenant after Shadow passes.
 - Re-run final browser/mobile Golden Canary on the final Preview SHA.
 
+## Live continuation checkpoint — 2026-09-04 16:56 UTC
+
+### GitHub / Preview
+
+- PR head at checkpoint: `8fab3b38d1690911e4c4ac8f53da997aa6f9afd2`.
+- `main` advanced independently to `57d145408d1a571576183c43cc2b646b6057ab17` through PR #480. Final exact-head re-sync is still required before Golden Canary.
+- Exact PR-head Vercel Preview `dpl_Fx86PThqhY5PvbBNjJVvt7h1HeLm`: READY.
+- DABBIR CI run 2191: SUCCESS.
+- DABBIR Mobile CI run 238: SUCCESS.
+
+### Preview isolation probe
+
+The live exact-head Preview probe returned a fail-closed result:
+
+- scope: `DABBIR_P0_TEST_ONLY`
+- `database_target = non_test_database_blocked`
+- `database_safe_for_test_execution = false`
+- WhatsApp webhook configured: false
+- WhatsApp outbound configured: false
+- WABA configured: false
+- Test recipient configured: false
+- Meta authorization not attempted because Meta read credentials are not configured
+- `live_execution_allowed = false`
+- `secrets_exposed = false`
+
+No live Meta send was attempted. Gate A therefore remains blocked until branch-scoped Preview environment values target the isolated Supabase test project and official Meta Test credentials/test recipient are available.
+
+### Supabase isolated branch truth
+
+- Production project `DABBIR Mumbai` (`fphpoysqdsceniwduxjq`) remains `ACTIVE_HEALTHY`.
+- Isolated P0 branch `dabbir-p0-live-validation` (`krjqfgkqksyknryolhdz`) remains `ACTIVE_HEALTHY` at runtime.
+- Branch metadata reports `MIGRATIONS_FAILED` because automatic historical migration replay still hits the known legacy-baseline dependency gap (`dabbir_private` / `dabbir_memberships`). This does not mean the targeted P0 schema is absent.
+- Direct live inspection confirms the P0 objects are present: `dabbir_car_wash_jobs`, `dabbir_car_wash_job_transitions`, `dabbir_car_wash_outcome_ledger`, `dabbir_car_wash_settings`, and `dabbir_car_wash_booking_requests`.
+
+### Real Shadow window
+
+Two isolated synthetic test settings rows are currently in `operator_mode = shadow` with `shadow_started_at = 2026-09-04 14:58:16.211973+00`.
+
+Both keep `MESSAGE`, `BOOK`, `ASSIGN`, `REMIND`, and `CHARGE` disabled. At this checkpoint:
+
+- job transitions: `5`
+- transitions with non-empty `external_result`: `0`
+- transitions using external permissions (`MESSAGE|BOOK|ASSIGN|REMIND|CHARGE`): `0`
+
+Therefore the real 48-hour Shadow clock is running from 2026-09-04 14:58:16 UTC. It is not backdated or compressed. Controlled Live remains forbidden until the elapsed-time gate passes.
+
+Current decision remains: **BLOCKED — Gate A is fail-closed and the real 48-hour Shadow window is in progress.**
