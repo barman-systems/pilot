@@ -14,6 +14,7 @@ const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 const clean=(value,max=160)=>String(value||'').trim().slice(0,max);
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
+const finiteNumber=value=>Number.isFinite(Number(value))?Number(value):NaN;
 const has=(object,key)=>Object.prototype.hasOwnProperty.call(object||{},key);
 
 function singleQueryValue(req,name){
@@ -71,10 +72,10 @@ function roundMoney(value,market){
 }
 
 function moneyInput(body,market,neutralKey,legacyAedKey){
-  if(has(body,neutralKey))return number(body[neutralKey]);
+  if(has(body,neutralKey))return finiteNumber(body[neutralKey]);
   if(has(body,legacyAedKey)){
     if(market.currency_code!=='AED')throw Object.assign(new Error('LEGACY_AED_INPUT_NOT_ALLOWED'),{status:409});
-    return number(body[legacyAedKey]);
+    return finiteNumber(body[legacyAedKey]);
   }
   return NaN;
 }
