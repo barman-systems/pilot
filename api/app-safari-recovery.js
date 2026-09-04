@@ -10,18 +10,32 @@ const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
 const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
   if(window.__dabbirDesignAuthorityHeadV2)return;
   window.__dabbirDesignAuthorityHeadV2=true;
-  const tabletSidebarAnchorVersion='ipad-visual-viewport-anchor-v1';
+  const tabletSidebarAnchorVersion='ipad-visual-viewport-anchor-v2';
   let frame=0;
   let observer=null;
+  function syncTabletSidebarVisualViewport(){
+    if(!document.documentElement)return false;
+    const viewport=window.visualViewport;
+    const viewportWidth=Math.max(1,Number(viewport?.width||window.innerWidth||document.documentElement.clientWidth||1));
+    const viewportLeft=Number(viewport?.offsetLeft||0);
+    const sidebarWidth=Math.max(1,Math.min(286,viewportWidth*.82,Math.max(1,viewportWidth-16)));
+    const rtl=String(document.documentElement.dir||'rtl').toLowerCase()==='rtl';
+    const sidebarLeft=rtl?(viewportLeft+viewportWidth-sidebarWidth):viewportLeft;
+    document.documentElement.style.setProperty('--dabbir-sidebar-visual-left',String(sidebarLeft)+'px');
+    document.documentElement.style.setProperty('--dabbir-sidebar-visual-width',String(sidebarWidth)+'px');
+    window.__dabbirTabletSidebarViewport={version:tabletSidebarAnchorVersion,width:viewportWidth,left:viewportLeft,sidebarWidth,sidebarLeft,rtl};
+    return true;
+  }
   function ensureTabletSidebarAnchor(){
     if(!document.head)return false;
-    let anchor=document.querySelector('style[data-dabbir-tablet-sidebar-anchor="ipad-visual-viewport-anchor-v1"]');
+    let anchor=document.querySelector('style[data-dabbir-tablet-sidebar-anchor="ipad-visual-viewport-anchor-v2"]');
     if(!anchor){
       anchor=document.createElement('style');
       anchor.dataset.dabbirTabletSidebarAnchor=tabletSidebarAnchorVersion;
-      anchor.textContent='@media(max-width:920px){html[dir="rtl"] body .shell>.side{position:fixed!important;inset:0 0 0 auto!important;width:min(82vw,286px)!important;max-width:calc(100vw - 16px)!important}html[dir="ltr"] body .shell>.side{position:fixed!important;inset:0 auto 0 0!important;width:min(82vw,286px)!important;max-width:calc(100vw - 16px)!important}html body .shell>.side.open{transform:translate3d(0,0,0)!important}}';
+      anchor.textContent='@media(max-width:920px){html body .shell>#side{position:fixed!important;inset-inline-start:auto!important;inset-inline-end:auto!important;inset-block-start:0!important;inset-block-end:0!important;top:0!important;right:auto!important;bottom:0!important;left:var(--dabbir-sidebar-visual-left,0px)!important;margin:0!important;width:var(--dabbir-sidebar-visual-width,min(82vw,286px))!important;max-width:calc(100vw - 16px)!important}html body .shell>#side.open{transform:translate3d(0,0,0)!important}}';
       document.head.appendChild(anchor);
     }
+    syncTabletSidebarVisualViewport();
     return true;
   }
   function reassertAuthority(){
@@ -47,12 +61,18 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
     window.__dabbirUiLifecycle?.on?.('afterNavigate','executive-calm-authority',schedule);
     window.__dabbirUiLifecycle?.on?.('afterLanguage','executive-calm-authority',schedule);
   }catch(_error){}
+  try{
+    window.addEventListener('resize',schedule,{passive:true});
+    window.addEventListener('orientationchange',schedule,{passive:true});
+    window.visualViewport?.addEventListener?.('resize',schedule,{passive:true});
+    window.visualViewport?.addEventListener?.('scroll',schedule,{passive:true});
+  }catch(_error){}
   window.addEventListener('load',schedule,{once:true});
   ensureTabletSidebarAnchor();
   schedule();
   setTimeout(schedule,250);
   setTimeout(schedule,1400);
-  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0,tabletSidebarAnchor:tabletSidebarAnchorVersion};
+  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0,tabletSidebarAnchor:tabletSidebarAnchorVersion,visualViewportAnchoring:true};
 })();`;
 
 function bustUiAssetVersion(body) {

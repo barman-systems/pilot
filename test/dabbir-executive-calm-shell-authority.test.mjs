@@ -17,12 +17,19 @@ test('Safari shell reasserts Executive Calm in head without mutating the applica
   assert.doesNotMatch(safariRecovery,/setInterval\(/);
 });
 
-test('responsive iPad sidebar is physically anchored inside the visual viewport for RTL and LTR',()=>{
-  assert.match(safariRecovery,/dabbir-tablet-sidebar-anchor/);
-  assert.match(safariRecovery,/ipad-visual-viewport-anchor-v1/);
-  assert.match(safariRecovery,/inset:0 0 0 auto!important/);
-  assert.match(safariRecovery,/inset:0 auto 0 0!important/);
-  assert.match(safariRecovery,/max-width:calc\(100vw - 16px\)!important/);
+test('responsive iPad sidebar is anchored to visual viewport coordinates rather than the wider WebKit layout viewport',()=>{
+  assert.match(safariRecovery,/ipad-visual-viewport-anchor-v2/);
+  assert.match(safariRecovery,/window\.visualViewport/);
+  assert.match(safariRecovery,/viewport\?\.width\|\|window\.innerWidth/);
+  assert.match(safariRecovery,/viewport\?\.offsetLeft\|\|0/);
+  assert.match(safariRecovery,/sidebarLeft=rtl\?\(viewportLeft\+viewportWidth-sidebarWidth\):viewportLeft/);
+  assert.match(safariRecovery,/--dabbir-sidebar-visual-left/);
+  assert.match(safariRecovery,/--dabbir-sidebar-visual-width/);
+  assert.match(safariRecovery,/inset-inline-start:auto!important/);
+  assert.match(safariRecovery,/inset-inline-end:auto!important/);
+  assert.match(safariRecovery,/left:var\(--dabbir-sidebar-visual-left,0px\)!important/);
+  assert.match(safariRecovery,/width:var\(--dabbir-sidebar-visual-width,min\(82vw,286px\)\)!important/);
   assert.match(safariRecovery,/side\.open\{transform:translate3d\(0,0,0\)!important\}/);
-  assert.match(safariRecovery,/tabletSidebarAnchor:tabletSidebarAnchorVersion/);
+  assert.match(safariRecovery,/visualViewportAnchoring:true/);
+  assert.doesNotMatch(safariRecovery,/inset:0 0 0 auto!important/);
 });
