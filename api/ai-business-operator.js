@@ -33,7 +33,7 @@ function toolCatalog(){return [
 function parseJsonObject(text){const raw=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{const value=JSON.parse(raw);return value&&typeof value==='object'&&!Array.isArray(value)?value:null}catch{return null}}
 export function deterministicPlan(message){
   const text=String(message||'').replace(/ـ/g,'').trim();
-  const addPrefix=/^(?:أضف|اضف|أضيف|اضيف|أضفي|اضفي|أضيفي|اضيفي|ضيف|ضيفي|أنشئ|انشئ|create|add)\s+/i;
+  const addPrefix=/^(?:أضف|اضف|ضف|أضيف|اضيف|أضفي|اضفي|أضيفي|اضيفي|ضيف|ضيفي|أنشئ|انشئ|create|add)\s+/i;
   if(addPrefix.test(text)&&/(?:اشتراك|باقة|باقه|غسلات|washes|subscription|package)/i.test(text)){
     const priceMatch=text.match(/([0-9]+(?:\.[0-9]+)?)(?=[^0-9]{0,30}(?:درهم|aed))/iu),washesMatch=text.match(/([0-9]+)\s*(?:غسلات|غسلة|غسله|washes?)/iu),code=text.match(/\b([a-z][a-z0-9_-]{1,30})\b/i)?.[1]?.toUpperCase()||'VVIP',washes=Math.trunc(num(washesMatch?.[1])??0),descriptionAr=clean(text.replace(addPrefix,'').replace(/^(?:خدمة|خدمه|عرض)\s+/i,''),500);
     return {tool:'create_car_wash_offer',args:{name_ar:`اشتراك باقة ${code}`,name_en:`${code} subscription package`,description_ar:descriptionAr,description_en:washes>0?`${washes} washes plus one free`:'Subscription package',price_aed:num(priceMatch?.[1]),duration_minutes:60},summary:'Create car-wash subscription offer'};
@@ -44,6 +44,18 @@ export function deterministicPlan(message){
     const durationMatch=after.match(/(?:لمدة|مدة|duration)?\s*[:=]?\s*([0-9]+)\s*(?:دقيقة|دقائق|minutes?|mins?)/i);
     const name=after.replace(/(?:بسعر|ب)?\s*[:=]?\s*[0-9]+(?:\.[0-9]+)?\s*(?:درهم|aed)/ig,'').replace(/(?:لمدة|مدة)?\s*[:=]?\s*[0-9]+\s*(?:دقيقة|دقائق|minutes?|mins?)/ig,'').replace(/[،,]+$/,'').trim();
     return {tool:'create_service',args:{name:clean(name,160),price_aed:num(priceMatch?.[1])??0,duration_minutes:Math.trunc(num(durationMatch?.[1])??30)},summary:'Create service'};
+  }
+  if(addPrefix.test(text)){
+    const after=text.replace(addPrefix,'').replace(/^(?:منتج|product)\s+/i,'');
+    const pricePattern=/(?:بسعر|سعره|سعرها|قيمته|قيمتها|price(?:d)?(?:\s+at)?|cost(?:s)?(?:\s+at)?)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:درهم|aed)/iu;
+    const quantityPattern=/(?:الكمية|الكميه|كمية|كميه|المخزون|quantity|qty|stock)\s*[:=]?\s*([0-9]+)/iu;
+    const priceMatch=after.match(pricePattern),quantityMatch=after.match(quantityPattern);
+    if(priceMatch&&quantityMatch){
+      const explicitSku=after.match(/(?:sku|كود|رمز)\s*[:=]?\s*([\p{L}\p{N}_-]{1,80})/iu)?.[1]||'';
+      const name=clean(after.replace(pricePattern,'').replace(quantityPattern,'').replace(/(?:sku|كود|رمز)\s*[:=]?\s*[\p{L}\p{N}_-]{1,80}/iu,'').replace(/[،,;:=-]+$/u,'').trim(),160)||clean(explicitSku,160);
+      const sku=clean(explicitSku||name.replace(/\s+/g,'-'),80);
+      return {tool:'create_product',args:{sku,name,price_aed:num(priceMatch[1]),quantity:Math.trunc(num(quantityMatch[1])??-1)},summary:'Create product with opening inventory'};
+    }
   }
   const customer=text.match(/(?:العميل|عميل|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|عايز|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
   if(customer&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)&&/(?:اليوم|today)/iu.test(text)&&/(?:العصر|afternoon|بعد الظهر)/iu.test(text)){
