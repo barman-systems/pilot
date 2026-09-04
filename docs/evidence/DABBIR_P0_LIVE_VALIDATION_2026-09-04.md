@@ -6,9 +6,10 @@ Production remains unchanged by PR #474. The PR remains Draft. The P0 Production
 
 ## Source identity
 
-- Current PR head before this documentation-only refresh: `5ee8b3bcd0584ea27b343cfae508e68015dd6c30`
+- Current PR functional line: `feat/dabbir-market-reality-killer-job`
+- Latest documentation-only evidence commit before this content: `02a67301603b1318cadbe495ad05b3beda970f14`
 - Current `main` / Production runtime observed during continuation: `57d145408d1a571576183c43cc2b646b6057ab17`
-- Previous exact-head Preview: `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` — READY
+- Proven Preview before the final documentation-only refresh: `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` — READY
 - Migration: `supabase/migrations/20260904123000_dabbir_car_wash_killer_job_p0.sql`
 - Migration SHA-256: `a8533f64b6f07dc961bddc70eeb4d6cb92da74af26f8b20c38057ec0ba2d150c`
 - Schema-only artifact: `artifacts/dabbir-p0-schema-only-20260904.sql`
@@ -50,7 +51,7 @@ Verified baseline includes:
 
 ## Preview isolation — runtime probe
 
-The verified Preview `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` reached READY and had no build error/stderr/exit events.
+The proven Preview `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` reached READY and had no build error/stderr/exit events.
 
 Its live validation probe returned fail-closed:
 
@@ -104,7 +105,7 @@ Before the documentation-only continuation commits, exact P0 functional verifica
 - DABBIR CI run 2191: SUCCESS.
 - DABBIR Mobile CI run 238: SUCCESS.
 
-Documentation-only continuation commits trigger fresh CI and Preview builds; their completion does not change the Gate A/Gate D blockers.
+Documentation-only evidence commits trigger fresh CI and Preview builds; they do not alter P0 behavior or remove the Gate A/Gate D blockers.
 
 ## Current gates
 
