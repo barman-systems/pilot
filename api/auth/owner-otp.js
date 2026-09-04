@@ -1,8 +1,10 @@
 import { json, parseCookies, readJsonBody, requireSameOrigin } from '../_auth-core.js';
+import { ownerMailerAuth } from '../_owner-mailer-auth.js';
 
 const ROOT_USERNAME = 'barmanadmin';
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const BROKER_URL = String(process.env.DABBIR_OWNER_BROKER_URL || `${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/, '');
+const OTP_MAILER_URL = String(process.env.DABBIR_OWNER_OTP_MAILER_URL || `${SUPABASE_URL}/functions/v1/dabbir-owner-otp-mailer`).replace(/\/$/, '');
 const OTP_RE = /^\d{6}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CHALLENGE_COOKIE = '__Host-dabbir_owner_otp_challenge';
@@ -15,8 +17,8 @@ const challengeCookie=(value,maxAge=600)=>secureCookie(CHALLENGE_COOKIE,value,ma
 const sessionCookie=(value,maxAge=43200)=>secureCookie(SESSION_COOKIE,value,maxAge);
 const clearChallengeCookie=()=>challengeCookie('',0);
 
-async function broker(body){
-  const response=await fetch(BROKER_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(12000)});
+async function broker(url,body,headers={}){
+  const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(12000)});
   const payload=await response.json().catch(()=>({}));
   return {response,payload};
 }
@@ -24,7 +26,7 @@ async function broker(body){
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   res.setHeader('pragma','no-cache');
-  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v8');
+  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v9');
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
   try{
@@ -35,8 +37,9 @@ export default async function handler(req,res){
       // Do not reveal whether an employee email exists.
       if(!validLogin(login))return json(res,200,{ok:true,otp_required:true});
       const resendKey=String(process.env.RESEND_API_KEY||'').trim();
-      if(!resendKey)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
-      const {response,payload}=await broker({action:'owner_otp_request',login,resend_key:resendKey});
+      const mailerAuth=ownerMailerAuth();
+      if(!resendKey||!mailerAuth)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+      const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{'x-dabbir-owner-mailer-auth':mailerAuth});
       if(response.status===404)return json(res,200,{ok:true,otp_required:true});
       if(!response.ok||!payload?.ok||!payload?.challenge_id)return json(res,response.status===429?429:503,{ok:false,error:response.status===429?'OTP_RATE_LIMITED':(payload?.error||'OWNER_AUTH_UNAVAILABLE')});
       res.setHeader('set-cookie',challengeCookie(payload.challenge_id));
@@ -47,7 +50,7 @@ export default async function handler(req,res){
       if(!OTP_RE.test(otp))return json(res,400,{ok:false,error:'INVALID_OTP_FORMAT'});
       const challengeId=parseCookies(req.headers.cookie||'')[CHALLENGE_COOKIE];
       if(!challengeId)return json(res,401,{ok:false,error:'INVALID_OWNER_OTP'});
-      const {response,payload}=await broker({action:'owner_otp_verify',challenge_id:challengeId,otp});
+      const {response,payload}=await broker(BROKER_URL,{action:'owner_otp_verify',challenge_id:challengeId,otp});
       if(!response.ok||!payload?.authenticated||!payload?.session_token){res.setHeader('set-cookie',clearChallengeCookie());return json(res,response.status===503?503:401,{ok:false,error:payload?.error||'INVALID_OWNER_OTP'});}
       const maxAge=Math.max(60,Math.min(43200,Number(payload.expires_in||43200)));
       res.setHeader('set-cookie',[sessionCookie(payload.session_token,maxAge),clearChallengeCookie()]);
