@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 
 const MAX_ATTEMPTS = 3;
+const ATTEMPT_TIMEOUT_MS = 20000;
+const KILL_GRACE_MS = 2000;
 const RETRY_DELAYS_MS = [1500, 4000];
 const transientPattern = /(?:\b429\b|\b5\d\d\b|service unavailable|audit endpoint returned an error|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|network timeout|network error)/i;
 
@@ -17,10 +19,37 @@ function runAudit() {
 
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    let killTimer;
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      stderr += `\nETIMEDOUT npm audit exceeded ${ATTEMPT_TIMEOUT_MS}ms`;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+      killTimer.unref?.();
+    }, ATTEMPT_TIMEOUT_MS);
+    timeout.unref?.();
+
     child.stdout.on('data', (chunk) => { stdout += chunk; process.stdout.write(chunk); });
     child.stderr.on('data', (chunk) => { stderr += chunk; process.stderr.write(chunk); });
-    child.once('error', reject);
-    child.once('close', (code, signal) => resolve({ code: code ?? 1, signal, stdout, stderr }));
+    child.once('error', (error) => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      if (!settled) {
+        settled = true;
+        resolve({ code: timedOut ? 124 : (code ?? 1), signal, stdout, stderr });
+      }
+    });
   });
 }
 
