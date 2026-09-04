@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { ToolLoopAgent, jsonSchema, stepCountIs, tool } from 'ai';
 import { supabaseRest } from './_auth-core.js';
 
-export const OPERATOR_VERSION='v3.1-autonomous-safe';
+export const OPERATOR_VERSION='v3.2-resilient-operator';
 export const RUN_STATES=['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled'];
 export const READ_TOOLS=['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals'];
 export const WRITE_TOOLS=['create_service','create_product','set_inventory','receive_stock','create_expense','book_available_appointment'];
@@ -16,6 +16,7 @@ const page=v=>({limit:Math.min(50,Math.max(1,Math.trunc(Number(v?.limit)||20))),
 async function readResponse(response){const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!response.ok){const e=new Error(data?.message||data?.error||'READ_TOOL_FAILED');e.status=response.status;throw e}return data}
 const rest=(token,path)=>supabaseRest(path,token).then(readResponse);
 const verified=(name,items,paging)=>({ok:true,tool:name,truth:'verified',source:'supabase_tenant_rls',items:Array.isArray(items)?items:[],paging:{...paging,returned:Array.isArray(items)?items.length:0}});
+const localDate=(value,timeZone)=>Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(value)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
 
 async function readTool(token,businessId,name,input={}){
   const p=page(input),range=`limit=${p.limit}&offset=${p.offset}`;
@@ -72,6 +73,28 @@ async function readTool(token,businessId,name,input={}){
   let ledgerUnavailable=false;const rows=await rest(token,paths[name]).catch(error=>{if(name==='inspect_recent_operator_runs'){ledgerUnavailable=true;return []}return Promise.reject(error)});
   if(ledgerUnavailable)return {ok:true,tool:name,truth:'verified_unavailable',source:'current_tenant_rls',items:[],availability:'operator_ledger_not_readable_with_current_owner_rls'};
   return verified(name,rows,p);
+}
+
+export async function runDeterministicReadGoal({token,businessId,goal,language='ar'}){
+  const query=clean(goal,800).toLowerCase(),ar=language!=='en';
+  const todayCustomers=/(?:كم|عدد).*(?:زبون|عميل|customer|client).*(?:اليوم|today)|(?:اليوم|today).*(?:كم|عدد).*(?:زبون|عميل|customer|client)/i.test(query);
+  if(todayCustomers){
+    const businesses=await rest(token,`dabbir_businesses?select=id,timezone& id=eq.${businessId}`.replace('?select=id,timezone& id','?select=id,timezone&id'));
+    const timeZone=clean(businesses?.[0]?.timezone,80)||'Asia/Dubai',since=new Date(Date.now()-36*60*60*1000).toISOString();
+    const appointments=await rest(token,`dabbir_appointments?select=id,customer_id,starts_at,status,simulated&business_id=eq.${businessId}&starts_at=gte.${encodeURIComponent(since)}&order=starts_at.desc&limit=100`);
+    const nowParts=localDate(new Date(),timeZone),key=x=>`${x.year}-${x.month}-${x.day}`,today=appointments.filter(item=>key(localDate(item.starts_at,timeZone))===key(nowParts)&&!item.simulated),completed=today.filter(item=>String(item.status).toLowerCase()==='completed'),customers=new Set(completed.map(item=>item.customer_id).filter(Boolean));
+    return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',goal,summary:ar?`خدم النشاط اليوم ${customers.size} عميلًا عبر ${completed.length} موعد مكتمل. إجمالي مواعيد اليوم المسجلة: ${today.length}.`:`The business served ${customers.size} customers today across ${completed.length} completed appointments. Total appointments recorded today: ${today.length}.`,evidence:{truth:'verified',source:'supabase_tenant_rls',timezone:timeZone,unique_completed_customers:customers.size,completed_appointments:completed.length,total_appointments:today.length,simulated_excluded:true},trace:[{tool:'inspect_today_customer_activity',state:'verified'}],transitions:[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()},{state:'verifying',at:new Date().toISOString()},{state:'completed',at:new Date().toISOString()}]};
+  }
+  if(/(?:موظف|موظفين|طاقم|staff|employee|worker).*(?:عمل|اداء|أداء|تقرير|report|performance)|(?:تقرير|report).*(?:موظف|staff|employee)/i.test(query)){
+    const evidence=await readTool(token,businessId,'inspect_staff_activity',{limit:50,offset:0}),rows=evidence.items||[];
+    const lines=rows.map(x=>`${x.worker.display_name}: ${x.appointment_activity.completed}/${x.appointment_activity.total}`).join(ar?'، ':', ');
+    return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',goal,summary:ar?`نشاط المواعيد الموثق لآخر 3 أيام: ${lines||'لا توجد سجلات لموظفين أو مواعيد'}. لا توجد بيانات حضور وانصراف، لذلك لا يمكن إثبات ساعات العمل الفعلية.`:`Verified appointment activity for the last 3 days: ${lines||'no staff or appointment records'}. Clock-in attendance is unavailable, so actual worked hours cannot be proven.`,evidence,trace:[{tool:'inspect_staff_activity',state:'verified'}],transitions:[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()},{state:'verifying',at:new Date().toISOString()},{state:'completed',at:new Date().toISOString()}]};
+  }
+  const intents=[
+    [/(?:مخزون|inventory|stock)/i,'inspect_inventory',ar?'عناصر المخزون':'inventory items'],[/(?:مصروف|مصاريف|expense)/i,'inspect_expenses',ar?'المصروفات':'expenses'],[/(?:موعد|مواعيد|appointment|booking)/i,'inspect_appointments',ar?'المواعيد':'appointments'],[/(?:خدم|service)/i,'list_services',ar?'الخدمات':'services'],[/(?:منتج|products?)/i,'list_products',ar?'المنتجات':'products'],[/(?:محادث|conversation)/i,'inspect_conversations',ar?'المحادثات':'conversations']
+  ];
+  for(const [pattern,toolName,label] of intents)if(pattern.test(query)&&/(?:كم|عدد|اعرض|راجع|قائمة|حالة|how many|list|show|inspect|status)/i.test(query)){const evidence=await readTool(token,businessId,toolName,{limit:50,offset:0});return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',goal,summary:ar?`تم التحقق من Supabase: يوجد ${evidence.items.length} من ${label} ضمن الصفحة الحالية.`:`Verified from Supabase: ${evidence.items.length} ${label} in the current page.`,evidence,trace:[{tool:toolName,state:'verified'}],transitions:[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()},{state:'verifying',at:new Date().toISOString()},{state:'completed',at:new Date().toISOString()}]};}
+  return null;
 }
 
 const pageSchema=jsonSchema({type:'object',properties:{limit:{type:'integer',minimum:1,maximum:50},offset:{type:'integer',minimum:0}},additionalProperties:false});

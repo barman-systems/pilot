@@ -1,6 +1,6 @@
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, readJsonBody, requireSameOrigin, supabaseRest, supabaseRpc } from './_auth-core.js';
 import { generateDABBIRAiReply } from './_ai-core.js';
-import { OPERATOR_VERSION, describeApproval, planAutonomousRun, verifyApproval } from './_dabbir-autonomous-agent.js';
+import { OPERATOR_VERSION, describeApproval, planAutonomousRun, runDeterministicReadGoal, verifyApproval } from './_dabbir-autonomous-agent.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=v=>UUID_RE.test(String(v||'').trim())?String(v).trim():null;
@@ -109,6 +109,7 @@ export default async function handler(req,res){
   if(action==='cancel')return json(res,200,{ok:true,state:'cancelled',executed:false,version:OPERATOR_VERSION,transitions:[{state:'received',at:new Date().toISOString()},{state:'cancelled',at:new Date().toISOString()}]});
   if(action==='approve'){try{return json(res,200,await executeApproved(ctx,businessId,clean(body?.approval_token,16000)))}catch(error){const status=[400,403,409].includes(Number(error?.status))?Number(error.status):500;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'APPROVAL_EXECUTION_FAILED',140)})}}
   if(action!=='plan')return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});const message=clean(body?.message,800);if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
+  try{const direct=await runDeterministicReadGoal({token:ctx.token,businessId,goal:message,language});if(direct)return json(res,200,direct)}catch(error){return json(res,502,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'VERIFIED_READ_FAILED',140)})}
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
     const fallback=fallbackPlan(message,language);if(!fallback)return json(res,503,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE'});
     const issued=Date.now(),payload={v:1,business_id:businessId,user_id:ctx.user.id,issued_at:issued,expires_at:issued+600000,goal:message,language,plan:[fallback.raw]},raw=Buffer.from(JSON.stringify(payload)).toString('base64url');const {createHmac}=await import('node:crypto'),signature=createHmac('sha256',`dabbir-owner-approval:${ctx.token}`).update(raw).digest('base64url');return json(res,200,{ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'FREE_TIER_ONLY',degraded:true,goal:message,plan:[fallback.raw],approval:fallback.approval,approval_token:`${raw}.${signature}`,summary:language==='ar'?'تم إعداد خطة آمنة، ومزود AI غير متاح مؤقتًا.':'A safe plan was prepared; AI is temporarily unavailable.'});
