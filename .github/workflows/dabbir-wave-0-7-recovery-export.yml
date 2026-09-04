@@ -81,8 +81,9 @@ jobs:
             };
             {
               project_ref:$project_ref, status:"VERIFIED_FROM_MANAGEMENT_API",
-              pitr_enabled:(.pitr_enabled // .pitrEnabled // null),
-              walg_enabled:(.walg_enabled // .walgEnabled // null),
+              response_keys:(keys | sort),
+              pitr_enabled:(if has("pitr_enabled") then .pitr_enabled elif has("pitrEnabled") then .pitrEnabled else null end),
+              walg_enabled:(if has("walg_enabled") then .walg_enabled elif has("walgEnabled") then .walgEnabled else null end),
               retention_days:(.retention_days // .retentionDays // null),
               earliest_recovery_point:(.earliest_recovery_point // .earliestRecoveryPoint // null),
               latest_recovery_point:(.latest_recovery_point // .latestRecoveryPoint // null),
