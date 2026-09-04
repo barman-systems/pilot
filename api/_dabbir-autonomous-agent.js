@@ -9,6 +9,8 @@ export const READ_TOOLS=['inspect_workspace','list_services','list_products','in
 export const WRITE_TOOLS=['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment'];
 export const MAX_STEPS=6;
 export const PAID_OPERATOR_MODEL=process.env.DABBIR_AI_GATEWAY_MODEL||'openai/gpt-5.4';
+export const GATEWAY_FALLBACK_MODELS=(process.env.DABBIR_AI_GATEWAY_FALLBACK_MODELS||'anthropic/claude-sonnet-4.6,google/gemini-3-flash,openai/gpt-5.4-nano').split(',').map(value=>value.trim()).filter(Boolean).slice(0,3);
+export const MODEL_TIMEOUT_MS=Math.min(60000,Math.max(15000,Math.trunc(Number(process.env.DABBIR_AI_MODEL_TIMEOUT_MS)||45000)));
 const hash=v=>createHash('sha256').update(String(v)).digest('hex');
 const clean=(v,n=800)=>String(v??'').trim().slice(0,n);
 const jsonStable=v=>JSON.stringify(v,Object.keys(v||{}).sort());
@@ -141,7 +143,7 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
   const budgetOperationKey=`operator.ai_planning:${randomUUID()}`;
   const budget=await claimAiBudget({businessId,operationKey:budgetOperationKey,operationType:'operator.ai_planning',autonomous:false});
   if(!budget.allowed){const code=budget.reason==='MONTHLY_HARD_LIMIT'?'AI_MONTHLY_BUDGET_REACHED':'AI_BUDGET_UNAVAILABLE';throw Object.assign(new Error(code),{code,status:budget.reason==='MONTHLY_HARD_LIMIT'?429:503,budget})}
-  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:PAID_OPERATOR_MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true,models:['openai/gpt-5.4-nano']}},
+  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:PAID_OPERATOR_MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true,models:GATEWAY_FALLBACK_MODELS,user:userId,tags:['feature:ai-business-operator','env:production']}},
     instructions:[
       'You are DABBIR Autonomous Business Operator, an execution agent and not a chatbot.',
       'Start by inspecting the workspace. Read every relevant domain before proposing changes. Use multiple tools for multi-domain goals.',
@@ -153,7 +155,7 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
       `At most ${MAX_STEPS} model steps. Respond in ${language==='en'?'English':'Arabic'} with a concise plan summary, not chain-of-thought.`
     ].join('\n'),prepareStep:({stepNumber})=>stepNumber===0?{toolChoice:{type:'tool',toolName:'inspect_workspace'}}:{toolChoice:'auto'}});
   let result;
-  try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(9000)})}
+  try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(MODEL_TIMEOUT_MS)})}
   catch(error){await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:error?.name==='AbortError'||error?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model:PAID_OPERATOR_MODEL,error:clean(error?.message||error,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw error}
   const cost=await generationCost(result);
   const finalized=await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'VERIFIED_SUCCESS',failureClass:null,actualCostUsd:cost.total_cost_usd,metadata:{model:PAID_OPERATOR_MODEL,generation:cost,state:cost.total_cost_usd==null?'RESERVATION_RETAINED':'ACTUAL_COST_VERIFIED'}}).then(()=>true).catch(()=>false);
