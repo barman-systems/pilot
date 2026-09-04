@@ -16,3 +16,12 @@ test('Safari shell reasserts Executive Calm in head without mutating the applica
   assert.doesNotMatch(safariRecovery,/observer\.observe\(document\.body/);
   assert.doesNotMatch(safariRecovery,/setInterval\(/);
 });
+
+test('responsive iPad sidebar is physically anchored inside the visual viewport for RTL and LTR',()=>{
+  assert.match(safariRecovery,/data-dabbir-tablet-sidebar-anchor="ipad-visual-viewport-anchor-v1"/);
+  assert.match(safariRecovery,/html\[dir="rtl"\] body \.shell>\.side\{position:fixed!important;inset:0 0 0 auto!important/);
+  assert.match(safariRecovery,/html\[dir="ltr"\] body \.shell>\.side\{position:fixed!important;inset:0 auto 0 0!important/);
+  assert.match(safariRecovery,/max-width:calc\(100vw - 16px\)!important/);
+  assert.match(safariRecovery,/html body \.shell>\.side\.open\{transform:translate3d\(0,0,0\)!important\}/);
+  assert.match(safariRecovery,/tabletSidebarAnchor:tabletSidebarAnchorVersion/);
+});
