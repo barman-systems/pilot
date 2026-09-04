@@ -9,13 +9,13 @@ const endpoint=fs.readFileSync(new URL('../api/ai-business-operator.js',import.m
 const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta.url),'utf8');
 
 test('operator v3 is a bounded ToolLoopAgent with the complete state machine',()=>{
-  assert.equal(OPERATOR_VERSION,'v3-autonomous-safe');assert.equal(MAX_STEPS,6);
+  assert.equal(OPERATOR_VERSION,'v3.1-autonomous-safe');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
   assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(9000\)/);assert.match(core,/maxOutputTokens:700/);
 });
 
 test('all required tenant read tools exist and are paginated',()=>{
-  assert.deepEqual(READ_TOOLS,['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals']);
+  assert.deepEqual(READ_TOOLS,['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals']);
   assert.match(core,/maximum:50/);assert.match(core,/business_id=eq\.\$\{businessId\}/);assert.match(core,/source:'supabase_tenant_rls'/);
 });
 
@@ -65,8 +65,16 @@ for(let index=0;index<5;index++)test(`multi-step partial failure scenario ${inde
 });
 
 test('owner UI presents plan, approval, cancellation, receipts and bilingual copy',()=>{
-  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3-autonomous-safe'])assert.match(ui,new RegExp(token));
+  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.1-autonomous-safe'])assert.match(ui,new RegExp(token));
   assert.doesNotMatch(ui,/chain-of-thought/i);
+});
+
+test('staff activity is verified without pretending appointment activity is attendance',()=>{
+  assert.match(core,/inspect_staff_activity/);
+  assert.match(core,/no_clock_in_or_attendance_source_exists/);
+  assert.match(core,/Appointment activity proves assigned booking activity, not physical attendance/);
+  assert.match(ui,/لم تُنفذ أي تغييرات ولم تُنشأ إيصالات/);
+  assert.match(ui,/data\.summary\|\|data\.error/);
 });
 
 test('high-risk capabilities are absent from the allowlist',()=>{
