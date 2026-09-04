@@ -145,7 +145,8 @@ export default function handler(req, res) {
       res.setHeader('cache-control', 'no-store, max-age=0');
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
-      res.setHeader('x-dabbir-first-paint-authority', 'executive-calm-static-before-auth-boot-v1');
+      res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
+      res.setHeader('x-dabbir-static-design-authority', 'executive-calm-static-before-auth-boot-v1');
       res.setHeader('x-dabbir-design-authority', 'executive-calm-v1');
       executiveCalmHeaders(res);
       res.statusCode = Number(proxy.statusCode || 200);
