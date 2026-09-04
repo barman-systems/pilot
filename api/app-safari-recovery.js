@@ -10,10 +10,23 @@ const AUTH_BOOT_ANCHOR = 'applyLang();boot();\n</script>';
 const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
   if(window.__dabbirDesignAuthorityHeadV2)return;
   window.__dabbirDesignAuthorityHeadV2=true;
+  const tabletSidebarAnchorVersion='ipad-visual-viewport-anchor-v1';
   let frame=0;
   let observer=null;
+  function ensureTabletSidebarAnchor(){
+    if(!document.head)return false;
+    let anchor=document.querySelector('style[data-dabbir-tablet-sidebar-anchor="ipad-visual-viewport-anchor-v1"]');
+    if(!anchor){
+      anchor=document.createElement('style');
+      anchor.dataset.dabbirTabletSidebarAnchor=tabletSidebarAnchorVersion;
+      anchor.textContent='@media(max-width:920px){html[dir="rtl"] body .shell>.side{position:fixed!important;inset:0 0 0 auto!important;width:min(82vw,286px)!important;max-width:calc(100vw - 16px)!important}html[dir="ltr"] body .shell>.side{position:fixed!important;inset:0 auto 0 0!important;width:min(82vw,286px)!important;max-width:calc(100vw - 16px)!important}html body .shell>.side.open{transform:translate3d(0,0,0)!important}}';
+      document.head.appendChild(anchor);
+    }
+    return true;
+  }
   function reassertAuthority(){
     frame=0;
+    ensureTabletSidebarAnchor();
     const style=document.querySelector('style[data-dabbir-design-system="executive-calm-v1"]');
     if(!style||!document.head)return false;
     if(style.parentNode!==document.head||style!==document.head.lastElementChild)document.head.appendChild(style);
@@ -35,10 +48,11 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
     window.__dabbirUiLifecycle?.on?.('afterLanguage','executive-calm-authority',schedule);
   }catch(_error){}
   window.addEventListener('load',schedule,{once:true});
+  ensureTabletSidebarAnchor();
   schedule();
   setTimeout(schedule,250);
   setTimeout(schedule,1400);
-  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0};
+  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0,tabletSidebarAnchor:tabletSidebarAnchorVersion};
 })();`;
 
 function bustUiAssetVersion(body) {
