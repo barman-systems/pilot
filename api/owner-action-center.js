@@ -7,12 +7,6 @@ import {
   supabaseRest,
   userClaimsFromValidatedAccessToken,
 } from './_auth-core.js';
-import {
-  assertSnapshotCurrency,
-  formatMarketMoney,
-  marketDayStartIso,
-  verifiedBusinessMarket,
-} from './_gcc-money-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
@@ -38,6 +32,9 @@ async function authenticatedContext(req,res){
   const token=accessTokenFromRequest(req);
   if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
 
+  // Membership lookup goes through the Supabase Data API, which validates the
+  // same JWT before applying tenant RLS. Reuse that successful validation and
+  // keep /auth/v1/user off this high-frequency dashboard path.
   let memberships;
   try{
     memberships=await getBusinessMemberships(token);
@@ -48,6 +45,7 @@ async function authenticatedContext(req,res){
   }
 
   let user=userClaimsFromValidatedAccessToken(token);
+  // Compatibility fallback for unexpected/legacy token shapes only.
   if(!user)user=await getVerifiedUser(token).catch(()=>null);
   if(!user){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
   return {token,user,memberships};
@@ -73,6 +71,12 @@ function addItem(items,item){
   });
 }
 
+function dubaiDayStartIso(nowMs){
+  const dubaiOffsetMs=4*60*60*1000;
+  const dubaiDay=new Date(nowMs+dubaiOffsetMs).toISOString().slice(0,10);
+  return new Date(`${dubaiDay}T00:00:00+04:00`).toISOString();
+}
+
 function handledLabel(operationType){
   if(operationType==='followup.capture_internal'){
     return {ar:'التقط متابعة عميل تلقائيًا',en:'Captured a customer follow-up automatically'};
@@ -90,20 +94,10 @@ export default async function handler(req,res){
     const membership=membershipFor(context.memberships,requested);
     if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
     const businessId=membership.business_id;
-
-    const businessRows=await rest(
-      context.token,
-      `dabbir_businesses?select=id,country_code,currency_code,timezone&id=eq.${businessId}&limit=1`,
-      'BUSINESS_MARKET_LOOKUP_FAILED',
-    );
-    const business=Array.isArray(businessRows)?businessRows[0]:null;
-    if(!business)throw Object.assign(new Error('BUSINESS_MARKET_NOT_FOUND'),{status:409});
-    const market=verifiedBusinessMarket(business);
-
     const now=Date.now();
     const in24h=now+24*60*60*1000;
     const in2h=now+2*60*60*1000;
-    const dayStart=marketDayStartIso(now,market);
+    const dayStart=dubaiDayStartIso(now);
 
     const handledLookup=rest(
       context.token,
@@ -119,7 +113,7 @@ export default async function handler(req,res){
       rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,status,simulated&business_id=eq.${businessId}&order=starts_at.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_products?select=id,name,sku,active&business_id=eq.${businessId}&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&limit=200`,'INVENTORY_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_amount,currency_code,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_aed,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=50`,'CHANNELS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
       handledLookup,
@@ -172,11 +166,8 @@ export default async function handler(req,res){
       if(order.simulated!==false)continue;
       const status=String(order.status||'').toLowerCase();
       if(!['draft','reserved'].includes(status))continue;
-      assertSnapshotCurrency(order.currency_code,market,'ORDER');
       const name=customerName.get(order.customer_id)||'عميل';
-      const amountAr=formatMarketMoney(order.total_amount,market,'ar');
-      const amountEn=formatMarketMoney(order.total_amount,market,'en');
-      addItem(items,{id:`order:${order.id}`,type:'order',priority:status==='reserved'?68:54,severity:'warning',title_ar:status==='reserved'?`طلب محجوز يحتاج متابعة: ${name}`:`طلب غير مكتمل: ${name}`,title_en:status==='reserved'?`Reserved order needs follow-up: ${name}`:`Incomplete order: ${name}`,detail_ar:`القيمة ${amountAr} — الحالة ${status}.`,detail_en:`${amountEn} — status ${status}.`,target:'operations',entity_id:order.id,due_at:order.created_at});
+      addItem(items,{id:`order:${order.id}`,type:'order',priority:status==='reserved'?68:54,severity:'warning',title_ar:status==='reserved'?`طلب محجوز يحتاج متابعة: ${name}`:`طلب غير مكتمل: ${name}`,title_en:status==='reserved'?`Reserved order needs follow-up: ${name}`:`Incomplete order: ${name}`,detail_ar:`القيمة ${number(order.total_aed).toFixed(2)} د.إ — الحالة ${status}.`,detail_en:`AED ${number(order.total_aed).toFixed(2)} — status ${status}.`,target:'operations',entity_id:order.id,due_at:order.created_at});
     }
 
     const liveStates=new Set(['connected','operational','verified','live']);
@@ -207,15 +198,13 @@ export default async function handler(req,res){
       business_id:businessId,
       role:membership.role,
       generated_at:new Date().toISOString(),
-      country_code:market.country_code,
-      currency_code:market.currency_code,
-      timezone:market.timezone,
+      timezone:'Asia/Dubai',
       status:urgent>0?'needs_attention':warning>0?'watch':'clear',
       metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
       handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
       brief:{ar:briefAr,en:briefEn},
       items:items.slice(0,12),
-      truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,market_contract:'verified_country_currency_timezone',money_source:'currency_snapshotted_generic_amounts',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
+      truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
     });
   }catch(error){
     const status=Number(error?.status||500);
