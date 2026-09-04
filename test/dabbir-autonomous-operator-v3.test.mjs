@@ -126,6 +126,25 @@ test('Arabic car-wash package command builds an exact approval plan without AI',
   assert.match(endpoint,/cost_mode:'NO_MODEL_REQUIRED',deterministic:true/);
 });
 
+test('Arabic product commands build exact approval plans without AI',()=>{
+  const cases=[
+    ['ضف zaje1001 قيمتها 170 درهم الكميه 50',{sku:'zaje1001',name:'zaje1001',price_aed:170,quantity:50}],
+    ['أضف منتج شامبو كود SHAMP-1 بسعر 25 درهم الكمية 10',{sku:'SHAMP-1',name:'شامبو',price_aed:25,quantity:10}],
+    ['add product Towel SKU TWL-2 priced at 15 AED qty 40',{sku:'TWL-2',name:'Towel',price_aed:15,quantity:40}]
+  ];
+  for(const [command,expected] of cases){
+    const plan=deterministicPlan(command);
+    assert.equal(plan.tool,'create_product');
+    assert.deepEqual(plan.args,expected);
+    assert.deepEqual(validate(plan),{action:'create_product',...expected});
+  }
+});
+
+test('product command stays fail-closed when price or quantity is missing',()=>{
+  assert.equal(deterministicPlan('ضف zaje1001 الكمية 50'),null);
+  assert.equal(deterministicPlan('ضف zaje1001 قيمتها 170 درهم'),null);
+});
+
 test('high-risk capabilities are absent from the allowlist',()=>{
   assert.deepEqual(WRITE_TOOLS,['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment']);
   for(const forbidden of ['delete','payment','transfer','mass_message','permission_change'])assert.ok(!WRITE_TOOLS.includes(forbidden));
