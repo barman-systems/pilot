@@ -22,7 +22,7 @@ test('Executive Calm has one static first-paint token authority and no legacy ne
 
 test('app receives static design authority before auth boot without breaking Safari release headers',()=>{
   assert.match(safari,/applyExecutiveCalmPage\(canonical\)/);
-  assert.match(safari,/x-dabbir-first-paint-authority', 'legacy first-paint contract remains visible to existing release tests');
+  assert.match(safari,/x-dabbir-first-paint-authority/);
   assert.match(safari,/owner-first-inline-before-auth-boot-v2/);
   assert.match(safari,/x-dabbir-static-design-authority/);
   assert.match(safari,/executive-calm-static-before-auth-boot-v1/);
