@@ -6,13 +6,13 @@ export default async function handler(req,res){
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
   try{
     const body=await readJsonBody(req,4096);const context=await requireBillingOwner(req,body?.business_id);const account=await getBillingAccount(context.accessToken,context.businessId);
-    if(account&&['trialing','active','past_due','unpaid','incomplete'].includes(String(account.status)))return json(res,409,{ok:false,error:'SUBSCRIPTION_ALREADY_EXISTS',can_manage:Boolean(account.stripe_customer_id)});
+    const status=String(account?.status||'not_subscribed');
+    if(account?.stripe_subscription_id&&['trialing','active','past_due','unpaid','incomplete'].includes(status))return json(res,409,{ok:false,error:'SUBSCRIPTION_ALREADY_EXISTS',can_manage:Boolean(account.stripe_customer_id)});
     const result=await stripeSandboxBridge('dabbir_checkout',{
       business_id:context.businessId,
       user_id:context.user.id,
       customer_email:account?.stripe_customer_id?null:(context.user.email||null),
       stripe_customer_id:account?.stripe_customer_id||null,
-      trial_available:!account?.trial_started_at&&!account?.trial_ends_at,
       return_origin:requestOrigin(req),
     });
     if(!result?.url)throw Object.assign(new Error('CHECKOUT_URL_MISSING'),{code:502});
