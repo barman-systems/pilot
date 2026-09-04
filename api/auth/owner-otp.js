@@ -1,4 +1,5 @@
 import { json, parseCookies, readJsonBody, requireSameOrigin } from '../_auth-core.js';
+import { ownerMailerAuth } from '../_owner-mailer-auth.js';
 
 const ROOT_USERNAME = 'barmanadmin';
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -36,9 +37,9 @@ export default async function handler(req,res){
       // Do not reveal whether an employee email exists.
       if(!validLogin(login))return json(res,200,{ok:true,otp_required:true});
       const resendKey=String(process.env.RESEND_API_KEY||'').trim();
-      const serviceRoleKey=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
-      if(!resendKey||serviceRoleKey.length<24||serviceRoleKey.startsWith('sb_publishable_'))return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
-      const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{'x-dabbir-supabase-service-key':serviceRoleKey});
+      const mailerAuth=ownerMailerAuth(resendKey);
+      if(!resendKey||!mailerAuth)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+      const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{'x-dabbir-owner-mailer-auth':mailerAuth});
       if(response.status===404)return json(res,200,{ok:true,otp_required:true});
       if(!response.ok||!payload?.ok||!payload?.challenge_id)return json(res,response.status===429?429:503,{ok:false,error:response.status===429?'OTP_RATE_LIMITED':(payload?.error||'OWNER_AUTH_UNAVAILABLE')});
       res.setHeader('set-cookie',challengeCookie(payload.challenge_id));
