@@ -53,31 +53,22 @@
     "api/car-wash-booking.js": {
       "includeFiles": "booking.html"
     },
-    "api/privacy-page.js": {
-      "includeFiles": "privacy.html"
-    },
-    "api/terms-page.js": {
-      "includeFiles": "terms.html"
-    },
-    "api/support-page.js": {
-      "includeFiles": "support.html"
-    },
     "api/team-page.js": {
       "includeFiles": "team.html"
     }
   },
   "routes": [
     {
-      "src": "^/privacy(?:\\.html)?/?$",
-      "dest": "/api/privacy-page"
+      "src": "^/privacy/?$",
+      "dest": "/privacy.html"
     },
     {
-      "src": "^/terms(?:\\.html)?/?$",
-      "dest": "/api/terms-page"
+      "src": "^/terms/?$",
+      "dest": "/terms.html"
     },
     {
-      "src": "^/support(?:\\.html)?/?$",
-      "dest": "/api/support-page"
+      "src": "^/support/?$",
+      "dest": "/support.html"
     },
     {
       "src": "^/team/?$",
@@ -107,27 +98,15 @@
   "rewrites": [
     {
       "source": "/privacy",
-      "destination": "/api/privacy-page"
-    },
-    {
-      "source": "/privacy.html",
-      "destination": "/api/privacy-page"
+      "destination": "/privacy.html"
     },
     {
       "source": "/terms",
-      "destination": "/api/terms-page"
-    },
-    {
-      "source": "/terms.html",
-      "destination": "/api/terms-page"
+      "destination": "/terms.html"
     },
     {
       "source": "/support",
-      "destination": "/api/support-page"
-    },
-    {
-      "source": "/support.html",
-      "destination": "/api/support-page"
+      "destination": "/support.html"
     },
     {
       "source": "/team",
