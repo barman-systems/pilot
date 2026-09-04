@@ -122,7 +122,6 @@ export default async function handler(req,res){
   try{const direct=await runDeterministicReadGoal({token:ctx.token,businessId,goal:message,language});if(direct)return json(res,200,direct)}catch(error){return json(res,502,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'VERIFIED_READ_FAILED',140)})}
   const directWrite=fallbackPlan(message,language);if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite));
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
-    const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
-    return json(res,budgetCode==='AI_MONTHLY_BUDGET_REACHED'?429:503,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE'),monthly_ai_hard_limit_aed:budgetCode?300:undefined});
+    return json(res,503,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE'});
   }
 }

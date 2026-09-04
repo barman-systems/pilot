@@ -23,10 +23,6 @@
     {
       "path": "/api/barman-executive-cron",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/dabbir-daily-operator-cron",
-      "schedule": "15 5 * * *"
     }
   ],
   "functions": {
@@ -43,9 +39,6 @@
       "maxDuration": 60
     },
     "api/barman-executive-cron.js": {
-      "maxDuration": 60
-    },
-    "api/dabbir-daily-operator-cron.js": {
       "maxDuration": 60
     },
     "api/app.js": {
