@@ -27,3 +27,15 @@ test('Golden Canary comment trigger stays main-trusted and owner-only', async ()
   assert.match(qa, /payload\.event_name==='issue_comment'/u);
   assert.match(qa, /payload\.actor!==GH_COMMENT_ACTOR\|\|String\(payload\.actor_id\|\|''\)!==GH_COMMENT_ACTOR_ID/u);
 });
+
+test('Golden Canary blocks promotion unless the real iPad WebKit responsive journey passes', async () => {
+  const workflow = await readFile(workflowUrl, 'utf8');
+
+  assert.match(workflow, /run-ai-full-customer-journey-en\.mjs/u);
+  assert.match(workflow, /CANARY_IPAD_JOURNEY_REPORT: dabbir-ai-customer-journey-report-ipad\.json/u);
+  assert.ok(workflow.includes('.ipad_webkit.verdict == "PASS"'));
+  assert.ok(workflow.includes('.ipad_webkit.mobile_step_status == "PASS"'));
+  assert.match(workflow, /\.ipad_webkit\.viewport\.width == 820/u);
+  assert.ok(workflow.includes('responsive_ipad_webkit:"PASS"'));
+  assert.match(workflow, /Exact Preview \+ iPhone\/iPad WebKit journeys passed/u);
+});
