@@ -141,7 +141,7 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
   const budgetOperationKey=`operator.ai_planning:${randomUUID()}`;
   const budget=await claimAiBudget({businessId,operationKey:budgetOperationKey,operationType:'operator.ai_planning',autonomous:false});
   if(!budget.allowed){const code=budget.reason==='MONTHLY_HARD_LIMIT'?'AI_MONTHLY_BUDGET_REACHED':'AI_BUDGET_UNAVAILABLE';throw Object.assign(new Error(code),{code,status:budget.reason==='MONTHLY_HARD_LIMIT'?429:503,budget})}
-  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:PAID_OPERATOR_MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true}},
+  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:PAID_OPERATOR_MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true,models:['openai/gpt-5.4-nano']}},
     instructions:[
       'You are DABBIR Autonomous Business Operator, an execution agent and not a chatbot.',
       'Start by inspecting the workspace. Read every relevant domain before proposing changes. Use multiple tools for multi-domain goals.',
