@@ -9,7 +9,7 @@ const endpoint=fs.readFileSync(new URL('../api/ai-business-operator.js',import.m
 const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta.url),'utf8');
 
 test('operator v3 is a bounded ToolLoopAgent with the complete state machine',()=>{
-  assert.equal(OPERATOR_VERSION,'v3.1-autonomous-safe');assert.equal(MAX_STEPS,6);
+  assert.equal(OPERATOR_VERSION,'v3.2-resilient-operator');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
   assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(9000\)/);assert.match(core,/maxOutputTokens:700/);
 });
@@ -65,7 +65,7 @@ for(let index=0;index<5;index++)test(`multi-step partial failure scenario ${inde
 });
 
 test('owner UI presents plan, approval, cancellation, receipts and bilingual copy',()=>{
-  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.1-autonomous-safe'])assert.match(ui,new RegExp(token));
+  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.2-resilient-operator'])assert.match(ui,new RegExp(token));
   assert.doesNotMatch(ui,/chain-of-thought/i);
 });
 
@@ -75,6 +75,14 @@ test('staff activity is verified without pretending appointment activity is atte
   assert.match(core,/Appointment activity proves assigned booking activity, not physical attendance/);
   assert.match(ui,/لم تُنفذ أي تغييرات ولم تُنشأ إيصالات/);
   assert.match(ui,/data\.summary\|\|data\.error/);
+});
+
+test('common owner KPI questions do not depend on the AI provider',()=>{
+  assert.match(core,/runDeterministicReadGoal/);
+  assert.match(core,/NO_MODEL_REQUIRED/);
+  assert.match(core,/unique_completed_customers/);
+  assert.match(core,/simulated_excluded:true/);
+  assert.match(endpoint,/await runDeterministicReadGoal/);
 });
 
 test('high-risk capabilities are absent from the allowlist',()=>{
