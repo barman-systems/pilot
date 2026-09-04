@@ -173,11 +173,16 @@ export default async function handler(req,res){
   try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
     const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
+    const providerStatus=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status)||null;
+    const diagnostic=clean(error?.message||error?.cause?.message||error?.name||'UNKNOWN_AI_ERROR',200).replace(/(?:sk|key|token)[-_][A-Za-z0-9_-]{12,}/gi,'[REDACTED]');
     console.error('dabbir_ai_business_operator_plan_failed',{
       version:OPERATOR_VERSION,
       error:publicError,
       budget_code:budgetCode||null,
       failure_class:publicError==='AGENT_TIMEOUT'?'TIMEOUT':'AI',
+      provider_status:providerStatus,
+      cause_name:clean(error?.name||error?.cause?.name||'Error',80),
+      diagnostic,
       external_side_effects:false,
       money_movement:false
     });

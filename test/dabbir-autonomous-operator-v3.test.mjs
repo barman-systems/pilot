@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { MAX_STEPS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, isTodayAppointmentCountGoal, runDeterministicReadGoal, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
+import { GATEWAY_FALLBACK_MODELS, MAX_STEPS, MODEL_TIMEOUT_MS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, isTodayAppointmentCountGoal, operatorModelCandidates, runDeterministicReadGoal, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
 import { deterministicPlan, deterministicWritePlan, parseInventoryCommand, validate } from '../api/ai-business-operator.js';
 
 const core=fs.readFileSync(new URL('../api/_dabbir-autonomous-agent.js',import.meta.url),'utf8');
@@ -11,7 +11,7 @@ const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta
 test('operator v4 is a bounded ToolLoopAgent with the complete state machine',()=>{
   assert.equal(OPERATOR_VERSION,'v4.0-autonomous-daily-operator');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
-  assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(9000\)/);assert.match(core,/maxOutputTokens:700/);
+  assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(perAttemptTimeout\)/);assert.equal(MODEL_TIMEOUT_MS,45000);assert.match(core,/maxOutputTokens:700/);
 });
 
 test('all required tenant read tools exist and are paginated',()=>{
@@ -195,6 +195,26 @@ test('paid operator model is protected by the 300 AED monthly hard cap',()=>{
   assert.match(core,/finalizeAiBudget/);
   assert.match(core,/HARD_MONTHLY_AI_BUDGET_AED/);
   assert.match(core,/PAID_MODEL_MONTHLY_HARD_CAP/);
-  assert.match(core,/models:\['openai\/gpt-5\.4-nano'\]/);
+  assert.deepEqual(GATEWAY_FALLBACK_MODELS,['anthropic/claude-sonnet-4.6','google/gemini-3-flash','openai/gpt-5.4-nano']);
+  assert.match(core,/models:GATEWAY_FALLBACK_MODELS/);
+  assert.match(core,/user:userId/);
+  assert.match(core,/feature:ai-business-operator/);
   assert.doesNotMatch(core,/minimax\/minimax-m3-free|FREE_TIER_ONLY/);
+});
+
+test('owner execution agent uses configured direct providers before the rate-limited gateway',()=>{
+  const candidates=operatorModelCandidates({GEMINI_API_KEY:'test-gemini',GROQ_API_KEY:'test-groq',DABBIR_GEMINI_MODEL:'gemini-test',DABBIR_GROQ_MODEL:'groq-test'});
+  assert.deepEqual(candidates.map(x=>x.name),['gemini-direct','groq-direct','vercel-gateway']);
+  assert.deepEqual(candidates.map(x=>x.modelId),['gemini-test','groq-test',PAID_OPERATOR_MODEL]);
+  assert.match(core,/generativelanguage\.googleapis\.com\/v1beta\/openai/);
+  assert.match(core,/api\.groq\.com\/openai\/v1/);
+  assert.match(core,/RESERVATION_RETAINED/);
+});
+
+
+test('provider failures retain safe diagnostics for production triage',()=>{
+  assert.match(endpoint,/provider_status:providerStatus/);
+  assert.match(endpoint,/cause_name:/);
+  assert.match(endpoint,/diagnostic/);
+  assert.match(endpoint,/\\[REDACTED\\]/);
 });
