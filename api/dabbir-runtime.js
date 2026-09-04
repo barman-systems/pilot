@@ -10,6 +10,7 @@ import {
   supabaseRpc,
 } from './_auth-core.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
+import { getDabbirAgentConfig, runDabbirAgent } from './_dabbir-agent-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUSINESS_TYPES = new Set(['store', 'laundry', 'car_wash', 'clinic', 'creator', 'salon', 'real_estate', 'services', 'other']);
@@ -562,6 +563,22 @@ async function createFollowup(identity, body) {
   };
 }
 
+async function executeAgentCommand(identity, body) {
+  const requestedBusinessId = safeId(body.business_id);
+  const requestedConversationId = safeId(body.conversation_id);
+  if (requestedBusinessId && !requireMembership(identity, requestedBusinessId)) {
+    throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'), { status: 403 });
+  }
+
+  return runDabbirAgent({
+    command: body.command,
+    writeApproved: body.approve_writes === true,
+    loadWorkspace: () => loadWorkspace(identity, requestedBusinessId, requestedConversationId),
+    createAppointment: input => createAppointment(identity, input),
+    createFollowup: input => createFollowup(identity, input),
+  });
+}
+
 export default async function handler(req, res) {
   const identity = await requireIdentity(req).catch(() => null);
   if (!identity) return json(res, 401, { ok: false, authenticated: false, error: 'AUTH_REQUIRED' });
@@ -570,7 +587,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const businessId = safeId(singleQueryValue(req, 'business_id'));
       const conversationId = safeId(singleQueryValue(req, 'conversation_id'));
-      return json(res, 200, await loadWorkspace(identity, businessId, conversationId));
+      const workspace = await loadWorkspace(identity, businessId, conversationId);
+      return json(res, 200, { ...workspace, agent: getDabbirAgentConfig() });
     }
 
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' }, { allow: 'GET, POST' });
@@ -584,6 +602,7 @@ export default async function handler(req, res) {
     else if (action === 'send_message') result = await sendMessage(identity, body);
     else if (action === 'create_appointment') result = await createAppointment(identity, body);
     else if (action === 'create_followup') result = await createFollowup(identity, body);
+    else if (action === 'agent_command') result = await executeAgentCommand(identity, body);
     else return json(res, 400, { ok: false, error: 'UNSUPPORTED_ACTION' });
 
     return json(res, result.ok === false ? 502 : 200, result);
