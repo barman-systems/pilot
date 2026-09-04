@@ -121,8 +121,8 @@ function replaceLegacyIdentity(text = '') {
 function safeGroundedReply(input, language) {
   const arabic = language === 'ar' || (language !== 'en' && /[\u0600-\u06FF]/.test(String(input || '')));
   return arabic
-    ? 'هذه المعلومة غير موثقة لدي الآن؛ أعطني المطلوب وسأنفذ الخطوة الآمنة.'
-    : 'That detail is not verified yet; tell me the task and I will take the safe next step.';
+    ? 'هذه المعلومة غير موثقة، ولن أخمّنها. أعطني المطلوب.'
+    : 'That detail is not verified, so I will not guess. Tell me what you need.';
 }
 
 function normalizeHistory(history = []) {
