@@ -18,7 +18,7 @@ test('Apple-linked account deletion revokes Sign in with Apple before destructiv
   assert.match(accountDelete, /dabbir_delete_current_user_account/);
 
   const preflight = accountDelete.indexOf("supabaseRpc('dabbir_delete_current_user_account_preflight'");
-  const revoke = accountDelete.indexOf('revokeAppleAuthorizationForDeletion');
+  const revoke = accountDelete.indexOf('await revokeAppleAuthorizationForDeletion(');
   const destructive = accountDelete.lastIndexOf("supabaseRpc('dabbir_delete_current_user_account'");
   assert.ok(preflight >= 0 && revoke > preflight && destructive > revoke, 'preflight -> Apple revoke -> DABBIR delete order must remain fail-closed');
 });
