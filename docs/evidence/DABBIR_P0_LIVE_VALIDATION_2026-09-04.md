@@ -1,130 +1,58 @@
 # DABBIR P0 live validation evidence — 2026-09-04
 
-Status: **BLOCKED — official WhatsApp Test Number and the real 48-hour Shadow window are not yet proven.**
+Status: **BLOCKED — Preview/test credential isolation and the real 48-hour Shadow window are still open.**
 
-Production was not changed. The PR remains Draft. Neither Production schema nor a real business WhatsApp number was touched.
+Production remains unchanged by PR #474. The PR remains Draft. The P0 Production migration is not applied.
 
 ## Source identity
 
-- Main and Production SHA at re-sync: `0ed73ec41fea4234e0b91d64b40722c2a5023fad`
-- P0 branch/PR SHA used by the first post-fix Preview: `9fb65931e9deefc6ac0f37eef2a91762e687fcd1`
+- Current PR head: `1846adbc0e7d348dae2991b3d550e47bbcb48ce8`
+- Current `main` / Production runtime observed during continuation: `57d145408d1a571576183c43cc2b646b6057ab17`
+- Current exact-head Preview: `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` — READY
 - Migration: `supabase/migrations/20260904123000_dabbir_car_wash_killer_job_p0.sql`
 - Migration SHA-256: `a8533f64b6f07dc961bddc70eeb4d6cb92da74af26f8b20c38057ec0ba2d150c`
 - Schema-only artifact: `artifacts/dabbir-p0-schema-only-20260904.sql`
 - Schema-only SHA-256: `94687b0073723fcefc7359b7d5dffec6d3c154e9db5ae0f6a9978bb2fc0f659d`
 - Production migration status: **NOT APPLIED**
 
-## Actual PostgreSQL validation
+## Proven PostgreSQL / P0 baseline
 
-The migration was compiled and exercised on Supabase Postgres 17.6 in the isolated `dabbir-p0-live-validation` branch. Test data used synthetic `.test` identities and synthetic phone numbers only.
+The targeted P0 migration was previously compiled and exercised on Supabase Postgres 17.6 in the isolated `dabbir-p0-live-validation` branch using synthetic identities and synthetic phone data only.
 
-Three defects found by actual PostgreSQL execution were fixed:
+Verified baseline includes:
 
-1. Low-confidence extraction returned price and slots instead of failing closed.
-2. Atomic confirmation wrote into generated currency/price columns.
-3. Reminder leasing had an ambiguous `business_id` column reference.
+- Forced-RLS tenant tables: `3/3`.
+- Tenant A/B/outsider isolation passed.
+- Authenticated direct writes to P0 ledgers denied.
+- Concurrent confirmation of one crew/slot produced exactly one booking; the loser failed `CAR_WASH_CREW_DOUBLE_BOOKED`.
+- Cancellation released capacity.
+- Schedule, break, time-off and calendar-busy exclusions passed.
+- Illegal transitions and idempotency replay were rejected/handled correctly.
+- Kill Switch and Shadow outbound=0 logic passed.
+- Payment without provider evidence was rejected.
+- Reminder lease/finalize/delivery reconciliation/replay passed.
+- Independent targeted restore and schema-only restore passed.
+- Security Advisor after hardening: `0 ERROR`, `2 WARN`, `37 INFO`.
+- Performance Advisor: no ERROR/WARN.
 
-Verified results:
+## Isolated Supabase branch — current truth
 
-- Low confidence: `HUMAN_REQUIRED / LOW_CONFIDENCE`.
-- Illegal transition: rejected.
-- Same transition/idempotency key: replayed without a second transition.
-- Two concurrent confirmations for the same crew and slot: one booking succeeded; the other failed with `CAR_WASH_CREW_DOUBLE_BOOKED`.
-- Cancellation released capacity and a replacement booking succeeded.
-- Worker branch membership, work schedule, break, time off and calendar busy blocks all changed availability as expected.
-- Payment without verified provider evidence: rejected.
-- Verified payment evidence: accepted; Estimated, Verified, Recovered and Lost remained distinct.
-- Shadow outbound rows: `0`.
-- Kill Switch: new automated action rejected.
-- Reminder lease, finalize, delivery reconciliation and duplicate delivery replay: passed.
+- Production: `DABBIR Mumbai` / `fphpoysqdsceniwduxjq` — ACTIVE_HEALTHY.
+- Isolated branch: `dabbir-p0-live-validation` / `krjqfgkqksyknryolhdz` — runtime ACTIVE_HEALTHY.
+- Branch metadata reports `MIGRATIONS_FAILED` because full historical replay still encounters the known legacy-baseline dependency gap (`dabbir_private` / `dabbir_memberships`). This is the known full-project DR gap; it does not remove the targeted P0 schema.
+- Direct live inspection confirms the isolated branch contains:
+  - `dabbir_car_wash_jobs`
+  - `dabbir_car_wash_job_transitions`
+  - `dabbir_car_wash_outcome_ledger`
+  - `dabbir_car_wash_settings`
+  - `dabbir_car_wash_booking_requests`
+- Direct Production inspection confirms the three new P0 ledger/state tables are absent there: Production migration remains **NOT APPLIED**.
 
-Catalog evidence on the applied P0 schema:
+## Preview isolation — exact-head runtime probe
 
-- Forced-RLS tenant tables: `3/3`
-- Tenant SELECT policies: `3`
-- Car-wash indexes: `18`
-- Car-wash foreign keys: `27`
-- Car-wash triggers: `3`
-- Authenticated table grants on new P0 ledgers: SELECT only
-- Anonymous execute on every public car-wash RPC: false
-- Service-role-only WhatsApp RPCs: confirmed
+The exact-head Preview `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` is READY and has no build error/stderr/exit events.
 
-Actual RLS execution:
-
-- Tenant A could read Tenant A and could not read Tenant B.
-- Tenant B could read Tenant B and could not read Tenant A.
-- A user without membership read zero rows.
-- Direct INSERT/UPDATE by `authenticated` on P0 ledgers was denied.
-
-## Security and performance advisors
-
-After hardening the legacy migration helper:
-
-- Security Advisor: `0 ERROR`, `2 WARN`, `37 INFO`.
-- The two warnings are intentional authenticated `SECURITY DEFINER` owner paths. Both independently verify active tenant permission; non-human actors remain service-role-only.
-- Performance Advisor: `0 ERROR/WARN`, `65 INFO`. The P0 notices are unindexed-FK recommendations, not correctness failures; hot-path business/time indexes are present.
-
-## Independent restore proof
-
-Two temporary Supabase branches were created and deleted after use:
-
-1. Full fixed migration restore: baseline + migration compiled; Availability returned a 220 AED slot; two concurrent confirmations produced exactly one booking; same-key replay returned the same booking.
-2. Schema-only artifact restore: the independent artifact applied successfully; Availability → Confirmed → Assigned succeeded; member read and direct-write denial passed; the restored catalog contained `3` Forced-RLS tables, `3` policies, `18` indexes, `27` foreign keys and `3` triggers.
-
-Remaining recovery limitation: the repository's complete historical migration chain still does not reconstruct the whole legacy operational baseline on a blank branch. P0's targeted additive restore is proven, but full-project disaster recovery remains a separate open gate.
-
-## Application verification
-
-- Full Node test suite after current-main merge: `1245/1245` passed.
-- Focused live-validation/WhatsApp/car-wash contracts: `29/29` passed.
-- JavaScript syntax: passed.
-- DABBIR build: passed.
-- Production dependency audit: `0 vulnerabilities`.
-- Exact-sha Preview `9fb6593…`: READY.
-- Preview safety probe: correctly blocked live execution because Preview was not yet scoped to the Test database and Meta Test credentials were absent.
-
-## Cost ledger
-
-| Resource | Purpose | Cost | Duration | Type | Stop method |
-|---|---|---:|---:|---|---|
-| Supabase live-validation branch | PostgreSQL/Shadow evidence | `$0.01344/hour` | Active until Shadow evidence is complete | Recurring hourly | Delete branch |
-| Supabase full-restore branch | Migration + concurrency restore test | About `$0.0023` | About 10 minutes | One-time | Deleted |
-| Supabase schema-dump restore branch | Independent schema-only restore | Under `$0.001` | About 3 minutes | One-time | Deleted |
-| Meta/AI/Vercel usage | Not used yet | `0 AED measured` | — | — | — |
-
-Projected Supabase cost for a 48-hour Shadow window is `$0.64512`, approximately `2.37 AED`. This is well inside the approved 300 AED cap.
-
-## Rollback / containment
-
-1. Set the tenant Kill Switch and `operator_mode=paused` before stopping workers.
-2. Disable MESSAGE/BOOK/ASSIGN/REMIND/CHARGE permissions.
-3. Stop reminder/webhook writes and preserve audit, transition and outcome rows.
-4. If no real P0 data exists, drop the view, functions, triggers, policies and P0 tables in dependency order.
-5. If P0 data exists, do not destructive-rollback; keep the ledgers and ship a forward fix.
-6. Production alias and schema remain unchanged until explicit owner approval.
-
-## Open gates
-
-- Scope Preview Supabase variables to the isolated test branch.
-- Configure an official Meta Test Number/Test WABA and authorized test recipient.
-- Complete signed inbound and provider delivery-status E2E.
-- Run a real 48-hour Shadow window with outbound count equal to zero.
-- Run Controlled Live only in the Test tenant after Shadow passes.
-- Re-run final browser/mobile Golden Canary on the final Preview SHA.
-
-## Live continuation checkpoint — 2026-09-04 16:56 UTC
-
-### GitHub / Preview
-
-- PR head at checkpoint: `8fab3b38d1690911e4c4ac8f53da997aa6f9afd2`.
-- `main` advanced independently to `57d145408d1a571576183c43cc2b646b6057ab17` through PR #480. Final exact-head re-sync is still required before Golden Canary.
-- Exact PR-head Vercel Preview `dpl_Fx86PThqhY5PvbBNjJVvt7h1HeLm`: READY.
-- DABBIR CI run 2191: SUCCESS.
-- DABBIR Mobile CI run 238: SUCCESS.
-
-### Preview isolation probe
-
-The live exact-head Preview probe returned a fail-closed result:
+Its live validation probe returns fail-closed:
 
 - scope: `DABBIR_P0_TEST_ONLY`
 - `database_target = non_test_database_blocked`
@@ -132,30 +60,61 @@ The live exact-head Preview probe returned a fail-closed result:
 - WhatsApp webhook configured: false
 - WhatsApp outbound configured: false
 - WABA configured: false
-- Test recipient configured: false
-- Meta authorization not attempted because Meta read credentials are not configured
+- Meta authorization: false / not attempted
+- reason: `META_READ_CREDENTIALS_NOT_CONFIGURED`
+- test recipient configured: false
 - `live_execution_allowed = false`
 - `secrets_exposed = false`
 
-No live Meta send was attempted. Gate A therefore remains blocked until branch-scoped Preview environment values target the isolated Supabase test project and official Meta Test credentials/test recipient are available.
+No Meta message was sent. No real customer or Production WhatsApp number was used.
 
-### Supabase isolated branch truth
+## Real 48-hour Shadow window
 
-- Production project `DABBIR Mumbai` (`fphpoysqdsceniwduxjq`) remains `ACTIVE_HEALTHY`.
-- Isolated P0 branch `dabbir-p0-live-validation` (`krjqfgkqksyknryolhdz`) remains `ACTIVE_HEALTHY` at runtime.
-- Branch metadata reports `MIGRATIONS_FAILED` because automatic historical migration replay still hits the known legacy-baseline dependency gap (`dabbir_private` / `dabbir_memberships`). This does not mean the targeted P0 schema is absent.
-- Direct live inspection confirms the P0 objects are present: `dabbir_car_wash_jobs`, `dabbir_car_wash_job_transitions`, `dabbir_car_wash_outcome_ledger`, `dabbir_car_wash_settings`, and `dabbir_car_wash_booking_requests`.
+The isolated test branch has two synthetic settings rows in `operator_mode = shadow` with:
 
-### Real Shadow window
+- `shadow_started_at = 2026-09-04 14:58:16.211973+00`
+- `kill_switch = false`
+- `READ = true`
+- `QUOTE = true`
+- `MESSAGE = false`
+- `BOOK = false`
+- `ASSIGN = false`
+- `REMIND = false`
+- `CHARGE = false`
 
-Two isolated synthetic test settings rows are currently in `operator_mode = shadow` with `shadow_started_at = 2026-09-04 14:58:16.211973+00`.
+Latest safety checkpoint:
 
-Both keep `MESSAGE`, `BOOK`, `ASSIGN`, `REMIND`, and `CHARGE` disabled. At this checkpoint:
-
+- jobs: `4`
 - job transitions: `5`
-- transitions with non-empty `external_result`: `0`
+- outcome ledger rows observed: `5`
+- transitions with non-empty external result: `0`
 - transitions using external permissions (`MESSAGE|BOOK|ASSIGN|REMIND|CHARGE`): `0`
 
-Therefore the real 48-hour Shadow clock is running from 2026-09-04 14:58:16 UTC. It is not backdated or compressed. Controlled Live remains forbidden until the elapsed-time gate passes.
+The Shadow clock is real and must complete 48 elapsed hours. Earliest gate completion is approximately `2026-09-06 14:58:16 UTC` / `2026-09-06 18:58:16 Asia/Dubai`.
 
-Current decision remains: **BLOCKED — Gate A is fail-closed and the real 48-hour Shadow window is in progress.**
+An hourly safety watch is active, and a continuation gate is scheduled immediately after the 48-hour point. Controlled Live remains forbidden until the elapsed Shadow gate passes.
+
+## Application / CI state
+
+Before this evidence-only checkpoint commit, exact P0 head verification was green:
+
+- Focused P0/WhatsApp/car-wash: `49/49`.
+- Full suite: `1250/1250`.
+- Build gate: `1250/1250`.
+- DABBIR CI run 2191: SUCCESS.
+- DABBIR Mobile CI run 238: SUCCESS.
+
+For current evidence-only head `1846adbc...`, DABBIR CI run 2195 and Mobile CI run 239 were still in progress at the last checkpoint. Exact-head Vercel Preview itself is READY.
+
+## Current gates
+
+1. **Gate A — BLOCKED / fail-closed:** Preview is not yet fully scoped to the isolated Supabase test credentials and official Meta Test credentials/test recipient are absent.
+2. **Gate B — BLOCKED:** real official Meta Test Number inbound/outbound/status E2E cannot start until Gate A is safe.
+3. **Gate C — BLOCKED:** Owner Receipt from real provider test E2E is not yet available.
+4. **Gate D — IN PROGRESS:** real 48-hour Shadow window is running with external action count still zero.
+5. **Gate E — NOT STARTED:** Controlled Live is prohibited until Gate D passes.
+6. **Gate F — PARTIAL:** exact-head Preview is READY and fail-closed probe works; final mobile/desktop Golden Canary belongs after the final functional head and current-main re-sync.
+
+## Production safety
+
+**Production is unchanged by this PR and remains outside the P0 test execution path. Do not merge PR #474, apply the P0 Production migration, or deploy this branch to Production before all gates pass and explicit owner approval is received.**
