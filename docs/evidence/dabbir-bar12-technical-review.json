@@ -1,35 +1,49 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
-    "deployment_id": "dpl_2LqMp5GDHguKSsWvxMqFrNMSC4T7",
+    "source_commit": "fa7aeddb06aad9ee93712e455e452a20c09a3b87",
+    "deployment_id": "dpl_F3QytXMQLAfm2PFSKaTj5LpzvUEu",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-04T13:01:59.264Z",
+    "checked_at": "2026-09-04T17:28:25.178Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
-    "levels_checked": ["warning", "error", "fatal"],
-    "matching_logs": 0
+    "levels_checked": [
+      "warning",
+      "error",
+      "fatal"
+    ],
+    "matching_logs": 0,
+    "scope": "deployment_id=dpl_F3QytXMQLAfm2PFSKaTj5LpzvUEu; environment=production",
+    "project_wide_context": {
+      "matching_logs": 19,
+      "classification": {
+        "operator_provider_or_timeout": 5,
+        "tool_agent_gateway_or_timeout": 4,
+        "expected_chat_control_4xx": 10
+      },
+      "note": "The project-wide 24h query included superseded deployments. The BAR-12 runtime query was separately scoped to the authoritative current Production deployment and returned zero warning/error/fatal rows."
+    }
   },
   "alert_delivery": {
-    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
-    "deployment_id": "dpl_2LqMp5GDHguKSsWvxMqFrNMSC4T7",
+    "source_commit": "fa7aeddb06aad9ee93712e455e452a20c09a3b87",
+    "deployment_id": "dpl_F3QytXMQLAfm2PFSKaTj5LpzvUEu",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-04T13:02:05.738Z",
+    "verified_at": "2026-09-04T17:28:25.179Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
     "channel_name": "barman-executive-alerts",
-    "message_ts": "1788525489.681249",
-    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788525489681249",
+    "message_ts": "1788542738.390559",
+    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788542738390559",
     "readback_verified": true,
     "test_only": true,
     "contains_secrets_or_customer_data": false,
-    "notes": "The single permitted test-only BAR-12 operational alert was updated in place with the exact current public Production release identity and read back from Slack at the same message timestamp; it contains no secrets or customer data."
+    "notes": "Exactly one new test-only message was sent in this review, then read back at the same timestamp. It contains no secrets, customer data, or operational commands."
   },
   "security": {
-    "source_commit": "ea50183c79b0409cdb23c676c867d85dfef96b58",
+    "source_commit": "fa7aeddb06aad9ee93712e455e452a20c09a3b87",
     "project_ref": "fphpoysqdsceniwduxjq",
-    "reviewed_at": "2026-09-04T13:00:31.202Z",
+    "reviewed_at": "2026-09-04T17:24:30.636Z",
     "verdict": "PASS",
     "blocking_findings": 0,
     "advisor_max_level": "INFO",
@@ -55,8 +69,18 @@
         "warn": 0,
         "info": 67
       },
-      "all_six_reviewed_functions_service_role_only": true
+      "all_six_reviewed_functions_service_role_only": true,
+      "ai_budget_functions_security_definer": true,
+      "ai_budget_functions_empty_search_path": true,
+      "ai_budget_functions_timezone_utc": true
     },
-    "notes": "Supabase Security Advisor was rerun against the authoritative Production project and returned 67 INFO findings, 0 WARN and 0 ERROR. The four legacy public-definer functions and both AI budget functions were reviewed live; PUBLIC, anon and authenticated cannot execute them, service_role can, direct anonymous booking-table DML is denied, and the booking abuse-guard trigger remains present."
+    "notes": "Live catalog verification confirmed all six reviewed SECURITY DEFINER functions deny EXECUTE to PUBLIC, anon, and authenticated while service_role can execute them. Both AI budget functions have search_path='' and TimeZone=UTC. Security Advisor returned 67 INFO, 0 WARN, 0 ERROR; all INFO findings are RLS-enabled tables with no policies."
+  },
+  "recovery": {
+    "backup_id": "1568460944",
+    "backup_completed": true,
+    "restore_tested": false,
+    "restore_performed_in_this_task": false,
+    "notes": "Restore remains explicitly untested and was not attempted."
   }
 }
