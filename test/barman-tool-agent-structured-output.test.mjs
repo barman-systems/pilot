@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// This regression must run behind the repository's bounded, fail-closed dependency audit gate.
 const broker=fs.readFileSync(new URL('../api/barman-tool-agent-broker.js',import.meta.url),'utf8');
 
 test('tool-agent requests machine-enforced JSON schema instead of trusting prompt-only JSON',()=>{
