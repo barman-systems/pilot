@@ -16,6 +16,10 @@ test('CI exposes a repository-wide JavaScript syntax gate', () => {
 test('CI audits production dependency vulnerabilities at high severity with bounded fail-closed retries', () => {
   assert.equal(pkg.scripts?.['audit:prod'], 'node scripts/audit-prod-retry.mjs');
   assert.match(auditRetry, /const MAX_ATTEMPTS = 3;/);
+  assert.match(auditRetry, /const ATTEMPT_TIMEOUT_MS = 20000;/);
+  assert.match(auditRetry, /SIGTERM/);
+  assert.match(auditRetry, /SIGKILL/);
+  assert.match(auditRetry, /ETIMEDOUT/);
   assert.match(auditRetry, /['"]audit['"]/);
   assert.match(auditRetry, /['"]--omit=dev['"]/);
   assert.match(auditRetry, /['"]--audit-level=high['"]/);
