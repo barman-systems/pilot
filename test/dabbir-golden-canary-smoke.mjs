@@ -27,6 +27,11 @@ const report={
 
 function assert(condition,message){if(!condition)throw new Error(message||'ASSERTION_FAILED')}
 function headers(extra={}){return {'x-vercel-trusted-oidc-idp-token':TRUSTED_OIDC,...extra}}
+function shouldIgnoreConsoleError(text){
+  const value=String(text||'');
+  if(/401|AUTH_REQUIRED|Failed to load resource/i.test(value))return true;
+  return /^Refused to load https:\/\/vercel\.live\/_next-live\/feedback\/feedback\.js\b.*Content Security Policy/i.test(value);
+}
 async function protectedFetch(path,init={}){const h=new Headers(init.headers||{});for(const [k,v] of Object.entries(headers()))h.set(k,v);return fetch(`${ORIGIN}${path}`,{redirect:'follow',cache:'no-store',...init,headers:h})}
 async function step(name,fn){const started=Date.now();const row={name,status:'RUNNING',duration_ms:null,detail:null};report.steps.push(row);try{const detail=await fn();row.status='PASS';row.duration_ms=Date.now()-started;row.detail=detail||null;console.log(`PASS ${name} (${row.duration_ms}ms)${detail?` — ${detail}`:''}`)}catch(error){row.status='FAIL';row.duration_ms=Date.now()-started;row.detail=String(error?.stack||error?.message||error).slice(0,1200);console.error(`FAIL ${name} — ${row.detail}`);throw error}}
 
@@ -70,7 +75,7 @@ try{
     const page=await context.newPage();
     const pageErrors=[];const consoleErrors=[];
     page.on('pageerror',error=>pageErrors.push(String(error?.message||error)));
-    page.on('console',message=>{if(message.type()==='error'&&!/401|AUTH_REQUIRED|Failed to load resource/i.test(message.text()))consoleErrors.push(message.text())});
+    page.on('console',message=>{if(message.type()==='error'&&!shouldIgnoreConsoleError(message.text()))consoleErrors.push(message.text())});
     const response=await page.goto(ORIGIN,{waitUntil:'domcontentloaded',timeout:45000});
     assert(response?.status()===200,`BROWSER_HOME_STATUS_${response?.status()}`);
     await page.locator('#authGate:not(.hidden)').waitFor({state:'visible',timeout:20000});
