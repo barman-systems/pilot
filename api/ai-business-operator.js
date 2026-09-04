@@ -81,8 +81,21 @@ export function parseInventoryCommand(message){
   return null;
 }
 async function aiPlan(message,language){
-  const prompt=['Map the owner command to exactly one DABBIR tool.','Return JSON only: {"tool":"tool_name","args":{},"summary":"short"}.','For booking requests, use day today or tomorrow only and period afternoon or exact.','Never invent database IDs. Allowed tools: '+JSON.stringify(toolCatalog()),'Owner command: '+message].join('\n');
-  try{const task=generateDABBIRAiReply({project:'dabbir_businesses',message:prompt,language,businessContext:'Tool selection only. Server validates and executes.'});const timeout=new Promise(resolve=>setTimeout(()=>resolve(null),3500));const out=await Promise.race([task,timeout]);return out?.ok?parseJsonObject(out.reply):null}catch{return null}
+  const prompt=[
+    'Map the owner command to exactly one supported DABBIR write tool.',
+    'Return JSON only: {"tool":"tool_name","args":{},"summary":"short"}.',
+    'If the command is not a supported write or a required field is missing, return {"tool":null,"args":{},"summary":"missing_or_unsupported"}.',
+    'For exact booking requests include customer_name, day as today or tomorrow, period exact, exact_time as HH:MM in 24-hour time, and duration_minutes default 30.',
+    'For afternoon booking requests include customer_name, day as today or tomorrow, period afternoon, and duration_minutes default 30.',
+    'Never invent database IDs or claim that execution happened. Allowed tools: '+JSON.stringify(toolCatalog()),
+    'Owner command: '+message
+  ].join('\n');
+  try{const task=generateDABBIRAiReply({project:'dabbir_businesses',message:prompt,language,businessContext:'Tool selection only. Server validates, asks for owner approval, and executes separately.'});const timeout=new Promise(resolve=>setTimeout(()=>resolve(null),3500));const out=await Promise.race([task,timeout]);return out?.ok?parseJsonObject(out.reply):null}catch{return null}
+}
+function looksLikeWriteIntent(message){
+  const text=String(message||'').replace(/ـ/g,'').trim();
+  return /(?:احجز|حجّز|أنشئ|انشئ|أضف|اضف|ضف|ضيف|سجل|سجّل|حدث|حدّث|عدل|عدّل|اجعل|إجعل|خلي|خلّي|استلم|استقبل|ورد|ورّد|نفذ|نفّذ|book|schedule|create|add|record|set|update|receive|restock|execute)/iu.test(text)
+    ||/(?:ابي|أبي|اريد|أريد|ابغى|أبغى|i want|need)\s+.*(?:حجز|احجز|أحجز|book(?:ing)?)/iu.test(text);
 }
 export function validate(plan){
   if(!plan||!toolCatalog().some(t=>t.name===plan.tool))return null;const a=plan.args&&typeof plan.args==='object'?plan.args:{};
@@ -144,18 +157,23 @@ export async function deterministicWritePlan({token,businessId,message,language=
   let plan=deterministicPlan(message),payload=validate(plan);
   if(!payload){
     const inventory=parseInventoryCommand(message);
-    if(!inventory)return null;
-    if(inventory.quantity<0)throw Object.assign(new Error('INVENTORY_QUANTITY_INVALID'),{status:400});
-    const products=await rest(token,`dabbir_products?select=id,sku,name,active&business_id=eq.${businessId}&limit=100`,{},'PRODUCT_LOOKUP_FAILED');
-    const ref=inventory.product_ref.toLocaleLowerCase('en-US');
-    const skuMatches=(products||[]).filter(x=>String(x.sku||'').trim().toLocaleLowerCase('en-US')===ref);
-    const nameMatches=(products||[]).filter(x=>String(x.name||'').trim().toLocaleLowerCase('en-US')===ref);
-    const matches=skuMatches.length?skuMatches:nameMatches;
-    if(matches.length===0)throw Object.assign(new Error('PRODUCT_NOT_FOUND'),{status:404});
-    if(matches.length!==1)throw Object.assign(new Error('PRODUCT_REFERENCE_AMBIGUOUS'),{status:409});
-    plan={tool:inventory.tool,args:{product_id:matches[0].id,quantity:inventory.quantity,note:clean(message,240)},summary:inventory.summary};
-    payload=validate(plan);
-    if(!payload)throw Object.assign(new Error('INVENTORY_PLAN_INVALID'),{status:400});
+    if(inventory){
+      if(inventory.quantity<0)throw Object.assign(new Error('INVENTORY_QUANTITY_INVALID'),{status:400});
+      const products=await rest(token,`dabbir_products?select=id,sku,name,active&business_id=eq.${businessId}&limit=100`,{},'PRODUCT_LOOKUP_FAILED');
+      const ref=inventory.product_ref.toLocaleLowerCase('en-US');
+      const skuMatches=(products||[]).filter(x=>String(x.sku||'').trim().toLocaleLowerCase('en-US')===ref);
+      const nameMatches=(products||[]).filter(x=>String(x.name||'').trim().toLocaleLowerCase('en-US')===ref);
+      const matches=skuMatches.length?skuMatches:nameMatches;
+      if(matches.length===0)throw Object.assign(new Error('PRODUCT_NOT_FOUND'),{status:404});
+      if(matches.length!==1)throw Object.assign(new Error('PRODUCT_REFERENCE_AMBIGUOUS'),{status:409});
+      plan={tool:inventory.tool,args:{product_id:matches[0].id,quantity:inventory.quantity,note:clean(message,240)},summary:inventory.summary};
+      payload=validate(plan);
+      if(!payload)throw Object.assign(new Error('INVENTORY_PLAN_INVALID'),{status:400});
+    }else{
+      plan=await aiPlan(message,language);
+      payload=validate(plan);
+      if(!payload)return null;
+    }
   }
   const raw={...payload,step:1,reason:clean(plan.summary,160),idempotency_key:`dao:${Buffer.from(`${message}:${payload.action}`).toString('base64url').slice(0,40)}`};
   return {raw,approval:describeApproval([raw],language)};
@@ -171,7 +189,13 @@ export default async function handler(req,res){
   if(action!=='plan')return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});const message=clean(body?.message,800);if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
   try{const direct=await runDeterministicReadGoal({token:ctx.token,businessId,goal:message,language});if(direct)return json(res,200,direct)}catch(error){return json(res,502,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'VERIFIED_READ_FAILED',140)})}
   try{const directWrite=await deterministicWritePlan({token:ctx.token,businessId,message,language});if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite))}catch(error){const status=[400,404,409].includes(Number(error?.status))?Number(error.status):502;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'DETERMINISTIC_WRITE_FAILED',140)})}
-  try{return json(res,200,await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate}))}catch(error){
+  try{
+    const planned=await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate});
+    if(planned?.state==='completed'&&!planned?.executed&&!(Array.isArray(planned?.plan)&&planned.plan.length)&&looksLikeWriteIntent(message)){
+      return json(res,422,{...planned,ok:false,state:'failed',error:'NO_EXECUTABLE_PLAN',summary:language==='ar'?'لم يُنفذ شيء: لم يتمكن دبّر من بناء خطوة تنفيذية قابلة للموافقة لهذا الطلب. اذكر اسم العميل والوقت المطلوب بوضوح.':'Nothing was executed: DABBIR could not build an approvable execution step for this request. Include the customer name and requested time.'});
+    }
+    return json(res,200,planned);
+  }catch(error){
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
     const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
     const providerStatus=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status)||null;
