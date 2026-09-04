@@ -7,11 +7,10 @@ const shell = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const previewHandler = fs.readFileSync(new URL('../api/dabbir-market-preview.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
-test('public activation page communicates vertical, outcome, approvals, evidence and price before signup', () => {
+test('public activation page communicates vertical, outcome, approvals and evidence before signup', () => {
   for (const marker of [
     'لمشغلي غسيل السيارات المتنقل في الإمارات',
     'كل استفسار WhatsApp يصبح حجزًا مؤكدًا',
-    '299 AED',
     '14 يومًا بلا بطاقة',
     'Shadow Mode',
     'Owner Receipt',
@@ -22,6 +21,11 @@ test('public activation page communicates vertical, outcome, approvals, evidence
   const demoPosition = landing.indexOf('id="demoForm"');
   const signupPosition = landing.indexOf('ابدأ تجربة 14 يومًا');
   assert.ok(demoPosition >= 0 && signupPosition > demoPosition, 'signup CTA must appear after the value demo');
+});
+
+test('market preview aligns the public offer to the 29.99 AED subscription contract', () => {
+  assert.match(previewHandler, /\.replace\('299 AED','29\.99 AED'\)/);
+  assert.match(previewHandler, /car-wash-killer-job-v2/);
 });
 
 test('activation page calls the isolated same-origin demo endpoint and renders evidence', () => {
