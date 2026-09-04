@@ -1,20 +1,20 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
-    "deployment_id": "dpl_H618Kth2RGQwxS5Z3y62kbkxT4SV",
+    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
+    "deployment_id": "dpl_8628zYGW7ZW4xuxzapUoHA7L4u12",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-04T12:38:28.714Z",
+    "checked_at": "2026-09-04T12:46:15.097Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
   "alert_delivery": {
-    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
-    "deployment_id": "dpl_H618Kth2RGQwxS5Z3y62kbkxT4SV",
+    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
+    "deployment_id": "dpl_8628zYGW7ZW4xuxzapUoHA7L4u12",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-04T12:38:28.714Z",
+    "verified_at": "2026-09-04T12:46:15.097Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
@@ -27,7 +27,7 @@
     "notes": "A test-only BAR-12 operational alert containing only the exact current public Production release identity was delivered to the reserved owner alert channel and read back from Slack at the same message timestamp."
   },
   "security": {
-    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
+    "source_commit": "91bc7a29d6e1a7937d8924bf33525e821b1f357c",
     "project_ref": "fphpoysqdsceniwduxjq",
     "reviewed_at": "2026-09-04T12:37:37.837Z",
     "verdict": "PASS",
