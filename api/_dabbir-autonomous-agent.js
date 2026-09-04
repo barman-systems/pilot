@@ -1,13 +1,14 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ToolLoopAgent, jsonSchema, stepCountIs, tool } from 'ai';
 import { supabaseRest } from './_auth-core.js';
+import { claimAiBudget, finalizeAiBudget, generationCost, HARD_MONTHLY_AI_BUDGET_AED } from './_dabbir-ai-budget.js';
 
-export const OPERATOR_VERSION='v3.3-resilient-operator';
+export const OPERATOR_VERSION='v4.0-autonomous-daily-operator';
 export const RUN_STATES=['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled'];
-export const READ_TOOLS=['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals'];
+export const READ_TOOLS=['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','inspect_daily_management_reports','get_business_goals','get_pending_approvals','inspect_proactive_signals'];
 export const WRITE_TOOLS=['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment'];
 export const MAX_STEPS=6;
-const MODEL=process.env.DABBIR_AI_GATEWAY_MODEL||'minimax/minimax-m3-free';
+export const PAID_OPERATOR_MODEL=process.env.DABBIR_AI_GATEWAY_MODEL||'openai/gpt-5.4';
 const hash=v=>createHash('sha256').update(String(v)).digest('hex');
 const clean=(v,n=800)=>String(v??'').trim().slice(0,n);
 const jsonStable=v=>JSON.stringify(v,Object.keys(v||{}).sort());
@@ -67,6 +68,7 @@ async function readTool(token,businessId,name,input={}){
     inspect_customers:`dabbir_customers?select=id,display_name,lead_status,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&${range}`,
     inspect_conversations:`dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&${range}`,
     inspect_recent_operator_runs:`dabbir_ai_action_ledger?select=id,operation_key,operation_type,entity_id,result,created_at,updated_at&business_id=eq.${businessId}&order=created_at.desc&${range}`,
+    inspect_daily_management_reports:`dabbir_operation_outcomes?select=id,operation_key,outcome,cost_microusd,metadata,completed_at&business_id=eq.${businessId}&operation_type=eq.operator.daily_business_review&outcome=eq.VERIFIED_SUCCESS&order=completed_at.desc&${range}`,
     get_pending_approvals:`dabbir_action_policies?select=action_key,risk_class,requires_owner_approval,active,metadata,updated_at&business_id=eq.${businessId}&requires_owner_approval=eq.true&active=eq.true&order=updated_at.desc&${range}`
   };
   if(!paths[name])throw Object.assign(new Error('READ_TOOL_NOT_ALLOWED'),{status:400});
@@ -77,6 +79,11 @@ async function readTool(token,businessId,name,input={}){
 
 export async function runDeterministicReadGoal({token,businessId,goal,language='ar'}){
   const query=clean(goal,800).toLowerCase(),ar=language!=='en';
+  if(/(?:تقرير|ملخص|مراجعة).*(?:يومي|اليوم|الإدارة|الادارة|العمليات)|(?:daily|today).*(?:management|operations|business).*(?:report|review)/i.test(query)){
+    const evidence=await readTool(token,businessId,'inspect_daily_management_reports',{limit:1,offset:0}),latest=evidence.items?.[0]||null,report=latest?.metadata?.report||null;
+    if(!report)return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',goal,summary:ar?'لا يوجد تقرير إدارة يومي مكتمل بعد لهذا النشاط.':'No completed daily management report exists for this business yet.',evidence,trace:[{tool:'inspect_daily_management_reports',state:'verified'}],transitions:[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()},{state:'verifying',at:new Date().toISOString()},{state:'completed',at:new Date().toISOString()}]};
+    return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'NO_MODEL_REQUIRED',goal,summary:report.business_owner?.executive_summary||latest.metadata?.summary||'',report,evidence:{truth:'verified',source:'dabbir_operation_outcomes',outcome_id:latest.id,completed_at:latest.completed_at,cost_microusd:latest.cost_microusd},trace:[{tool:'inspect_daily_management_reports',state:'verified'}],transitions:[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()},{state:'verifying',at:new Date().toISOString()},{state:'completed',at:new Date().toISOString()}]};
+  }
   const todayCustomers=/(?:كم|عدد).*(?:زبون|عميل|customer|client).*(?:اليوم|today)|(?:اليوم|today).*(?:كم|عدد).*(?:زبون|عميل|customer|client)/i.test(query);
   if(todayCustomers){
     const businesses=await rest(token,`dabbir_businesses?select=id,timezone& id=eq.${businessId}`.replace('?select=id,timezone& id','?select=id,timezone&id'));
@@ -118,7 +125,10 @@ export function describeApproval(plan,language='ar'){return plan.map((step,index
 
 export async function planAutonomousRun({token,userId,businessId,goal,language,validateWrite}){
   const trace=[],proposals=[],transitions=[{state:'received',at:new Date().toISOString()},{state:'planning',at:new Date().toISOString()}];
-  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true}},
+  const budgetOperationKey=`operator.ai_planning:${randomUUID()}`;
+  const budget=await claimAiBudget({businessId,operationKey:budgetOperationKey,operationType:'operator.ai_planning',autonomous:false});
+  if(!budget.allowed){const code=budget.reason==='MONTHLY_HARD_LIMIT'?'AI_MONTHLY_BUDGET_REACHED':'AI_BUDGET_UNAVAILABLE';throw Object.assign(new Error(code),{code,status:budget.reason==='MONTHLY_HARD_LIMIT'?429:503,budget})}
+  const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:PAID_OPERATOR_MODEL,maxOutputTokens:700,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace,proposals,validateWrite}),providerOptions:{gateway:{disallowPromptTraining:true}},
     instructions:[
       'You are DABBIR Autonomous Business Operator, an execution agent and not a chatbot.',
       'Start by inspecting the workspace. Read every relevant domain before proposing changes. Use multiple tools for multi-domain goals.',
@@ -129,8 +139,13 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
       'Deletion, payment, transfer, mass messaging, permission, identity, legal and other HIGH-risk actions are blocked.',
       `At most ${MAX_STEPS} model steps. Respond in ${language==='en'?'English':'Arabic'} with a concise plan summary, not chain-of-thought.`
     ].join('\n'),prepareStep:({stepNumber})=>stepNumber===0?{toolChoice:{type:'tool',toolName:'inspect_workspace'}}:{toolChoice:'auto'}});
-  const result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(9000)});
+  let result;
+  try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(9000)})}
+  catch(error){await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:error?.name==='AbortError'||error?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model:PAID_OPERATOR_MODEL,error:clean(error?.message||error,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw error}
+  const cost=await generationCost(result);
+  const finalized=await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'VERIFIED_SUCCESS',failureClass:null,actualCostUsd:cost.total_cost_usd,metadata:{model:PAID_OPERATOR_MODEL,generation:cost,state:cost.total_cost_usd==null?'RESERVATION_RETAINED':'ACTUAL_COST_VERIFIED'}}).then(()=>true).catch(()=>false);
+  const budgetEvidence={hard_limit_aed:HARD_MONTHLY_AI_BUDGET_AED,reservation_microusd:budget.reserve_microusd,gateway_spend_usd_before:budget.external_spend_usd,generation:cost,ledger_finalized:finalized};
   const plan=proposals.slice(0,MAX_STEPS).map((item,index)=>({...item,step:index+1}));
-  if(!plan.length){transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'FREE_TIER_ONLY',goal,plan,trace,transitions,summary:clean(result.text,1000),usage:result.usage}}
-  const issued=Date.now();transitions.push({state:'awaiting_approval',at:new Date().toISOString()});return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'FREE_TIER_ONLY',goal,plan,approval:describeApproval(plan,language),approval_token:sign(token,{v:1,business_id:businessId,user_id:userId,issued_at:issued,expires_at:issued+600000,goal,language,plan}),trace,transitions,summary:clean(result.text,1000),usage:result.usage};
+  if(!plan.length){transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'PAID_MODEL_MONTHLY_HARD_CAP',model:PAID_OPERATOR_MODEL,budget:budgetEvidence,goal,plan,trace,transitions,summary:clean(result.text,1000),usage:result.usage}}
+  const issued=Date.now();transitions.push({state:'awaiting_approval',at:new Date().toISOString()});return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'PAID_MODEL_MONTHLY_HARD_CAP',model:PAID_OPERATOR_MODEL,budget:budgetEvidence,goal,plan,approval:describeApproval(plan,language),approval_token:sign(token,{v:1,business_id:businessId,user_id:userId,issued_at:issued,expires_at:issued+600000,goal,language,plan}),trace,transitions,summary:clean(result.text,1000),usage:result.usage};
 }

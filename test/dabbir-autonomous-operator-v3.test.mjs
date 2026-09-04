@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { MAX_STEPS, OPERATOR_VERSION, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
+import { MAX_STEPS, OPERATOR_VERSION, PAID_OPERATOR_MODEL, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
 import { deterministicPlan, validate } from '../api/ai-business-operator.js';
 
 const core=fs.readFileSync(new URL('../api/_dabbir-autonomous-agent.js',import.meta.url),'utf8');
 const endpoint=fs.readFileSync(new URL('../api/ai-business-operator.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta.url),'utf8');
 
-test('operator v3 is a bounded ToolLoopAgent with the complete state machine',()=>{
-  assert.equal(OPERATOR_VERSION,'v3.3-resilient-operator');assert.equal(MAX_STEPS,6);
+test('operator v4 is a bounded ToolLoopAgent with the complete state machine',()=>{
+  assert.equal(OPERATOR_VERSION,'v4.0-autonomous-daily-operator');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
   assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(9000\)/);assert.match(core,/maxOutputTokens:700/);
 });
 
 test('all required tenant read tools exist and are paginated',()=>{
-  assert.deepEqual(READ_TOOLS,['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','get_business_goals','get_pending_approvals','inspect_proactive_signals']);
+  assert.deepEqual(READ_TOOLS,['inspect_workspace','list_services','list_products','inspect_inventory','inspect_expenses','inspect_appointments','inspect_customers','inspect_conversations','inspect_staff_activity','inspect_recent_operator_runs','inspect_daily_management_reports','get_business_goals','get_pending_approvals','inspect_proactive_signals']);
   assert.match(core,/maximum:50/);assert.match(core,/business_id=eq\.\$\{businessId\}/);assert.match(core,/source:'supabase_tenant_rls'/);
 });
 
@@ -65,7 +65,7 @@ for(let index=0;index<5;index++)test(`multi-step partial failure scenario ${inde
 });
 
 test('owner UI presents plan, approval, cancellation, receipts and bilingual copy',()=>{
-  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.3-resilient-operator'])assert.match(ui,new RegExp(token));
+  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v4.0-autonomous-daily-operator'])assert.match(ui,new RegExp(token));
   assert.doesNotMatch(ui,/chain-of-thought/i);
 });
 
@@ -103,4 +103,11 @@ test('high-risk capabilities are absent from the allowlist',()=>{
 
 test('proactive operations are suggestion-only and use explicit bounded rules',()=>{assert.match(core,/inspect_proactive_signals/);assert.match(core,/suggestion_only_no_automatic_write/);assert.match(core,/low_stock_available_le:3/);assert.match(core,/unusual_expense_gt_average_multiplier:2/)});
 
-test('free-tier model policy is explicit',()=>{assert.match(core,/minimax\/minimax-m3-free/);assert.match(core,/FREE_TIER_ONLY/);assert.doesNotMatch(core,/gpt-5\.6|claude|paid/i)});
+test('paid operator model is protected by the 300 AED monthly hard cap',()=>{
+  assert.equal(PAID_OPERATOR_MODEL,process.env.DABBIR_AI_GATEWAY_MODEL||'openai/gpt-5.4');
+  assert.match(core,/claimAiBudget/);
+  assert.match(core,/finalizeAiBudget/);
+  assert.match(core,/HARD_MONTHLY_AI_BUDGET_AED/);
+  assert.match(core,/PAID_MODEL_MONTHLY_HARD_CAP/);
+  assert.doesNotMatch(core,/minimax\/minimax-m3-free|FREE_TIER_ONLY/);
+});
