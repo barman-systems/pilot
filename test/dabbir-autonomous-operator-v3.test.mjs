@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { MAX_STEPS, OPERATOR_VERSION, READ_TOOLS, RUN_STATES, WRITE_TOOLS, describeApproval, verifyApproval } from '../api/_dabbir-autonomous-agent.js';
-import { validate } from '../api/ai-business-operator.js';
+import { deterministicPlan, validate } from '../api/ai-business-operator.js';
 
 const core=fs.readFileSync(new URL('../api/_dabbir-autonomous-agent.js',import.meta.url),'utf8');
 const endpoint=fs.readFileSync(new URL('../api/ai-business-operator.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/ai-business-operator-ui.js',import.meta.url),'utf8');
 
 test('operator v3 is a bounded ToolLoopAgent with the complete state machine',()=>{
-  assert.equal(OPERATOR_VERSION,'v3.2-resilient-operator');assert.equal(MAX_STEPS,6);
+  assert.equal(OPERATOR_VERSION,'v3.3-resilient-operator');assert.equal(MAX_STEPS,6);
   assert.deepEqual(RUN_STATES,['received','planning','awaiting_approval','executing','verifying','completed','partially_completed','failed','cancelled']);
   assert.match(core,/new ToolLoopAgent/);assert.match(core,/stepCountIs\(MAX_STEPS\)/);assert.match(core,/AbortSignal\.timeout\(9000\)/);assert.match(core,/maxOutputTokens:700/);
 });
@@ -65,7 +65,7 @@ for(let index=0;index<5;index++)test(`multi-step partial failure scenario ${inde
 });
 
 test('owner UI presents plan, approval, cancellation, receipts and bilingual copy',()=>{
-  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.2-resilient-operator'])assert.match(ui,new RegExp(token));
+  for(const token of ['أنشئ الخطة','أوافق وأنفذ','Build plan','Approve & execute','doPlan','approval_token','data.receipts','v3.3-resilient-operator'])assert.match(ui,new RegExp(token));
   assert.doesNotMatch(ui,/chain-of-thought/i);
 });
 
@@ -85,8 +85,19 @@ test('common owner KPI questions do not depend on the AI provider',()=>{
   assert.match(endpoint,/await runDeterministicReadGoal/);
 });
 
+test('Arabic car-wash package command builds an exact approval plan without AI',()=>{
+  const plan=deterministicPlan('اضفي خدمه اشتراك باقه 300 vvip درهم 4 غسلات والخامسه مجانا');
+  assert.equal(plan.tool,'create_car_wash_offer');
+  assert.deepEqual(plan.args,{name_ar:'اشتراك باقة VVIP',name_en:'VVIP subscription package',description_ar:'اشتراك باقه 300 vvip درهم 4 غسلات والخامسه مجانا',description_en:'4 washes plus one free',price_aed:300,duration_minutes:60});
+  assert.deepEqual(validate(plan),{action:'create_car_wash_offer',...plan.args});
+  assert.match(endpoint,/CAR_WASH_OFFER_LIMIT_REACHED/);
+  assert.match(endpoint,/idempotent_replay:true/);
+  assert.match(endpoint,/if\(directWrite\)return json\(res,200,deterministicApproval/);
+  assert.match(endpoint,/cost_mode:'NO_MODEL_REQUIRED',deterministic:true/);
+});
+
 test('high-risk capabilities are absent from the allowlist',()=>{
-  assert.deepEqual(WRITE_TOOLS,['create_service','create_product','set_inventory','receive_stock','create_expense','book_available_appointment']);
+  assert.deepEqual(WRITE_TOOLS,['create_service','create_car_wash_offer','create_product','set_inventory','receive_stock','create_expense','book_available_appointment']);
   for(const forbidden of ['delete','payment','transfer','mass_message','permission_change'])assert.ok(!WRITE_TOOLS.includes(forbidden));
 });
 
