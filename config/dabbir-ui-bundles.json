@@ -28,7 +28,6 @@
     "/api/customer-activation-ui",
     "/api/dabbir-contextual-navigation-ui",
     "/api/dabbir-navigation-event-bridge-ui",
-    "/api/car-wash-loader-ui",
-    "/api/ai-business-operator-ui"
+    "/api/car-wash-loader-ui"
   ]
 }
