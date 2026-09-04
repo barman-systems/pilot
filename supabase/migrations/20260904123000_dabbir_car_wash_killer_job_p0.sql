@@ -3,8 +3,6 @@
 -- schema-only/function/policy/trigger backups, checksums and restore verification are approved.
 -- It extends the existing booking, appointment, WhatsApp and outcome infrastructure.
 
-begin;
-
 alter table public.dabbir_car_wash_settings
   add column if not exists operator_mode text not null default 'shadow',
   add column if not exists shadow_started_at timestamptz not null default now(),
@@ -851,5 +849,3 @@ on conflict (business_id,action_key) do nothing;
 comment on table public.dabbir_car_wash_jobs is 'One mobile-car-wash inquiry lifecycle. It links to existing conversations, booking requests and appointments; it is not a parallel booking calendar.';
 comment on table public.dabbir_car_wash_outcome_ledger is 'Signal-to-outcome evidence. Estimated, verified, recovered and lost values are separate and recovered requires verified payment attribution.';
 comment on function public.dabbir_car_wash_transition_job(uuid,uuid,text,text,text,text,text,jsonb,jsonb,jsonb,jsonb,boolean) is 'The only job state mutation surface. Enforces legal transitions, tenant permission, mode, kill switch, confidence, idempotency, audit and outcome attribution.';
-
-commit;
