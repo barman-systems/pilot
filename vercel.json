@@ -5,7 +5,12 @@
   "buildCommand": "npm run dabbir:build",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
-    "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com"
+    "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com",
+    "DABBIR_GEMINI_MODEL": "gemini-3.7-flash",
+    "DABBIR_GROQ_MODEL": "llama-3.3-70b-versatile",
+    "DABBIR_AI_GATEWAY_MODEL": "google/gemini-3.7-flash",
+    "DABBIR_AI_GATEWAY_FALLBACK_MODELS": "google/gemini-3.7-flash",
+    "DABBIR_DAILY_OPERATOR_MODEL": "google/gemini-3.7-flash"
   },
   "crons": [
     {
