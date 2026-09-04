@@ -53,10 +53,18 @@ const script=String.raw`(()=>{
   let editingProductId=null;
 
   function escapeHtml(value){return String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
-  function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))+' '+currencyCode()}catch{return Number(value||0).toFixed(2)+' '+currencyCode()}}
-  function date(value){if(!value)return '—';try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium'}).format(new Date(value))}catch{return String(value)}}
+  function countryCode(){try{return String(data?.country_code||workspace?.business?.country_code||'AE').trim().toUpperCase()||'AE'}catch{return 'AE'}}
+  function currencyCode(){try{return String(data?.currency_code||workspace?.business?.currency_code||'AED').trim().toUpperCase()||'AED'}catch{return 'AED'}}
+  function currencyDigits(){const value=Number(data?.currency_minor_units);if(Number.isInteger(value)&&value>=0&&value<=3)return value;return ['KWD','BHD','OMR'].includes(currencyCode())?3:2}
+  function timezone(){try{return String(data?.timezone||workspace?.business?.timezone||document.documentElement.dataset.dabbirTimezone||'Asia/Dubai')}catch{return 'Asia/Dubai'}}
+  function locale(){return (ar()?'ar-':'en-')+countryCode()}
+  function money(value){
+    const amount=Number(value||0);const digits=currencyDigits();
+    try{return new Intl.NumberFormat(locale(),{style:'currency',currency:currencyCode(),minimumFractionDigits:digits,maximumFractionDigits:digits}).format(amount)}
+    catch{return amount.toFixed(digits)+' '+currencyCode()}
+  }
+  function date(value){if(!value)return '—';try{return new Intl.DateTimeFormat(locale(),{dateStyle:'medium',timeZone:timezone()}).format(new Date(value))}catch{return String(value)}}
   function isStore(){try{return String(workspace?.business?.business_type||'').toLowerCase()==='store'}catch{return false}}
-  function currencyCode(){try{return String(workspace?.business?.currency_code||'AED').trim().toUpperCase()||'AED'}catch{return 'AED'}}
   function notify(message){try{if(typeof toast==='function')toast(message)}catch{}}
   function productSku(){return 'DAB-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
   function errorText(error){
@@ -68,19 +76,10 @@ const script=String.raw`(()=>{
 
   function ensureScreen(){
     let screen=q('#screen-operations');
-    if(!screen){
-      screen=document.createElement('section');
-      screen.className='screen';
-      screen.id='screen-operations';
-      q('.content')?.appendChild(screen);
-    }
+    if(!screen){screen=document.createElement('section');screen.className='screen';screen.id='screen-operations';q('.content')?.appendChild(screen)}
     if(!isStore())return screen;
-
-    if(!q('#opsBody')){
-      screen.innerHTML='<div class=\"hero\"><div><h1 id=\"opsTitle\"></h1><p id=\"opsDesc\"></p></div><button class=\"primary\" id=\"opsAddProduct\" type=\"button\"></button></div><div id=\"opsBody\"></div>';
-    }
+    if(!q('#opsBody'))screen.innerHTML='<div class=\"hero\"><div><h1 id=\"opsTitle\"></h1><p id=\"opsDesc\"></p></div><button class=\"primary\" id=\"opsAddProduct\" type=\"button\"></button></div><div id=\"opsBody\"></div>';
     q('#svcModal')?.classList.remove('open');
-
     if(!q('#opsProductModal')){
       const productModal=document.createElement('div');
       productModal.className='modal';productModal.id='opsProductModal';
@@ -95,29 +94,16 @@ const script=String.raw`(()=>{
     return screen;
   }
 
-  function openNewProduct(){
-    editingProductId=null;
-    q('#opsProductForm')?.reset();
-    applyCopy();
-    q('#opsProductModal')?.classList.add('open');
-  }
-
+  function openNewProduct(){editingProductId=null;q('#opsProductForm')?.reset();applyCopy();q('#opsProductModal')?.classList.add('open')}
   function openEditProduct(product){
     if(!product)return;
     editingProductId=product.id;
     q('#opsName').value=product.name||'';
-    q('#opsPrice').value=Number(product.price_aed||0).toFixed(2).replace(/\.00$/,'');
+    q('#opsPrice').value=Number(product.price_amount||0).toFixed(currencyDigits()).replace(/\.0+$/,'');
     q('#opsQty').value=Number(product.quantity||0);
-    applyCopy();
-    q('#opsProductModal')?.classList.add('open');
+    applyCopy();q('#opsProductModal')?.classList.add('open');
   }
-
-  function closeProductModal(){
-    q('#opsProductModal')?.classList.remove('open');
-    q('#opsProductForm')?.reset();
-    editingProductId=null;
-    applyCopy();
-  }
+  function closeProductModal(){q('#opsProductModal')?.classList.remove('open');q('#opsProductForm')?.reset();editingProductId=null;applyCopy()}
 
   function applyCopy(){
     if(!isStore())return;
@@ -128,6 +114,7 @@ const script=String.raw`(()=>{
     if(q('#opsProductModalTitle'))q('#opsProductModalTitle').textContent=editingProductId?t.editTitle:t.add;
     if(q('#opsNameLabel'))q('#opsNameLabel').textContent=t.name;
     if(q('#opsPriceLabel'))q('#opsPriceLabel').textContent=t.price+' ('+currencyCode()+')';
+    if(q('#opsPrice'))q('#opsPrice').step=currencyDigits()===3?'0.001':'0.01';
     if(q('#opsQtyLabel'))q('#opsQtyLabel').textContent=t.qty;
     if(q('#opsProductCancel'))q('#opsProductCancel').textContent=t.cancel;
     if(q('#opsProductSave'))q('#opsProductSave').textContent=editingProductId?t.update:t.save;
@@ -149,18 +136,16 @@ const script=String.raw`(()=>{
     businessId=workspace?.business?.id||businessId;
     if(loading||(!force&&data&&data.business_id===businessId))return;
     loading=true;render();
-    try{data=await request();render()}catch(error){data={error:error.message};render()}finally{loading=false;render()}
+    try{data=await request();render();applyCopy()}catch(error){data={error:error.message};render()}finally{loading=false;render()}
   }
 
-  function statusOptions(current){
-    const t=text();
-    const labels={draft:t.draft,reserved:t.reservedStatus,confirmed:t.confirmed,cancelled:t.cancelled,completed:t.completed};
-    return Object.entries(labels).map(([value,label])=>'<option value=\"'+value+'\" '+(value===current?'selected':'')+'>'+escapeHtml(label)+'</option>').join('');
+  function statusOptions(currentStatus){
+    const t=text();const labels={draft:t.draft,reserved:t.reservedStatus,confirmed:t.confirmed,cancelled:t.cancelled,completed:t.completed};
+    return Object.entries(labels).map(([value,label])=>'<option value=\"'+value+'\" '+(value===currentStatus?'selected':'')+'>'+escapeHtml(label)+'</option>').join('');
   }
 
   function render(){
-    const body=q('#opsBody');
-    if(!body||!isStore())return;
+    const body=q('#opsBody');if(!body||!isStore())return;
     const t=text();
     if(loading&&!data){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.loading)+'</div>';return}
     if(data?.error){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.failed)+' — '+escapeHtml(data.error)+'</div>';return}
@@ -171,16 +156,12 @@ const script=String.raw`(()=>{
     const inventoryUnits=products.reduce((sum,product)=>sum+Number(product.quantity||0),0);
     if(q('#opsAddProduct'))q('#opsAddProduct').style.display=data.can_manage?'inline-flex':'none';
 
-    const metrics=[
-      [t.products,products.length],[t.stock,inventoryUnits],[t.low,low.length],[t.sales,money(data.metrics?.recognized_sales_aed||0)]
-    ].map(([label,value])=>'<div class=\"opsMetric\"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
-
+    const metrics=[[t.products,products.length],[t.stock,inventoryUnits],[t.low,low.length],[t.sales,money(data.metrics?.recognized_sales_amount||0)]]
+      .map(([label,value])=>'<div class=\"opsMetric\"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
     const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
-
-    const productRows=products.length?products.map(product=>'<div class=\"opsRow\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
+    const productRows=products.length?products.map(product=>'<div class=\"opsRow\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_amount))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
     const productsHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.products)+'</h2><div class=\"opsTable\"><div class=\"opsRow head\"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.qty)+'</span><span></span></div>'+productRows+'</div></div>';
-
-    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
+    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_amount))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
     const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" style=\"margin-top:9px\">'+escapeHtml(t.simulated)+'</div></div>';
 
     body.innerHTML='<div class=\"opsMetrics\">'+metrics+'</div>'+lowHtml+'<div class=\"opsGrid\"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
@@ -190,14 +171,13 @@ const script=String.raw`(()=>{
   }
 
   async function mutate(payload){
-    const response=await fetch('/api/owner-operations',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:businessId,...payload})});
+    const response=await fetch('/api/owner-operations',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:businessId,currency_code:currencyCode(),...payload})});
     const result=await response.json().catch(()=>({}));
     if(!response.ok||!result.ok)throw new Error(result.detail||result.error||'OWNER_OPERATION_FAILED');
     return result;
   }
-
   async function manageProduct(payload){
-    const response=await fetch('/api/owner-product-management',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:businessId,...payload})});
+    const response=await fetch('/api/owner-product-management',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:businessId,currency_code:currencyCode(),...payload})});
     const result=await response.json().catch(()=>({}));
     if(!response.ok||!result.ok)throw new Error(result.error||result.detail||'OWNER_PRODUCT_MANAGEMENT_FAILED');
     return result;
@@ -207,62 +187,35 @@ const script=String.raw`(()=>{
     event.preventDefault();
     const t=text();const button=q('#opsProductSave');if(button)button.disabled=true;
     try{
-      const values={name:q('#opsName').value,price_aed:q('#opsPrice').value,quantity:q('#opsQty').value};
-      if(editingProductId){
-        await manageProduct({action:'update_product',product_id:editingProductId,...values});
-        notify(t.itemUpdated);
-      }else{
-        await mutate({action:'create_product',sku:productSku(),...values});
-        notify(t.created);
-      }
+      const values={name:q('#opsName').value,price_amount:q('#opsPrice').value,quantity:q('#opsQty').value};
+      if(editingProductId){await manageProduct({action:'update_product',product_id:editingProductId,...values});notify(t.itemUpdated)}
+      else{await mutate({action:'create_product',sku:productSku(),...values});notify(t.created)}
       closeProductModal();data=null;await load(true);
     }catch(error){notify(errorText(error))}finally{if(button)button.disabled=false}
   }
 
   async function deleteProduct(product){
-    if(!product)return;
-    const t=text();
-    if(!window.confirm(t.deleteConfirm))return;
-    try{
-      await manageProduct({action:'delete_product',product_id:product.id});
-      if(editingProductId===product.id)closeProductModal();
-      notify(t.itemDeleted);data=null;await load(true);
-    }catch(error){notify(errorText(error))}
+    if(!product)return;const t=text();if(!window.confirm(t.deleteConfirm))return;
+    try{await manageProduct({action:'delete_product',product_id:product.id});if(editingProductId===product.id)closeProductModal();notify(t.itemDeleted);data=null;await load(true)}catch(error){notify(errorText(error))}
   }
-
   async function updateOrder(orderId,status){
     const t=text();
     try{await mutate({action:'update_order_status',order_id:orderId,status});notify(t.orderUpdated);data=null;await load(true)}catch(error){notify(t.failed+' — '+error.message);data=null;await load(true)}
   }
 
-  function syncOperationsUi(){
-    if(!isStore())return;
-    ensureScreen();
-    applyCopy();
-    if(current==='operations')load();
-  }
-
-  function activateOperations({target}={}){
-    if(target!=='operations'||!isStore())return;
-    ensureScreen();
-    if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;
-    load();
-  }
-
+  function syncOperationsUi(){if(!isStore())return;ensureScreen();applyCopy();if(current==='operations')load()}
+  function activateOperations({target}={}){if(target!=='operations'||!isStore())return;ensureScreen();if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;load()}
   const lifecycle=window.__dabbirUiLifecycle;
   if(lifecycle?.on){
     lifecycle.on('afterRender','owner-operations',syncOperationsUi);
     lifecycle.on('afterNavigate','owner-operations',activateOperations);
     lifecycle.on('afterLanguage','owner-operations-language',syncOperationsUi);
   }
-
   setTimeout(()=>{if(isStore()){ensureScreen();load()}},600);
 })();`;
 
 export default function handler(req,res){
-  if(req.method!=='GET'){
-    res.statusCode=405;res.setHeader('allow','GET');return res.end('Method Not Allowed');
-  }
+  if(req.method!=='GET'){res.statusCode=405;res.setHeader('allow','GET');return res.end('Method Not Allowed')}
   res.statusCode=200;
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
