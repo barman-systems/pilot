@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { applyExecutiveCalmPage } from '../api/_executive-calm-page.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = path.join(root, 'config/dabbir-ui-bundles.json');
@@ -56,7 +57,18 @@ async function build(name, modules) {
   console.log(`${outputPath}: ${Buffer.byteLength(output)} bytes from ${modules.length} modules`);
 }
 
+async function brandStablePublicPages() {
+  for (const file of ['privacy.html', 'terms.html', 'support.html']) {
+    const filePath = path.join(root, file);
+    const source = await fs.readFile(filePath, 'utf8');
+    const branded = applyExecutiveCalmPage(source);
+    if (branded !== source) await fs.writeFile(filePath, branded);
+    console.log(`${filePath}: Executive Calm public-page authority`);
+  }
+}
+
 const all = [...manifest.critical, ...manifest.deferred];
 if (new Set(all).size !== all.length) throw new Error('Duplicate UI module in bundle manifest');
 await build('critical', manifest.critical);
 await build('deferred', manifest.deferred);
+await brandStablePublicPages();
