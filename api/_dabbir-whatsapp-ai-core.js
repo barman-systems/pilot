@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import { generateDABBIRAiReply } from './_ai-core.js';
 import { serviceRpc, finalizeOutboundReply, markOutboundResult, sendMetaText } from './_whatsapp-live-core.js';
 import { loadBusinessConnectionWithServiceKey } from './_whatsapp-service-connection.js';
+import { parseCarWashInquiry } from './_dabbir-car-wash-killer-job.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_ISO=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/;
 const ARABIC=/[\u0600-\u06ff]/;
 const HUMAN_REQUEST=/(?:\b(?:human|agent|person|staff|manager|owner)\b|موظف(?:ة)?|شخص حقيقي|إنسان|انسان|بشر|المالك|المدير|أكلم أحد|اكلم احد|حوّلني|حولني)/i;
+const VOICE_NOTE_UNAVAILABLE='[VOICE_NOTE_TRANSCRIPTION_UNAVAILABLE]';
 const CHOICE=[/(?:^|\s)(?:1|الأول|الاول|اول|أول|first)(?:\s|$)/i,/(?:^|\s)(?:2|الثاني|ثاني|second)(?:\s|$)/i,/(?:^|\s)(?:3|الثالث|ثالث|third)(?:\s|$)/i];
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
@@ -95,19 +97,28 @@ function bookingText(result,lang){
   return lang==='ar'?`تم تأكيد حجزك ✅ ${service?`${service} — `:''}${when}${worker?` مع ${worker}`:''}.`:`Your booking is confirmed ✅ ${service?`${service} — `:''}${when}${worker?` with ${worker}`:''}.`;
 }
 function resultState(result){return result?.confirmation_gate==='deposit'&&result?.status!=='confirmed'?'deposit_pending':'confirmed'}
+function localIsoFromInstant(value,timezone){try{const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value));const get=type=>parts.find(part=>part.type===type)?.value||'';return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`}catch{return null}}
+function resolveCarWashOffer(carWash,parsed){const offers=arr(carWash?.offers);const key=clean(parsed?.package?.key,40);const matcher=key==='premium'?/(?:premium|polish|detail|تلميع|بريميوم|بولش)/i:/(?:basic|essential|standard|wash|اساسي|أساسي|عادي|غسيل)/i;return offers.find(offer=>matcher.test(`${offer?.name_ar||''} ${offer?.name_en||''}`))||(offers.length===1?offers[0]:null)}
+function carWashBookingText(result,lang){const when=fmtWhen(result?.starts_at,result?.timezone,lang),price=Number(result?.price||0),currency=clean(result?.currency_code,8),worker=clean(result?.worker_name,120);return lang==='ar'?`تم تأكيد حجز الغسيل ✅ ${when}${worker?` — ${worker}`:''}. القيمة ${price} ${currency}.`:`Your car-wash booking is confirmed ✅ ${when}${worker?` — ${worker}`:''}. Value: ${price} ${currency}.`}
 async function setState(context,action,payload={},ttl=900){return serviceRpc('dabbir_whatsapp_ai_set_state',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_pending_action:action,p_payload:payload,p_ttl_seconds:ttl})}
 async function handoff(context,reason,summary,route='SUPPORT'){return serviceRpc('dabbir_whatsapp_ai_handoff',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_route_class:route,p_reason:clean(reason,500),p_summary:clean(summary,1200)})}
 async function recentBookings(context){return serviceRpc('dabbir_whatsapp_ai_customer_recent_bookings',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_limit:5}).catch(()=>[])}
 
 async function reserveReply(claim,context,body,purpose){
-  const text=clean(body,4000),key=`wa-ai:${claim.batch_id}:attempt:${claim.attempt_count}:${clean(purpose,24)}`;
+  const text=clean(body,4000),key=`wa-ai:${claim.batch_id}:${clean(purpose,24)}`;
   const row=one(await serviceRpc('dabbir_whatsapp_ai_reserve_outbound',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_idempotency_key:key,p_payload_hash:hash(text),p_body:text}));
   if(!row?.reservation_id)throw Object.assign(new Error('AI_OUTBOUND_RESERVATION_UNVERIFIED'),{code:'AI_OUTBOUND_RESERVATION_UNVERIFIED'});
   return row;
 }
 async function deliver(claim,context,body,purpose='reply'){
   const reservation=await reserveReply(claim,context,body,purpose);
-  if(reservation.should_send!==true)return {deduplicated:true,state:clean(reservation.reservation_state,40),providerMessageId:clean(reservation.provider_message_id,320)||null};
+  if(reservation.should_send!==true){
+    const state=clean(reservation.reservation_state,40).toUpperCase();
+    if(['PROVIDER_ACCEPTED','SENT','DELIVERED','READ'].includes(state))return {deduplicated:true,state,providerMessageId:clean(reservation.provider_message_id,320)||null};
+    const error=Object.assign(new Error(`WHATSAPP_OUTBOUND_${state||'UNVERIFIED'}`),{code:`WHATSAPP_OUTBOUND_${state||'UNVERIFIED'}`});
+    if(state==='AMBIGUOUS'||state==='SENDING')error.ambiguous=true;else error.definitive=true;
+    throw error;
+  }
   const key=serviceKey();if(!key)throw Object.assign(new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED'),{code:'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED'});
   const connection=await loadBusinessConnectionWithServiceKey(key,context.business.id);
   if(!connection||connection.status!=='connected')throw Object.assign(new Error('WHATSAPP_TENANT_NOT_LINKED'),{code:'WHATSAPP_TENANT_NOT_LINKED'});
@@ -121,15 +132,36 @@ async function deliver(claim,context,body,purpose='reply'){
     throw error;
   }
 }
+async function recordCarWashExternal(context,jobId,purpose,delivery,operationKey){
+  try{return await serviceRpc('dabbir_car_wash_record_external_message',{p_business_id:context.business.id,p_job_id:jobId,p_purpose:purpose,p_provider_message_id:delivery?.providerMessageId||null,p_delivery_status:delivery?.state||'accepted',p_operation_key:operationKey})}
+  catch(error){error.ambiguous=true;throw error}
+}
 async function finish(claim,outcome,error=null){return serviceRpc('dabbir_whatsapp_ai_finish_batch',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_outcome:outcome,p_error:error})}
 async function availability(context,{serviceId=null,workerId=null,requestedLocal=null}={}){return serviceRpc('dabbir_whatsapp_ai_check_availability',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:serviceId,p_worker_id:workerId,p_requested_local:requestedLocal})}
 function resolveService(context,name){return exactNamed(context?.services,name,['name','name_ar','name_en'])}
 function resolveWorker(context,name){return exactNamed(context?.workers,name,['display_name'])}
 function pendingSlots(context){return arr(context?.pending_state?.payload?.slots).slice(0,3)}
+function carWashInquiryText(context,text){
+  if(context?.pending_state?.payload?.mode!=='car_wash_clarify')return text;
+  const previous=arr(context?.history)
+    .filter(item=>item?.sender_type==='customer')
+    .slice(-4)
+    .map(item=>clean(item?.body,800))
+    .filter(Boolean);
+  return [...previous,clean(text,1500)].join('\n').slice(-3000);
+}
 
 async function executeSelectedSlot(claim,context,index,lang){
   const pending=context?.pending_state||{},payload=pending?.payload||{},slots=pendingSlots(context),slot=slots[index];
-  if(pending?.pending_action!=='choose_slot'||!slot?.starts_at||!safeUuid(slot?.service_id))return null;
+  if(pending?.pending_action!=='choose_slot'||!slot?.starts_at)return null;
+  if(payload.mode==='car_wash'&&slot.kind==='car_wash'&&safeUuid(slot.job_id)){
+    const result=await serviceRpc('dabbir_car_wash_whatsapp_confirm',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_job_id:slot.job_id,p_slot:slot,p_operation_key:`car-wash-confirm:${claim.batch_id}:${index}`});
+    await setState(context,'none',{});
+    const delivery=await deliver(claim,context,carWashBookingText({...result,worker_name:slot.worker_name},lang),'car-wash-booking');
+    await recordCarWashExternal(context,result.job_id,'confirmation',delivery,`car-wash-message:${claim.batch_id}:confirmation`);
+    return {action:'CREATE_CAR_WASH_BOOKING',result,state:'assigned'};
+  }
+  if(!safeUuid(slot?.service_id))return null;
   if(payload.mode==='reschedule'&&safeUuid(payload.appointment_id)){
     const result=await serviceRpc('dabbir_whatsapp_ai_reschedule_booking',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_appointment_id:payload.appointment_id,p_new_starts_at:slot.starts_at,p_operation_key:`reschedule:${claim.batch_id}:${payload.appointment_id}:${index}`});
     await setState(context,'none',{});
@@ -142,12 +174,59 @@ async function executeSelectedSlot(claim,context,index,lang){
   return {action:'CREATE_BOOKING',result,state:resultState(result)};
 }
 
+async function processCarWashInquiry(claim,context,text,lang){
+  const carWash=await serviceRpc('dabbir_car_wash_whatsapp_context',{p_business_id:context.business.id,p_conversation_id:context.conversation.id});
+  context.car_wash=carWash;
+  const parsed=parseCarWashInquiry(carWashInquiryText(context,text));
+  const shadow=carWash?.operator_mode==='shadow';
+  if(carWash?.kill_switch===true||carWash?.operator_mode==='paused'){
+    const h=await handoff(context,'Car-wash operator is stopped',text,'OPERATIONS');await finish(claim,'HUMAN_REQUIRED','CAR_WASH_OPERATOR_STOPPED');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false};
+  }
+  if(!parsed.complete){
+    await setState(context,'confirm_booking',{mode:'car_wash_clarify',extraction:{package:parsed.package?.key||null,vehicle:parsed.vehicle?.key||null,area:parsed.area?.key||null,preferred_time:parsed.preferredTime,confidence:parsed.confidence},missing:parsed.missing},900);
+    if(shadow){await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SHADOW_OBSERVATION',external_send:false,question:parsed.question}}
+    if(carWash?.permissions?.MESSAGE!==true){const h=await handoff(context,'MESSAGE permission is disabled',parsed.question||text,'OPERATIONS');await finish(claim,'HUMAN_REQUIRED','CAR_WASH_MESSAGE_PERMISSION_REQUIRED');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false}}
+    await deliver(claim,context,parsed.question,'car-wash-clarify');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY'};
+  }
+  if(carWash?.permissions?.READ!==true||Number(parsed.confidence?.overall||0)<Number(carWash?.confidence_threshold||0.9)){
+    const h=await handoff(context,'Car-wash inquiry confidence is below the owner threshold',text,'BOOKING');await finish(claim,'HUMAN_REQUIRED','LOW_CONFIDENCE_HUMAN_ESCALATION');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false};
+  }
+  const offer=resolveCarWashOffer(carWash,parsed);
+  if(!offer){
+    const names=arr(carWash?.offers).map(item=>clean(lang==='ar'?item.name_ar:item.name_en,120)).filter(Boolean).join(lang==='ar'?'، ':', ');
+    const question=lang==='ar'?`أي باقة تريد؟${names?` المتاح: ${names}`:''}`:`Which package would you like?${names?` Available: ${names}`:''}`;
+    if(shadow){await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SHADOW_OBSERVATION',external_send:false,question}}
+    if(carWash?.permissions?.MESSAGE!==true){const h=await handoff(context,'MESSAGE permission is disabled',question,'BOOKING');await finish(claim,'HUMAN_REQUIRED','CAR_WASH_MESSAGE_PERMISSION_REQUIRED');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false}}
+    await deliver(claim,context,question,'car-wash-offer');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY'};
+  }
+  if(!shadow&&(carWash?.permissions?.QUOTE!==true||carWash?.permissions?.BOOK!==true||carWash?.permissions?.ASSIGN!==true)){
+    const h=await handoff(context,'Car-wash quote, booking, or assignment permission is disabled',text,'BOOKING');await finish(claim,'HUMAN_REQUIRED','CAR_WASH_EXECUTION_PERMISSION_REQUIRED');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false};
+  }
+  const requestedLocal=localIsoFromInstant(parsed.preferredTime,carWash.timezone||context.business.timezone);
+  const availabilityResult=await serviceRpc('dabbir_car_wash_whatsapp_availability',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_offer_id:offer.id,p_vehicle_type:parsed.vehicle.key,p_location_label:parsed.area?.ar||parsed.area?.en||parsed.area?.key,p_requested_local:requestedLocal,p_extraction:{package:parsed.package.key,vehicle:parsed.vehicle.key,area:parsed.area.key,preferred_time:parsed.preferredTime,parser:parsed.source},p_confidence:parsed.confidence.overall,p_operation_key:`car-wash-offer:${claim.batch_id}`});
+  if(availabilityResult?.state==='OUTSIDE_SERVICE_AREA'||availabilityResult?.state==='HUMAN_REQUIRED'){
+    const h=await handoff(context,availabilityResult?.reason||availabilityResult?.state,text,'OPERATIONS');await finish(claim,'HUMAN_REQUIRED',availabilityResult?.reason||availabilityResult?.state);return {state:'HUMAN_REQUIRED',handoff:h,external_send:false};
+  }
+  const slots=arr(availabilityResult?.slots).slice(0,3);
+  if(shadow){await setState(context,'confirm_booking',{mode:'car_wash_shadow',job_id:availabilityResult?.job_id,slots},900);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SHADOW_OBSERVATION',external_send:false,slots:slots.length}}
+  if(carWash?.permissions?.MESSAGE!==true){const h=await handoff(context,'MESSAGE permission is disabled',text,'OPERATIONS');await finish(claim,'HUMAN_REQUIRED','CAR_WASH_MESSAGE_PERMISSION_REQUIRED');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false}}
+  if(slots.length===0){await setState(context,'confirm_booking',{mode:'car_wash_clarify',missing:['preferred_time']},900);await deliver(claim,context,slotsText([],lang),'car-wash-no-capacity');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_CAR_WASH_CAPACITY',slots:0}}
+  await setState(context,'choose_slot',{mode:'car_wash',job_id:availabilityResult?.job_id,slots},900);
+  const delivery=await deliver(claim,context,slotsText(slots,lang),'car-wash-availability');
+  await recordCarWashExternal(context,availabilityResult?.job_id,'offer',delivery,`car-wash-message:${claim.batch_id}:offer`);
+  await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_CAR_WASH_CAPACITY',slots:slots.length};
+}
+
 async function processClaim(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)throw Object.assign(new Error('AI_CONTEXT_UNVERIFIED'),{code:'AI_CONTEXT_UNVERIFIED'});
   const text=latestText(context),lang=language(text);
   if(context?.conversation?.newer_customer_message_exists===true){await finish(claim,'CANCELLED','SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE');return {state:'CANCELLED',reason:'newer_message'}}
   if(context?.conversation?.state==='human_active'||context?.conversation?.state==='action_required'){await finish(claim,'HUMAN_REQUIRED','HUMAN_TAKEOVER_ACTIVE');return {state:'HUMAN_REQUIRED'}}
+  if(text.includes(VOICE_NOTE_UNAVAILABLE)){
+    const h=await handoff(context,'Voice note transcription is not configured; no automated interpretation was attempted','A voice note needs manual review before any quote or booking action.','BOOKING');
+    await finish(claim,'HUMAN_REQUIRED','VOICE_NOTE_TRANSCRIPTION_UNAVAILABLE');return {state:'HUMAN_REQUIRED',handoff:h,external_send:false};
+  }
   if(HUMAN_REQUEST.test(text)){
     const h=await handoff(context,'Customer requested human assistance',text,'SUPPORT');
     const reply=lang==='ar'?'تمام، حوّلت المحادثة للفريق ليتابع معك شخص.':'Done — I handed the conversation to the team for a person to continue.';
@@ -159,6 +238,8 @@ async function processClaim(claim){
     try{const done=await executeSelectedSlot(claim,context,direct,lang);if(done){await finish(claim,'PROCESSED');return {state:'PROCESSED',...done}}}
     catch(error){if(String(error?.code||error?.message).includes('ACTION_SLOT_UNAVAILABLE')){await setState(context,'none',{});await deliver(claim,context,lang==='ar'?'هذا الوقت لم يعد متاحًا. أعطني الوقت الذي يناسبك وسأبحث من جديد.':'That slot is no longer available. Send me another time and I’ll check again.','slot-race');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SLOT_RACE'}}throw error}
   }
+
+  if(context?.business?.business_type==='car_wash')return processCarWashInquiry(claim,context,text,lang);
 
   const recent=await recentBookings(context),decision=await decide(context,recent);
   if(decision.action==='HANDOFF'){

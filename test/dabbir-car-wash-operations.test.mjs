@@ -34,11 +34,13 @@ test('vehicle evidence, location, WhatsApp drafts, repeat bookings, and recurrin
   assert.match(bookingUi,/import carWashOperationsUi from '.\/car-wash-operations-ui\.js'/);
 });
 
-test('operations stay role-aware and exclude worker assignment, GPS tracking, routing, and alternate navigation',()=>{
+test('operations stay role-aware and exclude advanced routing, GPS tracking, and alternate navigation',()=>{
   const api=read('api/car-wash-admin.js');
   const ui=read('api/car-wash-operations-ui.js');
   assert.match(api,/OPERATIONS_ROLES/);
   assert.match(api,/requireOperations/);
-  assert.doesNotMatch(api,/assign_worker|worker_id|route_optimization|gps_tracking/i);
+  assert.doesNotMatch(api,/action==='assign_worker'|route_optimization|gps_tracking/i);
+  assert.match(api,/dabbir_car_wash_transition_job/);
+  assert.match(api,/dabbir_car_wash_record_checkpoint/);
   assert.doesNotMatch(ui,/showScreen\('operations'\)|primary_navigation/i);
 });

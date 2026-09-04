@@ -21,6 +21,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/dabbir-car-wash-reminder-cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/barman-executive-cron",
       "schedule": "*/5 * * * *"
     },
@@ -40,6 +44,9 @@
       "maxDuration": 60
     },
     "api/dabbir-whatsapp-ai-worker.js": {
+      "maxDuration": 60
+    },
+    "api/dabbir-car-wash-reminder-cron.js": {
       "maxDuration": 60
     },
     "api/barman-executive-cron.js": {
@@ -98,6 +105,10 @@
       "dest": "/api/car-wash-booking"
     },
     {
+      "src": "^/try/?$",
+      "dest": "/try.html"
+    },
+    {
       "src": "^/$",
       "dest": "/api/app-safari-recovery"
     }
@@ -130,6 +141,10 @@
     {
       "source": "/book",
       "destination": "/api/car-wash-booking"
+    },
+    {
+      "source": "/try",
+      "destination": "/try.html"
     },
     {
       "source": "/",
