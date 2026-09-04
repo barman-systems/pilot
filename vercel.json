@@ -60,6 +60,9 @@
     "api/car-wash-booking.js": {
       "includeFiles": "booking.html"
     },
+    "api/dabbir-market-preview.js": {
+      "includeFiles": "try.html"
+    },
     "api/team-page.js": {
       "includeFiles": "team.html"
     }
@@ -98,6 +101,10 @@
       "dest": "/api/car-wash-booking"
     },
     {
+      "src": "^/try/?$",
+      "dest": "/api/dabbir-market-preview"
+    },
+    {
       "src": "^/$",
       "dest": "/api/app-safari-recovery"
     }
@@ -130,6 +137,10 @@
     {
       "source": "/book",
       "destination": "/api/car-wash-booking"
+    },
+    {
+      "source": "/try",
+      "destination": "/api/dabbir-market-preview"
     },
     {
       "source": "/",
