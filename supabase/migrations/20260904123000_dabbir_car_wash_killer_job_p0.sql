@@ -237,10 +237,25 @@ begin
   new.ends_at:=coalesce(new.ends_at,new.starts_at+make_interval(mins=>v_duration));
   perform pg_advisory_xact_lock(hashtextextended('dabbir:car-wash-capacity:'||new.business_id::text,0));
   select greatest(1,s.max_concurrent_bookings),greatest(0,s.default_travel_minutes) into v_max,v_travel from public.dabbir_car_wash_settings s where s.business_id=new.business_id;
-  select count(*) into v_active_workers from public.dabbir_workers w where w.business_id=new.business_id and w.status='active';
+  select count(*) into v_active_workers from public.dabbir_workers w
+  where w.business_id=new.business_id and w.status='active'
+    and (
+      new.branch_id is null
+      or exists(
+        select 1 from public.dabbir_worker_branches wb
+        where wb.business_id=new.business_id and wb.branch_id=new.branch_id and wb.worker_id=w.id and wb.active
+      )
+    );
   if v_active_workers>0 and new.assigned_worker_id is null then
     select w.id into v_worker_id from public.dabbir_workers w
     where w.business_id=new.business_id and w.status='active'
+      and (
+        new.branch_id is null
+        or exists(
+          select 1 from public.dabbir_worker_branches wb
+          where wb.business_id=new.business_id and wb.branch_id=new.branch_id and wb.worker_id=w.id and wb.active
+        )
+      )
       and not exists(
         select 1 from public.dabbir_car_wash_booking_requests r
         where r.business_id=new.business_id and (r.branch_id is null or new.branch_id is null or r.branch_id=new.branch_id) and r.assigned_worker_id=w.id
@@ -253,6 +268,10 @@ begin
     new.assigned_worker_id:=v_worker_id;
   end if;
   if new.assigned_worker_id is not null and not exists(select 1 from public.dabbir_workers w where w.id=new.assigned_worker_id and w.business_id=new.business_id and w.status='active') then raise exception 'CAR_WASH_CREW_NOT_IN_BUSINESS'; end if;
+  if new.assigned_worker_id is not null and new.branch_id is not null and not exists(
+    select 1 from public.dabbir_worker_branches wb
+    where wb.business_id=new.business_id and wb.branch_id=new.branch_id and wb.worker_id=new.assigned_worker_id and wb.active
+  ) then raise exception 'CAR_WASH_CREW_NOT_IN_BRANCH'; end if;
   if new.assigned_worker_id is not null and exists(
     select 1 from public.dabbir_car_wash_booking_requests r
     where r.business_id=new.business_id and (r.branch_id is null or new.branch_id is null or r.branch_id=new.branch_id) and r.id<>coalesce(new.id,gen_random_uuid())
@@ -533,12 +552,51 @@ begin
     if not (extract(dow from v_local)::smallint=any(v_settings.working_days)) then continue; end if;
     if v_local::time<v_settings.open_time or (v_local+make_interval(mins=>v_offer.duration_minutes+v_settings.default_travel_minutes))::time>v_settings.close_time then continue; end if;
     v_start:=v_local at time zone v_business.timezone;v_end:=v_start+make_interval(mins=>v_offer.duration_minutes);
+    if v_start<=now() then continue; end if;
     select w.* into v_worker from public.dabbir_workers w
     where w.business_id=p_business_id and w.status='active'
+      and exists(
+        select 1 from public.dabbir_worker_branches wb
+        where wb.business_id=p_business_id and wb.branch_id=v_conversation.branch_id and wb.worker_id=w.id and wb.active
+      )
       and (
         jsonb_typeof(w.metadata->'service_areas') is distinct from 'array'
         or jsonb_array_length(w.metadata->'service_areas')=0
         or exists(select 1 from jsonb_array_elements_text(w.metadata->'service_areas') a where lower(trim(p_location_label)) like '%'||lower(trim(a))||'%')
+      )
+      and (
+        not exists(
+          select 1 from public.dabbir_worker_schedules ws
+          where ws.business_id=p_business_id and ws.worker_id=w.id and ws.active and ws.schedule_type='work'
+        )
+        or exists(
+          select 1 from public.dabbir_worker_schedules ws
+          where ws.business_id=p_business_id and ws.worker_id=w.id and ws.active and ws.schedule_type='work'
+            and ws.weekday=extract(dow from v_local)::smallint
+            and ws.starts_at<=v_local::time
+            and ws.ends_at>=(v_local+make_interval(mins=>v_offer.duration_minutes))::time
+        )
+      )
+      and not exists(
+        select 1 from public.dabbir_worker_schedules ws
+        where ws.business_id=p_business_id and ws.worker_id=w.id and ws.active and ws.schedule_type in ('break','unavailable')
+          and ws.weekday=extract(dow from v_local)::smallint
+          and ws.starts_at<(v_local+make_interval(mins=>v_offer.duration_minutes))::time
+          and ws.ends_at>v_local::time
+      )
+      and not exists(
+        select 1 from public.dabbir_worker_time_off wt
+        where wt.business_id=p_business_id and wt.worker_id=w.id and wt.starts_at<v_end and wt.ends_at>v_start
+      )
+      and not exists(
+        select 1 from public.dabbir_appointments ap
+        where ap.business_id=p_business_id and ap.worker_id=w.id and ap.starts_at is not null
+          and ap.status not in ('cancelled','completed','no_show')
+          and ap.starts_at<v_end and coalesce(ap.ends_at,ap.starts_at+interval '60 minutes')>v_start
+      )
+      and not exists(
+        select 1 from public.dabbir_calendar_busy_blocks cb
+        where cb.business_id=p_business_id and cb.starts_at<v_end and cb.ends_at>v_start
       )
       and not exists(select 1 from public.dabbir_car_wash_booking_requests r where r.business_id=p_business_id and (r.branch_id is null or r.branch_id=v_conversation.branch_id) and r.assigned_worker_id=w.id and r.status in ('new','confirmed','en_route','arrived','washing') and r.starts_at<v_end+make_interval(mins=>v_settings.default_travel_minutes) and coalesce(r.ends_at,r.starts_at+interval '60 minutes')+make_interval(mins=>v_settings.default_travel_minutes)>v_start)
     order by w.display_name,w.id limit 1;
@@ -587,7 +645,7 @@ begin
   v_vehicle:=v_job.extracted->>'vehicle_type';v_location:=left(v_job.extracted->>'location_label',240);
   perform pg_advisory_xact_lock(hashtextextended('dabbir:car-wash-capacity:'||p_business_id::text,0));
   insert into public.dabbir_appointments(business_id,branch_id,customer_id,worker_id,starts_at,ends_at,status,simulated,quoted_price_aed,discount_aed,notes,booking_source,payment_status,location_type,service_address,travel_minutes,currency_code,deposit_currency_code,quoted_price_amount)
-  values(p_business_id,v_conversation.branch_id,v_conversation.customer_id,v_worker,v_start,v_end,'new',false,v_job.booking_value,0,'Mobile car wash booked by DABBIR from verified WhatsApp conversation.','whatsapp','unpaid','customer_address',v_location,v_settings.default_travel_minutes,v_job.currency_code,v_job.currency_code,v_job.booking_value)
+  values(p_business_id,v_conversation.branch_id,v_conversation.customer_id,v_worker,v_start,v_end,'new',false,v_job.booking_value,0,'Mobile car wash booked by DABBIR from verified WhatsApp conversation.','whatsapp','unpaid','customer',v_location,v_settings.default_travel_minutes,v_job.currency_code,v_job.currency_code,v_job.booking_value)
   returning * into v_appt;
   insert into public.dabbir_car_wash_booking_requests(
     business_id,branch_id,offer_id,vehicle_type,starts_at,ends_at,customer_name,customer_phone,location_lat,location_lng,location_label,status,source,

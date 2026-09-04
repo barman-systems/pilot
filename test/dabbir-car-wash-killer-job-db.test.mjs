@@ -22,6 +22,12 @@ test('capacity is serialized at business scope and includes team and travel buff
   assert.match(migration, /CAR_WASH_CAPACITY_FULL/);
   assert.match(migration, /default_travel_minutes/);
   assert.match(migration, /assigned_worker_id/);
+  assert.match(migration, /public\.dabbir_worker_branches wb/i);
+  assert.match(migration, /CAR_WASH_CREW_NOT_IN_BRANCH/);
+  assert.match(migration, /public\.dabbir_worker_schedules ws/i);
+  assert.match(migration, /public\.dabbir_worker_time_off wt/i);
+  assert.match(migration, /public\.dabbir_calendar_busy_blocks cb/i);
+  assert.match(migration, /public\.dabbir_appointments ap/i);
   assert.match(migration, /max_concurrent_bookings between 1 and 15/i);
 });
 
@@ -77,6 +83,8 @@ test('real booking creation carries branch, atomic capacity and mandatory appoin
   assert.match(migration, /add column if not exists branch_id uuid references public\.dabbir_business_branches/i);
   assert.match(migration, /insert into public\.dabbir_appointments\(business_id,branch_id/i);
   assert.match(migration, /deposit_currency_code/);
+  assert.match(migration, /'whatsapp','unpaid','customer',v_location/i);
+  assert.doesNotMatch(migration, /'whatsapp','unpaid','customer_address'/i);
   assert.match(migration, /for update of j skip locked/i);
 });
 
