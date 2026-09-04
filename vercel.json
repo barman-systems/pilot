@@ -53,22 +53,31 @@
     "api/car-wash-booking.js": {
       "includeFiles": "booking.html"
     },
+    "api/privacy-page.js": {
+      "includeFiles": "privacy.html"
+    },
+    "api/terms-page.js": {
+      "includeFiles": "terms.html"
+    },
+    "api/support-page.js": {
+      "includeFiles": "support.html"
+    },
     "api/team-page.js": {
       "includeFiles": "team.html"
     }
   },
   "routes": [
     {
-      "src": "^/privacy/?$",
-      "dest": "/privacy.html"
+      "src": "^/privacy(?:\\.html)?/?$",
+      "dest": "/api/privacy-page"
     },
     {
-      "src": "^/terms/?$",
-      "dest": "/terms.html"
+      "src": "^/terms(?:\\.html)?/?$",
+      "dest": "/api/terms-page"
     },
     {
-      "src": "^/support/?$",
-      "dest": "/support.html"
+      "src": "^/support(?:\\.html)?/?$",
+      "dest": "/api/support-page"
     },
     {
       "src": "^/team/?$",
@@ -98,15 +107,27 @@
   "rewrites": [
     {
       "source": "/privacy",
-      "destination": "/privacy.html"
+      "destination": "/api/privacy-page"
+    },
+    {
+      "source": "/privacy.html",
+      "destination": "/api/privacy-page"
     },
     {
       "source": "/terms",
-      "destination": "/terms.html"
+      "destination": "/api/terms-page"
+    },
+    {
+      "source": "/terms.html",
+      "destination": "/api/terms-page"
     },
     {
       "source": "/support",
-      "destination": "/support.html"
+      "destination": "/api/support-page"
+    },
+    {
+      "source": "/support.html",
+      "destination": "/api/support-page"
     },
     {
       "source": "/team",
@@ -132,6 +153,12 @@
   "headers": [
     {
       "source": "/dabbir-ui-(critical|deferred)\\.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/dabbir-executive-calm.css",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]
