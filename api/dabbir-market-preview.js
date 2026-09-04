@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
-const PREVIEW_HTML=readFileSync(new URL('../try.html',import.meta.url),'utf8');
+const PREVIEW_HTML=readFileSync(new URL('../try.html',import.meta.url),'utf8')
+  .replace('299 AED','29.99 AED');
 
 const HEADERS={
   'content-type':'text/html; charset=utf-8',
@@ -20,7 +21,7 @@ export default function handler(req,res){
     return res.end(JSON.stringify({ok:false,error:'METHOD_NOT_ALLOWED'}));
   }
   for(const [key,value] of Object.entries(HEADERS))res.setHeader(key,value);
-  res.setHeader('x-dabbir-market-preview','car-wash-killer-job-v1');
+  res.setHeader('x-dabbir-market-preview','car-wash-killer-job-v2');
   res.statusCode=200;
   return res.end(PREVIEW_HTML);
 }
