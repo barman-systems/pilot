@@ -12,26 +12,46 @@ import {
 } from '../api/_billing-core.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration] = await Promise.all([
+const [core, checkout, trial, portal, edgeCheckout, edgeWebhook, ui, shell, migration, trialMigration, contract] = await Promise.all([
   read('api/_billing-core.js'),
   read('api/billing/checkout.js'),
+  read('api/billing/trial.js'),
   read('api/billing/portal.js'),
   read('supabase/functions/barman-stripe-checkout/index.ts'),
   read('supabase/functions/barman-stripe-webhook/index.ts'),
   read('api/dabbir-billing-ui.js'),
   read('api/app-recovery.js'),
   read('supabase/migrations/20260827181057_dabbir_stripe_sandbox_billing_v1.sql'),
+  read('supabase/migrations/20260905010500_dabbir_owner_no_card_trial_v1.sql'),
+  read('scripts/dabbir-stripe-sandbox-contract.mjs'),
 ]);
 
-test('DABBIR owner plan is server-fixed to verified sandbox price and seven-day trial', () => {
-  assert.equal(DABBIR_OWNER_PRICE_ID, 'price_1U8yRWLYIkiZam7bHaP2NhtT');
-  assert.equal(DABBIR_OWNER_MONTHLY_AED, 129);
-  assert.equal(DABBIR_TRIAL_DAYS, 7);
-  assert.match(edgeCheckout, /DABBIR_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT'/);
+test('DABBIR owner plan is server-fixed to 299 AED monthly and a 14-day app-side no-card trial', () => {
+  assert.equal(DABBIR_OWNER_PRICE_ID, 'price_1UC4GNPxQ9s8ILDGU8LTapgz');
+  assert.equal(DABBIR_OWNER_MONTHLY_AED, 299);
+  assert.equal(DABBIR_TRIAL_DAYS, 14);
+  assert.match(edgeCheckout, /DABBIR_PRICE_ID='price_1UC4GNPxQ9s8ILDGU8LTapgz'/);
   assert.match(edgeCheckout, /line_items\[0\]\[price\].*DABBIR_PRICE_ID/s);
-  assert.match(edgeCheckout, /trial_available===true.*trial_period_days.*'7'/s);
+  assert.doesNotMatch(edgeCheckout, /trial_period_days/);
   assert.doesNotMatch(checkout, /body\?\.price|body\.price|price_id.*body/i);
   assert.doesNotMatch(edgeCheckout, /automatic_tax/);
+  assert.match(contract, /monthly_aed:\s*299/);
+  assert.match(contract, /trial_days:\s*14/);
+  assert.match(contract, /trial_model:\s*'dabbir_app_no_card'/);
+  assert.match(contract, /stripe_trial_period_days:\s*0/);
+});
+
+test('no-card trial is owner-only, same-origin, service-role-only and one-time', () => {
+  assert.match(trial, /requireSameOrigin\(req\)/);
+  assert.match(trial, /requireBillingOwner\(req/);
+  assert.match(trial, /startBillingTrial\(context\.businessId\)/);
+  assert.doesNotMatch(trial, /stripeSandboxBridge|api\.stripe\.com|payment_method/i);
+  assert.match(trialMigration, /interval '14 days'/i);
+  assert.match(trialMigration, /security definer/i);
+  assert.match(trialMigration, /revoke all on function public\.dabbir_start_owner_trial_v1\(uuid\) from public, anon, authenticated/i);
+  assert.match(trialMigration, /grant execute on function public\.dabbir_start_owner_trial_v1\(uuid\) to service_role/i);
+  assert.match(trialMigration, /trial_started_at is not null or v_row\.trial_ends_at is not null/i);
+  assert.doesNotMatch(trialMigration, /stripe_customer_id\s*=|stripe_subscription_id\s*=|payment_method/i);
 });
 
 test('Stripe execution is isolated in Supabase and DABBIR rejects live or malformed keys', () => {
@@ -108,7 +128,7 @@ test('Vercel has no competing billing webhook handler', async () => {
   await assert.rejects(access(new URL('../api/billing/webhook.js', import.meta.url)));
 });
 
-test('public billing state and identifiers stay deterministic', () => {
+test('public billing state derives app trial lifecycle deterministically', () => {
   assert.equal(safeBusinessId('11111111-1111-4111-8111-111111111111'), '11111111-1111-4111-8111-111111111111');
   assert.equal(safeBusinessId('not-a-uuid'), null);
   assert.equal(checkoutIdempotencyKey('b', 'u', 0), checkoutIdempotencyKey('b', 'u', 599999));
@@ -116,19 +136,29 @@ test('public billing state and identifiers stay deterministic', () => {
   assert.equal(requestOrigin({ headers: { host: 'app.example.com', 'x-forwarded-proto': 'http' } }), 'https://app.example.com');
   assert.throws(() => requestOrigin({ headers: { host: 'bad host' } }), /INVALID_REQUEST_HOST/);
   assert.deepEqual(publicBillingState(null), {
-    plan: 'owner', status: 'not_subscribed', amount: 129, currency: 'AED', interval: 'month',
-    trial_days: 7, trial_available: true, can_subscribe: true, can_manage: false,
+    plan: 'owner', status: 'not_subscribed', amount: 299, currency: 'AED', interval: 'month',
+    trial_days: 14, trial_available: true, can_subscribe: false, can_manage: false,
   });
+  const trialing=publicBillingState({status:'trialing',trial_started_at:'2026-09-01T00:00:00Z',trial_ends_at:'2026-09-15T00:00:00Z',stripe_customer_id:null,stripe_subscription_id:null},Date.parse('2026-09-05T00:00:00Z'));
+  assert.equal(trialing.status,'trialing');
+  assert.equal(trialing.can_subscribe,true);
+  assert.equal(trialing.can_manage,false);
+  const expired=publicBillingState({status:'trialing',trial_started_at:'2026-08-01T00:00:00Z',trial_ends_at:'2026-08-15T00:00:00Z',stripe_customer_id:null,stripe_subscription_id:null},Date.parse('2026-09-05T00:00:00Z'));
+  assert.equal(expired.status,'trial_expired');
+  assert.equal(expired.can_subscribe,true);
 });
 
-test('billing UI is mounted on the authoritative shell without replacing metric authority', () => {
+test('billing UI exposes no-card trial, subscription checkout and portal without secrets', () => {
   const billingAt = shell.indexOf('/api/dabbir-billing-ui');
   const metricsAt = shell.indexOf('/api/verified-metrics-ui');
   assert.ok(billingAt > 0 && metricsAt > billingAt);
-  assert.match(ui, /Stripe Sandbox فقط/);
-  assert.match(ui, /Stripe Sandbox only/);
+  assert.match(ui, /299 د\.إ شهريًا/);
+  assert.match(ui, /14 يومًا مجانًا بلا بطاقة/);
+  assert.match(ui, /\/api\/billing\/trial/);
   assert.match(ui, /\/api\/billing\/status/);
   assert.match(ui, /\/api\/billing\/checkout/);
   assert.match(ui, /\/api\/billing\/portal/);
+  assert.match(ui, /Stripe Sandbox فقط/);
+  assert.match(ui, /Stripe Sandbox only/);
   assert.doesNotMatch(ui, /sk_test_|sk_live_|SUPABASE_SERVICE_ROLE_KEY/);
 });
