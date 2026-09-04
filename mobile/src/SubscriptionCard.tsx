@@ -7,6 +7,7 @@ type FinishTransaction = (args: { purchase: Purchase; isConsumable?: boolean }) 
 
 type StoreKitPeriod = { count: number; unit: string };
 type StoreKitIntro = { paymentMode?: string; periodCount?: number; period?: { unit?: string }; displayPrice?: string };
+const APPLE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions';
 
 function publicHttpsUrl(raw: string | undefined): string | null {
   try {
@@ -158,6 +159,12 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
     }
   };
 
+  const manageSubscription = () => {
+    void Linking.openURL(APPLE_SUBSCRIPTIONS_URL).catch(() => {
+      Alert.alert('تعذر فتح App Store', 'افتح إعدادات اشتراكات Apple ID لإدارة أو إلغاء الاشتراك.');
+    });
+  };
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>اشتراك دبّر عبر Apple</Text>
@@ -174,6 +181,10 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
         <Text style={styles.buttonText}>{verified ? 'الاشتراك نشط' : 'اشترك عبر Apple'}</Text>
       </Pressable>
       <Pressable disabled={busy} onPress={restore}><Text style={styles.link}>استعادة المشتريات</Text></Pressable>
+      <Text style={styles.billingWarning}>حذف حساب دبّر لا يلغي اشتراك App Store تلقائيًا. إذا كنت لا تريد استمرار التجديد أو الفوترة، ألغِ الاشتراك من Apple قبل حذف الحساب.</Text>
+      <Pressable accessibilityRole="link" accessibilityLabel="إدارة أو إلغاء اشتراك App Store" onPress={manageSubscription}>
+        <Text style={styles.manageLink}>إدارة أو إلغاء اشتراك App Store</Text>
+      </Pressable>
       <View style={styles.legalRow}>
         <Pressable disabled={!privacyUrl} onPress={() => { if (privacyUrl) void Linking.openURL(privacyUrl); }}><Text style={[styles.legalLink, !privacyUrl && styles.disabledText]}>سياسة الخصوصية</Text></Pressable>
         <Text style={styles.separator}>•</Text>
@@ -190,10 +201,12 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, lineHeight: 22, textAlign: 'right' },
   offer: { fontSize: 13, lineHeight: 20, textAlign: 'right', fontWeight: '600' },
   warning: { fontSize: 13, lineHeight: 20, textAlign: 'right', color: '#B42318' },
+  billingWarning: { fontSize: 12, lineHeight: 18, textAlign: 'right', fontWeight: '600' },
   button: { backgroundColor: '#17171B', padding: 14, borderRadius: 12 },
   disabled: { opacity: 0.5 },
   buttonText: { color: '#FFF', textAlign: 'center', fontWeight: '700' },
   link: { textAlign: 'center', textDecorationLine: 'underline', padding: 6 },
+  manageLink: { textAlign: 'center', textDecorationLine: 'underline', padding: 6, fontWeight: '700' },
   legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   legalLink: { textDecorationLine: 'underline', fontSize: 13 },
   disabledText: { opacity: 0.45 },
