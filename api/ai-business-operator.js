@@ -57,12 +57,12 @@ export function deterministicPlan(message){
       return {tool:'create_product',args:{sku,name,price_aed:num(priceMatch[1]),quantity:Math.trunc(num(quantityMatch[1])??-1)},summary:'Create product with opening inventory'};
     }
   }
-  const timedBooking=text.match(/^(?:العميل\s+|عميل\s+|customer\s+)?([\p{L}\p{N}_-]{2,80})\s+(?:يبا|يبغى|يريد|عايز|wants|needs|ابي|أبي|يبى)\s+.*?(?:الساعة|الساعه|at)\s*([0-9]{1,2})(?::([0-9]{2}))?\s*(ص|م|صباحا|صباحاً|مساء|مساءً|am|pm)\s*$/iu);
+  const timedBooking=text.match(/^(?:العميل(?:ة)?\s+|عميل(?:ة)?\s+|customer\s+)?([\p{L}\p{N}_-]{2,80})\s+(?:يبا|يبغى|يريد|تريد|تبي|تبغى|تحتاج|عايز|عايزة|wants|needs|ابي|أبي|يبى)\s+.*?(?:الساعة|الساعه|at)\s*([0-9]{1,2})(?::([0-9]{2}))?\s*(ص|م|صباحا|صباحاً|مساء|مساءً|am|pm)\s*$/iu);
   if(timedBooking&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)){
     const marker=timedBooking[4].toLowerCase(),rawHour=Math.trunc(num(timedBooking[2])??-1),minute=Math.trunc(num(timedBooking[3])??0),day=/(?:غد(?:ا|اً|ى)|بكره|بكرة|tomorrow)/iu.test(text)?'tomorrow':'today';
     if(rawHour>=1&&rawHour<=12&&minute>=0&&minute<=59){const pm=marker==='م'||marker==='pm'||marker.startsWith('مساء'),hour=pm?(rawHour%12)+12:rawHour%12;return {tool:'book_available_appointment',args:{customer_name:clean(timedBooking[1],120),day,period:'exact',exact_time:`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`,duration_minutes:30},summary:'Book the requested exact time if available'}}
   }
-  const customer=text.match(/(?:العميل|عميل|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|عايز|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
+  const customer=text.match(/(?:العميل(?:ة)?|عميل(?:ة)?|customer)\s+([\p{L}\p{N} _-]{2,80}?)(?=\s+(?:يبا|يبغى|يريد|تريد|تبي|تبغى|تحتاج|عايز|عايزة|wants|needs|بغى|ابي|أبي|يبى)|$)/iu);
   if(customer&&/(?:غسل|غسيل|سيار|حجز|موعد|book|appointment|wash)/iu.test(text)&&/(?:اليوم|today)/iu.test(text)&&/(?:العصر|afternoon|بعد الظهر)/iu.test(text)){
     return {tool:'book_available_appointment',args:{customer_name:clean(customer[1],120),day:'today',period:'afternoon',duration_minutes:30},summary:'Find and book first free afternoon slot'};
   }
