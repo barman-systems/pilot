@@ -10,7 +10,29 @@ const EXPECTED_WORKFLOW=`${EXPECTED_REPO}/.github/workflows/barman-tool-agent.ym
 const GITHUB_ISSUER='https://token.actions.githubusercontent.com';
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='minimax/minimax-m3-free';
+const GATEWAY_MAX_ATTEMPTS=2;
+const GATEWAY_RETRYABLE=new Set([429,502,503,504]);
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
+
+const DISCOVERY_SCHEMA={
+  type:'object',
+  properties:{
+    summary:{type:'string'},
+    search_terms:{type:'array',items:{type:'string'},maxItems:8},
+    file_hints:{type:'array',items:{type:'string'},maxItems:8},
+  },
+  required:['summary','search_terms','file_hints'],
+  additionalProperties:false,
+};
+const PATCH_SCHEMA={
+  type:'object',
+  properties:{
+    summary:{type:'string'},
+    patch:{type:'string'},
+  },
+  required:['summary','patch'],
+  additionalProperties:false,
+};
 
 function decodePart(value){
   const normalized=value.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(value.length/4)*4,'=');
@@ -77,19 +99,48 @@ function parseJsonContent(payload){
   value=value.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
   try{return JSON.parse(value)}catch{return null}
 }
-async function brain(system,user,maxTokens){
+function structuredOutput(name,schema){
+  return {type:'json_schema',json_schema:{name,description:'BARMAN machine-readable tool-agent response',schema}};
+}
+function gatewayError(status){
+  return Object.assign(new Error(`AI_GATEWAY_HTTP_${status}`),{status:502});
+}
+async function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function gatewayCompletion(credential,requestBody){
+  let lastStatus=0;
+  for(let attempt=1;attempt<=GATEWAY_MAX_ATTEMPTS;attempt+=1){
+    const response=await fetch(GATEWAY_ENDPOINT,{
+      method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
+      body:JSON.stringify(requestBody),
+      signal:AbortSignal.timeout(45000),
+    });
+    lastStatus=response.status;
+    const text=await response.text();
+    let payload=null;
+    try{payload=text?JSON.parse(text):{}}catch{
+      if(response.ok)throw Object.assign(new Error('AI_GATEWAY_RESPONSE_INVALID_JSON'),{status:502});
+    }
+    if(response.ok)return payload||{};
+    if(!GATEWAY_RETRYABLE.has(response.status)||attempt===GATEWAY_MAX_ATTEMPTS)throw gatewayError(response.status);
+    const retryAfter=Math.max(0,Math.min(2000,Number(response.headers.get('retry-after')||0)*1000));
+    await sleep(retryAfter||300*attempt);
+  }
+  throw gatewayError(lastStatus||502);
+}
+async function brain(system,user,maxTokens,{name,schema}){
   const credential=await gatewayCredential();
   if(!credential)throw Object.assign(new Error('AI_GATEWAY_CREDENTIAL_MISSING'),{status:503});
   const model=clean(process.env.BARMAN_TOOL_AGENT_MODEL||process.env.BARMAN_AI_GATEWAY_MODEL||DEFAULT_MODEL,120);
-  const response=await fetch(GATEWAY_ENDPOINT,{
-    method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
-    body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],temperature:0.05,max_tokens:maxTokens,stream:false}),
-    signal:AbortSignal.timeout(45000),
+  const payload=await gatewayCompletion(credential,{
+    model,
+    messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],
+    temperature:0.05,
+    max_tokens:maxTokens,
+    stream:false,
+    response_format:structuredOutput(name,schema),
   });
-  const payload=await response.json().catch(()=>({}));
-  if(!response.ok)throw Object.assign(new Error(`AI_GATEWAY_HTTP_${response.status}`),{status:502});
   const parsed=parseJsonContent(payload);
-  if(!parsed)throw Object.assign(new Error('AI_GATEWAY_INVALID_JSON'),{status:502});
+  if(!parsed)throw Object.assign(new Error('AI_GATEWAY_STRUCTURED_OUTPUT_INVALID'),{status:502});
   return {model,payload:parsed};
 }
 
@@ -102,7 +153,7 @@ async function discover(command,paths){
     'Return JSON only: {"summary":"...","search_terms":["..."],"file_hints":["exact/path"]}.',
     'Use 3-8 concise English search terms and at most 8 exact file paths from the supplied path list.'
   ].join('\n');
-  const result=await brain(system,{command:clean(command,4000),paths:safePaths},1200);
+  const result=await brain(system,{command:clean(command,4000),paths:safePaths},1200,{name:'barman_repository_discovery',schema:DISCOVERY_SCHEMA});
   const p=result.payload;
   return {model:result.model,summary:clean(p?.summary,800),search_terms:Array.isArray(p?.search_terms)?p.search_terms.map(x=>clean(x,80)).filter(Boolean).slice(0,8):[],file_hints:Array.isArray(p?.file_hints)?p.file_hints.map(x=>clean(x,300)).filter(x=>safePaths.includes(x)).slice(0,8):[]};
 }
@@ -121,7 +172,7 @@ async function proposePatch(command,files,previousPatch='',applyError=''){
     'Return JSON only: {"summary":"...","patch":"<unified diff>"}. The patch must be a valid git unified diff applicable to the exact supplied content.',
     'If the request still cannot be safely completed, return {"summary":"BLOCKED: <specific non-owner-resolvable reason>","patch":""}.'
   ].join('\n');
-  const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1600)},7000);
+  const result=await brain(system,{command:clean(command,4000),files:context,previous_patch:String(previousPatch||'').slice(0,30000),apply_error:clean(applyError,1600)},7000,{name:'barman_source_patch',schema:PATCH_SCHEMA});
   return {model:result.model,summary:clean(result.payload?.summary,1200),patch:String(result.payload?.patch||'').trim().slice(0,80000)};
 }
 
