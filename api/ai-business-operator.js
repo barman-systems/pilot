@@ -9,7 +9,7 @@ const clean=(v,n=800)=>String(v??'').trim().slice(0,n);
 const num=v=>Number.isFinite(Number(v))?Number(v):null;
 async function read(response,fallback){const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!response.ok){const error=new Error(data?.message||fallback);error.status=response.status;throw error}return data}
 const rest=(token,path,options={},fallback)=>supabaseRest(path,token,options).then(r=>read(r,fallback));
-const rpc=(token,name,params,fallback)=>supabaseRpc(name,token).then(r=>read(r,fallback));
+const rpc=(token,name,params,fallback)=>supabaseRpc(name,token,params).then(r=>read(r,fallback));
 
 async function auth(req,res,businessId){
   const token=accessTokenFromRequest(req);if(!token){json(res,401,{ok:false,error:'AUTH_REQUIRED'});return null}
