@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { applyExecutiveCalmPage, executiveCalmHeaders } from './_executive-calm-page.js';
 
-const TEAM_HTML = readFileSync(new URL('../team.html', import.meta.url), 'utf8');
+const TEAM_HTML = applyExecutiveCalmPage(readFileSync(new URL('../team.html', import.meta.url), 'utf8'));
 
 export default function handler(req, res) {
   if (req.method !== 'GET') {
@@ -14,6 +15,7 @@ export default function handler(req, res) {
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  executiveCalmHeaders(res);
   return res.status(200).send(TEAM_HTML);
 }
 
