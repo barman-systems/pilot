@@ -12,9 +12,9 @@ const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const SAFE_HOST_RE=/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::\d{1,5})?$/i;
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const BILLING_READ_TIMEOUT_MS=10_000;
-export const DABBIR_OWNER_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT';
-export const DABBIR_TRIAL_DAYS=7;
-export const DABBIR_OWNER_MONTHLY_AED=129;
+export const DABBIR_OWNER_PRICE_ID='price_1UC4GNPxQ9s8ILDGU8LTapgz';
+export const DABBIR_TRIAL_DAYS=14;
+export const DABBIR_OWNER_MONTHLY_AED=299;
 
 function billingError(message,code=500){return Object.assign(new Error(message),{code})}
 export function safeBusinessId(value){const id=String(value||'').trim();return UUID_RE.test(id)?id:null}
@@ -78,10 +78,34 @@ export async function getBillingAccount(accessToken,businessId,options={}){
   },{label:'BILLING_ACCOUNT_READ',errorCode:'BILLING_STATUS_TIMEOUT',timeoutMs:options.timeoutMs??BILLING_READ_TIMEOUT_MS});
 }
 
-export function publicBillingState(account){
-  if(!account)return {plan:'owner',status:'not_subscribed',amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:true,can_subscribe:true,can_manage:false};
-  const status=String(account.status||'unknown');
-  return {plan:'owner',status,amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:!account.trial_started_at&&!account.trial_ends_at,can_subscribe:!['trialing','active','past_due','unpaid','incomplete'].includes(status),can_manage:Boolean(account.stripe_customer_id),trial_ends_at:account.trial_ends_at||null,current_period_ends_at:account.current_period_ends_at||null,cancel_at_period_end:Boolean(account.cancel_at_period_end),last_invoice_status:account.last_invoice_status||null,updated_at:account.updated_at||null};
+export async function startBillingTrial(businessId){
+  const id=safeBusinessId(businessId);if(!id)throw billingError('BUSINESS_ID_REQUIRED',400);
+  const key=serviceRoleKey();
+  const response=await supabaseRest('rpc/dabbir_start_owner_trial_v1',key,{
+    method:'POST',
+    headers:{prefer:'return=representation'},
+    body:JSON.stringify({p_business_id:id}),
+  });
+  const data=await parseResponse(response,'BILLING_TRIAL_UNAVAILABLE');
+  const row=Array.isArray(data)?data[0]:data;
+  if(!row||typeof row!=='object'||String(row.business_id||'')!==id)throw billingError('BILLING_TRIAL_INVALID_RESPONSE',502);
+  return row;
+}
+
+function appTrialExpired(account,now=Date.now()){
+  if(String(account?.status||'')!=='trialing'||account?.stripe_subscription_id||account?.stripe_customer_id)return false;
+  const end=Date.parse(String(account?.trial_ends_at||''));
+  return Number.isFinite(end)&&end<=Number(now);
+}
+
+export function publicBillingState(account,now=Date.now()){
+  if(!account)return {plan:'owner',status:'not_subscribed',amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:true,can_subscribe:false,can_manage:false};
+  const storedStatus=String(account.status||'unknown');
+  const appTrial=storedStatus==='trialing'&&!account.stripe_subscription_id&&!account.stripe_customer_id;
+  const status=appTrialExpired(account,now)?'trial_expired':storedStatus;
+  const hasStripeSubscription=Boolean(account.stripe_subscription_id);
+  const blockedByStripe=hasStripeSubscription&&['trialing','active','past_due','unpaid','incomplete'].includes(storedStatus);
+  return {plan:'owner',status,amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:!account.trial_started_at&&!account.trial_ends_at&&!hasStripeSubscription,can_subscribe:appTrial||status==='trial_expired'||!blockedByStripe,can_manage:Boolean(account.stripe_customer_id),trial_ends_at:account.trial_ends_at||null,current_period_ends_at:account.current_period_ends_at||null,cancel_at_period_end:Boolean(account.cancel_at_period_end),last_invoice_status:account.last_invoice_status||null,updated_at:account.updated_at||null};
 }
 
 export async function stripeSandboxBridge(action,payload={}){
