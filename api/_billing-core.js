@@ -12,9 +12,10 @@ const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const SAFE_HOST_RE=/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::\d{1,5})?$/i;
 const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const BILLING_READ_TIMEOUT_MS=10_000;
-export const DABBIR_OWNER_PRICE_ID='price_1U8yRWLYIkiZam7bHaP2NhtT';
-export const DABBIR_TRIAL_DAYS=7;
-export const DABBIR_OWNER_MONTHLY_AED=129;
+export const DABBIR_OWNER_PLAN_CODE='owner_monthly_v1';
+export const DABBIR_TRIAL_DAYS=14;
+export const DABBIR_OWNER_MONTHLY_AED=29.99;
+export const DABBIR_OWNER_MONTHLY_MINOR=2999;
 
 function billingError(message,code=500){return Object.assign(new Error(message),{code})}
 export function safeBusinessId(value){const id=String(value||'').trim();return UUID_RE.test(id)?id:null}
@@ -79,9 +80,19 @@ export async function getBillingAccount(accessToken,businessId,options={}){
 }
 
 export function publicBillingState(account){
-  if(!account)return {plan:'owner',status:'not_subscribed',amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:true,can_subscribe:true,can_manage:false};
+  const base={
+    plan:'owner',
+    plan_code:DABBIR_OWNER_PLAN_CODE,
+    amount:DABBIR_OWNER_MONTHLY_AED,
+    amount_minor:DABBIR_OWNER_MONTHLY_MINOR,
+    currency:'AED',
+    interval:'month',
+    trial_days:DABBIR_TRIAL_DAYS,
+    mode:'sandbox',
+  };
+  if(!account)return {...base,status:'not_subscribed',trial_available:true,can_subscribe:true,can_manage:false};
   const status=String(account.status||'unknown');
-  return {plan:'owner',status,amount:DABBIR_OWNER_MONTHLY_AED,currency:'AED',interval:'month',trial_days:DABBIR_TRIAL_DAYS,trial_available:!account.trial_started_at&&!account.trial_ends_at,can_subscribe:!['trialing','active','past_due','unpaid','incomplete'].includes(status),can_manage:Boolean(account.stripe_customer_id),trial_ends_at:account.trial_ends_at||null,current_period_ends_at:account.current_period_ends_at||null,cancel_at_period_end:Boolean(account.cancel_at_period_end),last_invoice_status:account.last_invoice_status||null,updated_at:account.updated_at||null};
+  return {...base,status,trial_available:!account.trial_started_at&&!account.trial_ends_at,can_subscribe:!['trialing','active','past_due','unpaid','incomplete'].includes(status),can_manage:Boolean(account.stripe_customer_id),trial_ends_at:account.trial_ends_at||null,current_period_ends_at:account.current_period_ends_at||null,cancel_at_period_end:Boolean(account.cancel_at_period_end),last_invoice_status:account.last_invoice_status||null,updated_at:account.updated_at||null};
 }
 
 export async function stripeSandboxBridge(action,payload={}){
