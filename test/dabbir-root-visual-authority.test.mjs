@@ -11,7 +11,7 @@ const team=fs.readFileSync(new URL('api/team-page.js',root),'utf8');
 const privacy=fs.readFileSync(new URL('api/privacy-page.js',root),'utf8');
 const terms=fs.readFileSync(new URL('api/terms-page.js',root),'utf8');
 const support=fs.readFileSync(new URL('api/support-page.js',root),'utf8');
-const vercel=fs.readFileSync(new URL('vercel.json',root),'utf8');
+const vercel=JSON.parse(fs.readFileSync(new URL('vercel.json',root),'utf8'));
 
 test('Executive Calm has one static first-paint token authority and no legacy neon accent',()=>{
   assert.match(css,/--ds-brand:#536dfe/);
@@ -19,12 +19,12 @@ test('Executive Calm has one static first-paint token authority and no legacy ne
   assert.match(css,/--bg:var\(--ds-bg\)!important/);
   assert.doesNotMatch(css,/#d7ff5f/i);
   assert.match(helper,/dabbir-executive-calm\.css/);
-  assert.match(helper,/theme-color["']? content=\"#091421\"|content=\"#091421\"/);
+  assert.match(helper,/content=\"#091421\"/);
 });
 
 test('app receives static design authority before auth boot instead of relying on JavaScript-only styling',()=>{
   assert.match(safari,/applyExecutiveCalmPage\(canonical\)/);
-  assert.match(safari,/x-dabbir-first-paint-authority', 'first-paint authority header is present');
+  assert.match(safari,/x-dabbir-first-paint-authority/);
   assert.match(safari,/executive-calm-static-before-auth-boot-v1/);
   assert.match(safari,/executiveCalmHeaders\(res\)/);
 });
@@ -34,10 +34,10 @@ test('all public routes are served through the same design authority including d
     assert.match(source,/applyExecutiveCalmPage/);
     assert.match(source,/executiveCalmHeaders/);
   }
-  assert.match(vercel,/\^\/privacy\(\?:\\\\\.html\)\?\/\?\$/);
-  assert.match(vercel,/\^\/terms\(\?:\\\\\.html\)\?\/\?\$/);
-  assert.match(vercel,/\^\/support\(\?:\\\\\.html\)\?\/\?\$/);
-  assert.match(vercel,/\/api\/privacy-page/);
-  assert.match(vercel,/\/api\/terms-page/);
-  assert.match(vercel,/\/api\/support-page/);
+  for(const page of ['privacy','terms','support']){
+    const route=vercel.routes.find(item=>item.dest===`/api/${page}-page`);
+    assert.ok(route,`${page} route must use branded handler`);
+    assert.ok(route.src.includes('\\.html'),`${page} route must cover direct .html access`);
+    assert.ok(vercel.rewrites.some(item=>item.source===`/${page}.html`&&item.destination===`/api/${page}-page`));
+  }
 });
