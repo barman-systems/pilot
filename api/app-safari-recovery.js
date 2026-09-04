@@ -21,8 +21,8 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
     const sidebarWidth=Math.max(1,Math.min(286,viewportWidth*.82,Math.max(1,viewportWidth-16)));
     const rtl=String(document.documentElement.dir||'rtl').toLowerCase()==='rtl';
     const sidebarLeft=rtl?(viewportLeft+viewportWidth-sidebarWidth):viewportLeft;
-    document.documentElement.style.setProperty('--dabbir-sidebar-visual-left',`${sidebarLeft}px`);
-    document.documentElement.style.setProperty('--dabbir-sidebar-visual-width',`${sidebarWidth}px`);
+    document.documentElement.style.setProperty('--dabbir-sidebar-visual-left',String(sidebarLeft)+'px');
+    document.documentElement.style.setProperty('--dabbir-sidebar-visual-width',String(sidebarWidth)+'px');
     window.__dabbirTabletSidebarViewport={version:tabletSidebarAnchorVersion,width:viewportWidth,left:viewportLeft,sidebarWidth,sidebarLeft,rtl};
     return true;
   }
