@@ -6,9 +6,9 @@ Production remains unchanged by PR #474. The PR remains Draft. The P0 Production
 
 ## Source identity
 
-- Current PR head: `1846adbc0e7d348dae2991b3d550e47bbcb48ce8`
+- Current PR head before this documentation-only refresh: `5ee8b3bcd0584ea27b343cfae508e68015dd6c30`
 - Current `main` / Production runtime observed during continuation: `57d145408d1a571576183c43cc2b646b6057ab17`
-- Current exact-head Preview: `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` — READY
+- Previous exact-head Preview: `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` — READY
 - Migration: `supabase/migrations/20260904123000_dabbir_car_wash_killer_job_p0.sql`
 - Migration SHA-256: `a8533f64b6f07dc961bddc70eeb4d6cb92da74af26f8b20c38057ec0ba2d150c`
 - Schema-only artifact: `artifacts/dabbir-p0-schema-only-20260904.sql`
@@ -48,11 +48,11 @@ Verified baseline includes:
   - `dabbir_car_wash_booking_requests`
 - Direct Production inspection confirms the three new P0 ledger/state tables are absent there: Production migration remains **NOT APPLIED**.
 
-## Preview isolation — exact-head runtime probe
+## Preview isolation — runtime probe
 
-The exact-head Preview `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` is READY and has no build error/stderr/exit events.
+The verified Preview `dpl_73XZc1nEWGBMCbgNR6ryxrgeusuy` reached READY and had no build error/stderr/exit events.
 
-Its live validation probe returns fail-closed:
+Its live validation probe returned fail-closed:
 
 - scope: `DABBIR_P0_TEST_ONLY`
 - `database_target = non_test_database_blocked`
@@ -96,7 +96,7 @@ An hourly safety watch is active, and a continuation gate is scheduled immediate
 
 ## Application / CI state
 
-Before this evidence-only checkpoint commit, exact P0 head verification was green:
+Before the documentation-only continuation commits, exact P0 functional verification was green:
 
 - Focused P0/WhatsApp/car-wash: `49/49`.
 - Full suite: `1250/1250`.
@@ -104,7 +104,7 @@ Before this evidence-only checkpoint commit, exact P0 head verification was gree
 - DABBIR CI run 2191: SUCCESS.
 - DABBIR Mobile CI run 238: SUCCESS.
 
-For current evidence-only head `1846adbc...`, DABBIR CI run 2195 and Mobile CI run 239 were still in progress at the last checkpoint. Exact-head Vercel Preview itself is READY.
+Documentation-only continuation commits trigger fresh CI and Preview builds; their completion does not change the Gate A/Gate D blockers.
 
 ## Current gates
 
@@ -113,7 +113,7 @@ For current evidence-only head `1846adbc...`, DABBIR CI run 2195 and Mobile CI r
 3. **Gate C — BLOCKED:** Owner Receipt from real provider test E2E is not yet available.
 4. **Gate D — IN PROGRESS:** real 48-hour Shadow window is running with external action count still zero.
 5. **Gate E — NOT STARTED:** Controlled Live is prohibited until Gate D passes.
-6. **Gate F — PARTIAL:** exact-head Preview is READY and fail-closed probe works; final mobile/desktop Golden Canary belongs after the final functional head and current-main re-sync.
+6. **Gate F — PARTIAL:** Preview build and fail-closed probe are proven; final mobile/desktop Golden Canary belongs after the final functional head and current-main re-sync.
 
 ## Production safety
 
