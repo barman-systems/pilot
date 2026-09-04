@@ -1,43 +1,46 @@
 {
   "schema_version": "dabbir_bar12_technical_review_v1",
   "runtime_monitoring": {
-    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
-    "deployment_id": "dpl_2eNiiKsbQiJwJCwtjhne9V3hKhFa",
+    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
+    "deployment_id": "dpl_H618Kth2RGQwxS5Z3y62kbkxT4SV",
     "origin": "https://dabbir.bmalman.com",
-    "checked_at": "2026-09-02T17:07:38.226Z",
+    "checked_at": "2026-09-04T12:38:28.714Z",
     "window_hours": 24,
     "provider": "Vercel Runtime Logs",
     "levels_checked": ["warning", "error", "fatal"],
     "matching_logs": 0
   },
   "alert_delivery": {
-    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
-    "deployment_id": "dpl_2eNiiKsbQiJwJCwtjhne9V3hKhFa",
+    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
+    "deployment_id": "dpl_H618Kth2RGQwxS5Z3y62kbkxT4SV",
     "origin": "https://dabbir.bmalman.com",
-    "verified_at": "2026-09-02T17:08:13.759Z",
+    "verified_at": "2026-09-04T12:38:28.714Z",
     "provider": "Slack",
     "delivery_mode": "BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL",
     "channel_id": "C0BRQQER3UH",
     "channel_name": "barman-executive-alerts",
-    "message_ts": "1788368893.759909",
-    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788368893759909",
+    "message_ts": "1788525489.681249",
+    "message_link": "https://barman-global.slack.com/archives/C0BRQQER3UH/p1788525489681249",
     "readback_verified": true,
     "test_only": true,
     "contains_secrets_or_customer_data": false,
-    "notes": "A test-only BAR-12 operational alert containing only the exact current public Production release identity was delivered by BARMAN Executive OS to the reserved owner alert channel and read back from Slack at the same message timestamp."
+    "notes": "A test-only BAR-12 operational alert containing only the exact current public Production release identity was delivered to the reserved owner alert channel and read back from Slack at the same message timestamp."
   },
   "security": {
-    "source_commit": "3ae553a0900b06b43243999e38853b23d8a4b728",
+    "source_commit": "01fc553d5ea85350ccf2af56562c93af64ae72d0",
     "project_ref": "fphpoysqdsceniwduxjq",
-    "reviewed_at": "2026-09-02T17:07:48.524Z",
+    "reviewed_at": "2026-09-04T12:37:37.837Z",
     "verdict": "PASS",
     "blocking_findings": 0,
-    "advisor_max_level": "WARN",
-    "reviewed_warnings": [
+    "advisor_max_level": "INFO",
+    "reviewed_warnings": [],
+    "reviewed_functions": [
       "public.dabbir_public_car_wash_book",
       "public.dabbir_public_car_wash_catalog",
       "public.dabbir_public_car_wash_slots",
-      "public.dabbir_public_order_status"
+      "public.dabbir_public_order_status",
+      "public.dabbir_claim_ai_budget_v1",
+      "public.dabbir_finalize_ai_budget_v1"
     ],
     "review_basis": {
       "security_advisor_rerun": true,
@@ -46,8 +49,14 @@
       "booking_abuse_guard_trigger_present": true,
       "public_catalog_is_bounded": true,
       "public_slots_are_bounded": true,
-      "public_order_status_uses_unguessable_uuid_token": true
+      "public_order_status_uses_unguessable_uuid_token": true,
+      "security_advisor_counts": {
+        "error": 0,
+        "warn": 0,
+        "info": 67
+      },
+      "all_six_reviewed_functions_service_role_only": true
     },
-    "notes": "Mumbai Security Advisor was rerun against the authoritative Production project after the current calendar runtime changes. It returned no blocking ERROR findings and the same four reviewed intentional anonymous public SECURITY DEFINER capabilities. INFO RLS-without-policy findings remain deny-by-default/server-only surfaces; the four WARN functions remain bounded public booking/status capabilities with the previously verified abuse/idempotency safeguards."
+    "notes": "Supabase Security Advisor was rerun against the authoritative Production project and returned 67 INFO findings, 0 WARN and 0 ERROR. The four legacy public-definer functions and both AI budget functions were reviewed live; PUBLIC, anon and authenticated cannot execute them, service_role can, direct anonymous booking-table DML is denied, and the booking abuse-guard trigger remains present."
   }
 }

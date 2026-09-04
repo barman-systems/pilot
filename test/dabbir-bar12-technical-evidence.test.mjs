@@ -7,7 +7,7 @@ const SHA='e5da322e56fc4903b5ee937e8a49686dc2d1de07';
 const DEPLOY='dpl_A6cqCH6bW9ch9iDgye2FpKGCeEnQ';
 const NOW=Date.parse('2026-09-02T12:50:00.000Z');
 const base={expected_main_sha:SHA,production_deployment:{id:DEPLOY,state:'READY',source_commit:SHA},monitoring:{runtime_errors_checked:false,alert_delivery_verified:false},critical_gates:{security:null,financial:null,legal:null}};
-const review={schema_version:'dabbir_bar12_technical_review_v1',runtime_monitoring:{source_commit:SHA,deployment_id:DEPLOY,origin:'https://dabbir.bmalman.com',checked_at:'2026-09-02T12:38:19.980Z',window_hours:24,provider:'Vercel Runtime Logs',levels_checked:['warning','error','fatal'],matching_logs:0},alert_delivery:{source_commit:SHA,deployment_id:DEPLOY,origin:'https://dabbir.bmalman.com',verified_at:'2026-09-02T12:49:28.186Z',provider:'Slack',delivery_mode:'BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL',channel_id:'C0BRQQER3UH',channel_name:'barman-executive-alerts',message_ts:'1788353368.186149',message_link:'https://barman-global.slack.com/archives/C0BRQQER3UH/p1788353368186149',readback_verified:true,test_only:true,contains_secrets_or_customer_data:false},security:{source_commit:SHA,project_ref:'fphpoysqdsceniwduxjq',reviewed_at:'2026-09-02T12:38:59.130Z',verdict:'PASS',blocking_findings:0,advisor_max_level:'WARN',reviewed_warnings:['public.dabbir_public_car_wash_book','public.dabbir_public_car_wash_catalog','public.dabbir_public_car_wash_slots','public.dabbir_public_order_status'],review_basis:{security_advisor_rerun:true,public_definer_functions_reviewed:true,anonymous_direct_table_dml_for_booking_requests:false,booking_abuse_guard_trigger_present:true,public_catalog_is_bounded:true,public_slots_are_bounded:true,public_order_status_uses_unguessable_uuid_token:true}}};
+const review={schema_version:'dabbir_bar12_technical_review_v1',runtime_monitoring:{source_commit:SHA,deployment_id:DEPLOY,origin:'https://dabbir.bmalman.com',checked_at:'2026-09-02T12:38:19.980Z',window_hours:24,provider:'Vercel Runtime Logs',levels_checked:['warning','error','fatal'],matching_logs:0},alert_delivery:{source_commit:SHA,deployment_id:DEPLOY,origin:'https://dabbir.bmalman.com',verified_at:'2026-09-02T12:49:28.186Z',provider:'Slack',delivery_mode:'BARMAN_EXECUTIVE_OS_TO_SLACK_OWNER_ALERT_CHANNEL',channel_id:'C0BRQQER3UH',channel_name:'barman-executive-alerts',message_ts:'1788353368.186149',message_link:'https://barman-global.slack.com/archives/C0BRQQER3UH/p1788353368186149',readback_verified:true,test_only:true,contains_secrets_or_customer_data:false},security:{source_commit:SHA,project_ref:'fphpoysqdsceniwduxjq',reviewed_at:'2026-09-02T12:38:59.130Z',verdict:'PASS',blocking_findings:0,advisor_max_level:'INFO',reviewed_warnings:[],reviewed_functions:['public.dabbir_public_car_wash_book','public.dabbir_public_car_wash_catalog','public.dabbir_public_car_wash_slots','public.dabbir_public_order_status','public.dabbir_claim_ai_budget_v1','public.dabbir_finalize_ai_budget_v1'],review_basis:{security_advisor_rerun:true,public_definer_functions_reviewed:true,anonymous_direct_table_dml_for_booking_requests:false,booking_abuse_guard_trigger_present:true,public_catalog_is_bounded:true,public_slots_are_bounded:true,public_order_status_uses_unguessable_uuid_token:true}}};
 
 test('exact fresh technical evidence promotes runtime monitoring, owner alert delivery and security only',()=>{
   const {evidence,report}=mergeTechnicalEvidence(base,review,{now:NOW});
@@ -57,10 +57,19 @@ test('alert PASS requires the reserved Slack channel, readback, safe payload and
   }
 });
 
-test('security PASS requires all reviewed public-definer warnings and safety assertions',()=>{
+test('security PASS requires all reviewed public-definer functions and safety assertions',()=>{
   const unsafe=structuredClone(review);
   unsafe.security.review_basis.booking_abuse_guard_trigger_present=false;
-  unsafe.security.reviewed_warnings.pop();
+  unsafe.security.reviewed_functions.shift();
+  const {evidence}=mergeTechnicalEvidence(base,unsafe,{now:NOW});
+  assert.equal(evidence.critical_gates.security,null);
+});
+
+test('security PASS rejects an advisor ERROR while accepting a clean INFO-only result',()=>{
+  const clean=mergeTechnicalEvidence(base,review,{now:NOW});
+  assert.equal(clean.evidence.critical_gates.security,'PASS');
+  const unsafe=structuredClone(review);
+  unsafe.security.advisor_max_level='ERROR';
   const {evidence}=mergeTechnicalEvidence(base,unsafe,{now:NOW});
   assert.equal(evidence.critical_gates.security,null);
 });
