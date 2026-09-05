@@ -14,7 +14,7 @@ const whatsappTruth=read('supabase/migrations/20260903193200_dabbir_whatsapp_con
 
 test('OTP challenge is bound to one actor and verify never re-resolves first admin',()=>{
   assert.match(broker,/actor_user_id:identity\.user_id/);
-  assert.match(broker,/select=id,actor_user_id,invitation_id,otp_hash/);
+  assert.match(broker,/select=id,actor_user_id,invitation_id,invitation_generation,otp_hash/);
   assert.match(broker,/p_actor_user_id:row\.actor_user_id/);
   assert.doesNotMatch(broker,/function activeAdmin/);
   assert.match(authority,/dabbir_owner_otp_actor_bound_check/);
