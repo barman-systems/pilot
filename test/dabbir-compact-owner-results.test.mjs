@@ -8,7 +8,8 @@ test('owner operator UI compacts user-facing AI results',()=>{
   assert.match(ui,/function compactUserText/);
   assert.match(ui,/parts\.slice\(0,2\)/);
   assert.match(ui,/s\.length>220/);
-  assert.match(ui,/تم التنفيذ بنجاح/);
+  assert.match(ui,/اكتمل التنفيذ/);
+  assert.match(ui,/نُفذت بعض الخطوات/);
   assert.doesNotMatch(ui,/data\.receipts\.map\(x=>'✓ '\+x\.tool\)/);
 });
 

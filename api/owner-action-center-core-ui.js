@@ -126,7 +126,12 @@ const client=String.raw`
       button.type='button';
       button.className='secondary dac-open';
       button.textContent=t.open;
+      const rowBusiness=workspaceNow()?.business?.id;
+      const rowBranch=workspaceNow()?.branch_scope?.branch_id||workspaceNow()?.branch_scope?.mode||'';
       button.addEventListener('click',()=>{
+        if(workspaceNow()?.business?.id!==rowBusiness||(workspaceNow()?.branch_scope?.branch_id||workspaceNow()?.branch_scope?.mode||'')!==rowBranch)return;
+        const direct=item.type==='appointment'?window.__dabbirAppointmentManagement?.openRecord:item.type==='order'?window.__dabbirOwnerOperations?.openOrderRecord:item.type==='inventory'?window.__dabbirOwnerOperations?.openProductRecord:null;
+        if(direct&&item.entity_id){void direct(item.entity_id);return}
         const target=String(item.target||'dashboard');
         if(typeof showScreen==='function')showScreen(target);
         // The action feed already supplies the conversation identifier; do not make the owner search again.

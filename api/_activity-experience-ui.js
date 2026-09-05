@@ -15,6 +15,7 @@ export const activityExperienceUi=String.raw`(()=>{
   function openRecord(row){
     const w=ws(),m=registry.model(w,language());if(!m.allowed(row.target))return;
     if(row.type==='appointment'&&window.__dabbirAppointmentManagement?.openRecord){void window.__dabbirAppointmentManagement.openRecord(row.id);return}
+    if(row.type==='order'&&window.__dabbirOwnerOperations?.openOrderRecord){void window.__dabbirOwnerOperations.openOrderRecord(row.id);return}
     if(row.type==='inventory'&&window.__dabbirOwnerOperations?.openProductRecord){void window.__dabbirOwnerOperations.openProductRecord(row.id);return}
     closeDetail();document.activeElement?.setAttribute?.('data-dae-return','true');
     if(row.target==='conversations'){

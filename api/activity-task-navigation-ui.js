@@ -36,6 +36,12 @@ const script=String.raw`(()=>{
       const status=document.createElement('p');status.textContent=({pending:label('قيد الانتظار','Pending'),in_progress:label('قيد التنفيذ','In progress'),done:label('مكتملة','Done'),dismissed:label('مستبعدة','Dismissed')})[task.status]||task.status;box.append(status);
       const actions=document.createElement('div');actions.className='modalActions';
       const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent=label('رجوع','Back');back.onclick=()=>closeTask();actions.append(back);
+      const destination=task.metadata?.module;
+      const destinations=['appointments','operations','conversations','customers','tasks','settings'];
+      const model=window.__dabbirActivityExperience?.model?.(workspace,document.documentElement.lang==='en'?'en':'ar');
+      if(destinations.includes(destination)&&model?.allowed(destination)&&typeof showScreen==='function'){
+        const linked=document.createElement('button');linked.type='button';linked.className='secondary';linked.textContent=label('فتح قسم العمل: ','Open work section: ')+model.label(destination);linked.onclick=()=>{if(scope()!==captured){closeTask(true);return}closeTask(true);showScreen(destination)};actions.append(linked);
+      }
       if(data.can_manage){const save=document.createElement('button');save.type='button';save.className='primary';save.textContent=task.status==='done'?label('إعادة فتح المهمة','Reopen task'):label('إكمال المهمة','Complete task');actions.append(save);save.onclick=async()=>{
         if(scope()!==captured){closeTask(true);return}save.disabled=true;
         try{const response=await fetch('/api/activity-tasks',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:business,task_id:id,status:task.status==='done'?'pending':'done'})});const result=await response.json();if(scope()!==captured||epoch!==detailEpoch)return;if(!response.ok||!result.ok)throw Error();await openTask(card);await window.__dabbirActivityProfile?.refresh?.()}catch{if(scope()===captured&&epoch===detailEpoch){status.textContent=label('تعذر حفظ التغيير. حاول مجددًا.','Could not save. Try again.');save.disabled=false}}
