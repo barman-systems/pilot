@@ -51,11 +51,14 @@ export default async function handler(req,res){
       const businessId=safeId(singleQueryValue(req,'business_id'));
       const membership=membershipFor(ctx.memberships,businessId);
       if(!businessId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
+      const requestedTask=singleQueryValue(req,'task_id'),taskId=safeId(requestedTask);
+      if(requestedTask&&!taskId)return json(res,400,{ok:false,error:'INVALID_TASK_ID'});
       const rows=await rest(ctx.token,`dabbir_businesses?select=id,name,business_type&id=eq.${businessId}&limit=1`,'BUSINESS_LOOKUP_FAILED');
       const business=rows?.[0]||null;
       if(!business)return json(res,404,{ok:false,error:'BUSINESS_NOT_FOUND'});
       const type=String(business.business_type||'other').toLowerCase();
-      const tasks=await rest(ctx.token,`dabbir_tasks?select=id,task_key,category,title_ar,title_en,priority,status,due_at,source,metadata,created_at,updated_at&business_id=eq.${businessId}&order=priority.desc,created_at.asc&limit=100`,'TASKS_LOOKUP_FAILED');
+      const tasks=await rest(ctx.token,`dabbir_tasks?select=id,task_key,category,title_ar,title_en,priority,status,due_at,source,metadata,created_at,updated_at&business_id=eq.${businessId}${taskId?'&id=eq.'+taskId:''}&order=priority.desc,created_at.asc&limit=${taskId?1:100}`,'TASKS_LOOKUP_FAILED');
+      if(taskId&&!tasks?.length)return json(res,404,{ok:false,error:'TASK_NOT_FOUND'});
       return json(res,200,{ok:true,business_id:businessId,business_type:type,profile:profiles[type]||profiles.other,tasks:tasks||[],can_manage:['owner','admin'].includes(String(membership.role||'').toLowerCase())});
     }
     if(req.method==='POST'){

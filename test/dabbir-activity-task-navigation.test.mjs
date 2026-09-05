@@ -16,24 +16,22 @@ test('activity task navigation is aggregated without growing the shell module co
   assert.match(aggregate,/activity-task-navigation-ui\.js/);
 });
 
-test('store activity task categories route directly to their work surfaces',()=>{
+test('task cards fetch their exact record instead of navigating to a general page',()=>{
   assert.match(source,/catalog.*inventory.*stock.*orders.*sales/);
   assert.match(source,/return 'operations'/);
   assert.match(source,/policy.*settings.*configuration.*permissions/);
   assert.match(source,/return 'settings'/);
-  assert.match(source,/showScreen\(route\)/);
+  assert.match(source,/task_id:id/);
+  assert.doesNotMatch(source,/showScreen\(route\)/);
 });
 
 test('task completion button stays completion-only',()=>{
   assert.match(source,/closest\?\.\('\[data-activity-task\]'\)\)return/);
 });
 
-test('task destination opens the fastest matching control',()=>{
-  assert.match(source,/#opsAddProduct/);
-  assert.match(source,/\.opsGrid > div:first-child \.opsSection/);
-  assert.match(source,/\.opsGrid > div:last-child \.opsSection/);
-  assert.match(source,/delivery_policy/);
-  assert.match(source,/return_policy/);
+test('task details do not wait for a matching row in a general page',()=>{
+  assert.doesNotMatch(source,/focusDestination|setTimeout/);
+  assert.match(source,/task\?\.id!==id/);
 });
 
 test('task cards are keyboard reachable',()=>{

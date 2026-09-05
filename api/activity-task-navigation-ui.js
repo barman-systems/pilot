@@ -14,47 +14,44 @@ const script=String.raw`(()=>{
     return null;
   };
 
-  const flash=node=>{
-    if(!node)return;
-    try{node.scrollIntoView({behavior:'smooth',block:'center'})}catch{node.scrollIntoView?.()}
-    node.classList.add('dabbirTaskTarget');
-    setTimeout(()=>node.classList.remove('dabbirTaskTarget'),1800);
-  };
-
-  const focusDestination=category=>{
-    if(category==='catalog'||category==='product'||category==='products'){
-      const add=q('#opsAddProduct');
-      if(add&&add.offsetParent!==null){add.click();return}
-      return flash(q('#opsBody .opsSection'));
-    }
-    if(category==='inventory'||category==='stock'){
-      return flash(q('#opsBody .opsGrid > div:first-child .opsSection')||q('#opsBody .opsLow'));
-    }
-    if(category==='orders'||category==='order'||category==='sales'){
-      return flash(q('#opsBody .opsGrid > div:last-child .opsSection'));
-    }
-    if(['policy','policies','settings','configuration','permissions'].includes(category)){
-      const field=q('.dk-field[data-key="delivery_policy"]')||q('.dk-field[data-key="return_policy"]')||q('#screen-settings .dabbir-knowledge-card');
-      flash(field);
-      const input=field?.querySelector?.('textarea,input,select');
-      if(input)requestAnimationFrame(()=>input.focus({preventScroll:true}));
-    }
-  };
-
-  const openTask=card=>{
-    if(!card)return;
-    const category=categoryOf(card);
-    const route=routeFor(category);
-    if(!route||typeof showScreen!=='function')return;
-    showScreen(route);
-    requestAnimationFrame(()=>setTimeout(()=>focusDestination(category),90));
-  };
+  let detailEpoch=0,detailScope='',returnFocus=null;
+  const scope=()=>{try{return workspace.business.id+'|'+(workspace.branch_scope?.branch_id||workspace.branch_scope?.mode||'')}catch{return ''}};
+  const label=(ar,en)=>document.documentElement.lang==='en'?en:ar;
+  function closeTask(discard=false){
+    detailEpoch++;q('#dabbirTaskDetail')?.remove();returnFocus?.focus?.();
+    if(history.state?.dabbirTaskDetail){if(discard){const state={...history.state};delete state.dabbirTaskDetail;history.replaceState(state,'')}else history.back()}
+  }
+  async function openTask(card){
+    const id=card?.dataset?.taskRecord;if(!id)return;
+    const captured=scope(),business=captured.split('|')[0],epoch=++detailEpoch;
+    try{
+      const response=await fetch('/api/activity-tasks?'+new URLSearchParams({business_id:business,task_id:id}),{credentials:'same-origin',cache:'no-store'});
+      const data=await response.json();if(epoch!==detailEpoch||scope()!==captured)return;
+      if(!response.ok||!data.ok)throw Error(response.status===404?label('المهمة غير متاحة','Task unavailable'):label('تعذر فتح المهمة','Could not open task'));
+      const task=data.tasks?.[0];if(task?.id!==id||data.business_id!==business)throw Error(label('تعذر التحقق من المهمة','Could not verify task'));
+      if(!q('#dabbirTaskDetail'))returnFocus=document.activeElement;q('#dabbirTaskDetail')?.remove();detailScope=captured;
+      const overlay=document.createElement('div');overlay.id='dabbirTaskDetail';overlay.className='modal open';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','dabbirTaskDetailTitle');
+      const box=document.createElement('div');box.className='modalBox';
+      const title=document.createElement('h3');title.id='dabbirTaskDetailTitle';title.textContent=label(task.title_ar,task.title_en);box.append(title);
+      const status=document.createElement('p');status.textContent=({pending:label('قيد الانتظار','Pending'),in_progress:label('قيد التنفيذ','In progress'),done:label('مكتملة','Done'),dismissed:label('مستبعدة','Dismissed')})[task.status]||task.status;box.append(status);
+      const actions=document.createElement('div');actions.className='modalActions';
+      const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent=label('رجوع','Back');back.onclick=()=>closeTask();actions.append(back);
+      if(data.can_manage){const save=document.createElement('button');save.type='button';save.className='primary';save.textContent=task.status==='done'?label('إعادة فتح المهمة','Reopen task'):label('إكمال المهمة','Complete task');actions.append(save);save.onclick=async()=>{
+        if(scope()!==captured){closeTask(true);return}save.disabled=true;
+        try{const response=await fetch('/api/activity-tasks',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:business,task_id:id,status:task.status==='done'?'pending':'done'})});const result=await response.json();if(scope()!==captured||epoch!==detailEpoch)return;if(!response.ok||!result.ok)throw Error();await openTask(card);await window.__dabbirActivityProfile?.refresh?.()}catch{if(scope()===captured&&epoch===detailEpoch){status.textContent=label('تعذر حفظ التغيير. حاول مجددًا.','Could not save. Try again.');save.disabled=false}}
+      }}
+      box.append(actions);overlay.append(box);document.body.append(overlay);if(!history.state?.dabbirTaskDetail)history.pushState({...history.state,dabbirTaskDetail:true},'');back.focus();
+    }catch(error){if(epoch===detailEpoch&&scope()===captured&&typeof toast==='function')toast(error.message)}
+  }
+  window.addEventListener('popstate',()=>{if(q('#dabbirTaskDetail'))closeTask()});
+  document.addEventListener('keydown',e=>{const modal=q('#dabbirTaskDetail');if(!modal)return;if(e.key==='Escape'){e.preventDefault();closeTask()}if(e.key==='Tab'){const nodes=[...modal.querySelectorAll('button:not(:disabled)')],first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}}});
+  window.__dabbirUiLifecycle?.on?.('afterRender','task-detail-scope',()=>{if(q('#dabbirTaskDetail')&&scope()!==detailScope)closeTask(true)});
 
   const decorate=()=>{
     qa('#activityTaskCard .activityTask').forEach(card=>{
       const route=routeFor(categoryOf(card));
-      if(!route){card.removeAttribute('data-dabbir-task-route');card.removeAttribute('role');card.removeAttribute('tabindex');return}
-      card.dataset.dabbirTaskRoute=route;
+      if(!card.dataset.taskRecord){card.removeAttribute('data-dabbir-task-route');card.removeAttribute('role');card.removeAttribute('tabindex');return}
+      card.dataset.dabbirTaskRoute=route||'tasks';
       card.setAttribute('role','link');
       card.setAttribute('tabindex','0');
       card.setAttribute('aria-label',String(card.querySelector('b')?.textContent||'').trim());
@@ -63,7 +60,7 @@ const script=String.raw`(()=>{
 
   const style=document.createElement('style');
   style.dataset.dabbirActivityTaskNavigation='v1';
-  style.textContent='.activityTask[data-dabbir-task-route]{cursor:pointer;transition:border-color .16s ease,background .16s ease,transform .16s ease}.activityTask[data-dabbir-task-route]:hover{border-color:#40515f;background:#192027}.activityTask[data-dabbir-task-route]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.activityTask[data-dabbir-task-route]:active{transform:scale(.995)}.dabbirTaskTarget{outline:2px solid var(--accent)!important;outline-offset:3px!important;transition:outline-color .2s ease}';
+  style.textContent='#dabbirTaskDetail .modalBox{max-height:85dvh;overflow:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom))}#dabbirTaskDetail button{min-height:44px}.activityTask[data-dabbir-task-route]{cursor:pointer;transition:border-color .16s ease,background .16s ease,transform .16s ease}.activityTask[data-dabbir-task-route]:hover{border-color:#40515f;background:#192027}.activityTask[data-dabbir-task-route]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.activityTask[data-dabbir-task-route]:active{transform:scale(.995)}.dabbirTaskTarget{outline:2px solid var(--accent)!important;outline-offset:3px!important;transition:outline-color .2s ease}';
   document.head.append(style);
 
   document.addEventListener('click',event=>{

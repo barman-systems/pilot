@@ -234,7 +234,7 @@ const script=String.raw`(()=>{
       const title=ar()?task.title_ar:task.title_en;
       const status=task.status==='in_progress'?t.progress:task.status==='done'?t.done:t.pending;
       const button=state.can_manage?'<button class="secondary" data-activity-task="'+esc(task.id)+'" data-next="'+(task.status==='done'?'pending':'done')+'">'+esc(task.status==='done'?t.reopen:t.complete)+'</button>':'';
-      return '<div class="activityTask '+(task.status==='done'?'activityDone':'')+'"><div class="grow"><b>'+esc(title)+'</b><small>'+esc(task.category)+' · '+esc(status)+'</small><span class="activityPriority">'+esc(t.priority)+' '+esc(task.priority)+'</span></div>'+button+'</div>';
+      return '<div data-task-record="'+esc(task.id)+'" class="activityTask '+(task.status==='done'?'activityDone':'')+'"><div class="grow"><b>'+esc(title)+'</b><small>'+esc(task.category)+' · '+esc(status)+'</small><span class="activityPriority">'+esc(t.priority)+' '+esc(task.priority)+'</span></div>'+button+'</div>';
     }).join('')+'</div>':'<div class="empty">'+esc(t.empty)+'</div>');
     card.querySelectorAll('[data-activity-task]').forEach(btn=>btn.onclick=()=>setTask(btn.dataset.activityTask,btn.dataset.next));
   }
@@ -244,6 +244,7 @@ const script=String.raw`(()=>{
     try{
       const response=await fetch('/api/activity-tasks',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({business_id:id,task_id:taskId,status})});
       const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'TASK_UPDATE_FAILED');
+      if(businessId()!==id)return;
       const task=state.tasks.find(x=>x.id===taskId);if(task)task.status=status;renderTasks();
     }catch(error){try{toast(ar()?'تعذر تحديث المهمة':'Could not update task')}catch{}}
   }
