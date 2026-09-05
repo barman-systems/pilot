@@ -8,7 +8,7 @@ const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
 const failOpen = fs.readFileSync(new URL('../api/dabbir-safari-auth-fail-open-ui.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
-function renderCanonicalRoot(){
+function renderCanonicalRoot(method='GET'){
   const headers=new Map();
   let body='';
   const res={
@@ -20,9 +20,19 @@ function renderCanonicalRoot(){
     set statusCode(value){this._status=Number(value)},
     get statusCode(){return this._status},
   };
-  appSafariRecoveryHandler({method:'GET',headers:{}},res);
+  appSafariRecoveryHandler({method,headers:{}},res);
   return {body,headers,status:res.statusCode};
 }
+
+test('unsupported shell methods retain 405 without running HTML transforms', () => {
+  for (const method of ['HEAD', 'POST', 'OPTIONS', 'PUT', 'DELETE']) {
+    const {body,headers,status}=renderCanonicalRoot(method);
+    assert.equal(status,405,method);
+    assert.equal(headers.get('allow'),'GET',method);
+    assert.equal(body,'Method Not Allowed',method);
+    assert.ok(!body.includes('<script'),method);
+  }
+});
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
   assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
