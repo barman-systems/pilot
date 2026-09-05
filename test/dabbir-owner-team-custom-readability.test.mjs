@@ -13,7 +13,7 @@ test('existing owner delegates can edit exact custom granular permission sets',(
   assert.match(team,/function selectedPerms\(/);
   assert.match(team,/roleCode==='CUSTOM'/);
   assert.match(team,/granular_permissions:selectedPerms\(editor,prefix\)/);
-  assert.match(team,/updateRolePermissions\(editor,prefix,e\.target\.value,current\)/);
+  assert.match(team,/updateRolePermissions\(card,prefix,sel\.value,\[\]\)/);
   assert.doesNotMatch(team,/استخدم قالبًا محددًا لحفظ الصلاحيات الحالية/);
 });
 
@@ -23,7 +23,7 @@ test('custom grants require at least one explicit granular permission and keep r
   assert.match(governance,/permissions=v_coarse,granular_permissions=v_granular/);
   assert.match(governance,/platform_assert_can_grant\(p_actor,v_coarse\)/);
   assert.match(team,/ROOT_OWNER/);
-  assert.match(team,/هوية المالك الأصلية محمية/);
+  assert.match(team,/ROOT_OWNER محمي/);
   for(const role of ['EXECUTIVE_ADMIN','OPERATIONS_MANAGER','CUSTOMER_SUPPORT','FINANCE','GROWTH_SALES','TECHNICAL_ADMIN','VIEWER_AUDITOR','CUSTOM'])assert.match(team,new RegExp(role));
 });
 
