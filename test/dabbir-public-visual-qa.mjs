@@ -28,6 +28,9 @@ for(const [name,width,height] of devices){
    await page.getByRole('heading',{name:lang==='ar'?'أنشئ حساب نشاطك':'Create your business account',exact:true}).waitFor();
    assert.equal(await page.locator('#signupTab').getAttribute('aria-selected'),'true');
    assert.ok(await page.locator('#authEmail').evaluate(el=>el.labels.length===1));
+   await page.locator('#authGate').evaluate(el=>{el.scrollTop=0});
+   assert.ok(await page.locator('#authGate .authCard').evaluate(el=>el.getBoundingClientRect().top>=0),'Signup header must remain reachable at scroll start');
+   await page.screenshot({path:`public-visual-evidence/${name}-${lang}-signup-top.png`,fullPage:true});
    await page.locator('#authEmail').focus();
    assert.ok(await page.locator('#authEmail').evaluate(el=>el===document.activeElement));
    async function noOverflow(){const m=await page.evaluate(()=>({w:document.documentElement.clientWidth,s:document.documentElement.scrollWidth}));assert.ok(m.s<=m.w+1,JSON.stringify(m));}
