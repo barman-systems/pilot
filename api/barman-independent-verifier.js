@@ -71,6 +71,11 @@ export default async function handler(req,res){
       return json(res,200,{ok:true,...claim});
     }
 
+    if(phase==='snapshot'){
+      const snapshot=await adminRpc(key,'barman_executive_read_snapshot_v1',{});
+      return json(res,200,{ok:true,snapshot});
+    }
+
     if(phase==='verify'){
       const commandId=uuid(body.command_id);
       if(!commandId)return json(res,400,{ok:false,error:'COMMAND_ID_INVALID'});
