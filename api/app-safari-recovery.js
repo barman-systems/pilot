@@ -181,6 +181,9 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
       res.setHeader('x-dabbir-design-authority', 'executive-calm-v1');
       res.statusCode = Number(proxy.statusCode || 200);
+      // Error/method responses have no HTML bootstrap to reorder.
+      // Preserve the upstream status and body instead of turning a 405 into a 500.
+      if (res.statusCode !== 200) return res.end(body);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
       const ordered = orderOwnerFirstBeforeAuthBoot(canonical);

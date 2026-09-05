@@ -31,3 +31,15 @@ test('returning to a screen restores its previous page scroll',()=>{
   const h=harness();h.go('tasks');assert.equal(h.context.window.scrollY,0);h.context.window.scrollY=350;h.go('customers');assert.equal(h.context.window.scrollY,0);
   h.callbacks.popstate({state:h.entries[0]});h.flush();assert.equal(h.context.window.scrollY,350);
 });
+
+
+test('late runtime response cannot replace a newly selected business',async()=>{
+  const pending=[],renders=[];
+  const ctx=vm.createContext({URLSearchParams,workspace:null,selectedConversationId:null,api:()=>new Promise(resolve=>pending.push(resolve)),showGate(){},toast(){},T:()=>({}),renderAll(){renders.push(ctx.workspace.business.id)}});
+  const start=html.indexOf('let runtimeRequestEpoch=');
+  vm.runInContext(html.slice(start,html.indexOf('\n',html.indexOf('async function loadRuntime',start))),ctx);
+  const first=ctx.loadRuntime('old'),second=ctx.loadRuntime('new');
+  pending[1]({r:{ok:true,status:200},j:{ok:true,business:{id:'new'}}});await second;
+  pending[0]({r:{ok:true,status:200},j:{ok:true,business:{id:'old'}}});await first;
+  assert.equal(ctx.workspace.business.id,'new');assert.deepEqual(renders,['new']);
+});

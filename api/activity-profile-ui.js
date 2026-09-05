@@ -166,7 +166,8 @@ const script=String.raw`(()=>{
   }
 
   function applyProfile(){
-    if(!state?.profile||!workspace?.business)return;
+    if(!state?.profile||!workspace?.business||state.business_id!==workspace.business.id)return;
+    workspace.activity_navigation_capabilities={business_id:state.business_id,...state.profile};
     const p=state.profile,t=copy();
     patchDictionary(p);
     document.body.dataset.dabbirActivity=state.business_type;
@@ -217,6 +218,7 @@ const script=String.raw`(()=>{
     }
     if(identity)identity.innerHTML='<span class="activityPill">'+esc(activityName)+'</span>';
     renderTasks();
+    window.__dabbirActivityExperienceUi?.refresh?.();
   }
 
   function renderTasks(){
@@ -253,6 +255,7 @@ const script=String.raw`(()=>{
     try{
       const response=await fetch('/api/activity-tasks?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'ACTIVITY_PROFILE_FAILED');
+      if(businessId()!==id)return;
       state=body;lastBusiness=id;calendarConnections=null;calendarConnectionsBusiness=null;applyProfile();
     }catch(error){console.error('dabbir_activity_profile_failed',String(error?.message||error).slice(0,120))}
     finally{loading=false;renderTasks()}

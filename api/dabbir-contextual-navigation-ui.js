@@ -1,3 +1,5 @@
+import { createActivityExperience } from './_activity-experience.js';
+import { activityExperienceUi } from './_activity-experience-ui.js';
 // BAR-30 router authority: feature modules do not create or mutate primary destinations.
 // The activity slot is reversible so switching business context cannot leave a stale target, label, or icon behind.
 const script=String.raw`(()=>{
@@ -268,6 +270,7 @@ const script=String.raw`(()=>{
     bindMobileMenuResync();
     bindApprovedSettings();
     syncApprovedSettings();
+    window.__dabbirActivityExperienceUi?.refresh?.();
   }
 
   function queueEnforce(){setTimeout(enforce,0)}
@@ -290,5 +293,5 @@ export default function handler(req,res){
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
   res.setHeader('x-dabbir-contextual-navigation','v7');
-  return res.status(200).send(script);
+  return res.status(200).send('window.__dabbirActivityExperience=('+createActivityExperience.toString()+')();\n'+script+'\n'+activityExperienceUi);
 }

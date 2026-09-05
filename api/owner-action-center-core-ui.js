@@ -171,7 +171,8 @@ const client=String.raw`
       const data=await response.json().catch(()=>null);
       if(!response.ok||!data?.ok)throw new Error(data?.error||('ACTION_CENTER_'+response.status));
       const live=workspaceNow();
-      if(live&&live.business?.id===businessId)live.owner_action_center=data;
+      if(live&&live.business?.id===businessId){live.owner_action_center=data;window.__dabbirActivityExperienceUi?.refresh?.()}
+      if(live?.business?.id!==businessId)return;
       lastBusinessId=businessId;
       lastLoadedAt=Date.now();
       render(data);
@@ -179,7 +180,11 @@ const client=String.raw`
       console.error('dabbir_action_center_ui_failed',String(error?.message||error).slice(0,120));
       if(panel){
         const t=text();
+        if(workspaceNow()?.business?.id!==businessId)return;
+        panel.dataset.state='error';
         panel.querySelector('#dacBrief').textContent=t.error;
+        panel.querySelector('#dacMetrics').replaceChildren();
+        panel.querySelector('#dacItems').textContent=t.error;
       }
     }finally{loading=false}
   }
