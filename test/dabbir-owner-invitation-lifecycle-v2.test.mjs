@@ -21,7 +21,7 @@ test('delegated invitation grants are contained by permissions scope expiry and 
 });
 
 test('acceptance locks exact invitation generation and revalidates sponsor authority',()=>{
-  assert.match(migration,/dabbir_platform_staff_accept_for_user_v2\(p_user_id uuid,p_invitation_id uuid,p_generation integer\)/);
+  assert.match(migration,/dabbir_platform_staff_accept_for_user_v2\(\s*p_user_id uuid,\s*p_invitation_id uuid,\s*p_generation integer\s*\)/s);
   assert.match(migration,/where id=p_invitation_id\s+for update/i);
   assert.match(migration,/p_generation<>v_inv\.generation/);
   assert.match(migration,/INVITATION_GENERATION_STALE/);
