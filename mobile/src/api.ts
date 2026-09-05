@@ -1,3 +1,5 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import type { DabbirSession } from './session';
 
 const configuredBase = String(process.env.EXPO_PUBLIC_DABBIR_API_BASE_URL || '').trim().replace(/\/$/, '');
@@ -85,8 +87,39 @@ export async function createStore(accessToken: string, name: string, locale: 'ar
   return post('/api/mobile/runtime', { action: 'create_business', name, business_type: 'store', locale }, accessToken);
 }
 
+async function appleDeletionAuthorizationCode(): Promise<string> {
+  if (!(await AppleAuthentication.isAvailableAsync())) throw new Error('APPLE_REAUTH_UNAVAILABLE');
+  try {
+    const bytes = await Crypto.getRandomBytesAsync(32);
+    const rawNonce = Array.from(bytes).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce,
+      { encoding: Crypto.CryptoEncoding.HEX },
+    );
+    const credential = await AppleAuthentication.signInAsync({ nonce: hashedNonce });
+    const code = String(credential.authorizationCode || '').trim();
+    if (!code) throw new Error('APPLE_REAUTHORIZATION_CODE_MISSING');
+    return code;
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'ERR_REQUEST_CANCELED') throw new Error('ACCOUNT_DELETE_CANCELLED');
+    throw error;
+  }
+}
+
 export async function deleteDabbirAccount(accessToken: string): Promise<any> {
-  return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
+  const payload = { confirmation: 'DELETE_DABBIR_ACCOUNT' };
+  try {
+    return await post('/api/mobile/account-delete', payload, accessToken);
+  } catch (error) {
+    if (String((error as Error)?.message || '') !== 'APPLE_REAUTH_REQUIRED') throw error;
+  }
+
+  const authorizationCode = await appleDeletionAuthorizationCode();
+  return post('/api/mobile/account-delete', {
+    ...payload,
+    apple_authorization_code: authorizationCode,
+  }, accessToken);
 }
 
 export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {

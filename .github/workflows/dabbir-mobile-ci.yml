@@ -7,11 +7,14 @@ on:
       - 'mobile/**'
       - 'api/mobile/**'
       - 'api/_apple-iap-core.js'
+      - 'api/_apple-signin-core.js'
       - 'api/apple/**'
       - 'supabase/migrations/*dabbir_apple*'
       - 'supabase/migrations/*dabbir_*account_deletion*'
       - 'scripts/dabbir-app-store-preflight.mjs'
+      - 'scripts/dabbir-apple-account-deletion-gate.mjs'
       - 'test/dabbir-app-store-preflight.test.mjs'
+      - 'test/apple-account-deletion-compliance.test.mjs'
       - 'privacy.html'
       - 'terms.html'
       - 'support.html'
@@ -23,11 +26,14 @@ on:
       - 'mobile/**'
       - 'api/mobile/**'
       - 'api/_apple-iap-core.js'
+      - 'api/_apple-signin-core.js'
       - 'api/apple/**'
       - 'supabase/migrations/*dabbir_apple*'
       - 'supabase/migrations/*dabbir_*account_deletion*'
       - 'scripts/dabbir-app-store-preflight.mjs'
+      - 'scripts/dabbir-apple-account-deletion-gate.mjs'
       - 'test/dabbir-app-store-preflight.test.mjs'
+      - 'test/apple-account-deletion-compliance.test.mjs'
       - 'privacy.html'
       - 'terms.html'
       - 'support.html'
@@ -54,6 +60,9 @@ jobs:
         env:
           DABBIR_APP_STORE_PREFLIGHT_REPORT_PATH: dabbir-app-store-preflight-report.json
         run: node scripts/dabbir-app-store-preflight.mjs
+      - name: Run Apple account-deletion compliance gate
+        working-directory: .
+        run: node scripts/dabbir-apple-account-deletion-gate.mjs
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Expo doctor
