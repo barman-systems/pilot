@@ -119,7 +119,6 @@ function expandContext(context,discovery,allPaths,commandText){
   const selected=new Map(context.map(file=>[file.path,file]));
   const add=path=>{if(selected.size>=12||selected.has(path))return;const file=readContextFile(path,allPaths);if(file)selected.set(path,file)};
   add('package.json');
-
   const tokens=new Set();
   const addToken=value=>{
     for(const part of String(value||'').toLowerCase().split(/[^a-z0-9_-]+/)){
@@ -132,7 +131,6 @@ function expandContext(context,discovery,allPaths,commandText){
     addToken(base);
   }
   for(const word of String(commandText||'').match(/[A-Za-z][A-Za-z0-9_-]{3,}/g)||[])addToken(word);
-
   for(const file of context){
     const base=file.path.split('/').pop()?.replace(/\.[^.]+$/,'').toLowerCase()||'';
     if(!base)continue;
@@ -155,6 +153,42 @@ function applyPatch(patch){
   const apply=spawnSync('git',['apply','--whitespace=fix','-'],{input:patch,encoding:'utf8'});
   if(apply.status!==0)return {ok:false,error:clean(apply.stderr||apply.stdout||'git apply failed',1200)};
   return {ok:true};
+}
+function validStructuredPath(path){
+  const value=String(path||'');
+  if(!value||value.startsWith('/')||value.includes('\\')||value.split('/').some(part=>part===''||part==='.'||part==='..'))return false;
+  return !forbiddenPath(value);
+}
+function allowedNewStructuredPath(path){
+  return (path.startsWith('test/')&&/\.(?:mjs|cjs|js|ts|tsx)$/.test(path))
+    ||(path.startsWith('supabase/migrations/')&&path.endsWith('.sql'));
+}
+function applyStructuredFiles(result,context,allPaths){
+  const entries=Array.isArray(result?.files)?result.files:[];
+  if(entries.length<1||entries.length>4)return {ok:false,error:'STRUCTURED_FILES_COUNT_INVALID'};
+  const contextPaths=new Set(context.map(file=>file.path));
+  const seen=new Set();
+  const validated=[];
+  for(const entry of entries){
+    const path=String(entry?.path||'').trim();
+    const mode=String(entry?.mode||'').toLowerCase();
+    const content=String(entry?.content??'');
+    if(!validStructuredPath(path))return {ok:false,error:`STRUCTURED_PATH_DENIED_${clean(path,180)}`};
+    if(seen.has(path))return {ok:false,error:`STRUCTURED_DUPLICATE_PATH_${clean(path,180)}`};
+    seen.add(path);
+    if(!['create','replace'].includes(mode))return {ok:false,error:`STRUCTURED_MODE_INVALID_${clean(mode,40)}`};
+    if(!content||content.includes('\0')||Buffer.byteLength(content,'utf8')>60000)return {ok:false,error:`STRUCTURED_CONTENT_INVALID_${clean(path,180)}`};
+    const exists=allPaths.includes(path);
+    if(mode==='create'&&(exists||!allowedNewStructuredPath(path)))return {ok:false,error:`STRUCTURED_CREATE_DENIED_${clean(path,180)}`};
+    if(mode==='replace'&&(!exists||!contextPaths.has(path)))return {ok:false,error:`STRUCTURED_REPLACE_DENIED_${clean(path,180)}`};
+    validated.push({path,mode,content});
+  }
+  for(const entry of validated){
+    const dir=entry.path.split('/').slice(0,-1).join('/');
+    if(dir)fs.mkdirSync(dir,{recursive:true});
+    fs.writeFileSync(entry.path,entry.content,'utf8');
+  }
+  return {ok:true,paths:validated.map(entry=>entry.path)};
 }
 function localTests(){
   sh('npm',['ci','--no-audit','--no-fund'],{stdio:'inherit'});
@@ -219,25 +253,35 @@ try{
     const firstSummary=proposal.summary||'AI_PATCH_EMPTY';
     context=expandContext(context,discovery,allPaths,commandText);
     console.log(`PATCH_EMPTY_RECOVERY context_files=${context.map(file=>file.path).join(',')}`);
-    proposal=await broker({
-      phase:'patch',
-      command:commandText,
-      files:context,
-      previous_patch:'',
-      apply_error:`AI_PATCH_EMPTY_AUTORECOVERY: The first attempt returned no patch. New files under test/ and supabase/migrations/ are already authorized and do not need to pre-exist. Infer conventions from the expanded context and execute the smallest safe change. First summary: ${clean(firstSummary,900)}`,
-    });
-    if(!proposal.patch){
-      await finalize('BLOCKED',proposal.summary||firstSummary,[], 'AI_PATCH_EMPTY_AFTER_AUTORECOVERY');
-      process.exit(0);
-    }
+    proposal=await broker({phase:'patch',command:commandText,files:context,previous_patch:'',apply_error:`AI_PATCH_EMPTY_AUTORECOVERY: The first attempt returned no patch. New files under test/ and supabase/migrations/ are already authorized and do not need to pre-exist. Infer conventions from the expanded context and execute the smallest safe change. First summary: ${clean(firstSummary,900)}`});
   }
-  if(patchTouchesForbidden(proposal.patch))throw new Error('PATCH_TOUCHED_GOVERNANCE_FILE');
-  let applied=applyPatch(proposal.patch);
-  if(!applied.ok){
-    proposal=await broker({phase:'patch',command:commandText,files:context,previous_patch:proposal.patch,apply_error:applied.error});
-    if(!proposal.patch||patchTouchesForbidden(proposal.patch))throw new Error(`PATCH_REPAIR_DENIED_${applied.error}`);
-    applied=applyPatch(proposal.patch);
-    if(!applied.ok)throw new Error(`PATCH_APPLY_FAILED_${applied.error}`);
+
+  let structuredSummary='';
+  let patchFailure='';
+  if(proposal.patch){
+    if(patchTouchesForbidden(proposal.patch))throw new Error('PATCH_TOUCHED_GOVERNANCE_FILE');
+    let applied=applyPatch(proposal.patch);
+    if(!applied.ok){
+      const firstFailure=applied.error;
+      const repaired=await broker({phase:'patch',command:commandText,files:context,previous_patch:proposal.patch,apply_error:firstFailure});
+      if(repaired.patch&&!patchTouchesForbidden(repaired.patch)){
+        applied=applyPatch(repaired.patch);
+        if(applied.ok){proposal=repaired}else{patchFailure=`PATCH_REPAIR_FAILED: ${applied.error}`}
+      }else{
+        patchFailure=`PATCH_REPAIR_EMPTY_OR_DENIED: ${firstFailure}`;
+      }
+    }
+  }else{
+    patchFailure='PATCH_EMPTY_AFTER_AUTORECOVERY';
+  }
+
+  if(patchFailure){
+    console.log(`STRUCTURED_FILE_RECOVERY reason=${clean(patchFailure,600)}`);
+    const structured=await broker({phase:'files',command:commandText,files:context,failure_reason:patchFailure});
+    const structuredApplied=applyStructuredFiles(structured,context,allPaths);
+    if(!structuredApplied.ok)throw new Error(`STRUCTURED_FILE_RECOVERY_FAILED_${structuredApplied.error}`);
+    structuredSummary=structured.summary||'Structured file recovery';
+    console.log(`STRUCTURED_FILE_RECOVERY_APPLIED paths=${structuredApplied.paths.join(',')}`);
   }
 
   const changed=changedFiles();
@@ -246,14 +290,15 @@ try{
   localTests();
 
   const branch=`barman/exec-${execution.commandId.slice(0,8)}-${RUN_ID}`.replace(/[^a-zA-Z0-9_\/-]/g,'-').slice(0,120);
+  const executionSummary=structuredSummary||proposal.summary||commandText;
   git(['config','user.name','BARMAN Executive OS']);
   git(['config','user.email','barmanai@users.noreply.github.com']);
   git(['switch','-c',branch]);
   git(['add','--',...changed]);
-  git(['commit','-m',`BARMAN: ${clean(proposal.summary||commandText,68)}`]);
+  git(['commit','-m',`BARMAN: ${clean(executionSummary,68)}`]);
   git(['push','-u','origin',branch]);
   let headSha=git(['rev-parse','HEAD']);
-  const pr=await createPr(branch,`BARMAN: ${clean(proposal.summary||commandText,80)}`,`Automated execution for owner command \`${execution.commandId}\`.\n\nOwner goal: ${clean(commandText,1200)}\n\nSafety: generated patch passed local syntax + npm test before PR creation.`);
+  const pr=await createPr(branch,`BARMAN: ${clean(executionSummary,80)}`,`Automated execution for owner command \`${execution.commandId}\`.\n\nOwner goal: ${clean(commandText,1200)}\n\nSafety: generated change passed local syntax + npm test before PR creation.`);
   const prUrl=String(pr.html_url||'');
 
   await dispatch('ci.yml',branch,{});
@@ -287,20 +332,13 @@ try{
   if(result.finalized.verification_status!=='INDEPENDENT_REQUIRED')throw new Error(`FINALIZE_TRUST_STATE_INVALID_${clean(result.finalized.verification_status||'missing',80)}`);
 
   let verifierWake='DISPATCHED';
-  try{
-    await dispatch('barman-independent-verifier.yml','main',{});
-  }catch(error){
-    verifierWake=`FAILED_UNPROMOTED_${clean(error?.message||error,240)}`;
-    console.error('VERIFIER_WAKE_FAILED_UNPROMOTED',verifierWake);
-  }
+  try{await dispatch('barman-independent-verifier.yml','main',{})}
+  catch(error){verifierWake=`FAILED_UNPROMOTED_${clean(error?.message||error,240)}`;console.error('VERIFIER_WAKE_FAILED_UNPROMOTED',verifierWake)}
   console.log('DONE_AWAITING_INDEPENDENT_VERIFICATION',JSON.stringify({command_id:execution.commandId,pr:prUrl,merge_sha:mergeSha,verification_status:result.finalized.verification_status,verifier_wake:verifierWake,notification:result?.notification||null}));
 }catch(error){
   const message=clean(error?.stack||error?.message||error,1800);
   console.error('BARMAN_TOOL_AGENT_FAILED',message);
-  if(!terminalPersisted){
-    await finalize('RETRY','تعذر إكمال دورة التنفيذ الآلية؛ ستعاد المحاولة بعد معالجة السبب.',[],message);
-  }else{
-    console.error('POST_FINALIZE_FAILURE_COMMAND_REMAINS_UNPROMOTED',execution?.commandId||'unknown');
-  }
+  if(!terminalPersisted){await finalize('RETRY','تعذر إكمال دورة التنفيذ الآلية؛ ستعاد المحاولة بعد معالجة السبب.',[],message)}
+  else{console.error('POST_FINALIZE_FAILURE_COMMAND_REMAINS_UNPROMOTED',execution?.commandId||'unknown')}
   process.exitCode=1;
 }

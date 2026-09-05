@@ -56,11 +56,14 @@ test('persistent worker has schedule plus protected-main push wake-up',()=>{
   assert.match(worker,/api\/barman-tool-agent-broker\.js/);
 });
 
-test('empty AI patches trigger bounded autonomous context recovery instead of owner questions',()=>{
+test('empty AI patches trigger bounded autonomous recovery and structured fallback instead of owner questions',()=>{
   assert.match(worker,/PATCH_EMPTY_RECOVERY/);
   assert.match(worker,/expandContext\(context,discovery,allPaths,commandText\)/);
   assert.match(worker,/AI_PATCH_EMPTY_AUTORECOVERY/);
-  assert.match(worker,/AI_PATCH_EMPTY_AFTER_AUTORECOVERY/);
+  assert.match(worker,/PATCH_EMPTY_AFTER_AUTORECOVERY/);
+  assert.match(worker,/STRUCTURED_FILE_RECOVERY/);
+  assert.match(worker,/phase:'files'/);
+  assert.match(worker,/applyStructuredFiles\(structured,context,allPaths\)/);
   assert.match(worker,/add\('package\.json'\)/);
   assert.match(broker,/explicitly authorized to create NEW files under test\//);
   assert.match(broker,/does NOT need to already appear in the supplied context/);
