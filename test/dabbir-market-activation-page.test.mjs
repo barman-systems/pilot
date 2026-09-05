@@ -7,20 +7,22 @@ const shell = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const previewHandler = fs.readFileSync(new URL('../api/dabbir-market-preview.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
-test('public activation page communicates vertical, outcome, approvals, evidence and price before signup', () => {
+test('public activation page communicates business positioning, outcome, approvals, evidence and simulation limits before signup', () => {
   for (const marker of [
-    'لمشغلي غسيل السيارات المتنقل في الإمارات',
-    'كل استفسار WhatsApp يصبح حجزًا مؤكدًا',
-    '299 AED',
-    '14 يومًا بلا بطاقة',
-    'Shadow Mode',
-    'Owner Receipt',
-    'Estimated',
-    'Verified',
-    'SANDBOX — لا إرسال خارجي',
+    'للأنشطة المختلفة — حسب احتياج نشاطك',
+    'أعمال نشاطك تتقدم.',
+    'بلا بطاقة',
+    'مثال متخصص: حجز غسيل سيارات',
+    'غسيل السيارات مثال واحد، وليس تعريف دبّر',
+    'تحديد الصلاحيات',
+    'ملخص التنفيذ',
+    'قيمة الحجز التقديرية',
+    'المبلغ المحصّل فعليًا',
+    'تجربة بلا إرسال',
   ]) assert.match(landing, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(landing, /299 AED|14 يومًا|Shadow Mode|Owner Receipt/);
   const demoPosition = landing.indexOf('id="demoForm"');
-  const signupPosition = landing.indexOf('ابدأ تجربة 14 يومًا');
+  const signupPosition = landing.indexOf('أنشئ حساب نشاطك');
   assert.ok(demoPosition >= 0 && signupPosition > demoPosition, 'signup CTA must appear after the value demo');
 });
 
@@ -29,7 +31,7 @@ test('activation page calls the isolated same-origin demo endpoint and renders e
   assert.match(landing, /credentials:'same-origin'/);
   assert.match(landing, /AbortSignal\.timeout\(10000\)/);
   assert.match(landing, /external_side_effects/);
-  assert.match(landing, /الإيراد المثبت 0 AED/);
+  assert.match(landing, /لم تُرسل رسالة واتساب ولم يُحصّل مبلغ/);
 });
 
 test('root login gate offers value before account while retaining the existing auth contract', () => {
