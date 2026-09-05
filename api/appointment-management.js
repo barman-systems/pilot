@@ -1,3 +1,5 @@
+import { singleQueryValue } from './_request-query.js';
+import { resolveBranchScope, branchFilter } from './_branch-scope.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -43,10 +45,10 @@ function membershipFor(memberships,businessId){
   return memberships.find(m=>m.business_id===businessId)||null;
 }
 
-async function appointmentFor(token,businessId,appointmentId){
+async function appointmentFor(token,businessId,appointmentId,scope){
   const rows=await rest(
     token,
-    `dabbir_appointments?select=id,business_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&limit=1`,
+    `dabbir_appointments?select=id,business_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}${scope?branchFilter(scope):''}&limit=1`,
     {},
     'APPOINTMENT_LOOKUP_FAILED',
   );
@@ -66,7 +68,7 @@ function durationMs(appointment){
 const calendarOutboxTruth=()=>({mode:'durable_outbox',business_truth_committed_first:true,external_sync_async:true});
 
 async function updateAppointment(req,ctx,body,businessId,appointmentId){
-  const current=await appointmentFor(ctx.token,businessId,appointmentId);
+  const current=await appointmentFor(ctx.token,businessId,appointmentId,ctx.branchScope);
   if(!current)return {status:404,body:{ok:false,error:'APPOINTMENT_NOT_FOUND'}};
 
   const patch={};
@@ -100,7 +102,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
 
   const rows=await rest(
     ctx.token,
-    `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
+    `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}${ctx.branchScope?branchFilter(ctx.branchScope):''}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
     {
       method:'PATCH',
       headers:{prefer:'return=representation'},
@@ -125,7 +127,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
 }
 
 async function deleteAppointment(req,ctx,businessId,appointmentId){
-  const current=await appointmentFor(ctx.token,businessId,appointmentId);
+  const current=await appointmentFor(ctx.token,businessId,appointmentId,ctx.branchScope);
   if(!current)return {status:404,body:{ok:false,error:'APPOINTMENT_NOT_FOUND'}};
 
   // "Delete" is intentionally a cancellation. Operational history is retained and
@@ -134,7 +136,7 @@ async function deleteAppointment(req,ctx,businessId,appointmentId){
   if(String(current.status||'').toLowerCase()!=='cancelled'){
     const cancelled=await rest(
       ctx.token,
-      `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
+      `dabbir_appointments?business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(appointmentId)}${ctx.branchScope?branchFilter(ctx.branchScope):''}&select=id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at`,
       {method:'PATCH',headers:{prefer:'return=representation'},body:JSON.stringify({status:'cancelled'})},
       'APPOINTMENT_CANCEL_FAILED',
     );
@@ -157,15 +159,38 @@ async function deleteAppointment(req,ctx,businessId,appointmentId){
   };
 }
 
+function appointmentPermission(membership,permission){
+  const role=String(membership?.role||'').toLowerCase();
+  if(role==='owner'||role==='admin')return true;
+  const grants=membership?.permissions;
+  if(Array.isArray(grants)&&grants.length)return grants.includes(permission);
+  return (permission==='view_appointments'?['manager','employee','staff','agent','viewer']:['manager','employee','staff','agent']).includes(role);
+}
+
 export default async function handler(req,res){
   const ctx=await context(req,res);if(!ctx)return;
   try{
-    if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
+    if(req.method==='GET'){
+      const businessId=safeId(singleQueryValue(req,'business_id')),appointmentId=safeId(singleQueryValue(req,'appointment_id'));
+      if(!businessId||!appointmentId)return json(res,400,{ok:false,error:'APPOINTMENT_ID_REQUIRED'});
+      const membership=membershipFor(ctx.memberships,businessId);
+      if(!membership||!appointmentPermission(membership,'view_appointments'))return json(res,403,{ok:false,error:'APPOINTMENT_ACCESS_DENIED'});
+      const scope=await resolveBranchScope({businessId,membership,userId:ctx.user.id,requestedBranch:singleQueryValue(req,'branch_id'),fetchRows:(path,error)=>rest(ctx.token,path,{},error)});
+      const rows=await rest(ctx.token,`dabbir_appointments?select=id,business_id,branch_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at&business_id=eq.${businessId}&id=eq.${appointmentId}${branchFilter(scope)}&limit=1`);
+      const appointment=rows?.[0];
+      if(!appointment)return json(res,404,{ok:false,error:'APPOINTMENT_NOT_FOUND'});
+      return json(res,200,{ok:true,appointment,can_manage:appointmentPermission(membership,'manage_appointments')});
+    }
+    if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
     const body=await readJsonBody(req);
     const businessId=safeId(body.business_id),appointmentId=safeId(body.appointment_id);
     if(!businessId||!appointmentId)return json(res,400,{ok:false,error:'APPOINTMENT_ID_REQUIRED'});
-    if(!membershipFor(ctx.memberships,businessId))return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
+    const membership=membershipFor(ctx.memberships,businessId);
+    if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
+    if(!appointmentPermission(membership,'manage_appointments'))return json(res,403,{ok:false,error:'APPOINTMENT_MANAGEMENT_DENIED'});
+
+    if(body.branch_id!==undefined)ctx.branchScope=await resolveBranchScope({businessId,membership,userId:ctx.user.id,requestedBranch:body.branch_id,fetchRows:(path,error)=>rest(ctx.token,path,{},error)});
 
     const action=String(body.action||'').trim().toLowerCase();
     let result;

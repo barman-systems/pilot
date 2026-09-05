@@ -5,7 +5,7 @@ export const activityExperienceUi=String.raw`(()=>{
   const language=()=>document.documentElement.lang==='en'?'en':'ar';
   const text=(ar,en)=>language()==='ar'?ar:en;
   const registry=window.__dabbirActivityExperience;
-  let business=null,signature='',activeRecord=null;
+  let business=null,branch=null,signature='',activeRecord=null;
   const style=document.createElement('style');
   style.textContent='.daeHidden{display:none!important}.daeDashboard{order:1;display:grid;gap:12px;margin-bottom:12px}.daeDashboard h2{margin:0;font-size:18px}.daeDashboard p{font-size:14px;color:var(--muted);line-height:1.6}.daeActions{display:flex;gap:8px;flex-wrap:wrap}.daeActions button,.daeRow{min-height:48px;font-size:14px}.daeRow{width:100%;display:flex;justify-content:space-between;gap:12px;text-align:start;padding:12px;margin-top:8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:inherit}.daeRow span{display:block;font-size:13px;color:var(--muted);margin-top:4px}.daeGroupTitle{grid-column:1/-1;margin:12px 0 4px;font-size:16px}.daeSettings{margin-top:16px}.daeBack{margin-bottom:12px}.daeDetail{position:fixed;inset:0;z-index:200;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px}.daeDetail .modalBox{max-height:85dvh;overflow:auto;width:min(540px,100%);font-size:16px}.daeDetail button{min-height:44px}.daeDetail p{overflow-wrap:anywhere}.daeOwner #dashCards,.daeOwner #screen-dashboard>.todayGrid,.daeOwner #doMetrics{display:none!important}.daeOwner #screen-dashboard>.hero{order:0}.daeOwner #dabbirActionCenter{order:2}.daeOwner #dabbirOperatorSummary{order:4}.daeOwner #setupCard{display:none!important}.daeOwner #dabbirActivation{order:5}.daeOwner #salonToday{order:3}.daeOwner .daeDashboard{order:1}.daeOwner #screen-dashboard.active{display:flex;flex-direction:column}#bottomNav{grid-template-columns:repeat(var(--dae-primary-count,5),minmax(0,1fr))!important}#bottomNav [hidden],#nav [hidden]{display:none!important}@media(max-width:700px){.daeDashboard h2{font-size:17px}.daeActions button{flex:1 1 42%}.daeDetail{align-items:flex-end;padding:0}.daeDetail .modalBox{width:100%;max-height:85dvh;border-radius:20px 20px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom))}.daeRow{min-width:0}.daeRow b{overflow-wrap:anywhere}}';
   document.head.append(style);
@@ -14,6 +14,7 @@ export const activityExperienceUi=String.raw`(()=>{
   function closeDetail(){if(history.state?.daeDetail){const state={...history.state};delete state.daeDetail;history.replaceState(state,'')}const box=q('#daeDetail');if(!box)return;box.remove();activeRecord=null;const origin=q('[data-dae-return="true"]');origin?.focus();origin?.removeAttribute('data-dae-return')}
   function openRecord(row){
     const w=ws(),m=registry.model(w,language());if(!m.allowed(row.target))return;
+    if(row.type==='appointment'&&window.__dabbirAppointmentManagement?.openRecord){void window.__dabbirAppointmentManagement.openRecord(row.id);return}
     closeDetail();document.activeElement?.setAttribute?.('data-dae-return','true');
     if(row.target==='conversations'){
       navigate(row.target);if(row.id&&typeof loadRuntime==='function')void loadRuntime(w.business.id,row.id);return;
@@ -41,7 +42,8 @@ export const activityExperienceUi=String.raw`(()=>{
   function refresh(){
     const w=ws();if(!w?.business?.id)return;
     const m=registry.model(w,language());
-    if(business!==w.business.id){business=w.business.id;signature='';closeDetail();q('#doReceipt')?.replaceChildren();const command=q('#doCommandInput');if(command)command.value='';}
+    const nextBranch=w.branch_scope?.branch_id||w.branch_scope?.mode||'';
+    if(business!==w.business.id||branch!==nextBranch){business=w.business.id;branch=nextBranch;signature='';closeDetail();q('#doReceipt')?.replaceChildren();const command=q('#doCommandInput');if(command)command.value='';}
     document.body.classList.toggle('daeOwner',m.owner);
     for(const id of ['#dabbirOperatorSummary','#dabbirActionCenter'])q(id)?.classList.toggle('daeHidden',!m.owner);
     for(const nav of [q('#nav'),q('#bottomNav')]){
