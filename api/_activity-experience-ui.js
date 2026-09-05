@@ -21,25 +21,14 @@ export const activityExperienceUi=String.raw`(()=>{
     if(row.target==='conversations'){
       navigate(row.target);if(row.id&&typeof loadRuntime==='function')void loadRuntime(w.business.id,row.id);return;
     }
-    const overlay=document.createElement('div');overlay.id='daeDetail';overlay.className='daeDetail';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','daeDetailTitle');
-    const box=document.createElement('div');box.className='modalBox';const heading=document.createElement('h2');heading.id='daeDetailTitle';heading.textContent=row.title||text('تفاصيل العنصر','Record details');box.append(heading);
-    const detail=document.createElement('p');detail.textContent=format(row.detail);box.append(detail);
-    const actions=document.createElement('div');actions.className='daeActions';actions.append(button(text('العودة','Back'),()=>{if(history.state?.daeDetail)history.back();else closeDetail()}));
-    actions.append(button(text('فتح في صفحة العمل','Open in work page'),()=>{
-      // Reuse the record control supplied by the existing feature; never guess a URL.
-      closeDetail();navigate(row.target);
-      const locate=()=>{
-        const keys=row.type==='appointment'?['data-appt-row','data-calendar-appt','data-salon-appt']:row.type==='inventory'?['data-ops-edit']:row.type==='order'?['data-ops-order']:[];
-        const nodes=keys.flatMap(key=>qa('['+key+']').filter(n=>n.getAttribute(key)===String(row.id)));
-        const node=nodes.find(n=>n.offsetParent!==null);
-        if(node){node.scrollIntoView({block:'center'});node.setAttribute('tabindex','-1');node.focus({preventScroll:true})}
-        else if(typeof toast==='function')toast(text('السجل غير متاح في القائمة الحالية. حدّث الصفحة أو راجع صلاحياتك.','Record unavailable in the current list. Refresh or check your access.'));
-      };
-      requestAnimationFrame(()=>setTimeout(locate,150));
-    }));
-    box.append(actions);overlay.append(box);document.body.append(overlay);activeRecord={business:w.business.id,row};
-    history.pushState({...history.state,daeDetail:true},'');actions.querySelector('button')?.focus();
+    // A missing native detail must not silently fall back to an unrelated loaded row.
+    if(['appointment','inventory','order'].includes(row.type)){
+      if(typeof toast==='function')toast(text('تعذر تحميل تفاصيل السجل. أعد المحاولة.','Record details could not be loaded. Please retry.'));
+      return;
+    }
+    navigate(row.target);
   }
+
   function format(value){if(!value)return '';if(/^\d{4}-\d\d-\d\dT/.test(String(value))){try{return new Intl.DateTimeFormat(language()==='ar'?'ar-AE':'en-AE',{timeZone:ws()?.business?.timezone||'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{}}return String(value)}
   function refresh(){
     const w=ws();if(!w?.business?.id)return;
