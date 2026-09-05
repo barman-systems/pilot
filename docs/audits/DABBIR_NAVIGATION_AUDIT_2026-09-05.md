@@ -1,88 +1,93 @@
-# DABBIR navigation audit — 5 September 2026
+# دبّر — تقرير مراجعة التنقل
 
-Status: NOT READY for complete navigation acceptance. This is a partial source audit with implemented fixes, not a completed authenticated customer audit.
-Baseline: origin/main 0072588. Production opened the login screen; /try was an explicitly labelled booking simulation. No authenticated owner, admin, manager or employee browser session was available. No internal iPhone/desktop interaction or production mutation is claimed.
+تاريخ المراجعة: 5 سبتمبر 2026.
 
-## Customer mental model and navigation map
+**تنبيه زمني:** هذا التقرير يوثّق مرحلة المراجعة الأولى. التغييرات والاختبارات اللاحقة موثّقة في [تقرير إعادة الهيكلة حسب النشاط](DABBIR_ACTIVITY_EXPERIENCE_2026-09-05.md). ترجمة التقرير لا تغيّر نتائج تلك المرحلة.
 
-The customer needs current work, conversations requiring a response, scheduled appointments or store orders, customer records, and decisions. Five primary destinations are a reasonable base; adding every feature to the bottom bar is unwarranted.
+**الحكم في هذه المرحلة: غير جاهز لاستيفاء تدقيق التنقل الكامل.** هذه مراجعة جزئية للمصدر مع إصلاحات منفّذة، ولم تكن تدقيقًا كاملًا لرحلات عميل مسجّل الدخول.
 
-| Group | Proposed destinations | Implementation status |
+الحالة المرجعية: الفرع الرئيسي عند الإصدار `0072588`. أظهر الإنتاج شاشة تسجيل الدخول؛ وكانت صفحة `/try` محاكاة حجز معلنة. لم تتوفر جلسة متصفح مصادق عليها للمالك أو المدير الإداري أو المدير أو الموظف. لا يُدّعى اختبار الواجهة الداخلية على iPhone أو سطح المكتب أو إجراء تعديل على الإنتاج في هذه المرحلة.
+
+## طريقة تفكير العميل وخريطة التنقل
+
+يحتاج صاحب النشاط إلى العمل الحالي، والمحادثات التي تنتظر ردًا، والمواعيد أو طلبات المتجر، وسجلات العملاء، والقرارات. خمس وجهات رئيسية قاعدة مناسبة؛ لا حاجة لوضع كل وظيفة في الشريط السفلي.
+
+| المجموعة | الوجهات المقترحة | حالة التنفيذ في المراجعة الأولى |
 |---|---|---|
-| MAIN | Today; Customer conversations; Appointments (service businesses) / Orders & inventory (stores); Customers; More | Existing five destinations retained; store currently labelled Operations |
-| Today shortcuts | Decisions and remaining follow-ups; action results; urgent conversations | Metrics made actionable; urgent conversation opens its supplied record ID; other result links remain incomplete |
-| SECONDARY / More | Tasks & decisions; Reports; Services (service businesses); Team; Notifications | Existing destinations retained; clearer names/grouping proposed |
-| SETTINGS | Business details; Integrations; Follow-up rules; Team permissions; Account/billing; Help | Consolidation proposed, not moved in this patch |
+| الرئيسية | اليوم؛ محادثات العملاء؛ مواعيد الأنشطة الخدمية أو طلبات ومخزون المتجر؛ العملاء؛ المزيد | الإبقاء على الوجهات الخمس؛ وجهة المتجر كانت باسم العمليات |
+| اختصارات اليوم | القرارات والمتابعات المتبقية؛ نتائج الإجراءات؛ المحادثات العاجلة | جُعلت المؤشرات قابلة للضغط وربطت المحادثة العاجلة بمعرّفها؛ روابط النتائج الأخرى غير مكتملة |
+| المزيد والوظائف الثانوية | المهام والقرارات؛ التقارير؛ خدمات الأنشطة الخدمية؛ الفريق؛ التنبيهات | الإبقاء على الوجهات مع اقتراح تجميع وتسميات أوضح |
+| الإعدادات | بيانات النشاط؛ التكاملات؛ قواعد المتابعة؛ صلاحيات الفريق؛ الحساب والفوترة؛ المساعدة | تجميع مقترح لم يُنفّذ في الإصلاح الأول |
 
-## Findings and disposition
+## المشكلات والإجراءات
 
-| Element | Current place | Problem | Intended place | Action |
+| العنصر | مكانه آنذاك | المشكلة | المكان المناسب | الإجراء في هذه المرحلة |
 |---|---|---|---|---|
-| Daily metrics | Today | Base cards lack navigation | Relevant list | Added mouse and keyboard navigation; store follow-up metric routes to Tasks |
-| Urgent conversation | Owner action center | Feed supplies entity_id but UI only opens generic screen | Exact conversation | Loads supplied conversation within current business |
-| Notification | Notifications | Rendered items have no navigation | Relevant task/calendar/integration | Added destinations, including repeated live-calendar renders; grouped notices still open lists |
-| Back | Main screen router | Screen switches do not create history entries | Previous screen | Added business-scoped history and page scroll restoration |
-| Active tab | Primary bars | Secondary screens leave all primary items inactive | More as parent | Added active and aria-current state |
-| Menu | Header | Expanded state not exposed | Same menu | Added accessible name, controls and expanded state |
-| Tasks | More | Daily work competes with administrative features | Today shortcut, More as full list | Today needs-attention metric now links to Tasks |
-| Automations | More | Base renderer copies follow-ups from Tasks | Settings / follow-up rules | Proposed; feature-layer behavior needs authenticated validation |
-| Reports | More / Analytics | Technical label | Reports in More | Proposed |
-| Services | More for service businesses | Context-specific, appropriate secondary destination | More | Retained |
-| Orders, inventory | Store Operations | Broad label, multiple concerns | Clearly named store activity destination | Proposed; do not create separate empty main tabs |
-| Team | Sidebar footer and More | Duplicate access is useful on mobile; role exposure needs verification | More with authorized controls | Retained pending role checks |
-| Integrations | More | Administrative card competes with daily work | Settings, with failure shortcut from Today | Notification shortcut implemented; relocation proposed |
-| AI results | Owner surfaces | Many destinations still use a generic target | Exact result/record | Only supplied conversation target fixed in this patch |
-| Customer relationships | Customer and appointment screens | Base rows lack linked record journey; specialized modes differ | Record context | Open; no invented universal profile route |
+| مؤشرات اليوم | اليوم | بطاقات أساسية بلا انتقال | القائمة المرتبطة | إضافة دعم الضغط ولوحة المفاتيح؛ مؤشر متابعة المتجر يفتح المهام |
+| المحادثة العاجلة | مركز قرارات المالك | تتوفر هوية المحادثة لكن الرابط يفتح الصفحة العامة | المحادثة نفسها | تحميل المعرّف الموجود ضمن النشاط الحالي |
+| التنبيه | التنبيهات | العناصر لا تقود إلى وجهة | المهمة أو التقويم أو التكامل المرتبط | إضافة الوجهات بما يشمل إعادة عرض التقويم؛ التنبيهات المجمعة تفتح القوائم |
+| الرجوع | موجّه الصفحات | تبديل الصفحات لا يُضاف إلى سجل المتصفح | الشاشة السابقة | إضافة سجل تنقل مرتبط بالنشاط واستعادة تمرير الصفحة |
+| التبويب النشط | التنقل الرئيسي | الصفحات الثانوية تترك جميع التبويبات غير نشطة | المزيد بصفته الوجهة الأم | إضافة حالة نشطة ووسم الوصول `aria-current` |
+| القائمة | رأس الصفحة | حالة الفتح غير معلنة لأدوات الوصول | القائمة نفسها | إضافة اسم واضح وعلاقة التحكم وحالة التوسّع |
+| المهام | المزيد | عمل يومي يزاحم وظائف إدارية | اختصار اليوم مع قائمة كاملة في المزيد | ربط مؤشر ما يحتاج الانتباه بالمهام |
+| المتابعات الآلية | المزيد | العرض الأساسي يكرر المتابعات الموجودة في المهام | الإعدادات وقواعد المتابعة | اقتراح؛ سلوك طبقات الوظيفة يحتاج جلسة مصادقًا عليها |
+| التقارير | المزيد باسم التحليلات | تسمية تقنية | التقارير في المزيد | تغيير مقترح |
+| الخدمات | المزيد للأنشطة الخدمية | وظيفة مرتبطة بالنشاط؛ موضعها الثانوي مناسب | المزيد | الإبقاء عليها |
+| الطلبات والمخزون | عمليات المتجر | اسم واسع يجمع احتياجات مختلفة | وجهة عمل واضحة للمتجر | اقتراح تسمية أوضح؛ لا تُنشأ تبويبات رئيسية فارغة |
+| الفريق | أسفل الشريط الجانبي والمزيد | التكرار مفيد للجوال؛ ظهور الأدوار يحتاج تحققًا | المزيد مع الضوابط المناسبة | الإبقاء عليه لحين اختبار الأدوار |
+| التكاملات | المزيد | وظيفة إدارية تزاحم العمل اليومي | الإعدادات واختصار عند وجود مشكلة | تنفيذ رابط تنبيه القناة؛ نقل الوظيفة مقترح |
+| نتائج دبّر | واجهات المالك | وجهات كثيرة تفتح صفحة عامة | النتيجة أو السجل نفسه | إصلاح رابط المحادثة ذات المعرّف المتاح فقط |
+| العلاقات بين سجلات العملاء | صفحات العملاء والمواعيد | لا توجد رحلة موحدة تربط السجلات؛ تختلف التخصيصات | سياق السجل | ما زالت مفتوحة؛ لم يُخترع مسار عام لملف العميل |
 
-## Fifteen customer journeys
+## رحلات العميل الخمس عشرة
 
-Counts below are source-derived transitions from the relevant starting screen, not observed production click measurements. Authentication is excluded.
+الأعداد أدناه مستخرجة من انتقالات المصدر وليست قياسات إنتاج. لا تتضمن تسجيل الدخول.
 
-| Journey | Before | After this patch / remaining verification |
+| الرحلة | قبل | بعد الإصلاح الأول وحدود التحقق |
 |---|---|---|
-| 1. Today's work | Today, one primary selection | Same; metrics now lead to lists |
-| 2. Open appointment | Appointments then calendar event | Existing two-step path; live modal and Back unverified |
-| 3. Find customer | Customers then search/list | Existing; record/search state needs verification |
-| 4. Remaining tasks | More → Tasks | Today metric → Tasks in one click; More path retained |
-| 5. Review order | Store activity → order row | Unchanged; no exact order deep link added |
-| 6. Accept approval | Owner execution surface | Unchanged; no real approval submitted |
-| 7. Stock problem | Owner action → Operations → find product | Unchanged; exact product destination remains open |
-| 8. What DABBIR did | Owner result/activity surface | Unchanged; complete result trail unverified |
-| 9. Employee | More → Team or sidebar Team | Unchanged; role-specific access unverified |
-| 10. Edit service | More → Services → Edit | Three-step source path retained |
-| 11. Report | More → Analytics | Two-step path retained; Reports name proposed |
-| 12. Business settings | More → Settings | Two-step path retained |
-| 13. Integration | More → Integrations | Two-step retained; channel problem notice now one click |
-| 14. Return to previous screen | No app screen history | Browser Back/Forward restores screen and page scroll; nested modal/search/filter state not covered |
-| 15. Alert → related record | Urgent conversation → list → search/select | Urgent conversation → supplied conversation ID; other entity types remain open |
+| 1. عمل اليوم | اختيار اليوم من الرئيسية | بقي المسار؛ المؤشرات تفتح القوائم |
+| 2. فتح موعد | المواعيد ثم الحدث | المسار من خطوتين بقي؛ نافذة التفاصيل والرجوع لم يُختبرا |
+| 3. العثور على عميل | العملاء ثم البحث أو القائمة | بقي المسار؛ حالة البحث والسجل تحتاج اختبارًا |
+| 4. المهام المتبقية | المزيد ثم المهام | مؤشر اليوم يفتح المهام بضغطة؛ بقي مسار المزيد |
+| 5. مراجعة طلب | عمل المتجر ثم صف الطلب | دون تغيير؛ لم يُضف رابط مباشر للطلب |
+| 6. قبول موافقة | واجهة التنفيذ لدى المالك | دون تغيير؛ لم تُرسل موافقة فعلية |
+| 7. مشكلة مخزون | إجراء المالك ثم العمليات ثم البحث | دون تغيير؛ الوجهة المباشرة للمنتج بقيت مفتوحة |
+| 8. ما نفّذه دبّر | واجهة النتائج أو سجل النشاط | دون تغيير؛ تسلسل الإثبات الكامل لم يُختبر |
+| 9. الوصول إلى موظف | المزيد ثم الفريق أو رابط الشريط الجانبي | دون تغيير؛ الوصول حسب الدور لم يُختبر |
+| 10. تعديل خدمة | المزيد ثم الخدمات ثم تعديل | الإبقاء على المسار المكوّن من ثلاث خطوات |
+| 11. مراجعة تقرير | المزيد ثم التحليلات | خطوتان؛ اقتراح اسم التقارير |
+| 12. إعدادات النشاط | المزيد ثم الإعدادات | الإبقاء على خطوتين |
+| 13. التكاملات | المزيد ثم التكاملات | خطوتان؛ تنبيه مشكلة القناة أصبح يفتحها بضغطة |
+| 14. العودة للشاشة السابقة | لا يوجد سجل تنقل للشاشات | الرجوع والتقدم يستعيدان الشاشة وتمرير الصفحة؛ النوافذ والبحث والفلاتر الداخلية غير مغطاة |
+| 15. تنبيه إلى السجل المرتبط | محادثة عاجلة ثم قائمة ثم بحث أو اختيار | المحادثة العاجلة تفتح المعرّف المتاح؛ أنواع السجلات الأخرى بقيت مفتوحة |
 
-## Scope and risks
+## نطاق التغيير وحدوده
 
-- No backend, schema, business direction or chatbot changes.
-- History lives in browser history and a page-local scroll map. It does not persist form inputs, nested scroller positions, filters rebuilt by feature renderers, or selected records across a full reload.
-- History entries from a different business are ignored. Authorization remains enforced by existing APIs; this is not a permission redesign.
-- MAIN layout and secondary/settings relocations are proposals, not represented as deployed changes.
-- Existing generated public bundles are stale relative to current source. The deployment build regenerates them; this patch does not commit unrelated generated drift.
-- Required before acceptance: authenticated 15-journey run, iPhone Safari and desktop QA, Owner/Admin/Manager/Employee plus actual additional roles, appointment/customer/order/product/approval deep links, filter restoration and cross-page Team return.
+- لا تغييرات على الخادم أو مخطط قاعدة البيانات أو اتجاه المنتج أو إنشاء واجهة محادثة جديدة.
+- سجل التنقل يعتمد على سجل المتصفح وخريطة تمرير داخل الصفحة. لا يحفظ مدخلات النماذج أو تمرير القوائم الداخلية أو الفلاتر التي تعيد طبقات العرض بناءها أو السجل المختار بعد تحديث كامل.
+- تُتجاهل إدخالات سجل التنقل التابعة لنشاط آخر. صلاحيات واجهات البرمجة الحالية باقية؛ هذا ليس إعادة بناء للصلاحيات.
+- تجميع الرئيسية والمزيد والإعدادات كان مقترحًا في هذه المرحلة، ولا يُقدّم هنا بوصفه منشورًا.
+- كانت الحزم العامة المولّدة أقدم من المصدر؛ يعيد البناء توليدها. لم تُضمّن الفروق القديمة غير المرتبطة بالإصلاح.
+- المطلوب للقبول: اختبار الرحلات الخمس عشرة بعد المصادقة، وiPhone وSafari وسطح المكتب، وأدوار المالك والمدير الإداري والمدير والموظف والأدوار الفعلية الأخرى، وروابط الموعد والعميل والطلب والمنتج والموافقة، واستعادة الفلاتر والعودة من صفحة الفريق.
 
-## Score
+## التقييم في المراجعة الأولى
 
-| Category | Maximum | Before | After |
+| المحور | الحد الأعلى | قبل | بعد |
 |---|---:|---|---|
-| Tab Structure | 20 | Not verified | Not verified |
-| Placement | 20 | Not verified | Not verified |
-| Navigation Clarity | 20 | Not verified | Not verified |
-| Click Efficiency | 15 | Not verified | Not verified |
-| Contextual Navigation | 10 | Not verified | Not verified |
-| Mobile UX | 10 | Not verified | Not verified |
-| Back/State | 5 | Not verified | Unit-tested screen history only |
+| بنية التبويبات | 20 | غير متحقق منه | غير متحقق منه |
+| مواضع العناصر | 20 | غير متحقق منه | غير متحقق منه |
+| وضوح التنقل | 20 | غير متحقق منه | غير متحقق منه |
+| كفاءة الضغطات | 15 | غير متحقق منه | غير متحقق منه |
+| الروابط السياقية | 10 | غير متحقق منه | غير متحقق منه |
+| تجربة الجوال | 10 | غير متحقق منه | غير متحقق منه |
+| الرجوع وحفظ الحالة | 5 | غير متحقق منه | اختبار كود لسجل الشاشات فقط |
 
-No defensible whole-product score or 90/100 claim is available from a login-gated browser and partial source evidence.
+لا تتوفر درجة شاملة يمكن الدفاع عنها أو إثبات 90/100 اعتمادًا على شاشة تسجيل دخول وأدلة مصدر جزئية.
 
-## Validation outcome
+## نتيجة الاختبارات في تلك المرحلة
 
-- `npm test`: 1,255 passed, 0 failed, 0 skipped after installing lockfile dependencies.
-- `npm run dabbir:build`: passed syntax, production dependency audit and all 1,255 tests.
-- Four executable screen-history tests cover Back/Forward, repeated/invalid destinations, cross-business rejection and page scroll restoration.
-- Browser: production login and public /try inspected only. Authenticated internal journeys, mobile touch and role behavior remain untested.
-- Changes are submitted for review; no production deployment or merged status is claimed.
+- نجح `npm test`: عدد **1255 اختبارًا ناجحًا، دون فشل أو تجاوز** بعد تثبيت التبعيات المقيدة بملف المشروع.
+- نجح `npm run dabbir:build`: فحص الصياغة والتبعيات والاختبارات الـ1255.
+- أربعة اختبارات لسجل الشاشات: الرجوع والتقدم؛ تكرار الوجهات والوجهات غير الصالحة؛ رفض سياق نشاط آخر؛ واستعادة تمرير الصفحة.
+- اقتصر المتصفح على شاشة دخول الإنتاج والمحاكاة العامة `/try`. لم تُختبر الرحلات الداخلية المصادق عليها أو لمس الجوال أو الأدوار حينها.
+- التغييرات قُدّمت للمراجعة؛ لم يُدّع دمجها أو نشرها على الإنتاج.
