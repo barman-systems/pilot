@@ -54,6 +54,7 @@ test('store lexical workspace converts side and bottom activity slots to visible
       }
       return [];
     },
+    addEventListener() {},
     createElement() { throw new Error('UNEXPECTED_CREATE_ELEMENT'); },
   };
 
@@ -97,6 +98,7 @@ test('window.workspace remains a compatibility fallback only when no lexical wor
       if (selector === '[data-dabbir-activity-slot="true"]') return side.dataset.dabbirActivitySlot === 'true' ? [side] : [];
       return [];
     },
+    addEventListener() {},
     createElement() { throw new Error('UNEXPECTED_CREATE_ELEMENT'); },
   };
   const context = {

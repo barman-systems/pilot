@@ -129,6 +129,11 @@ const client=String.raw`
       button.addEventListener('click',()=>{
         const target=String(item.target||'dashboard');
         if(typeof showScreen==='function')showScreen(target);
+        // The action feed already supplies the conversation identifier; do not make the owner search again.
+        if(target==='conversations'&&item.entity_id&&typeof loadRuntime==='function'){
+          const businessId=workspaceNow()?.business?.id;
+          if(businessId)void loadRuntime(businessId,String(item.entity_id));
+        }
       });
       row.append(body,button);
       list.append(row);

@@ -236,8 +236,33 @@ const script=String.raw`(()=>{
     document.addEventListener('click',event=>{if(event.target?.closest?.('[data-screen="settings"],#menuBtn,.navBtn,#bottomNav button,#bottomNav a,.dsa-language-control'))setTimeout(syncApprovedSettings,0)},true);
   }
 
+  function actionableSummaries(){
+    const routes=['conversations',isStore()?'tasks':'appointments','customers','tasks'];
+    qa('#dashCards .card.metric').forEach((card,index)=>{
+      if(!routes[index])return;
+      card.dataset.screen=routes[index];
+      card.setAttribute('role','link');card.setAttribute('tabindex','0');
+    });
+    qa('#noticeList [data-notice-type]').forEach(card=>{
+      const route={handoffs:'tasks',appointments:'appointments',channel_issues:'integrations'}[card.dataset.noticeType];
+      if(!route)return;
+      card.dataset.screen=route;card.setAttribute('role','link');card.setAttribute('tabindex','0');
+    });
+  }
+  document.addEventListener('click',event=>{
+    const card=event.target?.closest?.('#dashCards [data-screen][role="link"],#noticeList [data-screen][role="link"]');
+    if(card&&typeof showScreen==='function')showScreen(card.dataset.screen);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    const card=event.target?.closest?.('[data-screen][role="link"]');
+    if(!card||event.target!==card)return;
+    event.preventDefault();card.click();
+  });
+
   function enforce(){
     adaptPrimaryActivitySlot();
+    actionableSummaries();
     ensureMoreCard();
     ensureUtilityCards();
     bindMobileMenuResync();

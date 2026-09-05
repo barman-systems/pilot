@@ -54,7 +54,7 @@ const liveScript=String.raw`(()=>{
     if(upcoming.length)items.push({a:t?.appointments||(ar()?'الحجوزات':'Bookings'),b:(t?.upcomingNotice||(ar()?'حجوزات قادمة:':'Upcoming bookings:'))+' '+upcoming.length,type:'appointments'});
     if(workspace?.whatsapp?.state!=='OPERATIONAL')items.push({a:t?.whatsapp||'WhatsApp',b:t?.whatsappDesc||(ar()?'قناة WhatsApp غير تشغيلية.':'WhatsApp channel is not operational.'),type:'channel_issues'});
     const emptyLabel=t?.noNotices||(ar()?'لا توجد تنبيهات مهمة.':'No important alerts.');
-    list.innerHTML=items.length?items.map(x=>'<div class="item" data-notice-type="'+esc(x.type)+'"><div class="grow"><b>'+esc(x.a)+'</b><small>'+esc(x.b)+'</small></div></div>').join(''):'<div class="empty">'+esc(emptyLabel)+'</div>';
+    list.innerHTML=items.length?items.map(x=>'<div class="item" data-notice-type="'+esc(x.type)+'" role="link" tabindex="0" data-screen="'+({handoffs:'tasks',appointments:'appointments',channel_issues:'integrations'}[x.type]||'notifications')+'"><div class="grow"><b>'+esc(x.a)+'</b><small>'+esc(x.b)+'</small></div></div>').join(''):'<div class="empty">'+esc(emptyLabel)+'</div>';
   }
 
   try{

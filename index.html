@@ -81,7 +81,7 @@ button,input,select{font:inherit}button,input,select,a{min-height:44px}button{cu
 
 <main class="main">
 <header class="top">
-  <div class="row"><button class="mobileMenu" id="menuBtn">☰</button><div><div class="pageTitle" id="pageTitle"></div><span class="statusChip" id="runtimeChip"></span></div></div>
+  <div class="row"><button class="mobileMenu" id="menuBtn" aria-controls="side" aria-expanded="false" aria-label="القائمة / Menu">☰</button><div><div class="pageTitle" id="pageTitle"></div><span class="statusChip" id="runtimeChip"></span></div></div>
   <div class="topActions"><div class="lang"><button id="arBtn">عربي</button><button id="enBtn">EN</button></div></div>
 </header>
 
@@ -200,8 +200,34 @@ $('#businessForm').onsubmit=async e=>{e.preventDefault();const btn=$('#setupSubm
 function showGate(name){$('#loading').classList.add('hidden');$('#authGate').classList.toggle('hidden',name!=='auth');$('#onboardingGate').classList.toggle('hidden',name!=='onboarding');$('#appShell').classList.toggle('hidden',name!=='app');$('#bottomNav').classList.toggle('hidden',name!=='app');if(name==='app')window.__dabbirLoadDeferredUi?.()}
 async function boot(){applyLang();const {r,j}=await api('/api/dabbir-runtime');if(r.status===401){workspace=null;showGate('auth');return}if(!r.ok||!j.ok){workspace=null;showGate('auth');$('#authMsg').textContent=j.error||T().invalid;return}if(j.needs_onboarding){workspace=j;showGate('onboarding');return}workspace=j;selectedConversationId=j.selected_conversation_id||null;showGate('app');renderAll()}
 async function loadRuntime(businessId,conversationId){const q=new URLSearchParams();if(businessId)q.set('business_id',businessId);if(conversationId)q.set('conversation_id',conversationId);const {r,j}=await api('/api/dabbir-runtime?'+q.toString());if(r.status===401){workspace=null;showGate('auth');toast(T().authRequired);return}if(!r.ok||!j.ok){toast(j.error||T().invalid);return}workspace=j;selectedConversationId=j.selected_conversation_id||conversationId||null;showGate('app');renderAll()}
-function showScreen(name){current=name;$$('.screen').forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));$$('[data-screen]').forEach(b=>b.classList.toggle('active',b.dataset.screen===name));$('#pageTitle').textContent=T()[name]||name;$('#side').classList.remove('open')}
-$$('[data-screen]').forEach(b=>b.onclick=()=>showScreen(b.dataset.screen));$('#menuBtn').onclick=()=>$('#side').classList.toggle('open');
+let navigationBusiness=null,navigationScreen='dashboard',restoringNavigation=false;
+const navigationScroll=new Map();
+function showScreen(name){
+  if(!$('#screen-'+name))return;
+  const businessId=workspace?.business?.id||null;
+  if(navigationBusiness!==businessId){navigationBusiness=businessId;navigationScreen='dashboard';navigationScroll.clear()}
+  if(businessId&&name!==navigationScreen){
+    if(!restoringNavigation){
+      navigationScroll.set(navigationScreen,window.scrollY||0);
+      history.replaceState({...history.state,dabbirNavigation:{businessId,screen:navigationScreen}},'');
+      history.pushState({...history.state,dabbirNavigation:{businessId,screen:name}},'');
+    }
+    navigationScreen=name;
+    requestAnimationFrame(()=>{if(current===name)window.scrollTo(0,navigationScroll.get(name)||0)});
+  }
+  current=name;$$('.screen').forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));
+  $$('[data-screen]').forEach(b=>{const active=b.dataset.screen===name;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  if(!$$('#bottomNav [data-screen]').some(b=>b.dataset.screen===name))$$('#bottomNav [data-screen="more"],#nav [data-screen="more"]').forEach(b=>{b.classList.add('active');b.setAttribute('aria-current','page')});
+  $('#pageTitle').textContent=T()[name]||name;$('#side').classList.remove('open');$('#menuBtn').setAttribute('aria-expanded','false');
+}
+window.addEventListener('popstate',event=>{
+  const entry=event.state?.dabbirNavigation;
+  if(!entry||!workspace?.business?.id||entry.businessId!==workspace.business.id||!$('#screen-'+entry.screen))return;
+  navigationScroll.set(navigationScreen,window.scrollY||0);
+  restoringNavigation=true;
+  try{showScreen(entry.screen)}finally{restoringNavigation=false}
+});
+$$('[data-screen]').forEach(b=>b.onclick=()=>showScreen(b.dataset.screen));$('#menuBtn').onclick=()=>{$('#side').classList.toggle('open');$('#menuBtn').setAttribute('aria-expanded',String($('#side').classList.contains('open')))};
 function empty(text){return `<div class="empty">${esc(text)}</div>`}
 function selectedConversation(){return (workspace?.conversations||[]).find(c=>c.id===selectedConversationId)||null}
 function customerName(customerId){return (workspace?.customers||[]).find(c=>c.id===customerId)?.display_name||T().customer}
