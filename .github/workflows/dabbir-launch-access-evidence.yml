@@ -36,7 +36,7 @@ jobs:
            return json.loads(f.read_text())
           poolers=api("/config/database/pooler")
           pool=next((p for p in poolers if p.get("pool_mode")=="session"),poolers[0])
-          conn=urllib.parse.urlparse(pool.get("connection_string") or pool.get("connectionString"))
+          conn=urllib.parse.urlparse((pool.get("connection_string") or pool.get("connectionString") or "").replace("[","").replace("]",""))
           host=conn.hostname or pool["db_host"]
           login=api("/cli/login-role",{"read_only":True})
           print(json.dumps({"temporary_read_only_role_created":True,"ttl_seconds":login.get("ttl_seconds")}),flush=True)
