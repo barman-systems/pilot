@@ -12,7 +12,8 @@ test('broker v9 preserves the modern owner command-center surfaces',()=>{
     assert.match(broker,new RegExp(`action==='${action}'`));
   }
   assert.match(broker,/dabbir_platform_command_center_overview_v1/);
-  assert.match(broker,/dabbir_platform_customer_360_v1/);
+  assert.match(broker,/dabbir_platform_customer_360_scoped_v2/);
+  assert.doesNotMatch(broker,/rpc\('dabbir_platform_customer_360_v1'/);
   assert.match(broker,/dabbir_platform_support_action_v2/);
   assert.match(broker,/dabbir_platform_feedback_convert_v1/);
   assert.match(broker,/dabbir_platform_operational_action_v2/);
