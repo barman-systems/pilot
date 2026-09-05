@@ -3,7 +3,7 @@
 -- Restore only the six reviewed, caller-scoped boolean RLS helpers.
 -- No table data, RLS policy, service-role RPC, or function body is changed.
 -- Pre-change ACLs and exact rollback are captured in the incident evidence.
-begin;
+-- The migration runner owns the transaction; no explicit transaction control.
 grant execute on function dabbir_private.account_active() to authenticated;
 grant execute on function dabbir_private.branch_access_allowed(uuid,uuid) to authenticated;
 grant execute on function dabbir_private.has_permission(uuid,text) to authenticated;
@@ -33,4 +33,3 @@ begin
   end if;
 end
 $verify$;
-commit;
