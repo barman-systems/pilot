@@ -14,6 +14,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 concurrency:
   group: dabbir-release-guardian-main
@@ -31,6 +32,7 @@ jobs:
       FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
       FAILED_WORKFLOW: ${{ github.event.workflow_run.name }}
       FAILED_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +40,22 @@ jobs:
           ref: main
           fetch-depth: 20
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Prove this is a new regression against a green baseline
+        id: baseline
+        run: node scripts/dabbir-release-guardian-baseline.mjs
+
+      - name: Stop destructive rollback for a pre-existing or unproven failure
+        if: steps.baseline.outputs.eligible != 'true'
+        run: |
+          echo "BASELINE_FAILURE_SKIP_ROLLBACK: ${{ steps.baseline.outputs.reason }}"
+          echo "Previous distinct run: ${{ steps.baseline.outputs.baseline_run_id }} / ${{ steps.baseline.outputs.baseline_conclusion }}"
+
       - name: Fail closed with a governed revert PR if the failing head is still current
+        if: steps.baseline.outputs.eligible == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -77,14 +94,17 @@ jobs:
           git push origin HEAD:"$branch"
 
           body=$(cat <<EOF
-          DABBIR Release Guardian detected a protected-main validation failure and prepared a governed rollback candidate.
+          DABBIR Release Guardian detected a NEW regression after a green baseline and prepared a governed rollback candidate.
 
           Failed workflow: ${FAILED_WORKFLOW}
           Failed conclusion: ${FAILED_CONCLUSION}
           Failed SHA: ${FAILED_SHA}
+          Green baseline run: ${{ steps.baseline.outputs.baseline_run_id }}
+          Green baseline SHA: ${{ steps.baseline.outputs.baseline_sha }}
           Rollback branch: ${branch}
 
           Safety contract:
+          - rollback requires a previously green distinct baseline
           - direct main push: forbidden
           - branch protection: preserved
           - required checks: must pass
@@ -96,7 +116,7 @@ jobs:
           pr_url=$(gh pr create \
             --base main \
             --head "$branch" \
-            --title "revert(guardian): ${FAILED_WORKFLOW} failure on ${short_sha}" \
+            --title "revert(guardian): ${FAILED_WORKFLOW} regression on ${short_sha}" \
             --body "$body")
           echo "Governed rollback PR created: $pr_url"
 
