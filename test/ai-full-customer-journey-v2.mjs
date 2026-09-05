@@ -470,6 +470,7 @@ async function browserJourney() {
       try{
         await teamPage.goto(ORIGIN+'/team.html',{waitUntil:'domcontentloaded'});
         await teamPage.locator('#teamApp:not(.hidden)').waitFor({timeout:25000});
+        await teamPage.locator('#members .row').first().waitFor({timeout:25000});
         visual.team={language:await teamPage.locator('html').getAttribute('lang'),cases:[]};
         for(const [device,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
           await teamPage.setViewportSize({width,height});
