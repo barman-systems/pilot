@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Pull PostgreSQL 17 client
         run: docker pull postgres:17-alpine
-      - name: Create encrypted consistent logical backup using temporary read-only login
+      - name: Create encrypted consistent logical backup using temporary administrative login with read-only export
         shell: python
         run: |
           import os,json,subprocess,tempfile,pathlib,urllib.parse,hashlib
@@ -38,8 +38,8 @@ jobs:
           pool=next((p for p in poolers if p.get("pool_mode")=="session"),poolers[0])
           conn=urllib.parse.urlparse((pool.get("connection_string") or pool.get("connectionString") or "").replace("[","").replace("]",""))
           host=conn.hostname or pool["db_host"]
-          login=api("/cli/login-role",{"read_only":True})
-          print(json.dumps({"temporary_read_only_role_created":True,"ttl_seconds":login.get("ttl_seconds")}),flush=True)
+          login=api("/cli/login-role",{"read_only":False})
+          print(json.dumps({"temporary_postgres_role_created":True,"ttl_seconds":login.get("ttl_seconds")}),flush=True)
           env=os.environ.copy()
           env.update(PGHOST=host,PGPORT="5432",PGDATABASE="postgres",PGUSER=login["role"]+".fphpoysqdsceniwduxjq",PGPASSWORD=login["password"],PGSSLMODE="require",PGCONNECT_TIMEOUT="20",PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=180000")
           docker=["docker","run","--rm","--network","host","-v",str(root)+":/backup"]
@@ -56,7 +56,7 @@ jobs:
           assert "on" in proof.splitlines()
           print("POSTGRES_READ_ONLY_CONNECTION_PASS",flush=True)
           # Single consistent archive; derive separate sections from the same snapshot.
-          run(["pg_dump","--format=custom","--no-owner","--lock-wait-timeout=10s","--file=/backup/database.dump"])
+          run(["pg_dump","--role=postgres","--format=custom","--no-owner","--lock-wait-timeout=10s","--file=/backup/database.dump"])
           listing=run(["pg_restore","--list","/backup/database.dump"])
           assert "TABLE DATA" in listing and "TABLE " in listing
           run(["pg_restore","--schema-only","--file=/backup/schema.sql","/backup/database.dump"])
