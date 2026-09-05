@@ -1,3 +1,4 @@
+import { resolveBranchScope, branchFilter } from './_branch-scope.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -72,6 +73,17 @@ async function handleGet(req,res,context){
   const businessId=membership.business_id;
   const role=String(membership.role||'').toLowerCase();
   const canOperate=membershipHasPermission(membership,'manage_store_operations');
+
+  const orderValue=singleQueryValue(req,'order_id');
+  if(orderValue!==null){
+    const orderId=safeId(orderValue);
+    if(!requested||!orderId)return json(res,400,{ok:false,error:'ORDER_ID_REQUIRED'});
+    const scope=await resolveBranchScope({businessId,membership,userId:context.user.id,requestedBranch:singleQueryValue(req,'branch_id'),fetchRows:(path,error)=>rest(context.token,path,error)});
+    const orders=await rest(context.token,`dabbir_orders?select=id,business_id,branch_id,customer_id,status,total_aed,paid_aed,currency_code,payment_method,note,completed_at,simulated,created_at&business_id=eq.${businessId}&id=eq.${orderId}${branchFilter(scope)}&limit=1`,'ORDER_LOOKUP_FAILED');
+    const order=orders?.[0];if(!order)return json(res,404,{ok:false,error:'ORDER_NOT_FOUND'});
+    const items=await rest(context.token,`dabbir_order_items?select=id,order_id,product_id,product_name,sku,unit_price_aed,quantity,line_total_aed&business_id=eq.${businessId}&order_id=eq.${orderId}&order=created_at.asc`,'ORDER_ITEMS_LOOKUP_FAILED');
+    return json(res,200,{ok:true,business_id:businessId,order,items:items||[],can_operate:canOperate});
+  }
 
   const [products,inventory,orders,orderItems,movements,customers,services,expenses,returns]=await Promise.all([
     rest(context.token,`dabbir_products?select=id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&order=name.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
@@ -193,6 +205,11 @@ async function handlePost(req,res,context){
     const orderId=safeId(body.order_id);
     const status=clean(body.status,20).toLowerCase();
     if(!orderId||!['draft','reserved','confirmed','cancelled','completed'].includes(status))return json(res,400,{ok:false,error:'INVALID_ORDER_STATUS'});
+    if(body.branch_id!==undefined){
+      const scope=await resolveBranchScope({businessId,membership,userId:context.user.id,requestedBranch:body.branch_id,fetchRows:(path,error)=>rest(context.token,path,error)});
+      const rows=await rest(context.token,`dabbir_orders?select=id&business_id=eq.${businessId}&id=eq.${orderId}${branchFilter(scope)}&limit=1`,'ORDER_LOOKUP_FAILED');
+      if(!rows?.length)return json(res,404,{ok:false,error:'ORDER_NOT_FOUND'});
+    }
     result=await rpc(context.token,'dabbir_owner_update_order_status',{p_business_id:businessId,p_order_id:orderId,p_status:status},'ORDER_STATUS_UPDATE_FAILED');
   }else if(action==='complete_sale'){
     const items=Array.isArray(body.items)?body.items.slice(0,50).map(item=>({product_id:safeId(item?.product_id),quantity:Math.trunc(number(item?.quantity))})):[];

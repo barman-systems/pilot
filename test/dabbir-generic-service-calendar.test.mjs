@@ -39,5 +39,5 @@ test('event-scoped performance wrapper remains the only shipped calendar bundle 
   assert.match(performance,/import calendarLiveHandler from '\.\/calendar-live-ui\.js'/);
   assert.match(performance,/appointment-management-business-timezone/);
   assert.match(performance,/appointment-management-global-observer-and-poll/);
-  assert.match(ui,/appointment-management-v2-generic-calendar/);
+  assert.match(ui,/appointment-management-v3-direct-record/);
 });

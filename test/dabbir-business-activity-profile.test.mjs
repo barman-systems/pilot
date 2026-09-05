@@ -27,6 +27,13 @@ test('activity-specific business UI compiles and removes delivery from salon mod
   assert.doesNotThrow(()=>new Function(response.body));
 });
 
+test('generic services profile asks only for missing owner-specific instructions',()=>{
+  const source=read('api/business-activity-profile-ui.js');
+  assert.match(source,/services:\{[\s\S]*?fields:\['customer_requirements','activity_operations'\]/);
+  assert.match(source,/دبّر يقرأ الخدمات والأسعار ومدة كل خدمة تلقائيًا من قسم الخدمات/);
+  assert.match(source,/تعليمات خاصة/);
+});
+
 test('car wash profile avoids worker selection and service-zone concepts',()=>{
   const source=read('api/business-activity-profile-ui.js');
   assert.match(source,/car_wash/);

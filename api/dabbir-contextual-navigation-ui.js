@@ -1,3 +1,5 @@
+import { createActivityExperience } from './_activity-experience.js';
+import { activityExperienceUi } from './_activity-experience-ui.js';
 // BAR-30 router authority: feature modules do not create or mutate primary destinations.
 // The activity slot is reversible so switching business context cannot leave a stale target, label, or icon behind.
 const script=String.raw`(()=>{
@@ -236,13 +238,39 @@ const script=String.raw`(()=>{
     document.addEventListener('click',event=>{if(event.target?.closest?.('[data-screen="settings"],#menuBtn,.navBtn,#bottomNav button,#bottomNav a,.dsa-language-control'))setTimeout(syncApprovedSettings,0)},true);
   }
 
+  function actionableSummaries(){
+    const routes=['conversations',isStore()?'tasks':'appointments','customers','tasks'];
+    qa('#dashCards .card.metric').forEach((card,index)=>{
+      if(!routes[index])return;
+      card.dataset.screen=routes[index];
+      card.setAttribute('role','link');card.setAttribute('tabindex','0');
+    });
+    qa('#noticeList [data-notice-type]').forEach(card=>{
+      const route={handoffs:'tasks',appointments:'appointments',channel_issues:'integrations'}[card.dataset.noticeType];
+      if(!route)return;
+      card.dataset.screen=route;card.setAttribute('role','link');card.setAttribute('tabindex','0');
+    });
+  }
+  document.addEventListener('click',event=>{
+    const card=event.target?.closest?.('#dashCards [data-screen][role="link"],#noticeList [data-screen][role="link"]');
+    if(card&&typeof showScreen==='function')showScreen(card.dataset.screen);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    const card=event.target?.closest?.('[data-screen][role="link"]');
+    if(!card||event.target!==card)return;
+    event.preventDefault();card.click();
+  });
+
   function enforce(){
     adaptPrimaryActivitySlot();
+    actionableSummaries();
     ensureMoreCard();
     ensureUtilityCards();
     bindMobileMenuResync();
     bindApprovedSettings();
     syncApprovedSettings();
+    window.__dabbirActivityExperienceUi?.refresh?.();
   }
 
   function queueEnforce(){setTimeout(enforce,0)}
@@ -265,5 +293,5 @@ export default function handler(req,res){
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
   res.setHeader('x-dabbir-contextual-navigation','v7');
-  return res.status(200).send(script);
+  return res.status(200).send('window.__dabbirActivityExperience=('+createActivityExperience.toString()+')();\n'+script+'\n'+activityExperienceUi);
 }

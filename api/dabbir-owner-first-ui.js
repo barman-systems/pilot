@@ -219,7 +219,7 @@ const script = String.raw`(()=>{
   function normalizeActionCenter(){
     const panel=q('#dabbirActionCenter');
     const data=workspaceNow()?.owner_action_center;
-    if(!panel||!data)return;
+    if(!panel||!data||panel.dataset.state==='error')return;
     const items=(Array.isArray(data.items)?data.items:[]).filter(keepActionItem);
     const signature=activityType()+'|'+(isArabic()?'ar':'en')+'|'+items.map(x=>[x.id,x.due_at,x.severity].join(':')).join('|');
     const list=panel.querySelector('#dacItems');
@@ -248,7 +248,7 @@ const script = String.raw`(()=>{
       const small=document.createElement('small');small.textContent=formatWhen(item.due_at);
       body.append(title,detail,small);
       const button=document.createElement('button');button.type='button';button.className='secondary dac-open';button.textContent=t.open;
-      button.onclick=()=>{const target=String(item.target||'dashboard');if(typeof showScreen==='function')showScreen(target)};
+      button.onclick=()=>{const target=String(item.target||'dashboard');if(window.__dabbirActivityExperienceUi?.openRecord){window.__dabbirActivityExperienceUi.openRecord({id:item.entity_id,type:item.type,target,title:isArabic()?item.title_ar:item.title_en,detail:isArabic()?item.detail_ar:item.detail_en});return}if(typeof showScreen==='function')showScreen(target)};
       row.append(body,button);list.append(row);
     }
     panel.querySelector('#dacMoreWrap')?.setAttribute('hidden','');

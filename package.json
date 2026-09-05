@@ -10,7 +10,8 @@
     "check:syntax": "git ls-files '*.js' '*.mjs' | xargs -r -n1 node --check",
     "audit:prod": "node scripts/audit-prod-retry.mjs",
     "predabbir:build": "node scripts/build-owner-command-center-runtime.mjs",
-    "dabbir:build": "node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs"
+    "dabbir:build": "node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs",
+    "dev": "node scripts/preview-activity-experience.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.43",

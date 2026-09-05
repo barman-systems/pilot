@@ -126,9 +126,19 @@ const client=String.raw`
       button.type='button';
       button.className='secondary dac-open';
       button.textContent=t.open;
+      const rowBusiness=workspaceNow()?.business?.id;
+      const rowBranch=workspaceNow()?.branch_scope?.branch_id||workspaceNow()?.branch_scope?.mode||'';
       button.addEventListener('click',()=>{
+        if(workspaceNow()?.business?.id!==rowBusiness||(workspaceNow()?.branch_scope?.branch_id||workspaceNow()?.branch_scope?.mode||'')!==rowBranch)return;
+        const direct=item.type==='appointment'?window.__dabbirAppointmentManagement?.openRecord:item.type==='order'?window.__dabbirOwnerOperations?.openOrderRecord:item.type==='inventory'?window.__dabbirOwnerOperations?.openProductRecord:null;
+        if(direct&&item.entity_id){void direct(item.entity_id);return}
         const target=String(item.target||'dashboard');
         if(typeof showScreen==='function')showScreen(target);
+        // The action feed already supplies the conversation identifier; do not make the owner search again.
+        if(target==='conversations'&&item.entity_id&&typeof loadRuntime==='function'){
+          const businessId=workspaceNow()?.business?.id;
+          if(businessId)void loadRuntime(businessId,String(item.entity_id));
+        }
       });
       row.append(body,button);
       list.append(row);
@@ -166,7 +176,8 @@ const client=String.raw`
       const data=await response.json().catch(()=>null);
       if(!response.ok||!data?.ok)throw new Error(data?.error||('ACTION_CENTER_'+response.status));
       const live=workspaceNow();
-      if(live&&live.business?.id===businessId)live.owner_action_center=data;
+      if(live&&live.business?.id===businessId){live.owner_action_center=data;window.__dabbirActivityExperienceUi?.refresh?.()}
+      if(live?.business?.id!==businessId)return;
       lastBusinessId=businessId;
       lastLoadedAt=Date.now();
       render(data);
@@ -174,7 +185,11 @@ const client=String.raw`
       console.error('dabbir_action_center_ui_failed',String(error?.message||error).slice(0,120));
       if(panel){
         const t=text();
+        if(workspaceNow()?.business?.id!==businessId)return;
+        panel.dataset.state='error';
         panel.querySelector('#dacBrief').textContent=t.error;
+        panel.querySelector('#dacMetrics').replaceChildren();
+        panel.querySelector('#dacItems').textContent=t.error;
       }
     }finally{loading=false}
   }

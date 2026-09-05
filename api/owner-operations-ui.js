@@ -7,7 +7,7 @@ const script=String.raw`(()=>{
   const ar=()=>document.documentElement.lang!=='en';
   const text=()=>ar()?{
     nav:'العمليات',title:'مركز العمليات',desc:'السلع والمخزون والطلبات من بيانات نشاطك الفعلية.',
-    products:'السلع',stock:'المخزون',available:'المتاح',low:'مخزون منخفض',orders:'الطلبات',sales:'المبيعات المؤكدة',
+    products:'السلع',stock:'المخزون',available:'المتاح',low:'مخزون منخفض',orders:'الطلبات',sales:'قيمة الطلبات المؤكدة والمكتملة المعروضة',
     add:'إضافة سلعة',edit:'تعديل',delete:'حذف',editTitle:'تعديل السلعة',name:'اسم السلعة',price:'القيمة',qty:'الكمية',status:'الحالة',customer:'العميل',date:'التاريخ',
     noProducts:'لا توجد سلع بعد.',noOrders:'لا توجد طلبات فعلية بعد.',lowTitle:'تحتاج انتباه',lowNone:'لا يوجد نقص مخزون حاليًا.',
     simulated:'الطلبات التجريبية مستبعدة من المبيعات.',save:'حفظ',cancel:'إلغاء',update:'تحديث',
@@ -16,7 +16,7 @@ const script=String.raw`(()=>{
     draft:'مسودة',reservedStatus:'محجوز',confirmed:'مؤكد',cancelled:'ملغي',completed:'مكتمل',loading:'جارٍ تحميل العمليات...'
   }:{
     nav:'Operations',title:'Owner operations',desc:'Items, inventory, and orders from your real business data.',
-    products:'Items',stock:'Inventory',available:'Available',low:'Low stock',orders:'Orders',sales:'Recognized sales',
+    products:'Items',stock:'Inventory',available:'Available',low:'Low stock',orders:'Orders',sales:'Shown confirmed and completed order value',
     add:'Add item',edit:'Edit',delete:'Delete',editTitle:'Edit item',name:'Item name',price:'Value',qty:'Quantity',status:'Status',customer:'Customer',date:'Date',
     noProducts:'No items yet.',noOrders:'No real orders yet.',lowTitle:'Needs attention',lowNone:'No low-stock items right now.',
     simulated:'Simulated orders are excluded from recognized sales.',save:'Save',cancel:'Cancel',update:'Update',
@@ -51,6 +51,7 @@ const script=String.raw`(()=>{
   let loading=false;
   let businessId=null;
   let editingProductId=null;
+  let productBusiness=null,productBranch=null,recordEpoch=0,loadEpoch=0,operationsScope='',productReturnFocus=null;
 
   function escapeHtml(value){return String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
   function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))+' '+currencyCode()}catch{return Number(value||0).toFixed(2)+' '+currencyCode()}}
@@ -98,27 +99,29 @@ const script=String.raw`(()=>{
   }
 
   function openNewProduct(){
-    editingProductId=null;
+    editingProductId=null;productBusiness=workspace?.business?.id;productBranch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
     q('#opsProductForm')?.reset();
     applyCopy();
-    q('#opsProductModal')?.classList.add('open');
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true,dabbirRecord:null},'');q('#opsName')?.focus();
   }
 
   function openEditProduct(product){
     if(!product)return;
-    editingProductId=product.id;
+    editingProductId=product.id;productBusiness=workspace?.business?.id;productBranch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
     q('#opsName').value=product.name||'';
     q('#opsPrice').value=Number(product.price_aed||0).toFixed(2).replace(/\.00$/,'');
     q('#opsQty').value=Number(product.quantity||0);
     applyCopy();
-    q('#opsProductModal')?.classList.add('open');
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');const entry={...history.state,dabbirProductDetail:true,dabbirRecord:{type:'inventory',id:product.id,businessId:productBusiness,branch:productBranch}};if(!history.state?.dabbirProductDetail)history.pushState(entry,'');else history.replaceState(entry,'');q('#opsName')?.focus();
   }
 
-  function closeProductModal(){
+  function closeProductModal(discardHistory=false){
+    const ownsEntry=history.state?.dabbirProductDetail;
+    recordEpoch++;productBusiness=null;productBranch=null;
     q('#opsProductModal')?.classList.remove('open');
     q('#opsProductForm')?.reset();
     editingProductId=null;
-    applyCopy();
+    applyCopy();productReturnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirProductDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}
   }
 
   function applyCopy(){
@@ -137,21 +140,29 @@ const script=String.raw`(()=>{
     render();
   }
 
-  async function request(options={}){
+  async function request(options={},requestedBusiness=businessId){
     if(!businessId)businessId=workspace?.business?.id||null;
-    const url='/api/owner-operations?business_id='+encodeURIComponent(businessId||'');
+    const url='/api/owner-operations?business_id='+encodeURIComponent(requestedBusiness||businessId||'');
     const response=await fetch(url,{cache:'no-store',...options,headers:{'content-type':'application/json',...(options.headers||{})}});
     const payload=await response.json().catch(()=>({}));
     if(!response.ok||!payload.ok)throw new Error(payload.detail||payload.error||'OWNER_OPERATIONS_FAILED');
     return payload;
   }
 
+  function syncScope(){
+    const next=(workspace?.business?.id||'')+'|'+(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'');
+    if(next===operationsScope)return;
+    operationsScope=next;loadEpoch++;recordEpoch++;loading=false;data=null;businessId=workspace?.business?.id||null;
+    if(productBusiness)closeProductModal(true);
+  }
   async function load(force=false){
-    if(!isStore())return;
-    businessId=workspace?.business?.id||businessId;
+    syncScope();if(!isStore())return;
     if(loading||(!force&&data&&data.business_id===businessId))return;
+    const epoch=++loadEpoch,capturedBusiness=businessId;
     loading=true;render();
-    try{data=await request();render()}catch(error){data={error:error.message};render()}finally{loading=false;render()}
+    try{const result=await request({},capturedBusiness);if(epoch!==loadEpoch||workspace?.business?.id!==capturedBusiness)return;data=result;render()}
+    catch(error){if(epoch===loadEpoch&&workspace?.business?.id===capturedBusiness){data={error:error.message};render()}}
+    finally{if(epoch===loadEpoch){loading=false;render()}}
   }
 
   function statusOptions(current){
@@ -174,20 +185,21 @@ const script=String.raw`(()=>{
     if(q('#opsAddProduct'))q('#opsAddProduct').style.display=data.can_manage?'inline-flex':'none';
 
     const metrics=[
-      [t.products,products.length],[t.stock,inventoryUnits],[t.low,low.length],[t.sales,money(data.metrics?.recognized_sales_aed||0)]
+      [ar()?'السلع المعروضة':'Shown products',products.length],[ar()?'وحدات المخزون المعروضة':'Shown stock units',inventoryUnits],[ar()?'نقص المخزون المعروض':'Shown low stock',low.length],[t.sales,money(data.metrics?.recognized_sales_aed||0)]
     ].map(([label,value])=>'<div class=\"opsMetric\"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
 
-    const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
+    const lowHtml='<p class=\"muted\">'+(ar()?'الأرقام تخص البيانات المعروضة على مستوى النشاط: حتى ٢٠٠ سلعة و١٠٠ طلب. قيمة الطلبات قبل خصم المرتجعات، وليست التحصيل الفعلي.':'Figures cover loaded business data: up to 200 products and 100 orders. Order value is before returns and is not actual collections.')+'</p><div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
 
     const productRows=products.length?products.map(product=>'<div class=\"opsRow\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
     const productsHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.products)+'</h2><div class=\"opsTable\"><div class=\"opsRow head\"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.qty)+'</span><span></span></div>'+productRows+'</div></div>';
 
-    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
+    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><button type=\"button\" class=\"opsAction\" data-ops-open-order=\"'+escapeHtml(order.id)+'\">'+escapeHtml(order.customer_name||t.customer)+'</button></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
     const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" style=\"margin-top:9px\">'+escapeHtml(t.simulated)+'</div></div>';
 
     body.innerHTML='<div class=\"opsMetrics\">'+metrics+'</div>'+lowHtml+'<div class=\"opsGrid\"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
     qa('[data-ops-edit]').forEach(button=>button.onclick=()=>openEditProduct(products.find(product=>product.id===button.dataset.opsEdit)));
     qa('[data-ops-delete]').forEach(button=>button.onclick=()=>deleteProduct(products.find(product=>product.id===button.dataset.opsDelete)));
+    qa('[data-ops-open-order]').forEach(button=>button.onclick=()=>openOrderRecord(button.dataset.opsOpenOrder));
     qa('[data-ops-order]').forEach(select=>select.onchange=()=>updateOrder(select.dataset.opsOrder,select.value));
   }
 
@@ -207,18 +219,20 @@ const script=String.raw`(()=>{
 
   async function submitProduct(event){
     event.preventDefault();
+    if(!productBusiness||workspace?.business?.id!==productBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==productBranch){closeProductModal(true);return}
+    const capturedBusiness=productBusiness,capturedEpoch=recordEpoch;
     const t=text();const button=q('#opsProductSave');if(button)button.disabled=true;
     try{
       const values={name:q('#opsName').value,price_aed:q('#opsPrice').value,quantity:q('#opsQty').value};
       if(editingProductId){
         await manageProduct({action:'update_product',product_id:editingProductId,...values});
-        notify(t.itemUpdated);
+        if(workspace?.business?.id!==capturedBusiness||recordEpoch!==capturedEpoch)return;notify(t.itemUpdated);
       }else{
         await mutate({action:'create_product',sku:productSku(),...values});
-        notify(t.created);
+        if(workspace?.business?.id!==capturedBusiness||recordEpoch!==capturedEpoch)return;notify(t.created);
       }
       closeProductModal();data=null;await load(true);
-    }catch(error){notify(errorText(error))}finally{if(button)button.disabled=false}
+    }catch(error){if(workspace?.business?.id===capturedBusiness&&recordEpoch===capturedEpoch)notify(errorText(error))}finally{if(button)button.disabled=false}
   }
 
   async function deleteProduct(product){
@@ -238,6 +252,8 @@ const script=String.raw`(()=>{
   }
 
   function syncOperationsUi(){
+    syncScope();
+    if(productBusiness&&(workspace?.business?.id!==productBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==productBranch))closeProductModal(true);
     if(!isStore())return;
     ensureScreen();
     applyCopy();
@@ -250,6 +266,50 @@ const script=String.raw`(()=>{
     if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;
     load();
   }
+
+  async function openProductRecord(id){
+    syncScope();
+    const capturedBusiness=workspace?.business?.id,branch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
+    if(!capturedBusiness||!isStore())return;
+    const epoch=++recordEpoch;
+    try{
+      const response=await fetch('/api/owner-product-management?'+new URLSearchParams({business_id:capturedBusiness,product_id:id}),{credentials:'same-origin',cache:'no-store'});
+      const result=await response.json();
+      if(epoch!==recordEpoch||workspace?.business?.id!==capturedBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==branch)return;
+      if(!response.ok||!result.ok){notify(response.status===404?(ar()?'المنتج غير متاح.':'Product unavailable.'):response.status===403?(ar()?'لا تملك صلاحية إدارة المنتج.':'Product management access required.'):text().failed);return}
+      if(result.product?.id!==id||result.product?.business_id!==capturedBusiness){notify(text().failed);return}
+      businessId=capturedBusiness;ensureScreen();openEditProduct(result.product);
+    }catch{if(epoch===recordEpoch&&workspace?.business?.id===capturedBusiness&&(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')===branch)notify(text().failed)}
+  }
+  window.addEventListener('popstate',()=>{if(q('#opsProductModal')?.classList.contains('open'))closeProductModal()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&q('#opsProductModal')?.classList.contains('open')){e.preventDefault();closeProductModal()}});
+  let orderEpoch=0,orderScope='',orderReturnFocus=null;
+  const scopeKey=()=> (workspace?.business?.id||'')+'|'+(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'');
+  function closeOrder(discard=false){orderEpoch++;q('#opsOrderDetail')?.remove();orderReturnFocus?.focus?.();if(history.state?.dabbirOrderDetail){if(discard){const state={...history.state};delete state.dabbirOrderDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}}
+  async function openOrderRecord(id){
+    syncScope();const captured=scopeKey(),capturedBusiness=workspace?.business?.id,branch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'all',epoch=++orderEpoch;if(!capturedBusiness||!isStore())return;
+    try{
+      const response=await fetch('/api/owner-operations?'+new URLSearchParams({business_id:capturedBusiness,order_id:id,branch_id:branch}),{credentials:'same-origin',cache:'no-store'});const result=await response.json();if(epoch!==orderEpoch||scopeKey()!==captured)return;
+      if(!response.ok||!result.ok){notify(response.status===404?(ar()?'الطلب غير متاح في هذا الفرع.':'Order unavailable in this branch.'):text().failed);return}
+      const order=result.order;if(order?.id!==id||order.business_id!==capturedBusiness){notify(text().failed);return}
+      if(!q('#opsOrderDetail'))orderReturnFocus=document.activeElement;q('#opsOrderDetail')?.remove();orderScope=captured;
+      const overlay=document.createElement('div');overlay.id='opsOrderDetail';overlay.className='modal open';overlay.style.zIndex='210';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-labelledby','opsOrderDetailTitle');
+      const box=document.createElement('div');box.className='modalBox';box.style.maxHeight='85dvh';box.style.overflow='auto';box.style.paddingBottom='calc(20px + env(safe-area-inset-bottom))';
+      const title=document.createElement('h3');title.id='opsOrderDetailTitle';title.textContent=(ar()?'تفاصيل الطلب ':'Order details ')+id.slice(0,8);box.append(title);
+      const summary=document.createElement('p');summary.textContent=(ar()?'قيمة الطلب: ':'Order value: ')+String(order.total_aed)+' '+(order.currency_code||currencyCode())+' · '+(ar()?'المدفوع المسجل: ':'Recorded paid: ')+String(order.paid_aed)+' '+(order.currency_code||currencyCode());box.append(summary);
+      if(order.note){const note=document.createElement('p');note.textContent=order.note;box.append(note)}
+      const list=document.createElement('ul');for(const item of result.items||[]){const row=document.createElement('li');row.textContent=item.product_name+' × '+item.quantity;list.append(row)}box.append(list);
+      const select=document.createElement('select');select.className='opsOrderSelect';select.setAttribute('aria-label',text().status);select.innerHTML=statusOptions(order.status);select.disabled=!result.can_operate;box.append(select);
+      const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent=ar()?'رجوع':'Back';back.onclick=()=>closeOrder();box.append(back);
+      if(result.can_operate){const save=document.createElement('button');save.type='button';save.className='primary';save.textContent=text().save;box.append(save);save.onclick=async()=>{if(scopeKey()!==captured){closeOrder(true);return}save.disabled=true;try{await request({method:'POST',body:JSON.stringify({action:'update_order_status',business_id:capturedBusiness,branch_id:branch,order_id:id,status:select.value})},capturedBusiness);if(scopeKey()!==captured||epoch!==orderEpoch)return;await openOrderRecord(id);await load(true)}catch{if(scopeKey()===captured&&epoch===orderEpoch){notify(text().failed);save.disabled=false}}}}
+      overlay.append(box);document.body.append(overlay);const entry={...history.state,dabbirOrderDetail:true,dabbirRecord:{type:'order',id,businessId:capturedBusiness,branch:captured.split('|')[1]}};if(!history.state?.dabbirOrderDetail)history.pushState(entry,'');else history.replaceState(entry,'');back.focus();
+    }catch{if(epoch===orderEpoch&&scopeKey()===captured)notify(text().failed)}
+  }
+  window.addEventListener('popstate',()=>{if(q('#opsOrderDetail'))closeOrder()});
+  document.addEventListener('keydown',e=>{const modal=q('#opsOrderDetail');if(!modal)return;if(e.key==='Escape'){e.preventDefault();closeOrder()}if(e.key==='Tab'){const controls=[...modal.querySelectorAll('button:not(:disabled),select:not(:disabled)')],first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}}});
+  window.__dabbirUiLifecycle?.on?.('afterRender','order-detail-scope',()=>{if(q('#opsOrderDetail')&&scopeKey()!==orderScope)closeOrder(true)});
+  window.__dabbirOwnerOperations={openProductRecord,openOrderRecord};
+
 
   const lifecycle=window.__dabbirUiLifecycle;
   if(lifecycle?.on){

@@ -6,10 +6,10 @@ const script=String.raw`(()=>{
   const qa=s=>[...document.querySelectorAll(s)];
   const ar=()=>document.documentElement.lang!=='en';
   const copy=()=>ar()?{
-    total:'إجمالي العملاء',newCustomers:'عملاء جدد',repeat:'عملاء متكررون',inactive:'غير نشطين',
+    total:'العملاء المحمّلون',newCustomers:'عملاء جدد',repeat:'عملاء متكررون',inactive:'غير نشطين',
     search:'ابحث بالاسم أو رقم الهاتف…',all:'كل العملاء',newStatus:'جديد',repeatStatus:'متكرر',inactiveStatus:'غير نشط',
     sortLatest:'الأحدث نشاطًا',sortActivity:'الأكثر تعاملًا',sortName:'الاسم',
-    appointments:'الحجوزات',conversations:'المحادثات',orders:'الطلبات',spent:'إجمالي التعاملات',
+    appointments:'الحجوزات',conversations:'المحادثات',orders:'الطلبات',spent:'قيمة الطلبات المعروضة',
     lastActivity:'آخر تعامل',created:'منذ',phone:'الهاتف',noPhone:'لا يوجد رقم محفوظ',
     call:'اتصال',whatsapp:'واتساب',newBooking:'حجز جديد',newOrder:'طلب جديد',close:'إغلاق',
     customerHistory:'سجل العميل',recentAppointments:'آخر الحجوزات',recentOrders:'آخر الطلبات',notes:'ملاحظات',noNotes:'لا توجد ملاحظات.',
@@ -17,10 +17,10 @@ const script=String.raw`(()=>{
     orderProduct:'المنتج',orderQty:'الكمية',payment:'طريقة الدفع',cash:'نقدي',card:'بطاقة',transfer:'تحويل',credit:'آجل',other:'أخرى',saveOrder:'تأكيد الطلب',cancel:'إلغاء',orderSaved:'تم إنشاء الطلب وربطه بالعميل.',orderFailed:'تعذر إنشاء الطلب.',loadingOrders:'جارٍ تحميل سجل الطلبات…',
     statuses:{new:'جديد',active:'نشط',qualified:'مهتم',converted:'عميل',won:'عميل',closed:'مغلق',inactive:'غير نشط',lost:'غير نشط'}
   }:{
-    total:'Total customers',newCustomers:'New customers',repeat:'Repeat customers',inactive:'Inactive',
+    total:'Loaded customers',newCustomers:'New customers',repeat:'Repeat customers',inactive:'Inactive',
     search:'Search name or phone…',all:'All customers',newStatus:'New',repeatStatus:'Repeat',inactiveStatus:'Inactive',
     sortLatest:'Latest activity',sortActivity:'Most activity',sortName:'Name',
-    appointments:'Bookings',conversations:'Conversations',orders:'Orders',spent:'Total value',
+    appointments:'Bookings',conversations:'Conversations',orders:'Orders',spent:'Shown order value',
     lastActivity:'Last activity',created:'Since',phone:'Phone',noPhone:'No phone stored',
     call:'Call',whatsapp:'WhatsApp',newBooking:'New booking',newOrder:'New order',close:'Close',
     customerHistory:'Customer history',recentAppointments:'Recent bookings',recentOrders:'Recent orders',notes:'Notes',noNotes:'No notes.',
@@ -61,6 +61,15 @@ const script=String.raw`(()=>{
   let operationsCache=null;
   let operationsBusinessId=null;
   let operationsLoading=null;
+  let scopeGeneration=0;
+  const scopeKey=()=>[workspace?.business?.id,workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||''].join('|');
+  let currentScope='';
+  function syncScope(){
+    const next=scopeKey();if(next===currentScope)return;
+    currentScope=next;scopeGeneration++;operationsCache=null;operationsLoading=null;operationsBusinessId=null;
+    state={query:'',filter:'all',sort:'latest',selected:null};
+    q('#crmDetailModal')?.classList.remove('open');q('#crmOrderModal')?.classList.remove('open');
+  }
 
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
   function lower(value){return String(value||'').trim().toLocaleLowerCase()}
@@ -108,6 +117,7 @@ const script=String.raw`(()=>{
   }
 
   async function loadOperations(){
+    syncScope();const generation=scopeGeneration;
     const businessId=workspace?.business?.id||null;
     if(!businessId)return null;
     if(operationsCache&&operationsBusinessId===businessId)return operationsCache;
@@ -118,9 +128,10 @@ const script=String.raw`(()=>{
         const response=await fetch('/api/owner-operations?business_id='+encodeURIComponent(businessId),{cache:'no-store',credentials:'same-origin',headers:{accept:'application/json'}});
         const payload=await response.json().catch(()=>({}));
         if(!response.ok||!payload.ok)return null;
+        if(generation!==scopeGeneration||scopeKey()!==currentScope)return null;
         operationsCache=payload;
         return payload;
-      }catch{return null}finally{operationsLoading=null}
+      }catch{return null}finally{if(generation===scopeGeneration)operationsLoading=null}
     })();
     return operationsLoading;
   }
@@ -196,12 +207,13 @@ const script=String.raw`(()=>{
 
   async function openDetail(customer){
     if(!customer)return;
+    syncScope();const generation=scopeGeneration;
     state.selected=customer;
     ensureDetailModal();
     q('#crmDetailModal').classList.add('open');
     renderDetail(customer,null,true);
     const ops=await loadOperations();
-    if(state.selected?.key===customer.key)renderDetail(customer,ops,false);
+    if(generation===scopeGeneration&&scopeKey()===currentScope&&state.selected?.key===customer.key)renderDetail(customer,ops,false);
   }
 
   function renderDetail(customer,ops,loadingOps){
@@ -219,8 +231,8 @@ const script=String.raw`(()=>{
       '<button type="button" class="secondary" id="crmNewBooking">＋ '+escapeHtml(t.newBooking)+'</button>',
       canOrder?'<button type="button" class="primary" id="crmNewOrder">＋ '+escapeHtml(t.newOrder)+'</button>':''
     ].join('');
-    const apptRows=customer.appointments.slice().sort((a,b)=>new Date(b.starts_at||b.created_at||0)-new Date(a.starts_at||a.created_at||0)).slice(0,6).map(item=>'<div class="crmHistoryRow"><b>'+escapeHtml(date(item.starts_at,true))+'</b><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
-    const orderRows=orders.slice(0,6).map(item=>'<div class="crmHistoryRow"><div><b>'+escapeHtml(money(item.total_aed))+'</b><span style="display:block;margin-top:3px">'+escapeHtml(date(item.created_at))+'</span></div><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
+    const apptRows=customer.appointments.slice().sort((a,b)=>new Date(b.starts_at||b.created_at||0)-new Date(a.starts_at||a.created_at||0)).slice(0,6).map(item=>'<button type="button" class="crmHistoryRow" data-crm-appointment="'+escapeHtml(item.id)+'"><b>'+escapeHtml(date(item.starts_at,true))+'</b><span>'+escapeHtml(statusLabel(item.status))+'</span></button>').join('');
+    const orderRows=orders.slice(0,6).map(item=>'<button type="button" class="crmHistoryRow" data-crm-order="'+escapeHtml(item.id)+'"><div><b>'+escapeHtml(money(item.total_aed))+'</b><span style="display:block;margin-top:3px">'+escapeHtml(date(item.created_at))+'</span></div><span>'+escapeHtml(statusLabel(item.status))+'</span></button>').join('');
     body.innerHTML='<div class="crmDetailHead"><div><h3>'+escapeHtml(customer.name)+'</h3><small>'+escapeHtml(customer.phone?.raw||customer.phone?.digits||t.noPhone)+'</small></div><div class="crmBadges">'+customerBadges(customer)+'</div></div>'+
       '<div class="crmQuick">'+quick+'</div>'+
       '<div class="crmDetailGrid"><div class="crmDetailMetric"><span>'+escapeHtml(t.appointments)+'</span><b>'+customer.appointments.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.conversations)+'</span><b>'+customer.conversations.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.orders)+'</span><b>'+(loadingOps?'…':orders.length)+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.spent)+'</span><b>'+(loadingOps?'…':escapeHtml(money(total)))+'</b></div></div>'+
@@ -229,6 +241,9 @@ const script=String.raw`(()=>{
       '<div class="crmSection"><h4>'+escapeHtml(t.recentOrders)+'</h4><div class="crmHistory">'+(loadingOps?'<div class="crmHistoryRow"><span>'+escapeHtml(t.loadingOrders)+'</span></div>':orderRows||'<div class="crmHistoryRow"><span>—</span></div>')+'</div></div>'+
       '<div class="crmSection"><h4>'+escapeHtml(t.notes)+'</h4><div class="crmNotes">'+escapeHtml(customer.notes||t.noNotes)+'</div></div>'+
       '<div class="modalActions"><button type="button" class="secondary" id="crmDetailClose">'+escapeHtml(t.close)+'</button></div>';
+    const detailScope=scopeKey();
+    body.querySelectorAll('[data-crm-appointment]').forEach(button=>button.onclick=()=>{if(scopeKey()===detailScope)window.__dabbirAppointmentManagement?.openRecord?.(button.dataset.crmAppointment)});
+    body.querySelectorAll('[data-crm-order]').forEach(button=>button.onclick=()=>{if(scopeKey()===detailScope)window.__dabbirOwnerOperations?.openOrderRecord?.(button.dataset.crmOrder)});
     q('#crmDetailClose').onclick=closeDetail;
     q('#crmNewBooking').onclick=()=>{const input=q('#apptCustomer');if(input)input.value=customer.name;q('#appointmentModal')?.classList.add('open');requestAnimationFrame(()=>q('#apptTime')?.focus())};
     const orderButton=q('#crmNewOrder');if(orderButton)orderButton.onclick=()=>openQuickOrder(customer,ops);
@@ -256,6 +271,7 @@ const script=String.raw`(()=>{
 
   async function saveQuickOrder(event){
     event.preventDefault();
+    const generation=scopeGeneration,savedScope=scopeKey();
     const t=copy(),customer=state.selected,button=q('#crmOrderSave');
     if(!customer?.id||!workspace?.business?.id)return;
     const productId=q('#crmOrderProduct').value;
@@ -266,17 +282,19 @@ const script=String.raw`(()=>{
       const response=await fetch('/api/owner-operations',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({action:'complete_sale',business_id:workspace.business.id,customer_id:customer.id,payment_method:paymentMethod,items:[{product_id:productId,quantity}]})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.ok)throw new Error(payload.error||t.orderFailed);
+      if(generation!==scopeGeneration||savedScope!==scopeKey())return;
       operationsCache=null;
       q('#crmOrderModal').classList.remove('open');
       try{if(typeof toast==='function')toast(t.orderSaved)}catch{}
       const ops=await loadOperations();
       if(state.selected)renderDetail(state.selected,ops,false);
-    }catch(error){try{if(typeof toast==='function')toast(error.message||t.orderFailed)}catch{}}
+    }catch(error){if(generation!==scopeGeneration||savedScope!==scopeKey())return;try{if(typeof toast==='function')toast(error.message||t.orderFailed)}catch{}}
     finally{button.disabled=false}
   }
 
   function renderCustomersEnhanced(){
     const host=q('#customersTable');if(!host||typeof workspace==='undefined'||!workspace)return;
+    syncScope();
     host.classList.add('crmHost');
     const t=copy(),customers=buildCustomers(),m=metrics(customers),rows=filtered(customers);
     host.innerHTML='<div class="crmMetrics"><div class="crmMetric"><span>'+escapeHtml(t.total)+'</span><strong>'+m.total+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.newCustomers)+'</span><strong>'+m.newCustomers+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.repeat)+'</span><strong>'+m.repeat+'</strong></div><div class="crmMetric"><span>'+escapeHtml(t.inactive)+'</span><strong>'+m.inactive+'</strong></div></div>'+
@@ -290,6 +308,7 @@ const script=String.raw`(()=>{
   const previous=typeof window.renderCustomers==='function'?window.renderCustomers:(typeof renderCustomers==='function'?renderCustomers:null);
   window.renderCustomers=renderCustomersEnhanced;
   try{renderCustomers=renderCustomersEnhanced}catch{}
+  window.__dabbirUiLifecycle?.on?.('afterRender','customer-crm-scope',syncScope);
   ensureDetailModal();
   try{renderCustomersEnhanced()}catch{}
   document.documentElement.dataset.dabbirCustomerCrm='v1';
