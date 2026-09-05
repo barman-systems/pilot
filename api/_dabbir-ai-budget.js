@@ -1,5 +1,4 @@
 import { gateway } from 'ai';
-import { publishBudgetObservation } from './_dabbir-ai-observability.js';
 import { SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
@@ -109,7 +108,7 @@ export async function finalizeAiBudget({
   env = process.env,
   rpc = budgetRpc,
 }) {
-  const finalized = await rpc('dabbir_finalize_ai_budget_v1', {
+  return rpc('dabbir_finalize_ai_budget_v1', {
     p_business_id: businessId,
     p_operation_key: clean(operationKey, 240),
     p_outcome: outcome,
@@ -119,10 +118,6 @@ export async function finalizeAiBudget({
     p_estimated_manual_seconds: Math.min(86_400, Math.max(0, Math.trunc(finite(estimatedManualSeconds)))),
     p_metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
   }, env);
-  // Optional metadata-only export runs after the authoritative ledger succeeds.
-  // It must never turn a completed ledger write into a failed business request.
-  if (finalized?.ok !== false) await publishBudgetObservation({ businessId, operationKey, outcome, failureClass, actualCostUsd, metadata }, { env }).catch(() => null);
-  return finalized;
 }
 
 export async function generationCost(result, gatewayClient = gateway) {
