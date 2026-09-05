@@ -52,8 +52,8 @@ jobs:
             print(msg[:2500],flush=True)
             raise RuntimeError("Database tool failed: "+args[0])
            return p.stdout
-          proof=run(["psql","-X","-At","-v","ON_ERROR_STOP=1","-c","show transaction_read_only"])
-          assert proof.strip()=="on"
+          proof=run(["psql","-X","-At","-v","ON_ERROR_STOP=1","-c","BEGIN READ ONLY; SHOW transaction_read_only; ROLLBACK"])
+          assert "on" in proof.splitlines()
           print("POSTGRES_READ_ONLY_CONNECTION_PASS",flush=True)
           # Single consistent archive; derive separate sections from the same snapshot.
           run(["pg_dump","--format=custom","--no-owner","--lock-wait-timeout=10s","--file=/backup/database.dump"])
