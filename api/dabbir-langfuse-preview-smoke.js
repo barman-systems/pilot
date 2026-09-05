@@ -5,8 +5,8 @@ export default async function handler(req, res) {
   if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== 'feat/langfuse-trigger-observability-pilot') {
     return res.status(404).json({ ok: false, state: 'NOT_AVAILABLE' });
   }
-  if (req.method !== 'POST') {
-    res.setHeader('allow', 'POST');
+  if (req.method !== 'GET') {
+    res.setHeader('allow', 'GET');
     return res.status(405).json({ ok: false, state: 'METHOD_NOT_ALLOWED' });
   }
 
