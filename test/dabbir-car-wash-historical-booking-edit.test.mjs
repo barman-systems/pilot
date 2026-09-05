@@ -42,7 +42,8 @@ test('car-wash historical editor persists date and status through the canonical 
   assert.match(ui,/action:'update'/);
   assert.match(ui,/starts_at:start,status:nextStatus/);
   assert.match(ui,/data\?\.detail\|\|data\?\.error/);
-  assert.match(ui,/location\.reload\(\)/);
+  assert.doesNotMatch(ui,/location\.reload\(\)/);
+  assert.match(ui,/renderSavedAppointment\(w\.business\.id,id,data\.appointment\)/);
 });
 
 test('historical booking editor follows the selected GCC business timezone authority',()=>{
