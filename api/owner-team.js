@@ -12,7 +12,7 @@ async function callBroker(sessionToken,payload={}){
 
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
-  res.setHeader('x-dabbir-owner-team','authority-v1');
+  res.setHeader('x-dabbir-owner-team','authority-v2');
   const sessionToken=parseCookies(req.headers.cookie||'')[SESSION_COOKIE];
   if(!sessionToken)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
   try{
@@ -22,10 +22,10 @@ export default async function handler(req,res){
     }
     if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});
     if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
-    const body=await readJsonBody(req,8192);
+    const body=await readJsonBody(req,16384);
     const operation=String(body.operation||'').trim().toLowerCase();
     const payload={...body,operation};
-    if(operation==='invite')payload.resend_key=String(process.env.RESEND_API_KEY||'').trim();
+    if(operation==='invite'||operation==='invite_resend')payload.resend_key=String(process.env.RESEND_API_KEY||'').trim();
     const {r,p}=await callBroker(sessionToken,payload);
     return json(res,r.status,p);
   }catch(error){

@@ -6,20 +6,27 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const team=read('api/_owner-platform-team-ui.js');
 const design=read('api/_owner-command-center-design-system.js');
 const gateway=read('api/owner-dashboard-gateway.js');
+const governance=read('supabase/migrations/20260905205000_dabbir_owner_role_coarse_sync_v1.sql');
 
-test('existing owner delegates can edit exact custom permission sets',()=>{
-  assert.match(team,/data-staff-permissions/);
-  assert.match(team,/input\[data-permission-scope\^="staff-"\]/);
-  assert.match(team,/permissions=selectedPermissions\(grid\)/);
-  assert.match(team,/presetFor\(selectedPermissions\(grid\)\)/);
+test('existing owner delegates can edit exact custom granular permission sets',()=>{
+  assert.match(team,/data-gperm/);
+  assert.match(team,/function selectedPerms\(/);
+  assert.match(team,/roleCode==='CUSTOM'/);
+  assert.match(team,/role==='CUSTOM'&&!granular\.length/);
+  assert.match(team,/اختر صلاحية واحدة على الأقل للدور المخصص/);
+  assert.match(team,/granular_permissions:granular/);
+  assert.match(team,/updateRolePermissions\(card,prefix,sel\.value,\[\]\)/);
   assert.doesNotMatch(team,/استخدم قالبًا محددًا لحفظ الصلاحيات الحالية/);
 });
 
-test('team permissions require at least one explicit grant and keep root protected in UI',()=>{
-  assert.match(team,/اختر صلاحية واحدة على الأقل/);
+test('custom grants require at least one explicit granular permission and keep root protected',()=>{
+  assert.match(governance,/DABBIR_GRANULAR_PERMISSIONS_REQUIRED/);
+  assert.match(governance,/platform_coarse_permissions_for_role/);
+  assert.match(governance,/permissions=v_coarse,granular_permissions=v_granular/);
+  assert.match(governance,/platform_assert_can_grant\(p_actor,v_coarse\)/);
   assert.match(team,/ROOT_OWNER/);
-  assert.match(team,/هوية المالك الأصلية محمية/);
-  for(const preset of ['full','operations','support','technical','finance','custom'])assert.match(team,new RegExp(`${preset}:`));
+  assert.match(team,/ROOT_OWNER محمي/);
+  for(const role of ['EXECUTIVE_ADMIN','OPERATIONS_MANAGER','CUSTOMER_SUPPORT','FINANCE','GROWTH_SALES','TECHNICAL_ADMIN','VIEWER_AUDITOR','CUSTOM'])assert.match(team,new RegExp(role));
 });
 
 test('owner executive design system overrides legacy 6-10px typography with readable sizes',()=>{
