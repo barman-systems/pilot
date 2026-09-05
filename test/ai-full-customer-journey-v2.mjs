@@ -398,6 +398,46 @@ async function browserJourney() {
   }
   assert(operationsText.includes('AI Journey Product'), 'BROWSER_PRODUCT_MISSING');
 
+  // Optional visual evidence uses the same disposable, MFA-authenticated owner.
+  // No integration, billing, deletion or customer-message mutation is performed.
+  if (process.env.DABBIR_INTERNAL_VISUAL_QA === '1' && REPORT_PATH === 'dabbir-ai-customer-journey-report.json') {
+    const dir = 'dabbir-internal-visual';
+    fs.mkdirSync(dir, { recursive: true });
+    const visual = { sha: process.env.GITHUB_SHA, origin: ORIGIN, engine: 'WebKit emulation; not physical Safari', cases: [] };
+    const screens = ['dashboard', 'tasks', 'notifications', 'customers', 'appointments', 'operations', 'integrations', 'settings', 'automations', 'analytics'];
+    try {
+      for (const [device, width, height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]) {
+        await page.setViewportSize({ width, height });
+        for (const language of ['ar', 'en']) {
+          await page.locator(`#${language}Btn`).click();
+          for (const screen of screens) {
+            if (await page.locator('#menuBtn:visible').count() && !(await page.locator('#side.open').count())) await page.locator('#menuBtn').click();
+            let nav = page.locator(`#side [data-screen="${screen}"]`);
+            if (!(await nav.count())) {
+              await page.locator('#side [data-screen="more"]').click();
+              nav = page.locator(`#screen-more [data-screen="${screen}"]`);
+            }
+            const entry = { device, width, height, language, screen };
+            if (!(await nav.count())) { entry.status = 'UNAVAILABLE'; visual.cases.push(entry); continue; }
+            await nav.click({ timeout: 10000 });
+            await page.locator(`#screen-${screen}.active`).waitFor({ state: 'visible', timeout: 10000 });
+            await page.waitForTimeout(350);
+            entry.overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+            entry.file = `${device}-${language}-${screen}.png`;
+            await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
+            entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
+            visual.cases.push(entry);
+          }
+        }
+      }
+    } catch (error) {
+      visual.error = String(error.message);
+      throw error;
+    } finally {
+      fs.writeFileSync(`${dir}/report.json`, JSON.stringify(visual, null, 2));
+    }
+  }
+
   // The functional report is sufficient evidence here. In protected WebKit,
   // screenshot rasterization can block the browser channel long after every
   // interaction has already passed, so it must not determine journey success.

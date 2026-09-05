@@ -76,6 +76,7 @@ jobs:
       PRODUCTION_ORIGIN: ${{ vars.DABBIR_PRODUCTION_ORIGIN }}
       PROTECTED_QA_ORIGIN: https://dabbir-nd56cm4j5v-3619s-projects.vercel.app
       SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+      DABBIR_INTERNAL_VISUAL_QA: '1'
       JOURNEY_REPORT_PATH: dabbir-ai-customer-journey-report.json
       ISOLATION_REPORT_PATH: dabbir-cross-tenant-isolation-report.json
       EXPECTED_VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
@@ -282,6 +283,7 @@ jobs:
             dabbir-ai-customer-journey-report.json
             dabbir-ai-customer-journey-report-en.json
             dabbir-ai-customer-journey-screenshot.png
+            dabbir-internal-visual/
             dabbir-cross-tenant-isolation-report.json
           if-no-files-found: warn
           retention-days: 14
