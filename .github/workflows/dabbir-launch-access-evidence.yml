@@ -7,42 +7,79 @@ permissions:
 jobs:
   evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
-      - name: Diagnose backup HTTP rejection with identical credentials
+      - name: Pull PostgreSQL 17 client
+        run: docker pull postgres:17-alpine
+      - name: Create encrypted consistent logical backup using temporary read-only login
         shell: python
         run: |
-          import os,json,urllib.request,urllib.error,subprocess,tempfile
-          url="https://api.supabase.com/v1/projects/fphpoysqdsceniwduxjq/database/backups"
-          secrets=[os.environ.get(k,"") for k in ("SUPABASE_ACCESS_TOKEN","SUPABASE_MANAGEMENT_TOKEN")]
-          def summarize(status,body,headers):
-            try:
-              d=json.loads(body)
-              if status==200:return {"status":status,"backup_count":len(d.get("backups",[])),"pitr_enabled":d.get("pitr_enabled"),"latest_completed":max([str(b.get("completed_at","")) for b in d.get("backups",[])],default="")}
-              safe={k:d[k] for k in ("message","error","code") if k in d and isinstance(d[k],(str,int))}
-              msg=json.dumps(safe)
-            except Exception:msg=body[:1200]
-            for token in secrets:
-              if token:msg=msg.replace(token,"[REDACTED]")
-            return {"status":status,"error_body":msg[:1200],"server":headers.get("server"),"content_type":headers.get("content-type")}
-          for name in ("SUPABASE_ACCESS_TOKEN","SUPABASE_MANAGEMENT_TOKEN"):
-            token=os.environ.get(name,"")
-            if not token:
-              print(json.dumps({"credential_source":name,"present":False}));continue
-            for ua in (None,"curl/8.5.0"):
-              h={"Authorization":"Bearer "+token}
-              if ua:h["User-Agent"]=ua
-              try:
-                with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=25) as r:
-                  result=summarize(r.status,r.read().decode(),r.headers)
-              except urllib.error.HTTPError as e:result=summarize(e.code,e.read().decode(),e.headers)
-              except Exception as e:result={"error":type(e).__name__}
-              print(json.dumps({"credential_source":name,"client":"urllib","user_agent":ua or "Python-urllib/default",**result}))
-            with tempfile.NamedTemporaryFile() as conf, tempfile.NamedTemporaryFile() as out:
-              conf.write(('header = "Authorization: Bearer '+token+'"\n').encode());conf.flush()
-              p=subprocess.run(["curl","--config",conf.name,"--silent","--show-error","--max-time","25","--output",out.name,"--write-out","%{http_code}",url],capture_output=True,text=True)
-              result=summarize(int(p.stdout or 0),out.read().decode(),{})
-              print(json.dumps({"credential_source":name,"client":"curl",**result}))
+          import os,json,subprocess,tempfile,pathlib,urllib.parse,hashlib
+          os.umask(0o077)
+          root=pathlib.Path(os.environ["RUNNER_TEMP"])/"dabbir-export"
+          root.mkdir()
+          out=root/"encrypted";out.mkdir()
+          cert=root/"public.crt";cert.write_text("-----BEGIN CERTIFICATE-----\nMIIFJzCCAw+gAwIBAgIUFyKGshpjqJEMRc+OGSb+Wq9IKi0wDQYJKoZIhvcNAQEL\nBQAwIzEhMB8GA1UEAwwYREFCQklSIFJlY292ZXJ5IDIwMjYwOTA1MB4XDTI2MDkw\nNTA5NTU1MFoXDTM2MDkwMjA5NTU1MFowIzEhMB8GA1UEAwwYREFCQklSIFJlY292\nZXJ5IDIwMjYwOTA1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAnc5F\nGuIi2EodiYOV2pgAcaYdZp/WmpE0VXdl/wjwxEn2U5+bLvToAS69ezyj6VjGiqbG\nuw7wl6AjRYhTmkVzEIhNfCbchHyLavG3bA20vZzHL31qczIUoxUF6FFeGMW3c674\nbWN1shiSCyWuwVMLXYDeAEc/6EFtT3+J7RWPNBl51VQRw8jjzZ5UyKw6ngHyoIj5\nJKW4l4FJj/ezpoxUwz+P19bDpb+cA/bNc3A59+LzqLVlvoIf2DSjavIiETrNmIp6\nPQyKx5XDFcDle9/R4eUlx1yLANGN/TJRSFkZ+mgzJjSg1SAwHYDGQSVJsxXuWuTC\nHubnr1YjipE+3ZyooJEqWxjFhSO8UVVZGyK5mOSxdA7CcfbUgzuHxR5mImd5Wg16\ne80udO7SMBZFsF5XaaFZyafRsSWzhVY/R8Si1wKvSkaEiz89I9Jr5BUPib0ifs0I\nLxznc0CScM3QLGqpmk0cUww6zjsZykbwkP6d5TQij7SEs/Upm6elJuHIGJX42A5/\nVAm2qQanRrAmKLpQBF37zMuOMVs6K+oAQTLardnajBoqih5eScuI6NveDzKgHTiR\njuzyBrMsIOLSf7GaFZWe1eAZUk+mAtMPf800waKX0BTdikwNH3GCOoOxBwjyBhi+\nRgPyhPuBH442BhFMWCfd1TAnwu42Ra/SsE1q3J0CAwEAAaNTMFEwHQYDVR0OBBYE\nFKdl2+UMfftjn+It34A7Z9tlMUCyMB8GA1UdIwQYMBaAFKdl2+UMfftjn+It34A7\nZ9tlMUCyMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAIKSP2iz\nX5AXIhEkFdocm4Xe+IDeoMmTGJHI5BkDCf0x+onFuexeluHttdGJslxwOcHpUZzx\nHbIA0ust5Molr9ZWqy/aTdfVKhT8vDZC9GRGZM0XXx1knHRKNyt02kbu5yAuaSo9\n/eplRXyOjKGkh8NNYcxETqTFt+2TofBNcuekprs7eb6W45I0DrvptLk3Trrnc3Ks\nEHP3f+Co2fbdCtdrQ9sW0BBkIMX3fWszep1tLShgJzY/h3IyRSGkNp7P6NZh0zde\ny/C040dftVMX3Wdl1ZQv/a1fdEPFdSpyHaRdaRG+XXawfePLc5GzmKy/vvh5xA74\nUo6uWiQrWzKteCFGEqOXZgNCwo7n5RqslfVk870WnfA9eBaTBD6CbPgsSelU9RwY\nadEp412KQ50jYekb3c1IWmnwlm9Wf0D2+S++Cn0F0I/J5txHU8VqO/kj28nXctVt\ndcFrMqSiFEk8AkOTwdPNUMJcCgzVwA856lH476rEoAQKWan8nG8MRZDwWMRYRjRd\nc6WaXwSpvf+dS9KxOS6vHY/d9wsi/e+5p6rrAhzcmC9vVOekWgMug4665sVLgGgg\nnB5Oz17GFrt/h4Tw9N28Ng5o2lyRIZZF4u7yKDiYkMZL8wsTfFAgAJx6sWDvLFae\nYjiIxcK7WFjMRri5YB99xWtz5tPDFCg5yA2Z\n-----END CERTIFICATE-----")
+          token=os.environ["SUPABASE_ACCESS_TOKEN"]
+          conf=root/"curl.conf";conf.write_text('header = "Authorization: Bearer '+token+'"\n')
+          base="https://api.supabase.com/v1/projects/fphpoysqdsceniwduxjq"
+          def api(path,body=None):
+           f=root/"response.json"
+           cmd=["curl","--config",str(conf),"--silent","--show-error","--max-time","45","--output",str(f),"--write-out","%{http_code}"]
+           if body is not None:cmd+=["-H","Content-Type: application/json","--data",json.dumps(body)]
+           p=subprocess.run(cmd+[base+path],capture_output=True,text=True)
+           status=int(p.stdout or 0)
+           print(json.dumps({"endpoint":path,"http_status":status}),flush=True)
+           if status not in (200,201):raise RuntimeError("Management request failed HTTP "+str(status))
+           return json.loads(f.read_text())
+          poolers=api("/config/database/pooler")
+          pool=next((p for p in poolers if p.get("pool_mode")=="session"),poolers[0])
+          conn=urllib.parse.urlparse(pool.get("connection_string") or pool.get("connectionString"))
+          host=conn.hostname or pool["db_host"]
+          login=api("/cli/login-role",{"read_only":True})
+          print(json.dumps({"temporary_read_only_role_created":True,"ttl_seconds":login.get("ttl_seconds")}),flush=True)
+          env=os.environ.copy()
+          env.update(PGHOST=host,PGPORT="5432",PGDATABASE="postgres",PGUSER=login["role"]+".fphpoysqdsceniwduxjq",PGPASSWORD=login["password"],PGSSLMODE="require",PGCONNECT_TIMEOUT="20",PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=180000")
+          docker=["docker","run","--rm","--network","host","-v",str(root)+":/backup"]
+          for k in ("PGHOST","PGPORT","PGDATABASE","PGUSER","PGPASSWORD","PGSSLMODE","PGCONNECT_TIMEOUT","PGOPTIONS"):docker+=["-e",k]
+          docker+=["postgres:17-alpine"]
+          def run(args):
+           p=subprocess.run(docker+args,env=env,capture_output=True,text=True)
+           if p.returncode:
+            msg=p.stderr.replace(login["password"],"[REDACTED]").replace(token,"[REDACTED]")
+            print(msg[:2500],flush=True)
+            raise RuntimeError("Database tool failed: "+args[0])
+           return p.stdout
+          proof=run(["psql","-X","-At","-v","ON_ERROR_STOP=1","-c","show transaction_read_only"])
+          assert proof.strip()=="on"
+          print("POSTGRES_READ_ONLY_CONNECTION_PASS",flush=True)
+          # Single consistent archive; derive separate sections from the same snapshot.
+          run(["pg_dump","--format=custom","--no-owner","--lock-wait-timeout=10s","--file=/backup/database.dump"])
+          listing=run(["pg_restore","--list","/backup/database.dump"])
+          assert "TABLE DATA" in listing and "TABLE " in listing
+          run(["pg_restore","--schema-only","--file=/backup/schema.sql","/backup/database.dump"])
+          run(["pg_restore","--data-only","--file=/backup/data.sql","/backup/database.dump"])
+          (root/"archive-list.txt").write_text(listing)
+          manifest={"project_ref":"fphpoysqdsceniwduxjq","read_only":True,"consistent_snapshot":True,"files":{}}
+          for name in ("database.dump","schema.sql","data.sql","archive-list.txt"):
+           f=root/name
+           assert f.stat().st_size>0
+           manifest["files"][name]={"bytes":f.stat().st_size,"sha256":hashlib.sha256(f.read_bytes()).hexdigest()}
+           subprocess.run(["openssl","cms","-encrypt","-binary","-aes-256-cbc","-in",str(f),"-outform","DER","-out",str(out/(name+".cms")),str(cert)],check=True,capture_output=True)
+           f.unlink()
+          manifest["status"]="LOGICAL_BACKUP_CREATED"
+          (out/"manifest.json").write_text(json.dumps(manifest,indent=2))
+          print(json.dumps(manifest),flush=True)
+          
+      - name: Upload encrypted backup only
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-encrypted-logical-backup
+          path: ${{ runner.temp }}/dabbir-export/encrypted/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary files
+        if: always()
+        run: rm -rf "${{ runner.temp }}/dabbir-export"
