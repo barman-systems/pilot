@@ -8,24 +8,17 @@ const previewHandler = fs.readFileSync(new URL('../api/dabbir-market-preview.js'
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('public activation page communicates vertical, outcome, approvals and evidence before signup', () => {
-  for (const marker of [
-    'لمشغلي غسيل السيارات المتنقل في الإمارات',
-    'كل استفسار WhatsApp يصبح حجزًا مؤكدًا',
-    '14 يومًا بلا بطاقة',
-    'Shadow Mode',
-    'Owner Receipt',
-    'Estimated',
-    'Verified',
-    'SANDBOX — لا إرسال خارجي',
-  ]) assert.match(landing, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const marker of ['لمشغلي غسيل السيارات المتنقل في الإمارات','كل استفسار WhatsApp يصبح حجزًا مؤكدًا','14 يومًا بلا بطاقة','Shadow Mode','Owner Receipt','Estimated','Verified','SANDBOX — لا إرسال خارجي']) assert.match(landing, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const demoPosition = landing.indexOf('id="demoForm"');
   const signupPosition = landing.indexOf('ابدأ تجربة 14 يومًا');
   assert.ok(demoPosition >= 0 && signupPosition > demoPosition, 'signup CTA must appear after the value demo');
 });
 
-test('market preview aligns the public offer to the 29.99 AED subscription contract', () => {
-  assert.match(previewHandler, /\.replace\('299 AED','29\.99 AED'\)/);
-  assert.match(previewHandler, /car-wash-killer-job-v2/);
+test('market preview aligns the public offer to 39.99 base + activity and branch add-ons', () => {
+  assert.match(previewHandler, /\.replace\('299 AED','39\.99 AED'\)/);
+  assert.match(previewHandler, /إضافة نشاط: 29\.99 AED\/شهر/);
+  assert.match(previewHandler, /إضافة فرع: 19\.99 AED\/شهر/);
+  assert.match(previewHandler, /car-wash-killer-job-v3-pricing/);
 });
 
 test('activation page calls the isolated same-origin demo endpoint and renders evidence', () => {
