@@ -1,105 +1,131 @@
-# DABBIR activity navigation implementation — 5 September 2026
+# دبّر — إعادة هيكلة التنقل ولوحة المالك حسب النشاط
 
-Status: review branch; NOT READY for the full requested acceptance matrix. No production deployment or database changes performed by this work.
+تاريخ التقرير: 5 سبتمبر 2026.
 
-Implementation commit: `b8e618d`.
+**الحالة: التغييرات على فرع المراجعة؛ لم تكتمل شروط القبول المطلوبة. لم يُنفّذ نشر على الإنتاج أو تغيير لقاعدة البيانات ضمن هذا العمل.**
 
-Baseline: PR #498 was open/draft at 3791cf3; main f104317 was merged into the local work. Existing navigation/history repairs retained. This document supplements DABBIR_NAVIGATION_AUDIT_2026-09-05.md, not a replacement for its limitations.
+## الحالة المرجعية
 
-## Customer model and supported scope
+كان طلب الدمج #498 مفتوحًا كمسودة عند الإصدار `3791cf3`. أُدمج تحديث الفرع الرئيسي `f104317` في العمل المحلي مع الحفاظ على إصلاحات التنقل والرجوع السابقة. رُفعت إعادة الهيكلة بالإصدار `b8e618d`. هذا التقرير يُكمل تقرير مراجعة التنقل السابق ولا يلغي حدوده.
 
-The nine profiles below exist in api/activity-tasks.js. A profile is not proof of a complete vertical product. Available means source-backed route/data model, not production E2E certification. The common customer journey is inquiry → conversation/customer → booking or operational work → owner decision → result. No claims of a medical system, property CRM, campaign manager or field dispatch were added.
+## فهم صاحب النشاط وحدود الدعم
 
-| Activity | Core work / daily owner needs | Source-backed surfaces | Specialized primary destination | Owner work section | Remaining vertical gaps |
+الأنشطة التسعة التالية موجودة في `api/activity-tasks.js`. وجود ملف تعريف للنشاط لا يثبت اكتمال تشغيله. عبارة «متاح» أدناه تعني وجود صفحة أو نموذج بيانات في المصدر، ولا تعني اجتياز رحلة إنتاج كاملة.
+
+الرحلة المشتركة: استفسار ← محادثة وعميل ← حجز أو عمل تشغيلي ← قرار المالك ← نتيجة. لم تُضف ادعاءات بوجود نظام طبي متكامل أو إدارة عقارات أو حملات أو توزيع فرق ميدانية مكتملة.
+
+| النشاط | العمل الأساسي واحتياجات المالك اليومية | الوظائف الموجودة في المصدر | التبويب المتخصص | محتوى لوحة المالك | النواقص |
 |---|---|---|---|---|---|
-| Store | Review inquiries, orders, stock, follow-ups, decisions | Conversations, customers, operations, tasks | Orders & stock | Order and stock alerts from owner feed | Collected payments, returns, matching filtered totals not validated |
-| Salon | Today's bookings, confirmations, customers, services, decisions | Appointments, customers, services, tasks | Bookings | Today's active bookings | Staff occupancy and actual collection not established |
-| Clinic | Appointments, inquiries, patient contact, follow-ups, decisions | Generic appointments/customer contacts/services | Appointments; Patients label | Today's active appointments | No medical-record or clinical workflow claim |
-| Car wash | Bookings, inquiries, customer details, services, decisions | Appointment/services and existing car-wash extensions | Bookings | Today's wash bookings | Dispatch, team availability, collection E2E outstanding |
-| Laundry | Pickup arrangements, inquiries, customers, services, decisions | Generic bookings/services | Pickup & drop-off | Today's pickup/drop-off bookings | Garment lifecycle/delivery completion unverified; booking is not delivery proof |
-| Services | Service bookings, inquiries, customers, services, decisions | Generic bookings/services | Service bookings | Today's service appointments | Field visits, assignment, projects unverified |
-| Real estate | Inquiries, leads, viewings, follow-ups, decisions | Generic conversations/customers/appointments/tasks | Viewings; Leads label | Upcoming viewings | Property catalogue/pipeline not established |
-| Creator | Collaboration inquiries, contacts, schedule, follow-ups, decisions | Generic conversations/customers/appointments/tasks | Schedule; Collaboration leads label | Upcoming collaboration appointments | Campaign execution/deliverables not established |
-| Other | Inquiries, customers, appointments, follow-ups, decisions | Generic conversations/customers/appointments/tasks | Appointments | Upcoming work | Capability-specific operations beyond generic workflow unverified |
+| المتجر | مراجعة الاستفسارات والطلبات والمخزون والمتابعات والقرارات | المحادثات والعملاء والعمليات والمهام | الطلبات والمخزون | الطلبات وتنبيهات المخزون من سجل الأولويات | التحصيل الفعلي والمرتجعات والإجماليات المطابقة للفلاتر غير مثبتة |
+| الصالون | حجوزات اليوم والتأكيدات والعملاء والخدمات والقرارات | المواعيد والعملاء والخدمات والمهام | الحجوزات | حجوزات اليوم النشطة | إشغال الموظفين والتحصيل الفعلي غير مثبتين |
+| العيادة | المواعيد والاستفسارات وبيانات التواصل والمتابعات والقرارات | مواعيد عامة وجهات اتصال وخدمات | المواعيد؛ تسمية العملاء: المرضى | مواعيد اليوم النشطة | لا يوجد في هذا العمل إثبات لسجل طبي أو رحلة علاجية |
+| غسيل السيارات | الحجوزات والاستفسارات والعملاء والخدمات والقرارات | المواعيد والخدمات والتخصيصات الحالية للغسيل | الحجوزات | حجوزات الغسيل اليوم | توزيع الفرق وتوفرها والتحصيل يحتاج اختبارات تشغيل كاملة |
+| المغسلة | تنسيق الاستلام والاستفسارات والعملاء والخدمات والقرارات | حجوزات وخدمات عامة | الاستلام والتسليم | حجوزات الاستلام والتسليم اليوم | دورة الملابس واكتمال التسليم غير مثبتين؛ الحجز لا يثبت التسليم |
+| الخدمات | مواعيد الخدمات والاستفسارات والعملاء والخدمات والقرارات | حجوزات وخدمات عامة | مواعيد الخدمات | مواعيد الخدمات اليوم | الزيارات الميدانية والإسناد والمشاريع غير مثبتة |
+| العقارات | الاستفسارات والعملاء المحتملون والمعاينات والمتابعات والقرارات | محادثات وعملاء ومواعيد ومهام عامة | المعاينات؛ العملاء المحتملون | المعاينات القادمة | كتالوج العقارات ومراحل فرص البيع غير مثبتين |
+| صانع المحتوى | طلبات التعاون وجهات الاتصال والجدول والمتابعات والقرارات | محادثات وعملاء ومواعيد ومهام عامة | الجدول؛ جهات التعاون | مواعيد التعاون القادمة | تنفيذ الحملات وتسليم مخرجاتها غير مثبتين |
+| نشاط آخر | الاستفسارات والعملاء والمواعيد والمتابعات والقرارات | محادثات وعملاء ومواعيد ومهام عامة | المواعيد | العمل القادم | العمليات المتخصصة خارج الرحلة العامة غير مثبتة |
 
-## Implemented navigation
+## خريطة التنقل المنفّذة
 
-Stable MAIN order: Today → activity work → Conversations → Customers (activity label where useful) → More. Each destination is permission-filtered; 3–5 destinations for default supported roles. Explicit grants can reduce this further.
+| المجموعة | المحتوى والترتيب |
+|---|---|
+| الرئيسية | اليوم ← عمل النشاط ← المحادثات ← العملاء بالتسمية المناسبة ← المزيد |
+| المزيد | المهام والقرارات، التقارير، التنبيهات، الإعدادات، والوصول الحالي لتبديل النشاط والفريق حسب الصلاحية |
+| وظائف ثانوية مرتبطة بالنشاط | اختصار الخدمات الحالي يظهر فقط عندما تكون الخدمات مدعومة ومسموحة |
+| الإعدادات | التكاملات والقنوات، المتابعات المجدولة، المساعدة، وإعدادات النشاط والحساب الحالية |
+| اختصارات لوحة المالك | عمل النشاط، المهام والقرارات، المحادثات، التقارير |
 
-More: tasks & decisions, reports, notifications, settings, existing business switch/team access as allowed. Services remains a secondary existing shortcut only where supported. Owner action shortcut now reaches the actual command form, not the hidden copilot.
+الترتيب ثابت ولا يتغير مع وصول بيانات جديدة. يُرشّح ظهور الوجهات حسب نوع النشاط وإمكاناته المفعلة وصلاحيات العضوية. للأدوار الافتراضية المدعومة 3–5 وجهات رئيسية؛ وقد تقل عند تقييد الصلاحيات صراحة. الدور غير المعروف لا يحصل على وجهات رئيسية.
 
-Settings: integrations & channels, scheduled follow-ups, help, plus existing business/account controls. Existing cards are moved with their handlers intact. Integrations remains reachable in three clicks from a primary screen: More → Settings → Integrations.
+نُقلت بطاقات الإدارة الحالية مع الاحتفاظ بمعالجات الضغط عليها. الوصول إلى التكاملات من وجهة رئيسية أصبح ثلاث ضغطات: المزيد ← الإعدادات ← التكاملات. اختصار تنفيذ الإجراء يصل الآن إلى نموذج التنفيذ الفعلي بدل مساعد مخفي.
 
-Visibility uses business type + business-scoped enabled capabilities + membership role/permissions. Unknown roles get no primary routes. UI filtering is not server authorization. Existing backend controls retained. No new schema/backend access policy.
+إخفاء التبويب لا يحل محل تحقق الصلاحية في الخادم. بقيت ضوابط الخادم الحالية دون تغيير، ولم تُعدّل البنية أو سياسات الوصول لقاعدة البيانات.
 
-## Owner dashboard
+## تركيب لوحة المالك
 
-One shared renderer with registry-driven work sections; no independent application per activity. Shared regions: short heading, operational shortcuts, relevant work queue, execution-result disclosure, existing owner action center and execution controls. Repeated generic metric cards and redundant setup card are hidden for owners. Activation appears after work. Employee does not receive the new owner region/action-center/command controls.
+تستخدم الأنشطة عارضًا مشتركًا وإعدادًا مركزيًا لقائمة العمل. لا توجد نسخة مستقلة من التطبيق لكل نشاط.
 
-Metrics intentionally limited: work rows are a bounded loaded-data view, NOT exact business totals. No invented revenue, collection, occupancy, delivery or savings cards. Appointment day uses business timezone (fallback Asia/Dubai); cancelled, completed, no-show and simulated rows excluded. Real-estate/creator/other queue uses upcoming timestamps. Store rows use order/inventory alerts from owner_action_center. Execution results use handled.available and server titles/completed_at from VERIFIED_SUCCESS autonomous outcomes, not accepted plans. Unavailable is distinct from zero.
+المناطق المشتركة: عنوان قصير، اختصارات تشغيل، قائمة عمل مناسبة للنشاط، قسم قابل للفتح لنتائج التنفيذ، ومركز قرارات المالك وأدوات التنفيذ الحالية. أُخفيت بطاقات المؤشرات العامة المكررة وبطاقة الإعداد الزائدة لدى المالك. يظهر تفعيل النشاط بعد العمل اليومي. لا تظهر للموظف المنطقة الجديدة الخاصة بالمالك أو مركز قراراته أو أدوات إصدار الأوامر.
 
-## Before / after
+## مصادر البيانات ومعاني المؤشرات
 
-Before counts are source-derived paths, not timed baseline user trials. After observed paths are synthetic browser tests unless stated otherwise.
-
-| Journey | Before | After | Evidence / limitation |
+| العنصر | المصدر | شروط العرض والفترة | وجهة التفاعل أو حدودها |
 |---|---|---|---|
-| Owner → daily work | Generic destination then inspect list, 1+ | Activity work, 1 | All nine owner titles/switches observed; latest stable order verified by code |
-| Dashboard → loaded appointment | General list then locate, 2+ | Selected summary, 1; work-page record focus, +1 | Salon summary and Back observed; native editable detail not fully verified |
-| Dashboard → stock issue | General operations then search, 2+ | Identified issue summary, 1 | Store row rendered; live product resolution outstanding |
-| Owner → tasks/decisions | More → tasks, 2 | Dashboard shortcut, 1 | Existing task screen retained |
-| Owner → reports | More → reports, 2 | Dashboard shortcut, 1 | Metrics destinations remain legacy scope |
-| Owner → integration | More → integration, 2 | More → Settings → integration, 3 | Intentional administrative grouping; settings cards observed |
-| Record summary → return | General screen navigation | Back closes summary, 1 | Browser and history tests |
-| Change business | Old async response could overwrite new | Only newest runtime response renders | Deferred response race test |
-| Failed action-center load | Could normalize into reassuring zeros | Explicit error and cleared stale contents | Failure state observed in isolated browser |
+| قائمة المواعيد | المواعيد المحمّلة في مساحة النشاط | يوم النشاط وفق منطقته الزمنية؛ الافتراضي `Asia/Dubai`. استبعاد الملغى والمكتمل وعدم الحضور والمحاكاة | ملخص الموعد المحدد، ثم محاولة تحديد سجله في صفحة العمل |
+| المعاينات والتعاون والنشاط العام | المواعيد المحمّلة | المواعيد القادمة بحسب وقت بدايتها | ملخص العنصر المحدد |
+| أولويات المتجر | عناصر الطلبات والمخزون في `owner_action_center` | البيانات التي يعيدها سجل الأولويات | ملخص المشكلة المحددة، ثم محاولة تحديد العنصر المحمّل |
+| نتائج دبّر | `handled.available` وعناوين النتائج و`completed_at` | نتائج التنفيذ الذاتي المؤكدة بحالة `VERIFIED_SUCCESS` التي يعيدها الخادم | عرض العنوان والتوقيت؛ رابط دليل التنفيذ غير مكتمل لغياب وجهة السجل |
 
-## Implementation inventory
+قائمة العمل تعرض جزءًا من البيانات المحمّلة، وليست إجمالي النشاط الدقيق. لم تُضف أرقام مفترضة للإيراد أو التحصيل أو الإشغال أو التسليم أو التوفير. الخطة المقبولة لا تُحسب تنفيذًا مكتملًا. البيانات غير المتاحة تختلف عن القيمة الصفرية.
 
-- api/_activity-experience.js: shared profiles, labels, roles, capability checks, work queues.
-- api/_activity-experience-ui.js: shared navigation/dashboard, settings grouping, summary modal, focus/Back handling.
-- api/dabbir-contextual-navigation-ui.js: inject shared registry/UI and apply after legacy navigation.
-- api/activity-profile-ui.js: business-scoped capability state, ignore stale profile fetch.
-- api/owner-action-center-core-ui.js: ignore stale business responses; honest load errors.
-- api/dabbir-owner-first-ui.js: actual action-row handler links to entity summary; preserve error state.
-- index.html: ignore out-of-order runtime responses; retain earlier history/scroll changes.
-- test/dabbir-activity-experience.test.mjs: nine activities × seven roles × both languages, capability and queue cases.
-- test/dabbir-navigation-history.test.mjs: added real asynchronous business-switch race scenario.
-- scripts/preview-activity-experience.mjs and package.json: explicitly synthetic local-only preview server; unavailable integrations return errors; never production authentication or data proof.
+## أهم الرحلات قبل وبعد
 
-Generated public bundles are rebuilt by dabbir:build/deployment and excluded from this source change to avoid unrelated pre-existing generated drift.
+أعداد «قبل» مستخرجة من مسارات المصدر وليست قياسات زمنية لمستخدم إنتاج. ملاحظات المتصفح مبنية على بيانات اختبار معزولة.
 
-## Verification and evidence
-
-- Final full build: 1,324 tests passed, zero failed or skipped, including the asynchronous business-switch race test. Syntax and dependency audit passed.
-- Isolated browser: owner render/activity switch for all nine profiles; salon appointment summary and Back; store stock queue replacing previous appointment context; More/Settings regrouping; English LTR; employee owner-controls hidden. Desktop screenshot captured in the conversation, explicitly marked LOCAL FIXTURE.
-- Seven role models: owner/admin/manager/employee/staff/agent/viewer. Browser roles: owner and employee only. This does not certify all server permissions.
-- Simulated API failures intentionally returned 503; action-center error state observed. No external message, real approval or operational write executed.
-- Responsive styles include 44/48px controls, bottom-sheet safe area, visible active parent, reduced primary count. Actual iPhone/Safari/keyboard/overflow E2E remains unverified.
-
-## Remaining acceptance gaps (do not conceal)
-
-1. Generic summary is not yet a universal editable record deep link. Loaded DOM entity focus can report unavailable when absent; no guessed URL or wrong entity fallback.
-2. Result feed does not return an outcome entity ID; verified result title/time is displayed, but an execution-evidence deep link requires an actual supported destination.
-3. All-activity transactional fixtures, server authorization, deleted-record, filters/search restoration and branch switching have not been comprehensively tested.
-4. Exact activity-specific financial/occupancy metrics and filter-matching counts need authoritative definitions and supported data, not fabricated UI values.
-5. Legacy profile/render modules remain; the new navigation/dashboard configuration is central, but this is not a completed consolidation of all old activity-specific code.
-6. Real mobile/Safari evidence and authenticated preview/production business journeys remain open.
-
-## Per-activity score
-
-Do not award a numeric score from unit tests or profile labels. The required scoring dimensions are Tab Structure /20, Placement /20, Clarity /20, Click Efficiency /15, Context /10, Mobile /10, Back/State /5. Each is pending sufficient per-activity interactive evidence; no 90/100 claim.
-
-| Activity | Before score | After score | Full requested acceptance |
+| الرحلة | قبل | بعد | الدليل والحدود |
 |---|---|---|---|
-| Store | Not measured | Not certifiable yet | NOT READY |
-| Salon | Not measured | Not certifiable yet | NOT READY |
-| Clinic | Not measured | Not certifiable yet | NOT READY |
-| Car wash | Not measured | Not certifiable yet | NOT READY |
-| Laundry | Not measured | Not certifiable yet | NOT READY |
-| Services | Not measured | Not certifiable yet | NOT READY |
-| Real estate | Not measured | Not certifiable yet | NOT READY |
-| Creator | Not measured | Not certifiable yet | NOT READY |
-| Other | Not measured | Not certifiable yet | NOT READY |
+| المالك إلى العمل اليومي | وجهة عامة ثم فحص القائمة؛ ضغطة أو أكثر | وجهة عمل النشاط؛ ضغطة | فُحصت عناوين الأنشطة التسعة والتبديل بينها؛ ترتيب الوجهات الأخير متحقق منه بالكود |
+| لوحة المالك إلى موعد محمّل | قائمة عامة ثم العثور عليه؛ ضغطتان أو أكثر | ملخص الموعد بضغطة، ثم صفحة العمل بضغطة إضافية | اختُبر ملخص موعد الصالون والرجوع؛ التفاصيل الأصلية القابلة للتعديل لم تُختبر بالكامل |
+| لوحة المالك إلى نقص مخزون | العمليات ثم البحث؛ ضغطتان أو أكثر | ملخص المشكلة المحددة بضغطة | ظهر عنصر المتجر؛ فتح المنتج الفعلي في بيئة تشغيل ما زال مطلوبًا |
+| المهام والقرارات | المزيد ثم المهام؛ ضغطتان | اختصار لوحة المالك؛ ضغطة | الإبقاء على صفحة المهام الحالية |
+| التقارير | المزيد ثم التقارير؛ ضغطتان | اختصار لوحة المالك؛ ضغطة | نطاق المؤشرات في الصفحات القديمة لم يُغيّر |
+| التكاملات | المزيد ثم التكاملات؛ ضغطتان | المزيد ثم الإعدادات ثم التكاملات؛ ثلاث ضغطات | نقل مقصود لوظيفة إدارية؛ فُحص وجود البطاقات في الإعدادات |
+| الرجوع من الملخص | تنقل عام بين الصفحات | الرجوع يغلق الملخص؛ ضغطة | اختبار متصفح واختبارات سجل التنقل |
+| تبديل النشاط | استجابة قديمة قد تستبدل بيانات النشاط الجديد | أحدث طلب فقط يستطيع تحديث مساحة النشاط | اختبار استجابات غير مرتبة زمنيًا |
+| فشل تحميل مركز القرارات | احتمال ظهور أصفار توحي بعدم وجود مشاكل | رسالة خطأ واضحة ومسح المحتوى القديم | لوحظت حالة الفشل في المتصفح المعزول |
 
-These verdicts apply to completion of this requested audit/acceptance matrix, not a claim that every existing product feature is broken.
+## الملفات المعدلة
+
+| الملف | التغيير |
+|---|---|
+| `api/_activity-experience.js` | الإعداد المركزي للأنشطة والتسميات والأدوار والإمكانات وقوائم العمل |
+| `api/_activity-experience-ui.js` | التنقل ولوحة المالك وتجميع الإعدادات وملخص العنصر والتركيز والرجوع |
+| `api/dabbir-contextual-navigation-ui.js` | تحميل الإعداد والواجهة وتطبيقهما بعد طبقات التنقل السابقة |
+| `api/activity-profile-ui.js` | ربط الإمكانات بالنشاط وتجاهل استجابات تعريف النشاط القديمة |
+| `api/owner-action-center-core-ui.js` | تجاهل بيانات النشاط السابق وإظهار أخطاء التحميل بوضوح |
+| `api/dabbir-owner-first-ui.js` | ربط زر العنصر بملخصه والحفاظ على حالة الخطأ |
+| `index.html` | منع استجابات التشغيل المتأخرة مع الحفاظ على إصلاحات الرجوع والتمرير السابقة |
+| `test/dabbir-activity-experience.test.mjs` | اختبارات الأنشطة التسعة والأدوار السبعة واللغتين والإمكانات وقوائم العمل |
+| `test/dabbir-navigation-history.test.mjs` | اختبار سباق استجابات تبديل النشاط |
+| `scripts/preview-activity-experience.mjs` و`package.json` | معاينة محلية ببيانات اصطناعية معلنة؛ تعيد الوظائف غير المتاحة أخطاء واضحة |
+
+تُولّد حزم الواجهة العامة عبر أمر البناء والنشر. لم تُضمّن فروقها القديمة غير المرتبطة بهذا التغيير في تعديلات المصدر.
+
+## نتائج الاختبارات وحدود الإثبات
+
+- نجح البناء النهائي `npm run dabbir:build` بما يشمل فحص الصياغة والتبعيات و**1324 اختبارًا؛ دون فشل أو تجاوز اختبارات**.
+- المتصفح المعزول: عرض المالك والتبديل للأنشطة التسعة، ملخص موعد الصالون والرجوع، استبدال قائمة المواعيد بأولويات المتجر، تجميع المزيد والإعدادات، الإنجليزية واتجاه الكتابة من اليسار، وإخفاء أدوات المالك عن الموظف.
+- اختُبرت نماذج أدوار المالك والمدير الإداري والمدير والموظف وعضو الفريق والوكيل والمشاهد: `owner/admin/manager/employee/staff/agent/viewer`. اختبار المتصفح اقتصر على المالك والموظف؛ لا يثبت صلاحيات الخادم لكل الأدوار.
+- التُقطت صورة سطح المكتب وعُرضت في المحادثة، وتظهر عليها علامة بيانات الاختبار المعزولة.
+- أعادت وظائف تجريبية غير متاحة الحالة 503 عمدًا، وفُحص ظهور خطأ مركز القرارات. لم تُرسل رسالة خارجية ولم تُنفّذ موافقة أو عملية تشغيل حقيقية.
+- تشمل تحسينات التجاوب أهداف لمس 44/48 بكسل، ومساحة آمنة للنافذة السفلية، وحالة التبويب الأب، وتقليل عدد الوجهات حسب الصلاحية. اختبار iPhone وSafari ولوحة المفاتيح وتجاوز العرض بالكامل غير مكتمل.
+
+## النواقص المحددة
+
+1. ملخص العنصر ليس رابط تفاصيل قابلًا للتعديل لجميع السجلات. قد تُظهر محاولة تحديد العنصر رسالة عدم توفره عندما لا يكون محمّلًا؛ لا يُستخدم رابط مخمّن أو عنصر بديل.
+2. سجل النتائج لا يوفر معرّف وجهة النتيجة اللازمة لفتح دليل تنفيذها؛ المتاح هو العنوان والتوقيت المؤكدان.
+3. لم تكتمل اختبارات الإجراءات لكل نشاط وصلاحيات الخادم والسجلات المحذوفة واستعادة البحث والفلاتر وتبديل الفروع.
+4. المؤشرات المالية والإشغال والأعداد المطابقة للفلاتر تحتاج تعريفات ومصادر بيانات موثوقة.
+5. إعداد التنقل ولوحة المالك الجديدة مركزي، لكن ملفات التخصيص القديمة لا تزال موجودة؛ لم تكتمل عملية توحيد جميع شروط النشاط القديمة.
+6. اختبار الجوال الفعلي والرحلات الموثّقة في معاينة مصادق عليها أو الإنتاج ما زالا مطلوبين.
+
+## التقييم لكل نشاط
+
+المحاور المطلوبة: بنية التبويبات /20، مواضع العناصر /20، وضوح التنقل /20، كفاءة الضغطات /15، الروابط السياقية /10، تجربة الجوال /10، الرجوع وحفظ الحالة /5.
+
+لا تكفي اختبارات الكود أو ظهور تسمية النشاط لمنح درجة رقمية. تقييم المحاور لكل نشاط ينتظر أدلة تفاعل كافية؛ لا يوجد ادعاء بتحقيق 90/100.
+
+| النشاط | الدرجة قبل | الدرجة بعد | الحكم على اكتمال التدقيق المطلوب |
+|---|---|---|---|
+| المتجر | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| الصالون | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| العيادة | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| غسيل السيارات | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| المغسلة | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| الخدمات | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| العقارات | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| صانع المحتوى | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+| نشاط آخر | غير مقاسة | غير قابلة للاعتماد بعد | غير جاهز |
+
+**غير جاهز هنا تعني عدم استيفاء مصفوفة التدقيق والقبول المطلوبة، ولا تعني أن جميع وظائف المنتج الحالية معطلة.**
