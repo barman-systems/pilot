@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 
-const PREVIEW_HTML=readFileSync(new URL('../try.html',import.meta.url),'utf8');
+const PREVIEW_HTML=readFileSync(new URL('../try.html',import.meta.url),'utf8')
+  .replace('299 AED','39.99 AED')
+  .replace('/ رقم أو موقع شهريًا','/ النشاط الأساسي شهريًا')
+  .replace('<li>14 يومًا بلا بطاقة</li>','<li>14 يومًا بلا بطاقة</li><li>إضافة نشاط: 29.99 AED/شهر</li><li>إضافة فرع: 19.99 AED/شهر</li>');
 
 const HEADERS={
   'content-type':'text/html; charset=utf-8',
@@ -20,7 +23,7 @@ export default function handler(req,res){
     return res.end(JSON.stringify({ok:false,error:'METHOD_NOT_ALLOWED'}));
   }
   for(const [key,value] of Object.entries(HEADERS))res.setHeader(key,value);
-  res.setHeader('x-dabbir-market-preview','car-wash-killer-job-v1');
+  res.setHeader('x-dabbir-market-preview','car-wash-killer-job-v3-pricing');
   res.statusCode=200;
   return res.end(PREVIEW_HTML);
 }
