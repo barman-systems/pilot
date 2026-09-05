@@ -69,16 +69,6 @@ function assert(condition,message){if(!condition)throw new VerificationMismatch(
 function prNumber(reference){return /^https:\/\/github\.com\/barman-systems\/pilot\/pull\/(\d+)$/.exec(String(reference||''))?.[1]||''}
 function runId(reference){return /^https:\/\/github\.com\/barman-systems\/pilot\/actions\/runs\/(\d+)(?:\/.*)?$/.exec(String(reference||''))?.[1]||''}
 function sha(value){const v=String(value||'').toLowerCase();return /^[0-9a-f]{40}$/.test(v)?v:''}
-function metricSnapshot(snapshot){
-  const n=value=>Number.isFinite(Number(value))?Number(value):0;
-  return {
-    registered_accounts_total:n(snapshot?.registered_accounts?.total),
-    businesses_total:n(snapshot?.businesses?.total),
-    customers_total:n(snapshot?.customers?.total),
-    appointments_total:n(snapshot?.appointments?.total),
-    orders_total:n(snapshot?.orders?.total),
-  };
-}
 
 async function verifyCommit(reference){
   const commitSha=sha(reference);
@@ -137,28 +127,11 @@ async function verifyEvidence(item,releaseCache){
   }
 
   if(type==='query'){
-    if(reference==='dabbir-qa-capability'){
-      const capability=await publicJson(`${DABBIR_ORIGIN}/api/qa-capability?t=${Date.now()}`);
-      assert(capability?.ok===true,'QA_CAPABILITY_NOT_OK');
-      assert(capability?.supabase_project_ref==='fphpoysqdsceniwduxjq','QA_DATABASE_PROJECT_MISMATCH');
-      return {type,reference,project_ref:capability.supabase_project_ref};
-    }
-    if(reference==='barman-executive-snapshot-v1'){
-      const expected=details?.expected;
-      assert(expected&&typeof expected==='object'&&!Array.isArray(expected),'SNAPSHOT_EXPECTED_METRICS_REQUIRED');
-      const response=await broker({phase:'snapshot'});
-      const current=metricSnapshot(response?.snapshot||{});
-      const checked={};
-      for(const [key,value] of Object.entries(expected)){
-        assert(Object.hasOwn(current,key),`SNAPSHOT_METRIC_DENIED_${clean(key,80)}`);
-        const reported=Number(value),now=Number(current[key]);
-        assert(Number.isFinite(reported)&&reported>=0,`SNAPSHOT_REPORTED_INVALID_${clean(key,80)}`);
-        assert(Number.isFinite(now)&&now>=reported,`SNAPSHOT_METRIC_REGRESSED_${clean(key,80)}`);
-        checked[key]={reported,current:now};
-      }
-      return {type,reference,checked,source:'AUTHORITATIVE_DB_RECHECK'};
-    }
-    throw new VerificationMismatch('QUERY_REFERENCE_DENIED');
+    assert(reference==='dabbir-qa-capability','QUERY_REFERENCE_DENIED');
+    const capability=await publicJson(`${DABBIR_ORIGIN}/api/qa-capability?t=${Date.now()}`);
+    assert(capability?.ok===true,'QA_CAPABILITY_NOT_OK');
+    assert(capability?.supabase_project_ref==='fphpoysqdsceniwduxjq','QA_DATABASE_PROJECT_MISMATCH');
+    return {type,reference,project_ref:capability.supabase_project_ref};
   }
 
   throw new VerificationMismatch(`EVIDENCE_TYPE_UNSUPPORTED_${clean(type,80)}`);
@@ -194,6 +167,8 @@ try{
   console.log('INDEPENDENT_VERIFICATION_PASSED',JSON.stringify({command_id:commandId,checks,verified:verified.verified||null}));
 }catch(error){
   const message=clean(error?.message||error,1800);
+  // Fail closed: a mismatch never calls the promotion RPC. The command remains
+  // DONE + INDEPENDENT_REQUIRED + VERIFYING and is retried by a later run.
   if(error instanceof VerificationMismatch&&commandId){
     console.error('INDEPENDENT_VERIFICATION_MISMATCH_UNPROMOTED',commandId,message);
   }else{
