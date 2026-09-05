@@ -9,57 +9,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
-      - name: Read provider configuration without exposing values
+      - name: Diagnose backup HTTP rejection with identical credentials
         shell: python
         run: |
-          import os,json,urllib.request
-          def get(url,token):
-            if not token: return {"error":"CREDENTIAL_NOT_AVAILABLE"}
+          import os,json,urllib.request,urllib.error,subprocess,tempfile
+          url="https://api.supabase.com/v1/projects/fphpoysqdsceniwduxjq/database/backups"
+          secrets=[os.environ.get(k,"") for k in ("SUPABASE_ACCESS_TOKEN","SUPABASE_MANAGEMENT_TOKEN")]
+          def summarize(status,body,headers):
             try:
-              req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token})
-              with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
-            except Exception as e:return {"error":type(e).__name__,"status":getattr(e,"code",None)}
-          team="team_pwfKq8jHuyW1XFVSZirAJiId"
-          project="prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq"
-          token=os.environ.get("VERCEL_TOKEN","")
-          envs=get("https://api.vercel.com/v10/projects/"+project+"/env?decrypt=false&teamId="+team,token)
-          wanted=("GEMINI","GROQ","CLOUDFLARE","GATEWAY","WHATSAPP","STRIPE","DATABASE","DB_PASSWORD","DB_URL","DAILY_OPERATOR_MODEL")
-          inventory=[{"name":e.get("key"),"targets":e.get("target"),"branch":e.get("gitBranch")} for e in envs.get("envs",[]) if any(w in e.get("key","") for w in wanted)]
-          p=get("https://api.vercel.com/v9/projects/"+project+"?teamId="+team,token)
-          b=get("https://api.supabase.com/v1/projects/fphpoysqdsceniwduxjq/database/backups",os.environ.get("SUPABASE_ACCESS_TOKEN",""))
-          result={"env_read_error":envs.get("error"),"configured_names":inventory,"git_deployment_settings":p.get("gitProviderOptions"),"command_for_ignoring_build":p.get("commandForIgnoringBuildStep"),"backup_read_error":b.get("error"),"backup_http_status":b.get("status"),"backup_count":len(b.get("backups",[])),"pitr_enabled":b.get("pitr_enabled"),"physical_backup_data":b.get("physical_backup_data"),"runner_protocol_credentials_present":[k for k in ("SUPABASE_DB_PASSWORD","DATABASE_URL","SUPABASE_DB_URL") if os.environ.get(k)]}
-          # Never include environment values, API responses containing credentials, or database rows.
-          print(json.dumps(result,sort_keys=True))
-          def secret(name,target):
-            matches=[e for e in envs.get("envs",[]) if e.get("key")==name and target in e.get("target",[]) and not e.get("gitBranch")]
-            if len(matches)!=1:return ""
-            item=get("https://api.vercel.com/v1/projects/"+project+"/env/"+matches[0]["id"]+"?teamId="+team,token)
-            return item.get("value","")
-          def request_json(url,key,payload=None):
-            if not key:return {"state":"CREDENTIAL_NOT_READABLE"}
-            try:
-              req=urllib.request.Request(url,data=None if payload is None else json.dumps(payload).encode(),headers={"Authorization":"Bearer "+key,"Content-Type":"application/json"})
-              with urllib.request.urlopen(req,timeout=40) as r:
-                data=json.load(r)
-                return {"state":"RESPONSE","http_status":r.status,"has_choices":bool(data.get("choices")),"success":data.get("success"),"object":data.get("object"),"has_id":bool(data.get("id"))}
-            except urllib.error.HTTPError as e:
-              try:err=json.load(e)
-              except Exception:err={}
-              detail=err.get("error",{})
-              return {"state":"PROVIDER_ERROR","http_status":e.code,"provider_code":detail.get("code") if isinstance(detail,dict) else None}
-            except Exception as e:return {"state":"REQUEST_ERROR","error":type(e).__name__}
-          cf_token=secret("CLOUDFLARE_API_TOKEN","production")
-          cf_account=secret("CLOUDFLARE_ACCOUNT_ID","production")
-          cf=request_json("https://api.cloudflare.com/client/v4/accounts/"+cf_account+"/ai/v1/chat/completions",cf_token,{"model":"@cf/zai-org/glm-4.7-flash","messages":[{"role":"user","content":"Reply with OK only."}],"max_tokens":64,"stream":False}) if cf_account else {"state":"ACCOUNT_NOT_READABLE"}
-          wa_token=secret("DABBIR_WHATSAPP_ACCESS_TOKEN","production")
-          wa_phone=secret("DABBIR_WHATSAPP_PHONE_NUMBER_ID","production")
-          wa=request_json("https://graph.facebook.com/v23.0/"+wa_phone+"?fields=id",wa_token) if wa_phone else {"state":"PHONE_ID_NOT_READABLE"}
-          stripe=secret("STRIPE_SECRET_KEY","preview")
-          stripe_result=request_json("https://api.stripe.com/v1/prices?limit=1",stripe) if stripe.startswith(("sk_test_","rk_test_")) else {"state":"TEST_KEY_NOT_VERIFIED"}
-          print(json.dumps({"cloudflare_live_probe":cf,"whatsapp_read_only_probe":wa,"stripe_test_read_probe":stripe_result},sort_keys=True))
+              d=json.loads(body)
+              if status==200:return {"status":status,"backup_count":len(d.get("backups",[])),"pitr_enabled":d.get("pitr_enabled"),"latest_completed":max([str(b.get("completed_at","")) for b in d.get("backups",[])],default="")}
+              safe={k:d[k] for k in ("message","error","code") if k in d and isinstance(d[k],(str,int))}
+              msg=json.dumps(safe)
+            except Exception:msg=body[:1200]
+            for token in secrets:
+              if token:msg=msg.replace(token,"[REDACTED]")
+            return {"status":status,"error_body":msg[:1200],"server":headers.get("server"),"content_type":headers.get("content-type")}
+          for name in ("SUPABASE_ACCESS_TOKEN","SUPABASE_MANAGEMENT_TOKEN"):
+            token=os.environ.get(name,"")
+            if not token:
+              print(json.dumps({"credential_source":name,"present":False}));continue
+            for ua in (None,"curl/8.5.0"):
+              h={"Authorization":"Bearer "+token}
+              if ua:h["User-Agent"]=ua
+              try:
+                with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=25) as r:
+                  result=summarize(r.status,r.read().decode(),r.headers)
+              except urllib.error.HTTPError as e:result=summarize(e.code,e.read().decode(),e.headers)
+              except Exception as e:result={"error":type(e).__name__}
+              print(json.dumps({"credential_source":name,"client":"urllib","user_agent":ua or "Python-urllib/default",**result}))
+            with tempfile.NamedTemporaryFile() as conf, tempfile.NamedTemporaryFile() as out:
+              conf.write(('header = "Authorization: Bearer '+token+'"\n').encode());conf.flush()
+              p=subprocess.run(["curl","--config",conf.name,"--silent","--show-error","--max-time","25","--output",out.name,"--write-out","%{http_code}",url],capture_output=True,text=True)
+              result=summarize(int(p.stdout or 0),out.read().decode(),{})
+              print(json.dumps({"credential_source":name,"client":"curl",**result}))
