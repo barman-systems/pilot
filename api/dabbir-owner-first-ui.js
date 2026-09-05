@@ -100,6 +100,7 @@ const script = String.raw`(()=>{
       '.bottomNav br{display:none!important}',
       '.top,.side{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
     '}',
+    '#authGate .preSignupValue{background:var(--ds-surface2)!important;border-color:var(--ds-border-strong)!important;text-align:start!important}#authGate .preSignupValue p{text-align:start!important}#authGate .preSignupTruth{font-size:13px!important;line-height:1.7!important}#authGate .field label,#onboardingGate .field label{font-size:14px!important}#authGate .authHint{font-size:13px!important}.authLegal{font-size:14px!important}.authLegal a,.lang button{min-height:44px!important}.modalBox{max-height:calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}.modalActions{flex-wrap:wrap}.compose input{min-width:0}#authGate .authCard{margin-block:auto}.preSignupValue b{line-height:1.7!important}',
     '@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}'
   ].join('');
   document.head.appendChild(style);
