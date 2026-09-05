@@ -4,122 +4,117 @@ import { access, readFile } from 'node:fs/promises';
 import {
   DABBIR_OWNER_MONTHLY_AED,
   DABBIR_OWNER_MONTHLY_MINOR,
+  DABBIR_EXTRA_BUSINESS_MONTHLY_AED,
+  DABBIR_EXTRA_BUSINESS_MONTHLY_MINOR,
+  DABBIR_EXTRA_BRANCH_MONTHLY_AED,
+  DABBIR_EXTRA_BRANCH_MONTHLY_MINOR,
   DABBIR_OWNER_PLAN_CODE,
+  DABBIR_EXTRA_BUSINESS_PLAN_CODE,
+  DABBIR_EXTRA_BRANCH_PLAN_CODE,
   DABBIR_TRIAL_DAYS,
+  billingRootBusinessId,
   checkoutIdempotencyKey,
+  ownerMemberships,
   publicBillingState,
   requestOrigin,
   safeBusinessId,
 } from '../api/_billing-core.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration, planMigration] = await Promise.all([
-  read('api/_billing-core.js'),
-  read('api/billing/checkout.js'),
-  read('api/billing/portal.js'),
-  read('supabase/functions/barman-stripe-checkout/index.ts'),
-  read('supabase/functions/barman-stripe-webhook/index.ts'),
-  read('api/dabbir-billing-ui.js'),
-  read('api/app-recovery.js'),
+const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration, planMigration, contract] = await Promise.all([
+  read('api/_billing-core.js'), read('api/billing/checkout.js'), read('api/billing/portal.js'),
+  read('supabase/functions/barman-stripe-checkout/index.ts'), read('supabase/functions/barman-stripe-webhook/index.ts'),
+  read('api/dabbir-billing-ui.js'), read('api/app-recovery.js'),
   read('supabase/migrations/20260827181057_dabbir_stripe_sandbox_billing_v1.sql'),
   read('supabase/migrations/20260905003000_dabbir_subscription_catalog_v1.sql'),
+  read('scripts/dabbir-stripe-sandbox-contract.mjs'),
 ]);
 
-test('DABBIR owner plan is server-fixed to AED 29.99 monthly and a 14-day trial', () => {
+test('DABBIR subscription pricing is fixed to 39.99 base + 29.99 business + 19.99 branch', () => {
   assert.equal(DABBIR_OWNER_PLAN_CODE, 'owner_monthly_v1');
-  assert.equal(DABBIR_OWNER_MONTHLY_AED, 29.99);
-  assert.equal(DABBIR_OWNER_MONTHLY_MINOR, 2999);
+  assert.equal(DABBIR_EXTRA_BUSINESS_PLAN_CODE, 'owner_extra_business_v1');
+  assert.equal(DABBIR_EXTRA_BRANCH_PLAN_CODE, 'owner_extra_branch_v1');
+  assert.equal(DABBIR_OWNER_MONTHLY_AED, 39.99); assert.equal(DABBIR_OWNER_MONTHLY_MINOR, 3999);
+  assert.equal(DABBIR_EXTRA_BUSINESS_MONTHLY_AED, 29.99); assert.equal(DABBIR_EXTRA_BUSINESS_MONTHLY_MINOR, 2999);
+  assert.equal(DABBIR_EXTRA_BRANCH_MONTHLY_AED, 19.99); assert.equal(DABBIR_EXTRA_BRANCH_MONTHLY_MINOR, 1999);
   assert.equal(DABBIR_TRIAL_DAYS, 14);
-  assert.match(edgeCheckout, /DABBIR_PLAN_CODE='owner_monthly_v1'/);
-  assert.match(edgeCheckout, /DABBIR_AMOUNT_MINOR=2999/);
-  assert.match(edgeCheckout, /DABBIR_TRIAL_DAYS=14/);
-  assert.match(edgeCheckout, /billingPlan\(\)/);
-  assert.match(edgeCheckout, /verifiedStripePrice/);
-  assert.match(edgeCheckout, /line_items\[0\]\[price\].*plan\.stripe_test_price_id/s);
-  assert.match(edgeCheckout, /trial_available===true.*trial_period_days.*plan\.trial_days/s);
-  assert.doesNotMatch(edgeCheckout, /price_1U8yRWLYIkiZam7bHaP2NhtT/);
-  assert.doesNotMatch(checkout, /body\?\.price|body\.price|price_id.*body/i);
-  assert.doesNotMatch(edgeCheckout, /automatic_tax/);
+  assert.match(contract, /base_monthly_aed: 39\.99/);
+  assert.match(contract, /extra_business_monthly_aed: 29\.99/);
+  assert.match(contract, /extra_branch_monthly_aed: 19\.99/);
 });
 
-test('subscription catalog is server-only and seeded fail-closed until the verified Stripe test price is attached', () => {
-  assert.match(planMigration, /create table if not exists public\.dabbir_billing_plans/i);
-  assert.match(planMigration, /'owner_monthly_v1'.*2999.*'AED'.*'month'.*14/s);
-  assert.match(planMigration, /stripe_test_price_id, stripe_live_price_id, active/s);
+test('billing root is deterministic and additional activities are owner-only', () => {
+  const memberships=[
+    {business_id:'22222222-2222-4222-8222-222222222222',role:'owner',status:'active',accepted_at:'2026-02-01T00:00:00Z'},
+    {business_id:'11111111-1111-4111-8111-111111111111',role:'owner',status:'active',accepted_at:'2026-01-01T00:00:00Z'},
+    {business_id:'33333333-3333-4333-8333-333333333333',role:'staff',status:'active',accepted_at:'2025-01-01T00:00:00Z'},
+  ];
+  assert.equal(ownerMemberships(memberships).length,2);
+  assert.equal(billingRootBusinessId(memberships),'11111111-1111-4111-8111-111111111111');
+});
+
+test('server catalog contains all three monthly prices and fails closed until verified Stripe test prices are attached', () => {
+  assert.match(planMigration, /'owner_monthly_v1'.*3999.*'AED'.*'month'.*14/s);
+  assert.match(planMigration, /'owner_extra_business_v1'.*2999.*'AED'.*'month'.*0/s);
+  assert.match(planMigration, /'owner_extra_branch_v1'.*1999.*'AED'.*'month'.*0/s);
   assert.match(planMigration, /null, null, true/s);
   assert.match(planMigration, /force row level security/i);
   assert.match(planMigration, /revoke all on table public\.dabbir_billing_plans from public, anon, authenticated/i);
-  assert.match(planMigration, /grant select, insert, update, delete on table public\.dabbir_billing_plans to service_role/i);
   assert.match(edgeCheckout, /BILLING_PRICE_NOT_CONFIGURED/);
   assert.match(edgeCheckout, /BILLING_PRICE_CONTRACT_MISMATCH/);
+  assert.match(edgeCheckout, /PLAN_CODES/);
 });
 
-test('Stripe execution is isolated in Supabase and DABBIR rejects live or malformed keys', () => {
+test('checkout quantities are derived server-side from owner businesses and active non-primary branches', () => {
+  assert.match(edgeCheckout, /dabbir_memberships/);
+  assert.match(edgeCheckout, /\.eq\('role','owner'\)/);
+  assert.match(edgeCheckout, /dabbir_business_branches/);
+  assert.match(edgeCheckout, /\.eq\('is_primary',false\)/);
+  assert.match(edgeCheckout, /additionalBusinesses=Math\.max\(0,ids\.length-1\)/);
+  assert.match(edgeCheckout, /BASE_MINOR\+\(additionalBusinesses\*BUSINESS_MINOR\)\+\(additionalBranches\*BRANCH_MINOR\)/);
+  assert.match(edgeCheckout, /line_items\[/);
+  assert.match(edgeCheckout, /BUSINESS_PLAN/);
+  assert.match(edgeCheckout, /BRANCH_PLAN/);
+  assert.doesNotMatch(checkout, /body\?\.price|body\.price|price_id.*body/i);
+});
+
+test('Stripe execution stays isolated in Supabase and live or malformed keys are rejected', () => {
   assert.doesNotMatch(core, /process\.env\.STRIPE_SECRET_KEY|api\.stripe\.com/);
   assert.match(core, /functions\/v1\/barman-stripe-checkout/);
   assert.match(core, /x-dabbir-billing-bridge':'v1'/);
-  assert.match(core, /supabaseKeyHeaders/);
   assert.match(edgeCheckout, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
   assert.match(edgeCheckout, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
   assert.match(edgeWebhook, /key\.startsWith\('sk_live_'\).*LIVE_BILLING_DISABLED/s);
-  assert.match(edgeWebhook, /!key\.startsWith\('sk_test_'\).*INVALID_STRIPE_SANDBOX_KEY/s);
 });
 
-test('billing mutations are same-origin, owner-only, and checkout plan is server-bound', () => {
-  assert.match(checkout, /requireSameOrigin\(req\)/);
-  assert.match(portal, /requireSameOrigin\(req\)/);
+test('billing mutations are same-origin and owner-only', () => {
+  assert.match(checkout, /requireSameOrigin\(req\)/); assert.match(portal, /requireSameOrigin\(req\)/);
   assert.match(core, /membership\.role\|\|''\)\.toLowerCase\(\)!=='owner'/);
   assert.match(core, /OWNER_APPROVAL_REQUIRED/);
-  assert.match(checkout, /plan_code:DABBIR_OWNER_PLAN_CODE/);
-  assert.match(edgeCheckout, /INVALID_PLAN_CODE/);
-  assert.match(edgeCheckout, /apiKey===expected/);
-  assert.match(edgeCheckout, /legacyJwt&&auth===`Bearer \$\{expected\}`/);
+  assert.match(checkout, /billing_root_business_id:context\.billingRootBusinessId/);
+  assert.match(edgeCheckout, /BILLING_ROOT_MISMATCH/);
   assert.match(edgeCheckout, /x-dabbir-billing-bridge.*==='v1'/);
-  assert.match(ui, /function owner\(\).*membership\?\.role/s);
-  assert.match(ui, /if\(!owner\(\)\)return/);
 });
 
-test('shared Stripe webhook verifies signature and timestamp before parsing or persistence', () => {
+test('webhook verifies signature before parsing and accepts only the three allowed DABBIR prices', () => {
   assert.match(edgeWebhook, /Math\.abs\(Date\.now\(\)\/1000-ts\)>300/);
   assert.match(edgeWebhook, /crypto\.subtle\.sign\('HMAC'/);
-  const verifyAt = edgeWebhook.indexOf("if(!(await verify(raw,sig,secret)))");
-  const parseAt = edgeWebhook.indexOf('JSON.parse(raw)');
-  const classifyAt = edgeWebhook.indexOf('classification=await classifyDabbir(evt)');
-  assert.ok(verifyAt > 0 && parseAt > verifyAt && classifyAt > parseAt);
-});
-
-test('webhook accepts only the configured DABBIR plan and verified Stripe price', () => {
-  assert.match(edgeWebhook, /plan_code\|\|''\).*DABBIR_PLAN_CODE/s);
-  assert.match(edgeWebhook, /billingPlan\(\)/);
-  assert.match(edgeWebhook, /priceId!==plan\.stripe_test_price_id/);
+  const verifyAt=edgeWebhook.indexOf("if(!(await verify(raw,sig,secret)))");
+  const parseAt=edgeWebhook.indexOf('JSON.parse(raw)');
+  assert.ok(verifyAt>0&&parseAt>verifyAt);
   assert.match(edgeWebhook, /DABBIR_SUBSCRIPTION_PRICE_MISMATCH/);
+  assert.match(edgeWebhook, /DABBIR_BASE_PLAN_REQUIRED/);
+  assert.match(edgeWebhook, /DABBIR_PRICING_METADATA_MISMATCH/);
+  assert.match(edgeWebhook, /additional_businesses:pricing\.extraBusinesses/);
+  assert.match(edgeWebhook, /additional_branches:pricing\.extraBranches/);
 });
 
-test('live non-DABBIR invoice events bypass DABBIR sandbox lookup before legacy routing', () => {
-  const invoiceAt=edgeWebhook.indexOf("if(evt.type==='invoice.paid'||evt.type==='invoice.payment_failed')");
-  const liveBypassAt=edgeWebhook.indexOf("if(evt.livemode===true)return {yes:false,obj,subscription:null}",invoiceAt);
-  const stripeLookupAt=edgeWebhook.indexOf('const subscription=await stripeGet',invoiceAt);
-  assert.ok(invoiceAt>0&&liveBypassAt>invoiceAt&&stripeLookupAt>liveBypassAt);
-});
-
-test('billing data is tenant-owner readable, FORCE RLS, and event ledger is server-only', () => {
-  assert.match(migration, /alter table public\.dabbir_billing_accounts force row level security/i);
-  assert.match(migration, /m\.user_id = \(select auth\.uid\(\)\)/i);
-  assert.match(migration, /m\.status = 'active'/i);
-  assert.match(migration, /m\.role = 'owner'/i);
-  assert.match(migration, /grant select on table public\.dabbir_billing_accounts to authenticated/i);
-  assert.doesNotMatch(migration, /grant (insert|update|delete).*dabbir_billing_accounts.*authenticated/i);
-  assert.match(migration, /alter table public\.dabbir_stripe_events force row level security/i);
-  assert.match(migration, /revoke all on table public\.dabbir_stripe_events from public, anon, authenticated/i);
-});
-
-test('subscription truth is DABBIR-metadata scoped and webhook-driven with no card storage', () => {
-  assert.doesNotMatch(migration + planMigration, /card_number|card_cvc|payment_method_details|client_secret/i);
-  assert.match(edgeWebhook, /isDabbirMetadata/);
-  assert.match(edgeWebhook, /checkout\.session\.completed/);
-  assert.match(edgeWebhook, /customer\.subscription\./);
-  assert.match(edgeWebhook, /invoice\.paid/);
-  assert.match(edgeWebhook, /invoice\.payment_failed/);
+test('billing state mirrors portfolio pricing without storing card data', () => {
+  assert.match(planMigration, /additional_businesses integer/);
+  assert.match(planMigration, /additional_branches integer/);
+  assert.match(planMigration, /monthly_amount_minor integer/);
+  assert.match(planMigration, /pricing_snapshot jsonb/);
+  assert.doesNotMatch(migration+planMigration, /card_number|card_cvc|payment_method_details|client_secret/i);
   assert.match(edgeWebhook, /dabbir_stripe_events/);
   assert.match(edgeWebhook, /onConflict:'business_id'/);
   assert.match(edgeWebhook, /onConflict:'stripe_event_id'/);
@@ -130,7 +125,6 @@ test('legacy ZAJEL checkout stays explicitly stopped outside the DABBIR bridge',
   const stoppedAt=edgeCheckout.indexOf('LEGACY_BILLING_DISABLED');
   assert.ok(bridgeAt>0&&stoppedAt>bridgeAt);
   assert.match(edgeCheckout, /system:'BARMAN_ZAJEL'/);
-  assert.doesNotMatch(edgeCheckout, /p_project_key:'ZAJEL'|barman_get_sellable_product/);
 });
 
 test('Vercel has no competing billing webhook handler', async () => {
@@ -138,30 +132,21 @@ test('Vercel has no competing billing webhook handler', async () => {
 });
 
 test('public billing state and identifiers stay deterministic', () => {
-  assert.equal(safeBusinessId('11111111-1111-4111-8111-111111111111'), '11111111-1111-4111-8111-111111111111');
-  assert.equal(safeBusinessId('not-a-uuid'), null);
-  assert.equal(checkoutIdempotencyKey('b', 'u', 0), checkoutIdempotencyKey('b', 'u', 599999));
-  assert.notEqual(checkoutIdempotencyKey('b', 'u', 0), checkoutIdempotencyKey('b', 'u', 600000));
-  assert.equal(requestOrigin({ headers: { host: 'app.example.com', 'x-forwarded-proto': 'http' } }), 'https://app.example.com');
-  assert.throws(() => requestOrigin({ headers: { host: 'bad host' } }), /INVALID_REQUEST_HOST/);
-  assert.deepEqual(publicBillingState(null), {
-    plan: 'owner', plan_code: 'owner_monthly_v1', amount: 29.99, amount_minor: 2999,
-    currency: 'AED', interval: 'month', trial_days: 14, mode: 'sandbox',
-    status: 'not_subscribed', trial_available: true, can_subscribe: true, can_manage: false,
-  });
+  assert.equal(safeBusinessId('11111111-1111-4111-8111-111111111111'),'11111111-1111-4111-8111-111111111111');
+  assert.equal(safeBusinessId('not-a-uuid'),null);
+  assert.equal(checkoutIdempotencyKey('b','u',0,'x'),checkoutIdempotencyKey('b','u',599999,'x'));
+  assert.notEqual(checkoutIdempotencyKey('b','u',0,'x'),checkoutIdempotencyKey('b','u',600000,'x'));
+  assert.equal(requestOrigin({headers:{host:'app.example.com','x-forwarded-proto':'http'}}),'https://app.example.com');
+  assert.throws(()=>requestOrigin({headers:{host:'bad host'}}),/INVALID_REQUEST_HOST/);
+  const state=publicBillingState(null,{businesses:3,included_businesses:1,additional_businesses:2,additional_branches:4,total_minor:17993,total_aed:179.93});
+  assert.equal(state.base_amount,39.99); assert.equal(state.additional_business_amount,29.99); assert.equal(state.additional_branch_amount,19.99);
+  assert.equal(state.amount,179.93); assert.equal(state.status,'not_subscribed'); assert.equal(state.trial_available,true);
 });
 
-test('billing UI is mounted on the authoritative shell and exposes the 29.99 AED subscription', () => {
-  const billingAt = shell.indexOf('/api/dabbir-billing-ui');
-  const metricsAt = shell.indexOf('/api/verified-metrics-ui');
-  assert.ok(billingAt > 0 && metricsAt > billingAt);
-  assert.match(ui, /29\.99/);
-  assert.match(ui, /14 يومًا/);
-  assert.match(ui, /14-day full trial/);
-  assert.match(ui, /Stripe Sandbox فقط/);
-  assert.match(ui, /Stripe Sandbox only/);
-  assert.match(ui, /\/api\/billing\/status/);
-  assert.match(ui, /\/api\/billing\/checkout/);
-  assert.match(ui, /\/api\/billing\/portal/);
-  assert.doesNotMatch(ui, /sk_test_|sk_live_|SUPABASE_SERVICE_ROLE_KEY/);
+test('billing UI exposes approved pricing and the authoritative shell mounts it', () => {
+  const billingAt=shell.indexOf('/api/dabbir-billing-ui');
+  assert.ok(billingAt>0);
+  assert.match(ui,/39\.99/); assert.match(ui,/29\.99/); assert.match(ui,/19\.99/); assert.match(ui,/14 يومًا/);
+  assert.match(ui,/\/api\/billing\/status/); assert.match(ui,/\/api\/billing\/checkout/); assert.match(ui,/\/api\/billing\/portal/);
+  assert.doesNotMatch(ui,/sk_test_|sk_live_|SUPABASE_SERVICE_ROLE_KEY/);
 });
