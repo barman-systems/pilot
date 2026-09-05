@@ -87,6 +87,18 @@ const css=String.raw`
   body.dabbir-settings-approved .modalBox{background:#0c1725!important;border-color:#2a3b52!important}
 }
 @media(min-width:701px){.dsa-settings-toolbar,.dsa-header-logo{display:none!important}}
+@media(max-width:700px){
+body.dabbir-settings-approved #appShell .top{height:auto!important;min-height:78px!important;padding:calc(12px + env(safe-area-inset-top)) 18px 12px!important;overflow:visible!important}
+body.dabbir-settings-approved #appShell .top>.row{position:relative!important;min-height:46px!important}
+body.dabbir-settings-approved #appShell .top .d4-header-mark,body.dabbir-settings-approved #appShell .top .dabbirHeaderMarkV3,body.dabbir-settings-approved #appShell .dabbirHeaderWordV3{display:none!important}
+body.dabbir-settings-approved #appShell .dabbirHeaderBrandV3,body.dabbir-settings-approved #appShell .dabbirHeaderCopyV3{display:block!important;width:100%!important;min-width:0!important}
+body.dabbir-settings-approved #appShell #pageTitle{position:static!important;transform:none!important;max-width:none!important;margin-inline:54px!important;white-space:normal!important;overflow:visible!important;line-height:1.4!important;text-align:center!important}
+body.dabbir-settings-approved #appShell #menuBtn{top:50%!important;transform:translateY(-50%)!important;left:0!important;right:auto!important}
+body.dabbir-settings-approved #appShell .dsa-header-logo{top:50%!important;transform:translateY(-50%)!important;right:0!important;left:auto!important}
+html[dir=ltr] body.dabbir-settings-approved #appShell #menuBtn{right:0!important;left:auto!important}
+html[dir=ltr] body.dabbir-settings-approved #appShell .dsa-header-logo{left:0!important;right:auto!important}
+}
+
 `;
 
 const script=String.raw`(()=>{

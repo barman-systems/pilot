@@ -454,6 +454,8 @@ async function browserJourney() {
             if(screen==='settings'){
               for(const id of ['dabbirBillingCard','dkSave']){
                 const target=page.locator('#'+id);
+                entry.settingsSections??={};
+                entry.settingsSections[id]=(await target.count())?'PRESENT':'ABSENT';
                 if(await target.count()){
                   await target.scrollIntoViewIfNeeded();
                   await page.screenshot({path:`${dir}/${device}-${language}-${id}.png`,timeout:15000});
@@ -463,6 +465,18 @@ async function browserJourney() {
           }
         }
       }
+      // Read-only inspection of the separate team/permissions surface; no invites or edits.
+      const teamPage=await browserContext.newPage();
+      try{
+        await teamPage.goto(ORIGIN+'/team.html',{waitUntil:'domcontentloaded'});
+        await teamPage.locator('#teamApp:not(.hidden)').waitFor({timeout:25000});
+        visual.team={language:await teamPage.locator('html').getAttribute('lang'),cases:[]};
+        for(const [device,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
+          await teamPage.setViewportSize({width,height});
+          await teamPage.screenshot({path:`${dir}/${device}-team.png`,timeout:15000});
+          visual.team.cases.push({device,width,height,overflow:await teamPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)});
+        }
+      }finally{await teamPage.close()}
     } catch (error) {
       visual.error = String(error.message);
       throw error;
