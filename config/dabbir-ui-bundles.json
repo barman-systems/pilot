@@ -16,6 +16,7 @@
     "/api/owner-operations-ui",
     "/api/service-operations-ui",
     "/api/calendar-performance-ui",
+    "/api/activity-task-navigation-ui",
     "/api/owner-action-center-ui",
     "/api/dabbir-owner-away-ui",
     "/api/home-service-ui",
