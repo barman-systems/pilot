@@ -51,6 +51,7 @@ const script=String.raw`(()=>{
   let loading=false;
   let businessId=null;
   let editingProductId=null;
+  let productBusiness=null,productBranch=null,recordEpoch=0,loadEpoch=0,operationsScope='',productReturnFocus=null;
 
   function escapeHtml(value){return String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
   function money(value){try{return new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value||0))+' '+currencyCode()}catch{return Number(value||0).toFixed(2)+' '+currencyCode()}}
@@ -98,27 +99,29 @@ const script=String.raw`(()=>{
   }
 
   function openNewProduct(){
-    editingProductId=null;
+    editingProductId=null;productBusiness=workspace?.business?.id;productBranch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
     q('#opsProductForm')?.reset();
     applyCopy();
-    q('#opsProductModal')?.classList.add('open');
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true},'');q('#opsName')?.focus();
   }
 
   function openEditProduct(product){
     if(!product)return;
-    editingProductId=product.id;
+    editingProductId=product.id;productBusiness=workspace?.business?.id;productBranch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
     q('#opsName').value=product.name||'';
     q('#opsPrice').value=Number(product.price_aed||0).toFixed(2).replace(/\.00$/,'');
     q('#opsQty').value=Number(product.quantity||0);
     applyCopy();
-    q('#opsProductModal')?.classList.add('open');
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true},'');q('#opsName')?.focus();
   }
 
-  function closeProductModal(){
+  function closeProductModal(discardHistory=false){
+    const ownsEntry=history.state?.dabbirProductDetail;
+    recordEpoch++;productBusiness=null;productBranch=null;
     q('#opsProductModal')?.classList.remove('open');
     q('#opsProductForm')?.reset();
     editingProductId=null;
-    applyCopy();
+    applyCopy();productReturnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirProductDetail;history.replaceState(state,'')}else history.back()}
   }
 
   function applyCopy(){
@@ -137,21 +140,29 @@ const script=String.raw`(()=>{
     render();
   }
 
-  async function request(options={}){
+  async function request(options={},requestedBusiness=businessId){
     if(!businessId)businessId=workspace?.business?.id||null;
-    const url='/api/owner-operations?business_id='+encodeURIComponent(businessId||'');
+    const url='/api/owner-operations?business_id='+encodeURIComponent(requestedBusiness||businessId||'');
     const response=await fetch(url,{cache:'no-store',...options,headers:{'content-type':'application/json',...(options.headers||{})}});
     const payload=await response.json().catch(()=>({}));
     if(!response.ok||!payload.ok)throw new Error(payload.detail||payload.error||'OWNER_OPERATIONS_FAILED');
     return payload;
   }
 
+  function syncScope(){
+    const next=(workspace?.business?.id||'')+'|'+(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'');
+    if(next===operationsScope)return;
+    operationsScope=next;loadEpoch++;recordEpoch++;loading=false;data=null;businessId=workspace?.business?.id||null;
+    if(productBusiness)closeProductModal(true);
+  }
   async function load(force=false){
-    if(!isStore())return;
-    businessId=workspace?.business?.id||businessId;
+    syncScope();if(!isStore())return;
     if(loading||(!force&&data&&data.business_id===businessId))return;
+    const epoch=++loadEpoch,capturedBusiness=businessId;
     loading=true;render();
-    try{data=await request();render()}catch(error){data={error:error.message};render()}finally{loading=false;render()}
+    try{const result=await request({},capturedBusiness);if(epoch!==loadEpoch||workspace?.business?.id!==capturedBusiness)return;data=result;render()}
+    catch(error){if(epoch===loadEpoch&&workspace?.business?.id===capturedBusiness){data={error:error.message};render()}}
+    finally{if(epoch===loadEpoch){loading=false;render()}}
   }
 
   function statusOptions(current){
@@ -207,18 +218,20 @@ const script=String.raw`(()=>{
 
   async function submitProduct(event){
     event.preventDefault();
+    if(!productBusiness||workspace?.business?.id!==productBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==productBranch){closeProductModal(true);return}
+    const capturedBusiness=productBusiness,capturedEpoch=recordEpoch;
     const t=text();const button=q('#opsProductSave');if(button)button.disabled=true;
     try{
       const values={name:q('#opsName').value,price_aed:q('#opsPrice').value,quantity:q('#opsQty').value};
       if(editingProductId){
         await manageProduct({action:'update_product',product_id:editingProductId,...values});
-        notify(t.itemUpdated);
+        if(workspace?.business?.id!==capturedBusiness||recordEpoch!==capturedEpoch)return;notify(t.itemUpdated);
       }else{
         await mutate({action:'create_product',sku:productSku(),...values});
-        notify(t.created);
+        if(workspace?.business?.id!==capturedBusiness||recordEpoch!==capturedEpoch)return;notify(t.created);
       }
       closeProductModal();data=null;await load(true);
-    }catch(error){notify(errorText(error))}finally{if(button)button.disabled=false}
+    }catch(error){if(workspace?.business?.id===capturedBusiness&&recordEpoch===capturedEpoch)notify(errorText(error))}finally{if(button)button.disabled=false}
   }
 
   async function deleteProduct(product){
@@ -238,6 +251,8 @@ const script=String.raw`(()=>{
   }
 
   function syncOperationsUi(){
+    syncScope();
+    if(productBusiness&&(workspace?.business?.id!==productBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==productBranch))closeProductModal(true);
     if(!isStore())return;
     ensureScreen();
     applyCopy();
@@ -250,6 +265,24 @@ const script=String.raw`(()=>{
     if(q('#pageTitle'))q('#pageTitle').textContent=text().nav;
     load();
   }
+
+  async function openProductRecord(id){
+    syncScope();
+    const capturedBusiness=workspace?.business?.id,branch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
+    if(!capturedBusiness||!isStore())return;
+    const epoch=++recordEpoch;
+    try{
+      const response=await fetch('/api/owner-product-management?'+new URLSearchParams({business_id:capturedBusiness,product_id:id}),{credentials:'same-origin',cache:'no-store'});
+      const result=await response.json();
+      if(epoch!==recordEpoch||workspace?.business?.id!==capturedBusiness||(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')!==branch)return;
+      if(!response.ok||!result.ok){notify(response.status===404?(ar()?'المنتج غير متاح.':'Product unavailable.'):response.status===403?(ar()?'لا تملك صلاحية إدارة المنتج.':'Product management access required.'):text().failed);return}
+      if(result.product?.id!==id||result.product?.business_id!==capturedBusiness){notify(text().failed);return}
+      businessId=capturedBusiness;ensureScreen();openEditProduct(result.product);
+    }catch{if(epoch===recordEpoch&&workspace?.business?.id===capturedBusiness&&(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'')===branch)notify(text().failed)}
+  }
+  window.addEventListener('popstate',()=>{if(q('#opsProductModal')?.classList.contains('open'))closeProductModal()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&q('#opsProductModal')?.classList.contains('open')){e.preventDefault();closeProductModal()}});
+  window.__dabbirOwnerOperations={openProductRecord};
 
   const lifecycle=window.__dabbirUiLifecycle;
   if(lifecycle?.on){

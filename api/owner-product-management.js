@@ -1,3 +1,4 @@
+import { singleQueryValue } from './_request-query.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -58,26 +59,28 @@ async function productContext(token,businessId,productId){
     rest(token,`dabbir_products?select=id,business_id,sku,name,price_aed,active,metadata&business_id=eq.${businessId}&id=eq.${productId}&limit=1`,'PRODUCT_LOOKUP_FAILED'),
     rest(token,`dabbir_inventory?select=quantity,reserved&business_id=eq.${businessId}&product_id=eq.${productId}&limit=1`,'INVENTORY_LOOKUP_FAILED'),
   ]);
-  return {product:products?.[0]||null,inventory:inventory?.[0]||{quantity:0,reserved:0}};
+  return {product:products?.[0]||null,inventory:inventory?.[0]||{quantity:0,reserved:0},inventoryAvailable:!!inventory?.[0]};
 }
 
 export default async function handler(req,res){
-  if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'});
-  if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
+  if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'});
+  if(req.method==='POST'&&!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
 
   const context=await authenticatedContext(req,res);
   if(!context)return;
 
   try{
-    const body=await readJsonBody(req);
+    const body=req.method==='GET'?{business_id:singleQueryValue(req,'business_id'),product_id:singleQueryValue(req,'product_id')}:await readJsonBody(req);
     const businessId=safeId(body.business_id);
     const productId=safeId(body.product_id);
     const membership=membershipFor(context.memberships,businessId);
     if(!businessId||!productId||!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
     if(!canManageBusiness(membership))return json(res,403,{ok:false,error:'BUSINESS_MANAGEMENT_REQUIRED'});
 
-    const {product,inventory}=await productContext(context.token,businessId,productId);
-    if(!product)return json(res,404,{ok:false,error:'PRODUCT_NOT_FOUND'});
+    const {product,inventory,inventoryAvailable}=await productContext(context.token,businessId,productId);
+    if(!product||(req.method==='GET'&&product.active===false))return json(res,404,{ok:false,error:'PRODUCT_NOT_FOUND'});
+    if(req.method==='GET'&&!inventoryAvailable)return json(res,409,{ok:false,error:'INVENTORY_UNAVAILABLE'});
+    if(req.method==='GET')return json(res,200,{ok:true,product:{...product,quantity:inventory.quantity,reserved:inventory.reserved},can_manage:true,inventory_scope:'business'});
 
     const action=clean(body.action,40);
     if(action==='update_product'){
