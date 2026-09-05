@@ -47,6 +47,9 @@ begin
 end;
 $function$;
 
+revoke all on function public.barman_executive_read_snapshot_v1() from public, anon, authenticated;
+grant execute on function public.barman_executive_read_snapshot_v1() to service_role;
+
 create or replace function public.barman_github_dispatch_tick_v1()
 returns jsonb
 language plpgsql
@@ -179,3 +182,6 @@ exception when others then
   return jsonb_build_object('ok',false,'status','DISPATCH_ERROR','sqlstate',sqlstate);
 end;
 $function$;
+
+revoke all on function public.barman_github_dispatch_tick_v1() from public, anon, authenticated;
+grant execute on function public.barman_github_dispatch_tick_v1() to service_role;
