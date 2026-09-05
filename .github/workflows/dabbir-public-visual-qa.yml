@@ -1,0 +1,46 @@
+name: DABBIR Public Visual QA
+on:
+  pull_request:
+    paths:
+      - index.html
+      - try.html
+      - api/dabbir-owner-first-ui.js
+      - test/dabbir-public-visual-qa.mjs
+      - .github/workflows/dabbir-public-visual-qa.yml
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - try.html
+      - api/dabbir-owner-first-ui.js
+      - test/dabbir-public-visual-qa.mjs
+      - .github/workflows/dabbir-public-visual-qa.yml
+permissions:
+  contents: read
+jobs:
+  public-visual:
+    if: github.event_name == 'push' || github.head_ref == 'fix/visual-ux-polish-20260905'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps webkit
+      - name: Verify exact release and public journeys at five viewports
+        env:
+          QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          QA_URL: ${{ github.event_name == 'push' && 'https://dabbir.bmalman.com' || 'https://dabbir-git-fix-visual-ux-polis-31211b-nd56cm4j5v-3619s-projects.vercel.app' }}
+        run: node test/dabbir-public-visual-qa.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-visual-${{ github.event.pull_request.head.sha || github.sha }}
+          path: public-visual-evidence/
+          retention-days: 14

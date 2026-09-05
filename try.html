@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<meta name="description" content="جرّب كيف يحوّل DABBIR استفسار غسيل سيارات متنقل إلى حجز واضح قابل للمراجعة قبل إنشاء حساب.">
-<title>DABBIR — حوّل طلبات WhatsApp إلى حجوزات غسيل مؤكدة</title>
+<meta name="description" content="تعرّف على دبّر، مشغّل الأعمال الذكي، وشاهد مثالًا توضيحيًا للتنفيذ قبل إنشاء حساب.">
+<title>DABBIR — مشغّل أعمالك الذكي</title>
 <style>
 :root{color-scheme:dark;--bg:#07111f;--panel:#0d1a2a;--panel2:#102033;--line:#2d3c50;--text:#f7fafc;--muted:#a8b6c9;--accent:#536dfe;--green:#91e5aa;--yellow:#ffd47e;--red:#ffaaa9;--blue:#9ecfff;--radius:20px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif}button,textarea,a{font:inherit}button,a{min-height:46px}.wrap{width:min(1120px,calc(100% - 32px));margin:auto}.top{display:flex;align-items:center;justify-content:space-between;padding:18px 0}.brand{display:flex;align-items:center;gap:10px}.brand img{width:42px;height:42px;border-radius:13px}.brand b{display:block;font-size:14px}.brand small{color:var(--muted);font-size:14px}.topActions{display:flex;gap:8px}.link,.button{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;text-decoration:none;padding:9px 14px;font-size:14px;font-weight:850}.link{border:1px solid var(--line);color:var(--text);background:var(--panel)}.button{border:0;background:var(--accent);color:#fff;cursor:pointer}.hero{padding:32px 0 24px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:34px;align-items:center}.eyebrow{color:var(--accent);font-size:14px;font-weight:900;letter-spacing:.04em}.hero h1{font-size:clamp(30px,3.5vw,48px);line-height:1.4;letter-spacing:0;margin:13px 0 17px;max-width:800px}.hero p{font-size:15px;line-height:1.9;color:#c4cbc5;margin:0;max-width:700px}.promise{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}.promise span,.truthTag{border:1px solid #344036;background:#151c16;border-radius:999px;padding:7px 10px;color:#cfe4d1;font-size:14px}.priceCard{border:1px solid var(--line);background:var(--panel);border-radius:26px;padding:22px;box-shadow:none}.priceCard h2{font-size:15px;margin:0 0 16px}.price{font-size:43px;font-weight:950;letter-spacing:-.04em}.price small{font-size:14px;color:var(--muted);font-weight:600;letter-spacing:0}.priceCard ul{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:10px}.priceCard li{font-size:14px;color:#c4cbc5}.priceCard li:before{content:'✓';color:var(--accent);font-weight:900;margin-inline-end:8px}.truthNote{margin-top:15px;border-top:1px solid var(--line);padding-top:14px;color:var(--muted);font-size:14px;line-height:1.7}.section{padding:42px 0}.sectionHead{max-width:760px;margin-bottom:20px}.sectionHead h2{font-size:clamp(25px,4vw,40px);letter-spacing:-.03em;margin:7px 0}.sectionHead p{color:var(--muted);line-height:1.8;font-size:14px}.demoGrid{display:grid;grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr);gap:14px;align-items:start}.card{border:1px solid var(--line);background:var(--panel);border-radius:var(--radius);padding:18px}.card h3{margin:0 0 7px;font-size:14px}.card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}.demoLabel{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 7px;color:#dfe3df;font-size:14px}.sandbox{color:var(--yellow);font-size:14px;font-weight:850}.message{width:100%;min-height:132px;resize:vertical;border:1px solid #343b3f;background:#0b0e0f;color:#fff;border-radius:14px;padding:13px;line-height:1.8;font-size:14px}.demoActions{display:flex;gap:8px;margin-top:10px}.demoActions button{flex:1}.secondary{border:1px solid var(--line);background:#181c1e;color:#fff;border-radius:12px;padding:9px 12px;cursor:pointer;font-size:14px;font-weight:800}.status{min-height:24px;margin-top:10px;font-size:14px;color:var(--yellow);line-height:1.7}.receiptEmpty{min-height:260px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:14px;border:1px dashed #31383b;border-radius:15px;padding:24px}.receipt{display:none}.receipt.visible{display:block}.receiptTop{display:flex;justify-content:space-between;gap:12px;align-items:start}.receiptTop h3{font-size:17px}.receiptId{font:9px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);direction:ltr}.metricGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.metric{border:1px solid var(--line);background:var(--panel2);border-radius:13px;padding:11px}.metric b{display:block;font-size:18px}.metric span{font-size:14px;color:var(--muted)}.metric[data-kind="estimated"] b{color:var(--yellow)}.metric[data-kind="verified"] b{color:var(--green)}.timeline{display:grid;gap:7px;margin-top:14px}.step{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:9px;align-items:center;border:1px solid #272d30;background:#15191b;border-radius:11px;padding:9px}.step .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 12px #91e5aa77}.step b{font-size:14px}.step small{font-size:14px;color:var(--muted)}.step em{font-style:normal;font-size:14px;color:var(--blue)}.evidence{margin-top:12px;padding:11px;border:1px solid #2c3c2d;background:#111b13;border-radius:12px;font-size:14px;color:#bdd6c0;line-height:1.7}.afterValue{display:none;margin-top:13px;padding:14px;border:1px solid #506128;background:#222c15;border-radius:14px}.afterValue.visible{display:block}.afterValue b{font-size:14px}.afterValue p{margin:4px 0 10px;color:#cfd9bc}.afterValue .button{width:100%}.works{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.work{border:1px solid var(--line);background:var(--panel);border-radius:17px;padding:16px}.work strong{display:block;font-size:14px;margin:9px 0 5px}.work span{font-size:14px;line-height:1.7;color:var(--muted)}.work i{font-style:normal;color:var(--accent);font-size:14px;font-weight:900}.limits{margin:26px 0 0;border:1px solid #4d3f24;background:#211c11;border-radius:16px;padding:15px;color:#dfcea1;font-size:14px;line-height:1.8}.foot{border-top:1px solid var(--line);padding:24px 0 36px;color:var(--muted);font-size:14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.foot a{min-height:24px;color:var(--muted)}
@@ -18,29 +18,29 @@
 </head>
 <body>
 <header class="wrap top">
-  <div class="brand"><img src="/dabbir-app-icon.png" alt=""><div><b>DABBIR | دبّر</b><small>مشغّل حجوزات غسيل السيارات</small></div></div>
+  <div class="brand"><img src="/dabbir-app-icon.png" alt=""><div><b>DABBIR | دبّر</b><small>مشغّل أعمالك الذكي</small></div></div>
   <nav class="topActions"><a class="link" href="#how">كيف يعمل؟</a><a class="link" href="/">دخول العملاء</a></nav>
 </header>
 
 <main>
 <section class="wrap hero">
   <div>
-    <div class="eyebrow">لمشغلي غسيل السيارات المتنقل في الإمارات</div>
-    <h1>طلبات واتساب. حجوزات مرتبة. وقت أكثر لنشاطك.</h1>
-    <p>دبّر يفهم طلب العميل، يفحص المواعيد ويعيّن الفريق. أنت تتابع النتائج وتتدخل عند الحاجة.</p>
-    <div class="promise"><span>من الرسالة إلى الحجز</span><span>منع الحجز المزدوج</span><span>سجل لكل إجراء</span><span>عربي + English</span></div>
+    <div class="eyebrow">للأنشطة المختلفة — حسب احتياج نشاطك</div>
+    <h1>أعمال نشاطك تتقدم. والنتائج أمامك.</h1>
+    <p>دبّر يساعدك في متابعة العملاء والمهام والمواعيد المتاحة لنشاطك، ويعرض النتائج وما يحتاج قرارك. تتحدد القدرات بحسب نوع النشاط والإعدادات والتكاملات.</p>
+    <div class="promise"><span>متابعة الأعمال</span><span>صلاحيات بيدك</span><span>سجل لكل إجراء</span><span>عربي + English</span></div>
   </div>
   <aside class="priceCard" aria-label="التجربة التوضيحية">
     <h2>جرّب قبل التسجيل</h2>
     <div class="price">بلا بطاقة <small>للتجربة التوضيحية</small></div>
-    <ul><li>شاهد كيف يُرتّب طلب العميل</li><li>راجع الموعد والفريق والنتيجة</li><li>لا رسائل أو مدفوعات حقيقية</li></ul><a class="button" href="#demo">جرّب حجزًا الآن</a>
-    <div class="truthNote">هذه تجربة توضيحية معزولة. تشغيل واتساب على نشاطك يحتاج ربط رقمك وتحديد الصلاحيات.</div>
+    <ul><li>شاهد مثالًا على تنفيذ مهمة</li><li>راجع ما تم وما يحتاج قرارك</li><li>لا رسائل أو مدفوعات حقيقية</li></ul><a class="button" href="#demo">شاهد المثال التوضيحي</a>
+    <div class="truthNote">اختر نوع نشاطك عند إنشاء الحساب. مثال الحجز أدناه محاكاة معزولة بلا إرسال أو دفع؛ تشغيل القنوات الفعلية يحتاج ربطها وتحديد الصلاحيات.</div>
   </aside>
 </section>
 
 <section class="section" id="demo">
   <div class="wrap">
-    <div class="sectionHead"><div class="eyebrow">القيمة قبل التسجيل</div><h2>شاهد كيف يتولى دبّر الطلب</h2><p>ابدأ بالرسالة الجاهزة أو عدّلها. سيظهر الموعد والفريق وملخص ما تم.</p></div>
+    <div class="sectionHead"><div class="eyebrow">القيمة قبل التسجيل</div><h2>مثال متخصص: حجز غسيل سيارات</h2><p>غسيل السيارات مثال واحد، وليس تعريف دبّر. هذه التجربة العامة المتاحة حاليًا تحاكي حجزًا؛ لا تثبت جاهزية التشغيل لبقية الأنشطة. ابدأ بالرسالة الجاهزة أو عدّلها.</p></div>
     <div class="demoGrid">
       <form class="card" id="demoForm">
         <h3>طلب العميل</h3><p>اذكر الخدمة، نوع السيارة، المنطقة والوقت. العربية والإنجليزية مدعومتان.</p>
@@ -68,8 +68,8 @@
   </div>
 </section>
 
-<section class="wrap section" id="how">
-  <div class="sectionHead"><div class="eyebrow">يفهم الطلب · ينفّذ · يعرض النتيجة</div><h2>العمل يتقدم. والقرار بيدك.</h2></div>
+<section class="wrap section" id="how" aria-label="كيف يعمل مثال الحجز">
+  <div class="sectionHead"><div class="eyebrow">يفهم الطلب · ينفّذ · يعرض النتيجة</div><h2>كيف يعمل مثال الحجز؟</h2></div>
   <div class="works">
     <div class="work"><i>01 — يرى ويفهم</i><strong>الطلب الحقيقي</strong><span>يربط الرسالة بالعميل ويستخرج الباقة، السيارة، الموقع والوقت مع درجة ثقة. عند النقص يسأل سؤالًا واحدًا.</span></div>
     <div class="work"><i>02 — يقرر وينفذ</i><strong>داخل السعة والصلاحية</strong><span>يفحص المنطقة والساعات والمدة والتنقل والفرق، ثم يحجز دون تعارض. الخصم أو الاستثناء يحتاج موافقة.</span></div>
@@ -79,7 +79,7 @@
 </section>
 </main>
 
-<footer class="wrap foot"><span>© دبّر — لغسيل السيارات المتنقل</span><span><a href="/privacy">الخصوصية</a> · <a href="/terms">الشروط</a> · <a href="/support">الدعم</a></span></footer>
+<footer class="wrap foot"><span>© دبّر — مشغّل أعمالك الذكي</span><span><a href="/privacy">الخصوصية</a> · <a href="/terms">الشروط</a> · <a href="/support">الدعم</a></span></footer>
 
 <script>
 (()=>{

@@ -7,11 +7,13 @@ const shell = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const previewHandler = fs.readFileSync(new URL('../api/dabbir-market-preview.js', import.meta.url), 'utf8');
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
-test('public activation page communicates vertical, outcome, approvals, evidence and simulation limits before signup', () => {
+test('public activation page communicates business positioning, outcome, approvals, evidence and simulation limits before signup', () => {
   for (const marker of [
-    'لمشغلي غسيل السيارات المتنقل في الإمارات',
-    'طلبات واتساب. حجوزات مرتبة.',
+    'للأنشطة المختلفة — حسب احتياج نشاطك',
+    'أعمال نشاطك تتقدم.',
     'بلا بطاقة',
+    'مثال متخصص: حجز غسيل سيارات',
+    'غسيل السيارات مثال واحد، وليس تعريف دبّر',
     'تحديد الصلاحيات',
     'ملخص التنفيذ',
     'قيمة الحجز التقديرية',
