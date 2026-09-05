@@ -1,4 +1,5 @@
 -- DABBIR Owner Command Center Phase 2 / P1
+-- DABBIR-DESTRUCTIVE-MIGRATION-REVIEWED: role-permission-map-refresh-only-no-business-data
 -- Keep authority role (ROOT_OWNER/OWNER_DELEGATE) separate from operational role_code.
 
 alter table public.dabbir_platform_admins
