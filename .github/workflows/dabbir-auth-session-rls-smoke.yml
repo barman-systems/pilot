@@ -1,0 +1,36 @@
+name: DABBIR Auth Session RLS Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, fix/auth-rls-session-20260905]
+    paths:
+      - '.github/workflows/dabbir-auth-session-rls-smoke.yml'
+      - 'scripts/verify-auth-session-rls-live.mjs'
+      - 'supabase/migrations/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-auth-session-rls-smoke
+  cancel-in-progress: false
+
+jobs:
+  live-session-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install isolated browser test dependency
+        run: npm install --no-save --package-lock=false playwright@1.58.2
+      - name: Install WebKit and Chromium
+        run: npx playwright install --with-deps webkit chromium
+      - name: Verify production login, reload, logout and tenant isolation
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+        run: node scripts/verify-auth-session-rls-live.mjs
