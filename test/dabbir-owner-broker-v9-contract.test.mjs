@@ -29,7 +29,7 @@ test('OTP request and verification stay bound to the same actor',()=>{
 test('incident and CEO mutations never call unguarded legacy RPCs',()=>{
   assert.match(broker,/dabbir_platform_incident_create_authorized_v1/);
   assert.match(broker,/dabbir_platform_incident_update_authorized_v1/);
-  assert.match(broker,/dabbir_ceo_commands_list_authorized_v1/);
+  assert.match(broker,/dabbir_ceo_commands_authorized_v1/);
   assert.match(broker,/dabbir_ceo_command_create_authorized_v1/);
   assert.match(broker,/dabbir_ceo_command_update_authorized_v1/);
   assert.doesNotMatch(broker,/rpc\('dabbir_platform_owner_incident_create_v1'/);
