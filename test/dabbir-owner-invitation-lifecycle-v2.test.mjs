@@ -65,3 +65,21 @@ test('invite email delivery is persisted through v2 delivery contract',()=>{
   assert.match(teamApi,/operation==='invite'\|\|operation==='invite_resend'/);
   assert.match(teamApi,/RESEND_API_KEY/);
 });
+
+test('latest migration override keeps canonical invitation create authority',()=>{
+  const migrationsDir=new URL('../supabase/migrations/',import.meta.url);
+  const files=fs.readdirSync(migrationsDir).filter(x=>x.endsWith('.sql')).sort();
+  const overrides=[];
+  for(const file of files){
+    const sql=fs.readFileSync(new URL(file,migrationsDir),'utf8');
+    if(sql.includes('create or replace function public.dabbir_platform_staff_invite_create_v2')) overrides.push({file,sql});
+  }
+  assert.ok(overrides.length>0,'expected invitation create migration');
+  const latest=overrides.at(-1);
+  assert.match(latest.sql,/platform_invite_granular_for_role_v2/);
+  assert.match(latest.sql,/platform_assert_invite_grant_v2/);
+  assert.match(latest.sql,/DABBIR_INVITATION_ALREADY_PENDING/);
+  assert.match(latest.sql,/generation,resend_count,delivery_status/);
+  assert.doesNotMatch(latest.sql,/platform_invitation_grant_v2/);
+  assert.doesNotMatch(latest.sql,/token_generation=token_generation\+1/);
+});
