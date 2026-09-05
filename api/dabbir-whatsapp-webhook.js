@@ -10,6 +10,8 @@ export const config = {
   },
 };
 
+const COEXISTENCE_FIELDS = new Set(['history', 'smb_app_state_sync', 'smb_message_echoes']);
+
 function json(res, status, body, cid) {
   attachCorrelation(res, cid);
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
@@ -81,41 +83,97 @@ function parseRawBody(rawBody) {
   }
 }
 
+function messageText(message = {}) {
+  return message.text?.body
+    || message.button?.text
+    || message.interactive?.button_reply?.title
+    || message.interactive?.list_reply?.title
+    || '';
+}
+
+function coexistenceMessages(value = {}) {
+  const candidates = [
+    value.messages,
+    value.message_echoes,
+    value.echoes,
+    value.history?.messages,
+    value.history,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
 export function extractWhatsAppEvents(payload = {}) {
   const events = [];
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
-      if (change.field !== 'messages') continue;
       const value = change.value || {};
-      const phoneNumberId = value.metadata?.phone_number_id || null;
-      const displayPhoneNumber = value.metadata?.display_phone_number || null;
-      const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
-        .map(contact => [String(contact?.wa_id || ''), String(contact?.profile?.name || '').slice(0, 120)]));
-      for (const message of value.messages || []) {
-        const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';
-        events.push({
-          type: 'message',
-          messageId: message.id || null,
-          from: message.from || null,
-          contactName: contactNames.get(String(message.from || '')) || null,
-          timestamp: message.timestamp || null,
-          messageType: message.type || null,
-          text: String(text || '').slice(0, 4000),
-          phoneNumberId,
-          displayPhoneNumber,
-        });
+      const phoneNumberId = value.metadata?.phone_number_id || value.phone_number_id || null;
+      const displayPhoneNumber = value.metadata?.display_phone_number || value.display_phone_number || null;
+
+      if (change.field === 'messages') {
+        const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
+          .map(contact => [String(contact?.wa_id || ''), String(contact?.profile?.name || '').slice(0, 120)]));
+        for (const message of value.messages || []) {
+          events.push({
+            type: 'message',
+            messageId: message.id || null,
+            from: message.from || null,
+            contactName: contactNames.get(String(message.from || '')) || null,
+            timestamp: message.timestamp || null,
+            messageType: message.type || null,
+            text: String(messageText(message) || '').slice(0, 4000),
+            phoneNumberId,
+            displayPhoneNumber,
+          });
+        }
+        for (const status of value.statuses || []) {
+          events.push({
+            type: 'status',
+            messageId: status.id || null,
+            recipientId: status.recipient_id || null,
+            status: status.status || null,
+            timestamp: status.timestamp || null,
+            phoneNumberId,
+            displayPhoneNumber,
+          });
+        }
+        continue;
       }
-      for (const status of value.statuses || []) {
-        events.push({
-          type: 'status',
-          messageId: status.id || null,
-          recipientId: status.recipient_id || null,
-          status: status.status || null,
-          timestamp: status.timestamp || null,
-          phoneNumberId,
-          displayPhoneNumber,
-        });
+
+      if (!COEXISTENCE_FIELDS.has(change.field)) continue;
+
+      if (change.field === 'smb_message_echoes' || change.field === 'history') {
+        const messages = coexistenceMessages(value);
+        if (messages.length) {
+          for (const message of messages) {
+            events.push({
+              type: change.field === 'smb_message_echoes' ? 'app_message_echo' : 'history_message',
+              sourceField: change.field,
+              messageId: message.id || null,
+              from: message.from || null,
+              to: message.to || message.recipient_id || null,
+              timestamp: message.timestamp || null,
+              messageType: message.type || null,
+              text: String(messageText(message) || '').slice(0, 4000),
+              phoneNumberId,
+              displayPhoneNumber,
+            });
+          }
+          continue;
+        }
       }
+
+      events.push({
+        type: change.field === 'smb_app_state_sync' ? 'app_state_sync' : 'coexistence_sync',
+        sourceField: change.field,
+        phoneNumberId,
+        displayPhoneNumber,
+        state: String(value.state || value.event || value.status || '').slice(0, 120) || null,
+        timestamp: value.timestamp || null,
+      });
     }
   }
   return events;
@@ -177,6 +235,7 @@ export default async function handler(req, res) {
   const routed = events.map((event) => ({ ...event, ...classifyDABBIREvent(event, project) }));
   const messageCount = routed.filter(e => e.type === 'message').length;
   const statusCount = routed.filter(e => e.type === 'status').length;
+  const coexistenceCount = routed.filter(e => ['app_message_echo', 'history_message', 'app_state_sync', 'coexistence_sync'].includes(e.type)).length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
   let persistedMessages = 0;
   let duplicateMessages = 0;
@@ -216,6 +275,7 @@ export default async function handler(req, res) {
       event_count: routed.length,
       message_count: messageCount,
       status_count: statusCount,
+      coexistence_event_count: coexistenceCount,
     });
     return json(res, status, {
       ok: false,
@@ -232,7 +292,7 @@ export default async function handler(req, res) {
   const persistenceVerified = messageCount === 0 || persistedMessages === messageCount - unlinkedMessages;
   const state = unlinkedMessages > 0 && persistedMessages === 0
     ? 'TENANT_NOT_LINKED'
-    : (persistedMessages > 0 || matchedStatuses > 0 ? 'LIVE_EVENT_PERSISTED' : 'SIGNED_EVENT_NO_ACTION');
+    : (persistedMessages > 0 || matchedStatuses > 0 ? 'LIVE_EVENT_PERSISTED' : (coexistenceCount > 0 ? 'COEXISTENCE_EVENT_ACCEPTED' : 'SIGNED_EVENT_NO_ACTION'));
 
   logEvent('info', {
     correlation_id: cid,
@@ -243,6 +303,8 @@ export default async function handler(req, res) {
     event_count: routed.length,
     message_count: messageCount,
     status_count: statusCount,
+    coexistence_event_count: coexistenceCount,
+    coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
     classifications,
     persisted_messages: persistedMessages,
     duplicate_messages: duplicateMessages,
@@ -261,6 +323,8 @@ export default async function handler(req, res) {
     event_count: routed.length,
     message_count: messageCount,
     status_count: statusCount,
+    coexistence_event_count: coexistenceCount,
+    coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
     classifications,
     persisted: persistedMessages > 0,
     persistence_verified: persistenceVerified,
