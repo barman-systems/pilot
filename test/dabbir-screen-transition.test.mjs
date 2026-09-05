@@ -16,7 +16,9 @@ function showScreenBody(){
 test('screen content renders before the screen becomes active',()=>{
   const body=showScreenBody();
   const renderIndex=body.indexOf('renderCurrentFast();');
-  const activateIndex=body.indexOf("classList.toggle('active'");
+  const activateIndex=body.indexOf("baseShowScreen.call(this,name)");
+  const canonical=readFileSync(resolve(here,'../index.html'),'utf8');
+  assert.match(canonical,/function showScreen\(name\)[\s\S]*classList\.toggle\('active'/);
   assert.ok(renderIndex>=0,'showScreen must render current content');
   assert.ok(activateIndex>=0,'showScreen must activate the target screen');
   assert.ok(renderIndex<activateIndex,'content must render before the visible active state is published');

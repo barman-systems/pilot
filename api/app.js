@@ -68,17 +68,15 @@ button,a,[data-screen],[data-cid]{touch-action:manipulation}
     else setTimeout(ensureConversationLoaded,0);
   };
 
+  const baseShowScreen=showScreen;
   showScreen=function(name){
     if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';
     current=name;
     renderCurrentFast();
     applyFastBusinessProfile();
     ensureConversationLoaded();
-    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id==='screen-'+name));
-    document.querySelectorAll('[data-screen]').forEach(b=>b.classList.toggle('active',b.dataset.screen===name));
-    const page=document.querySelector('#pageTitle');
-    if(page) page.textContent=T()[name]||name;
-    document.querySelector('#side')?.classList.remove('open');
+    // Keep canonical history, scroll restoration and accessibility behavior.
+    return baseShowScreen.call(this,name);
   };
 
   window.__dabbirInterfacePerformance='fast-v4-truth';
