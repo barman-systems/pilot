@@ -26,9 +26,9 @@
 ## أدلة الاختبار
 
 1. اختبارات المُصدّر والخصوصية والعزل نجحت محليًا: 29/29 في الجولة الأولى، وأضيفت اختبارات ربط دفتر الميزانية إلى CI.
-2. `DABBIR CI` و`Dabbir observability pilot` اجتازا بنجاح على إصدارات الفرع المتعاقبة، بما فيها `c803ed96ef12b0cba571b73dbe8d318a94f69c1b`.
+2. آخر إصدار موثق للفرع `7842b0f411cdda0a4c24a6ccd03cf47fc219de75` اجتاز `DABBIR CI` و`Dabbir observability pilot` بنجاح.
 3. Vercel Preview أرسل حدث Langfuse اصطناعيًا وحصل على `LANGFUSE_ACCEPTED`، ثم ظهر الحدث فعليًا في لوحة Langfuse.
-4. Vercel Preview استخدم `TRIGGER_SECRET_KEY` Development المخزن كـSecret وأرسل حدثًا اصطناعيًا إلى Trigger.dev؛ Trigger قبل الطلب وأعاد `TRIGGER_QUEUED` والحالة `QUEUED`. أزيل endpoint الاختبار المؤقت بعد القياس.
+4. Vercel Preview استخدم `TRIGGER_SECRET_KEY` Development المخزن كـSecret وأرسل حدثًا اصطناعيًا إلى Trigger.dev؛ Trigger قبل الطلب وأعاد الحالة `QUEUED`. أزيل endpoint الاختبار المؤقت بعد القياس.
 5. محاولة إثبات عامل Development من GitHub Actions لم تصل إلى Trigger: فشلت خطوة سحب أسرار Preview لأن Vercel CLI رفض رمز GitHub المخزن برسالة `User not found (404)`. أزيل workflow التجريبي بعد توثيق السبب؛ لا يوجد workflow فاشل مؤقت ضمن التسليم النهائي.
 
 ## حدود الحكم
