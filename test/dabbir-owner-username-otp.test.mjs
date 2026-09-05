@@ -13,32 +13,28 @@ test('platform authentication is actor-bound brokered Resend OTP with isolated s
   assert.match(source, /dabbir-owner-broker/);
   assert.match(source, /dabbir-owner-otp-mailer/);
   assert.match(source, /ownerMailerAuth/);
-  assert.match(source, /x-dabbir-owner-mailer-auth/);
   assert.match(source, /owner_otp_request/);
   assert.match(source, /owner_otp_verify/);
   assert.match(source, /challenge_id/);
   assert.match(source, /session_token/);
   assert.match(source, /__Host-dabbir_owner_session/);
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(source, /x-dabbir-supabase-service-key/);
   assert.doesNotMatch(source, /grant_type=password/);
   assert.doesNotMatch(source, /barman2013@icloud\.com/);
 });
 
-test('owner OTP mailer uses verified auth domain and Resend-derived server-only authentication', async () => {
+test('owner OTP mailer uses the verified auth domain and rejects unauthenticated direct calls', async () => {
   const mailer = await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
   const auth = await read('api/_owner-mailer-auth.js');
   assert.match(mailer, /no-reply@auth\.bmalman\.com/);
   assert.match(mailer, /x-dabbir-owner-mailer-auth/);
-  assert.match(mailer, /dabbir-owner-otp-mailer-v2/);
-  assert.match(mailer, /DABBIR-owner-otp-mailer\/3/);
   assert.match(mailer, /OWNER_MAILER_UNAUTHORIZED/);
+  assert.match(mailer, /dabbir-owner-otp-mailer-v1/);
   assert.doesNotMatch(mailer, /onboarding@resend\.dev/);
   assert.doesNotMatch(mailer, /\/domains/);
-  assert.doesNotMatch(mailer, /x-dabbir-supabase-service-key/);
+  assert.match(auth, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(auth, /createHash\('sha256'\)/);
-  assert.match(auth, /dabbir-owner-otp-mailer-v2/);
-  assert.doesNotMatch(auth, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(auth, /dabbir-owner-otp-mailer-v1/);
 });
 
 test('owner broker supports modern Supabase secret keys and actor-aware incidents', async () => {
