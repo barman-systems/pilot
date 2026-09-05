@@ -1,5 +1,6 @@
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
+import { applyExecutiveCalmPage, executiveCalmHeaders } from './_executive-calm-page.js';
 
 const UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
@@ -179,14 +180,17 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-ui-cache-bust', UI_CACHE_BUST);
       res.setHeader('x-dabbir-navigation-authority', 'context-router');
       res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
+      res.setHeader('x-dabbir-static-design-authority', 'executive-calm-static-before-auth-boot-v1');
       res.setHeader('x-dabbir-design-authority', 'executive-calm-v1');
+      executiveCalmHeaders(res);
       res.statusCode = Number(proxy.statusCode || 200);
       // Error/method responses have no HTML bootstrap to reorder.
       // Preserve the upstream status and body instead of turning a 405 into a 500.
       if (res.statusCode !== 200) return res.end(body);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);
-      const ordered = orderOwnerFirstBeforeAuthBoot(canonical);
+      const branded = applyExecutiveCalmPage(canonical);
+      const ordered = orderOwnerFirstBeforeAuthBoot(branded);
       return res.end(injectSafariAuthFailOpen(ordered));
     },
   };
