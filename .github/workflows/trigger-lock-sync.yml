@@ -1,0 +1,37 @@
+name: Trigger lock sync
+on:
+  push:
+    branches:
+      - fix/trigger-prod-build-deps
+    paths:
+      - 'package.json'
+      - '.github/workflows/trigger-lock-sync.yml'
+permissions:
+  contents: write
+jobs:
+  sync-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/trigger-prod-build-deps
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Generate lockfile without lifecycle scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code package.json
+          if git diff --quiet package-lock.json; then
+            echo 'Lockfile already synchronized.'
+            exit 0
+          fi
+          git config user.name 'dabbir-release-guardian'
+          git config user.email 'dabbir-release-guardian@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'chore(trigger): sync build-only SDK lock'
+          git push origin HEAD:fix/trigger-prod-build-deps
