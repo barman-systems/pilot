@@ -421,45 +421,12 @@ async function browserJourney() {
             if (!(await nav.count())) { entry.status = 'UNAVAILABLE'; visual.cases.push(entry); continue; }
             await nav.click({ timeout: 10000 });
             await page.locator(`#screen-${screen}.active`).waitFor({ state: 'visible', timeout: 10000 });
-            await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
             await page.waitForTimeout(350);
             entry.overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
             entry.file = `${device}-${language}-${screen}.png`;
             await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
             entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
             visual.cases.push(entry);
-            if(['dashboard','settings'].includes(screen)&&['iphone','desktop'].includes(device)){
-              // Text-only 200% enlargement, separate from physical Safari/Dynamic Type.
-              await page.evaluate(()=>{
-                const nodes=[...document.querySelectorAll('#appShell *')].filter(el=>el.getClientRects().length);
-                const sizes=nodes.map(el=>parseFloat(getComputedStyle(el).fontSize)*2);
-                nodes.forEach((el,i)=>{el.dataset.qaOldStyle=el.getAttribute('style')??'__absent__';el.style.setProperty('font-size',sizes[i]+'px','important')});
-              });
-              entry.text200={method:'computed text sizes doubled; not physical Dynamic Type',overflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)};
-              await page.screenshot({path:`${dir}/${device}-${language}-${screen}-text200.png`,timeout:15000});
-              await page.evaluate(()=>document.querySelectorAll('[data-qa-old-style]').forEach(el=>{const old=el.dataset.qaOldStyle;delete el.dataset.qaOldStyle;if(old==='__absent__')el.removeAttribute('style');else el.setAttribute('style',old)}));
-            }
-            if(screen==='customers'&&await page.locator('[data-crm-customer]').count()){
-              await page.locator('[data-crm-customer]').first().click();
-              await page.locator('#crmDetailModal.open').waitFor();
-              await page.screenshot({path:`${dir}/${device}-${language}-customer-detail.png`,timeout:15000});
-              await page.locator('#crmDetailClose').click();
-            }
-            if(screen==='operations'){
-              await page.locator('#opsAddProduct').click();
-              await page.locator('#opsProductModal.open').waitFor();
-              await page.screenshot({path:`${dir}/${device}-${language}-product-dialog.png`,timeout:15000});
-              await page.locator('#opsProductCancel').click();
-            }
-            if(screen==='settings'){
-              for(const id of ['dabbirBillingCard','dkSave']){
-                const target=page.locator('#'+id);
-                if(await target.count()){
-                  await target.scrollIntoViewIfNeeded();
-                  await page.screenshot({path:`${dir}/${device}-${language}-${id}.png`,timeout:15000});
-                }
-              }
-            }
           }
         }
       }
@@ -522,49 +489,10 @@ async function runJourney() {
   });
 
   const business = await step('06_create_isolated_business', async () => {
-    let result;
-    if(process.env.DABBIR_INTERNAL_VISUAL_QA==='1' && REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
-      const {webkit}=await import('playwright');
-      const setupBrowser=await webkit.launch({headless:true});
-      fs.mkdirSync('dabbir-internal-visual',{recursive:true});
-      try{
-        for(const language of ['ar','en']){
-          const context=await setupBrowser.newContext({viewport:{width:400,height:860},isMobile:Boolean(1),hasTouch:Boolean(1)});
-          try{
-            const setup=await context.newPage();
-            await setup.goto(ORIGIN,{waitUntil:'domcontentloaded'});
-            await setup.locator('#authGate:not(.hidden)').waitFor();
-            await setup.locator(language==='ar'?'#authAr':'#authEn').click();
-            await setup.locator('#authEmail').fill(owner.email);
-            await setup.locator('#authPassword').fill(owner.password);
-            await setup.locator('#authSubmit').click();
-            await setup.locator('#onboardingGate:not(.hidden)').waitFor({timeout:25000});
-            for(const [name,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
-              await setup.setViewportSize({width,height});
-              await setup.screenshot({path:`dabbir-internal-visual/${name}-${language}-onboarding.png`,timeout:15000});
-            }
-            if(language==='en'){
-              await setup.locator('#businessName').fill(RUN_LABEL);
-              await setup.locator('#businessType').selectOption('store');
-              const responsePromise=setup.waitForResponse(r=>r.url().includes('/api/dabbir-runtime')&&r.request().method()==='POST'&&r.request().postData()?.includes('create_business'),{timeout:25000});
-              await setup.locator('#setupSubmit').click();
-              const response=await responsePromise;
-              const json=await response.json();
-              result={ok:response.ok(),status:response.status(),json,text:JSON.stringify(json)};
-              // Capture the created tenant id immediately so the established cleanup can remove it even if rendering fails.
-              if(json.business_id)businessId=json.business_id;
-              await setup.locator('#appShell:not(.hidden)').waitFor({timeout:25000});
-              await setup.screenshot({path:'dabbir-internal-visual/onboarding-first-workspace.png',timeout:15000});
-            }
-          }finally{await context.close()}
-        }
-      }finally{await setupBrowser.close()}
-    }else{
-    result = await ownerSession.request('/api/dabbir-runtime-fast', {
+    const result = await ownerSession.request('/api/dabbir-runtime-fast', {
       method: 'POST',
       body: { action: 'create_business', name: RUN_LABEL, business_type: 'store', locale: 'ar-AE' },
     });
-    }
     assert(result.ok && result.json?.business_id, `BUSINESS_CREATE_FAILED_${result.status}:${small(result.text)}`);
     businessId = result.json.business_id;
     const verify = await runtime(ownerSession, businessId, null, true);

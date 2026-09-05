@@ -86,8 +86,6 @@ const script=String.raw`(()=>{
       productModal.className='modal';productModal.id='opsProductModal';
       productModal.innerHTML='<form class=\"modalBox\" id=\"opsProductForm\"><h3 id=\"opsProductModalTitle\"></h3><div class=\"field\"><label id=\"opsNameLabel\"></label><input id=\"opsName\" maxlength=\"160\" required></div><div class=\"field\"><label id=\"opsPriceLabel\"></label><input id=\"opsPrice\" type=\"number\" min=\"0\" max=\"10000000\" step=\"0.01\" required></div><div class=\"field\"><label id=\"opsQtyLabel\"></label><input id=\"opsQty\" type=\"number\" min=\"0\" max=\"1000000\" step=\"1\" required></div><div class=\"modalActions\"><button type=\"button\" class=\"secondary\" id=\"opsProductCancel\"></button><button class=\"primary\" id=\"opsProductSave\" type=\"submit\"></button></div></form>';
       document.body.appendChild(productModal);
-      productModal.setAttribute('role','dialog');productModal.setAttribute('aria-modal','true');productModal.setAttribute('aria-labelledby','opsProductModalTitle');
-      for(const key of ['Name','Price','Qty'])q('#ops'+key+'Label').setAttribute('for','ops'+key);
       q('#opsProductCancel').onclick=closeProductModal;
       q('#opsProductForm').onsubmit=submitProduct;
       productModal.addEventListener('click',event=>{if(event.target===productModal)closeProductModal()});
