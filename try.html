@@ -92,7 +92,7 @@
     const node=walker.currentNode;
     if(node.parentElement.closest('script,style,textarea'))continue;
     const original=node.textContent.trim();
-    if(translations[original])nodes.push({node,original});
+    if(translations[original])nodes.push({node,original,raw:node.textContent});
   }
   const attrs=[...document.querySelectorAll('[aria-label]')].map(node=>({node,original:node.getAttribute('aria-label')}));
   const sampleAr='أحتاج premium polish لسيارة SUV في Dubai Marina بكرة الساعة 11 am';
@@ -104,7 +104,7 @@
     language=next;localStorage.setItem('dabbir_lang',next);
     document.documentElement.lang=next;document.documentElement.dir=next==='ar'?'rtl':'ltr';
     document.title='DABBIR — '+tr('مشغّل أعمالك الذكي');
-    nodes.forEach(({node,original})=>node.textContent=tr(original));
+    nodes.forEach(({node,original,raw})=>node.textContent=raw.replace(original,tr(original)));
     attrs.forEach(({node,original})=>node.setAttribute('aria-label',tr(original)));
     document.querySelector('#trialAr').setAttribute('aria-pressed',String(next==='ar'));
     document.querySelector('#trialEn').setAttribute('aria-pressed',String(next==='en'));

@@ -511,10 +511,49 @@ async function runJourney() {
   });
 
   const business = await step('06_create_isolated_business', async () => {
-    const result = await ownerSession.request('/api/dabbir-runtime-fast', {
+    let result;
+    if(process.env.DABBIR_INTERNAL_VISUAL_QA==='1' && REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
+      const {webkit}=await import('playwright');
+      const setupBrowser=await webkit.launch({headless:true});
+      fs.mkdirSync('dabbir-internal-visual',{recursive:true});
+      try{
+        for(const language of ['ar','en']){
+          const context=await setupBrowser.newContext({viewport:{width:400,height:860},isMobile:Boolean(1),hasTouch:Boolean(1)});
+          try{
+            const setup=await context.newPage();
+            await setup.goto(ORIGIN,{waitUntil:'domcontentloaded'});
+            await setup.locator('#authGate:not(.hidden)').waitFor();
+            await setup.locator(language==='ar'?'#authAr':'#authEn').click();
+            await setup.locator('#authEmail').fill(owner.email);
+            await setup.locator('#authPassword').fill(owner.password);
+            await setup.locator('#authSubmit').click();
+            await setup.locator('#onboardingGate:not(.hidden)').waitFor({timeout:25000});
+            for(const [name,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
+              await setup.setViewportSize({width,height});
+              await setup.screenshot({path:`dabbir-internal-visual/${name}-${language}-onboarding.png`,timeout:15000});
+            }
+            if(language==='en'){
+              await setup.locator('#businessName').fill(RUN_LABEL);
+              await setup.locator('#businessType').selectOption('store');
+              const responsePromise=setup.waitForResponse(r=>r.url().includes('/api/dabbir-runtime')&&r.request().method()==='POST'&&r.request().postData()?.includes('create_business'),{timeout:25000});
+              await setup.locator('#setupSubmit').click();
+              const response=await responsePromise;
+              const json=await response.json();
+              result={ok:response.ok(),status:response.status(),json,text:JSON.stringify(json)};
+              // Capture the created tenant id immediately so the established cleanup can remove it even if rendering fails.
+              if(json.business_id)businessId=json.business_id;
+              await setup.locator('#appShell:not(.hidden)').waitFor({timeout:25000});
+              await setup.screenshot({path:'dabbir-internal-visual/onboarding-first-workspace.png',timeout:15000});
+            }
+          }finally{await context.close()}
+        }
+      }finally{await setupBrowser.close()}
+    }else{
+    result = await ownerSession.request('/api/dabbir-runtime-fast', {
       method: 'POST',
       body: { action: 'create_business', name: RUN_LABEL, business_type: 'store', locale: 'ar-AE' },
     });
+    }
     assert(result.ok && result.json?.business_id, `BUSINESS_CREATE_FAILED_${result.status}:${small(result.text)}`);
     businessId = result.json.business_id;
     const verify = await runtime(ownerSession, businessId, null, true);
