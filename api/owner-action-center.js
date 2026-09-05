@@ -1,4 +1,5 @@
 import { singleQueryValue } from './_request-query.js';
+import { exactCount } from './_exact-count.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -105,11 +106,10 @@ export default async function handler(req,res){
     const in2h=now+2*60*60*1000;
     const dayStart=marketDayStartIso(now,market);
 
-    const handledLookup=rest(
-      context.token,
+    const handledLookup=supabaseRest(
       `dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${dayStart}&order=completed_at.desc&limit=20`,
-      'VERIFIED_OUTCOMES_LOOKUP_FAILED'
-    ).then(rows=>({available:true,rows:Array.isArray(rows)?rows:[]}))
+      context.token,{headers:{Prefer:'count=exact'}}
+    ).then(async response=>{const count=exactCount(response);const rows=await readData(response,'VERIFIED_OUTCOMES_LOOKUP_FAILED');return {available:count!==null,count,rows:Array.isArray(rows)?rows:[]}})
       .catch(error=>({available:false,rows:[],status:Number(error?.status||0)||null}));
 
     const [conversations,handoffs,followups,appointments,products,inventory,orders,channels,customers,handledResult]=await Promise.all([
@@ -162,7 +162,8 @@ export default async function handler(req,res){
 
     for(const product of products||[]){
       if(product.active===false)continue;
-      const stock=stockByProduct.get(product.id)||{quantity:0,reserved:0};
+      const stock=stockByProduct.get(product.id);
+      if(!stock)continue;
       const available=Math.max(0,number(stock.quantity)-number(stock.reserved));
       if(available>5)continue;
       addItem(items,{id:`stock:${product.id}`,type:'inventory',priority:available===0?86:64,severity:available===0?'critical':'warning',title_ar:available===0?`نفد المخزون: ${product.name}`:`مخزون منخفض: ${product.name}`,title_en:available===0?`Out of stock: ${product.name}`:`Low stock: ${product.name}`,detail_ar:`المتاح حاليًا ${available} من ${number(stock.quantity)}.`,detail_en:`Available now: ${available} of ${number(stock.quantity)}.`,target:'operations',entity_id:product.id,due_at:stock.updated_at||null});
@@ -195,7 +196,7 @@ export default async function handler(req,res){
       const label=handledLabel(row.operation_type);
       return {operation_type:row.operation_type,title_ar:label.ar,title_en:label.en,completed_at:row.completed_at};
     });
-    const handledCount=handledRows.length;
+    const handledCount=handledResult.count;
     const handledPrefixAr=handledResult.available&&handledCount>0?`دَبِّر أنجز ${handledCount} إجراءً موثقًا تلقائيًا اليوم. `:'';
     const handledPrefixEn=handledResult.available&&handledCount>0?`DABBIR completed ${handledCount} verified autonomous ${handledCount===1?'action':'actions'} today. `:'';
     const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.');
@@ -212,7 +213,7 @@ export default async function handler(req,res){
       timezone:market.timezone,
       status:urgent>0?'needs_attention':warning>0?'watch':'clear',
       metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
-      handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
+      handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[],scope:'business',business_id:businessId,timezone:business.timezone,period_start:dayStart},
       brief:{ar:briefAr,en:briefEn},
       items:items.slice(0,12),
       truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,market_contract:'verified_country_currency_timezone',money_source:'currency_snapshotted_generic_amounts',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},

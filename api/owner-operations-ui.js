@@ -102,7 +102,7 @@ const script=String.raw`(()=>{
     editingProductId=null;productBusiness=workspace?.business?.id;productBranch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'';
     q('#opsProductForm')?.reset();
     applyCopy();
-    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true},'');q('#opsName')?.focus();
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true,dabbirRecord:null},'');q('#opsName')?.focus();
   }
 
   function openEditProduct(product){
@@ -112,7 +112,7 @@ const script=String.raw`(()=>{
     q('#opsPrice').value=Number(product.price_aed||0).toFixed(2).replace(/\.00$/,'');
     q('#opsQty').value=Number(product.quantity||0);
     applyCopy();
-    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');if(!history.state?.dabbirProductDetail)history.pushState({...history.state,dabbirProductDetail:true},'');q('#opsName')?.focus();
+    productReturnFocus=document.activeElement;q('#opsProductModal')?.classList.add('open');const entry={...history.state,dabbirProductDetail:true,dabbirRecord:{type:'inventory',id:product.id,businessId:productBusiness,branch:productBranch}};if(!history.state?.dabbirProductDetail)history.pushState(entry,'');else history.replaceState(entry,'');q('#opsName')?.focus();
   }
 
   function closeProductModal(discardHistory=false){
@@ -121,7 +121,7 @@ const script=String.raw`(()=>{
     q('#opsProductModal')?.classList.remove('open');
     q('#opsProductForm')?.reset();
     editingProductId=null;
-    applyCopy();productReturnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirProductDetail;history.replaceState(state,'')}else history.back()}
+    applyCopy();productReturnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirProductDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}
   }
 
   function applyCopy(){
@@ -285,7 +285,7 @@ const script=String.raw`(()=>{
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&q('#opsProductModal')?.classList.contains('open')){e.preventDefault();closeProductModal()}});
   let orderEpoch=0,orderScope='',orderReturnFocus=null;
   const scopeKey=()=> (workspace?.business?.id||'')+'|'+(workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'');
-  function closeOrder(discard=false){orderEpoch++;q('#opsOrderDetail')?.remove();orderReturnFocus?.focus?.();if(history.state?.dabbirOrderDetail){if(discard){const state={...history.state};delete state.dabbirOrderDetail;history.replaceState(state,'')}else history.back()}}
+  function closeOrder(discard=false){orderEpoch++;q('#opsOrderDetail')?.remove();orderReturnFocus?.focus?.();if(history.state?.dabbirOrderDetail){if(discard){const state={...history.state};delete state.dabbirOrderDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}}
   async function openOrderRecord(id){
     syncScope();const captured=scopeKey(),capturedBusiness=workspace?.business?.id,branch=workspace?.branch_scope?.branch_id||workspace?.branch_scope?.mode||'all',epoch=++orderEpoch;if(!capturedBusiness||!isStore())return;
     try{
@@ -302,7 +302,7 @@ const script=String.raw`(()=>{
       const select=document.createElement('select');select.className='opsOrderSelect';select.setAttribute('aria-label',text().status);select.innerHTML=statusOptions(order.status);select.disabled=!result.can_operate;box.append(select);
       const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent=ar()?'رجوع':'Back';back.onclick=()=>closeOrder();box.append(back);
       if(result.can_operate){const save=document.createElement('button');save.type='button';save.className='primary';save.textContent=text().save;box.append(save);save.onclick=async()=>{if(scopeKey()!==captured){closeOrder(true);return}save.disabled=true;try{await request({method:'POST',body:JSON.stringify({action:'update_order_status',business_id:capturedBusiness,branch_id:branch,order_id:id,status:select.value})},capturedBusiness);if(scopeKey()!==captured||epoch!==orderEpoch)return;await openOrderRecord(id);await load(true)}catch{if(scopeKey()===captured&&epoch===orderEpoch){notify(text().failed);save.disabled=false}}}}
-      overlay.append(box);document.body.append(overlay);if(!history.state?.dabbirOrderDetail)history.pushState({...history.state,dabbirOrderDetail:true},'');back.focus();
+      overlay.append(box);document.body.append(overlay);const entry={...history.state,dabbirOrderDetail:true,dabbirRecord:{type:'order',id,businessId:capturedBusiness,branch:captured.split('|')[1]}};if(!history.state?.dabbirOrderDetail)history.pushState(entry,'');else history.replaceState(entry,'');back.focus();
     }catch{if(epoch===orderEpoch&&scopeKey()===captured)notify(text().failed)}
   }
   window.addEventListener('popstate',()=>{if(q('#opsOrderDetail'))closeOrder()});

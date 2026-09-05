@@ -1,3 +1,4 @@
+import { createRecordResume } from './_record-resume.js';
 export const activityExperienceUi=String.raw`(()=>{
   if(window.__dabbirActivityExperienceUi||!document.head)return;
   const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
@@ -5,6 +6,7 @@ export const activityExperienceUi=String.raw`(()=>{
   const language=()=>document.documentElement.lang==='en'?'en':'ar';
   const text=(ar,en)=>language()==='ar'?ar:en;
   const registry=window.__dabbirActivityExperience;
+  const resumeRecord=(${createRecordResume.toString()})(history.state?.dabbirRecord);
   let business=null,branch=null,signature='',activeRecord=null;
   const style=document.createElement('style');
   style.textContent='.daeHidden{display:none!important}.daeDashboard{order:1;display:grid;gap:12px;margin-bottom:12px}.daeDashboard h2{margin:0;font-size:18px}.daeDashboard p{font-size:14px;color:var(--muted);line-height:1.6}.daeActions{display:flex;gap:8px;flex-wrap:wrap}.daeActions button,.daeRow{min-height:48px;font-size:14px}.daeRow{width:100%;display:flex;justify-content:space-between;gap:12px;text-align:start;padding:12px;margin-top:8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:inherit}.daeRow span{display:block;font-size:13px;color:var(--muted);margin-top:4px}.daeGroupTitle{grid-column:1/-1;margin:12px 0 4px;font-size:16px}.daeSettings{margin-top:16px}.daeBack{margin-bottom:12px}.daeDetail{position:fixed;inset:0;z-index:200;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px}.daeDetail .modalBox{max-height:85dvh;overflow:auto;width:min(540px,100%);font-size:16px}.daeDetail button{min-height:44px}.daeDetail p{overflow-wrap:anywhere}.daeOwner #dashCards,.daeOwner #screen-dashboard>.todayGrid,.daeOwner #doMetrics{display:none!important}.daeOwner #screen-dashboard>.hero{order:0}.daeOwner #dabbirActionCenter{order:2}.daeOwner #dabbirOperatorSummary{order:4}.daeOwner #setupCard{display:none!important}.daeOwner #dabbirActivation{order:5}.daeOwner #salonToday{order:3}.daeOwner .daeDashboard{order:1}.daeOwner #screen-dashboard.active{display:flex;flex-direction:column}#bottomNav{grid-template-columns:repeat(var(--dae-primary-count,5),minmax(0,1fr))!important}#bottomNav [hidden],#nav [hidden]{display:none!important}@media(max-width:700px){.daeDashboard h2{font-size:17px}.daeActions button{flex:1 1 42%}.daeDetail{align-items:flex-end;padding:0}.daeDetail .modalBox{width:100%;max-height:85dvh;border-radius:20px 20px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom))}.daeRow{min-width:0}.daeRow b{overflow-wrap:anywhere}}';
@@ -33,6 +35,12 @@ export const activityExperienceUi=String.raw`(()=>{
   function refresh(){
     const w=ws();if(!w?.business?.id)return;
     const m=registry.model(w,language());
+    resumeRecord({businessId:w.business.id,branch:w.branch_scope?.branch_id||w.branch_scope?.mode||''},{
+      appointment:m.allowed('appointments')?window.__dabbirAppointmentManagement?.openRecord:null,
+      order:m.allowed('operations')?window.__dabbirOwnerOperations?.openOrderRecord:null,
+      inventory:m.allowed('operations')?window.__dabbirOwnerOperations?.openProductRecord:null,
+      task:m.allowed('tasks')?window.__dabbirTaskRecord?.openRecord:null
+    });
     const nextBranch=w.branch_scope?.branch_id||w.branch_scope?.mode||'';
     if(business!==w.business.id||branch!==nextBranch){business=w.business.id;branch=nextBranch;signature='';closeDetail();q('#doReceipt')?.replaceChildren();const command=q('#doCommandInput');if(command)command.value='';}
     document.body.classList.toggle('daeOwner',m.owner);

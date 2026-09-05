@@ -138,9 +138,9 @@ const script=String.raw`(()=>{
     q('#dabbirApptEditForm').onsubmit=readOnly?e=>e.preventDefault():saveEdit;
     if(readOnly){modal.querySelectorAll('input,select,button[type="submit"]').forEach(n=>n.disabled=true)}
     modal.onclick=e=>{if(e.target===modal)closeModal()};
-    modal.classList.add('open');history.pushState({...history.state,dabbirAppointmentDetail:true},'');setTimeout(()=>q('#dabbirApptEditModal button:not(:disabled)')?.focus(),0);
+    modal.classList.add('open');const entry={...history.state,dabbirAppointmentDetail:true,dabbirRecord:{type:'appointment',id,businessId:editingBusiness,branch:editingBranch}};if(history.state?.dabbirAppointmentDetail)history.replaceState(entry,'');else history.pushState(entry,'');setTimeout(()=>q('#dabbirApptEditModal button:not(:disabled)')?.focus(),0);
   }
-  function closeModal(discardHistory=false){const ownsEntry=history.state?.dabbirAppointmentDetail;openEpoch++;const modal=q('#dabbirApptEditModal');modal?.classList.remove('open');editingId=null;editingBusiness=null;returnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirAppointmentDetail;history.replaceState(state,'')}else history.back()}}
+  function closeModal(discardHistory=false){const ownsEntry=history.state?.dabbirAppointmentDetail;openEpoch++;const modal=q('#dabbirApptEditModal');modal?.classList.remove('open');editingId=null;editingBusiness=null;returnFocus?.focus?.();if(ownsEntry){if(discardHistory===true){const state={...history.state};delete state.dabbirAppointmentDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}}
   async function request(body){
     const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
     const data=await response.json().catch(()=>({}));return {response,data};

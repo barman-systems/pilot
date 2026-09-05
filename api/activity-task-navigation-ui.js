@@ -19,7 +19,7 @@ const script=String.raw`(()=>{
   const label=(ar,en)=>document.documentElement.lang==='en'?en:ar;
   function closeTask(discard=false){
     detailEpoch++;q('#dabbirTaskDetail')?.remove();returnFocus?.focus?.();
-    if(history.state?.dabbirTaskDetail){if(discard){const state={...history.state};delete state.dabbirTaskDetail;history.replaceState(state,'')}else history.back()}
+    if(history.state?.dabbirTaskDetail){if(discard){const state={...history.state};delete state.dabbirTaskDetail;delete state.dabbirRecord;history.replaceState(state,'')}else history.back()}
   }
   async function openTask(card){
     const id=card?.dataset?.taskRecord;if(!id)return;
@@ -46,10 +46,11 @@ const script=String.raw`(()=>{
         if(scope()!==captured){closeTask(true);return}save.disabled=true;
         try{const response=await fetch('/api/activity-tasks',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({business_id:business,task_id:id,status:task.status==='done'?'pending':'done'})});const result=await response.json();if(scope()!==captured||epoch!==detailEpoch)return;if(!response.ok||!result.ok)throw Error();await openTask(card);await window.__dabbirActivityProfile?.refresh?.()}catch{if(scope()===captured&&epoch===detailEpoch){status.textContent=label('تعذر حفظ التغيير. حاول مجددًا.','Could not save. Try again.');save.disabled=false}}
       }}
-      box.append(actions);overlay.append(box);document.body.append(overlay);if(!history.state?.dabbirTaskDetail)history.pushState({...history.state,dabbirTaskDetail:true},'');back.focus();
+      box.append(actions);overlay.append(box);document.body.append(overlay);const entry={...history.state,dabbirTaskDetail:true,dabbirRecord:{type:'task',id,businessId:business,branch:captured.split('|')[1]}};if(!history.state?.dabbirTaskDetail)history.pushState(entry,'');else history.replaceState(entry,'');back.focus();
     }catch(error){if(epoch===detailEpoch&&scope()===captured&&typeof toast==='function')toast(error.message)}
   }
   window.addEventListener('popstate',()=>{if(q('#dabbirTaskDetail'))closeTask()});
+  window.__dabbirTaskRecord={openRecord:id=>openTask({dataset:{taskRecord:id}})};
   document.addEventListener('keydown',e=>{const modal=q('#dabbirTaskDetail');if(!modal)return;if(e.key==='Escape'){e.preventDefault();closeTask()}if(e.key==='Tab'){const nodes=[...modal.querySelectorAll('button:not(:disabled)')],first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}}});
   window.__dabbirUiLifecycle?.on?.('afterRender','task-detail-scope',()=>{if(q('#dabbirTaskDetail')&&scope()!==detailScope)closeTask(true)});
 
