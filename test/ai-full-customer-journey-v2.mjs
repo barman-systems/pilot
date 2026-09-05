@@ -421,12 +421,34 @@ async function browserJourney() {
             if (!(await nav.count())) { entry.status = 'UNAVAILABLE'; visual.cases.push(entry); continue; }
             await nav.click({ timeout: 10000 });
             await page.locator(`#screen-${screen}.active`).waitFor({ state: 'visible', timeout: 10000 });
+            await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
             await page.waitForTimeout(350);
             entry.overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
             entry.file = `${device}-${language}-${screen}.png`;
             await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
             entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
             visual.cases.push(entry);
+            if(screen==='customers'&&await page.locator('[data-crm-customer]').count()){
+              await page.locator('[data-crm-customer]').first().click();
+              await page.locator('#crmDetailModal.open').waitFor();
+              await page.screenshot({path:`${dir}/${device}-${language}-customer-detail.png`,timeout:15000});
+              await page.locator('#crmDetailClose').click();
+            }
+            if(screen==='operations'){
+              await page.locator('#opsAddProduct').click();
+              await page.locator('#opsProductModal.open').waitFor();
+              await page.screenshot({path:`${dir}/${device}-${language}-product-dialog.png`,timeout:15000});
+              await page.locator('#opsProductCancel').click();
+            }
+            if(screen==='settings'){
+              for(const id of ['dabbirBillingCard','dkSave']){
+                const target=page.locator('#'+id);
+                if(await target.count()){
+                  await target.scrollIntoViewIfNeeded();
+                  await page.screenshot({path:`${dir}/${device}-${language}-${id}.png`,timeout:15000});
+                }
+              }
+            }
           }
         }
       }
