@@ -546,7 +546,7 @@ async function runJourney() {
             if(language==='en'){
               await setup.locator('#businessName').fill(RUN_LABEL);
               await setup.locator('#businessType').selectOption('store');
-              const responsePromise=setup.waitForResponse(r=>r.url().includes('/api/dabbir-runtime')&&r.request().method()==='POST'&&r.request().postData()?.includes('create_business'),{timeout:25000});
+              const responsePromise=setup.waitForResponse(r=>['/api/dabbir-runtime','/api/gcc-create-business'].includes(new URL(r.url()).pathname)&&r.request().method()==='POST'&&r.request().postData()?.includes('create_business'),{timeout:25000});
               await setup.locator('#setupSubmit').click();
               const response=await responsePromise;
               const json=await response.json();
