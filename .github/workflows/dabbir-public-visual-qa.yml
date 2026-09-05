@@ -19,7 +19,7 @@ permissions:
   contents: read
 jobs:
   public-visual:
-    if: github.event_name == 'push' || github.head_ref == 'fix/visual-ux-polish-20260905'
+    if: github.event_name == 'push' || github.head_ref == 'ux-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:
@@ -36,7 +36,7 @@ jobs:
       - name: Verify exact release and public journeys at five viewports
         env:
           QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          QA_URL: ${{ github.event_name == 'push' && 'https://dabbir.bmalman.com' || 'https://dabbir-git-fix-visual-ux-polis-31211b-nd56cm4j5v-3619s-projects.vercel.app' }}
+          QA_URL: ${{ github.event_name == 'push' && 'https://dabbir.bmalman.com' || 'https://dabbir-git-ux-polish-nd56cm4j5v-3619s-projects.vercel.app' }}
         run: node test/dabbir-public-visual-qa.mjs
       - uses: actions/upload-artifact@v4
         if: always()

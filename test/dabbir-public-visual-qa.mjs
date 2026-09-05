@@ -40,20 +40,21 @@ for(const [name,width,height] of devices){
    await page.locator('#demoFirstCta').click();
    await page.locator('#demoForm').waitFor();
    await noOverflow();
-   assert.match(await page.locator('h1').innerText(),/أعمال نشاطك/);
+   assert.equal(await page.locator('html').getAttribute('lang'),lang);
+   assert.match(await page.locator('h1').innerText(),lang==='ar'?/أعمال نشاطك/:/Your business moves forward/);
    await page.screenshot({path:`public-visual-evidence/${name}-${lang}-trial.png`,fullPage:true});
-   // The trial UI remains Arabic; both Arabic and English customer requests are supported.
+   // Verify translated UI and requests in both languages.
    await page.locator('#demoMessage').fill(lang==='ar'?'أحتاج تلميع لسيارة دفع رباعي في دبي مارينا بكرة الساعة 11 am':'premium polish SUV Dubai Marina tomorrow 11 am');
    await page.locator('#runDemo').click();
    await page.locator('#receipt.visible').waitFor({timeout:20000});
-   assert.match(await page.locator('#truthEvidence').innerText(),/لم تُرسل رسالة واتساب ولم يُحصّل مبلغ/);
+   assert.match(await page.locator('#truthEvidence').innerText(),lang==='ar'?/لم تُرسل رسالة واتساب ولم يُحصّل مبلغ/:/No WhatsApp message was sent and no payment was collected/);
    await page.locator('.executionDetails summary').click();
    assert.ok(await page.locator('.executionDetails').getAttribute('open')!==null);
    await noOverflow();
    await page.screenshot({path:`public-visual-evidence/${name}-${lang}-receipt.png`,fullPage:true});
    await page.locator('#resetDemo').click();
    assert.equal(await page.locator('#receipt').isVisible(),false);
-   await page.locator('#demoMessage').fill('مرحبا');
+   await page.locator('#demoMessage').fill(lang==='ar'?'مرحبا':'Hello');
    await page.locator('#runDemo').click();
    await page.waitForFunction(()=>document.querySelector('#runDemo').disabled===false&&document.querySelector('#demoStatus').textContent.length>0);
    assert.equal(await page.locator('#receipt').isVisible(),false);

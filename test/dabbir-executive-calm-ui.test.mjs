@@ -22,7 +22,7 @@ test('owner UI exposes the single Executive Calm visual authority',()=>{
   assert.equal(headers['x-dabbir-ui-authority'],'owner-first-v4');
   assert.equal(headers['x-dabbir-design-system'],'executive-calm-v1');
   assert.match(body,/dataset\.dabbirDesignSystem='executive-calm-v1'/);
-  assert.match(body,/--ds-brand:#536dfe/);
+  assert.match(body,/--ds-brand:#4961e8/);
   assert.match(body,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
   assert.match(body,/\.dabbirCopilot\{/);
   assert.match(body,/reorderDashboard\(\)/);
