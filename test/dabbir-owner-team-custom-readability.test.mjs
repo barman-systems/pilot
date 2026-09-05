@@ -12,7 +12,9 @@ test('existing owner delegates can edit exact custom granular permission sets',(
   assert.match(team,/data-gperm/);
   assert.match(team,/function selectedPerms\(/);
   assert.match(team,/roleCode==='CUSTOM'/);
-  assert.match(team,/granular_permissions:selectedPerms\(editor,prefix\)/);
+  assert.match(team,/role==='CUSTOM'&&!granular\.length/);
+  assert.match(team,/اختر صلاحية واحدة على الأقل للدور المخصص/);
+  assert.match(team,/granular_permissions:granular/);
   assert.match(team,/updateRolePermissions\(card,prefix,sel\.value,\[\]\)/);
   assert.doesNotMatch(team,/استخدم قالبًا محددًا لحفظ الصلاحيات الحالية/);
 });
