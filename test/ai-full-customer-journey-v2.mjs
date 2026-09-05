@@ -428,6 +428,17 @@ async function browserJourney() {
             await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
             entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
             visual.cases.push(entry);
+            if(['dashboard','settings'].includes(screen)&&['iphone','desktop'].includes(device)){
+              // Text-only 200% enlargement, separate from physical Safari/Dynamic Type.
+              await page.evaluate(()=>{
+                const nodes=[...document.querySelectorAll('#appShell *')].filter(el=>el.getClientRects().length);
+                const sizes=nodes.map(el=>parseFloat(getComputedStyle(el).fontSize)*2);
+                nodes.forEach((el,i)=>{el.dataset.qaOldStyle=el.getAttribute('style')??'__absent__';el.style.setProperty('font-size',sizes[i]+'px','important')});
+              });
+              entry.text200={method:'computed text sizes doubled; not physical Dynamic Type',overflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)};
+              await page.screenshot({path:`${dir}/${device}-${language}-${screen}-text200.png`,timeout:15000});
+              await page.evaluate(()=>document.querySelectorAll('[data-qa-old-style]').forEach(el=>{const old=el.dataset.qaOldStyle;delete el.dataset.qaOldStyle;if(old==='__absent__')el.removeAttribute('style');else el.setAttribute('style',old)}));
+            }
             if(screen==='customers'&&await page.locator('[data-crm-customer]').count()){
               await page.locator('[data-crm-customer]').first().click();
               await page.locator('#crmDetailModal.open').waitFor();
