@@ -14,6 +14,7 @@ export const GATEWAY_FALLBACK_MODELS=(process.env.DABBIR_AI_GATEWAY_FALLBACK_MOD
 export const MODEL_TIMEOUT_MS=Math.min(60000,Math.max(15000,Math.trunc(Number(process.env.DABBIR_AI_MODEL_TIMEOUT_MS)||45000)));
 export const DIRECT_GEMINI_MODEL=process.env.DABBIR_GEMINI_MODEL||'gemini-3.7-flash';
 export const DIRECT_GROQ_MODEL=process.env.DABBIR_GROQ_MODEL||'openai/gpt-oss-20b';
+export const DIRECT_CLOUDFLARE_MODEL=process.env.DABBIR_CLOUDFLARE_MODEL||'@cf/zai-org/glm-4.7-flash';
 const hash=v=>createHash('sha256').update(String(v)).digest('hex');
 const clean=(v,n=800)=>String(v??'').trim().slice(0,n);
 const compactUserSummary=value=>{let s=String(value??'').replace(/\*\*|__|\x60|#{1,6}\s*/g,'').replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi,'').replace(/\((?:[^()]*(?:completed|confirmed|in_progress|requested|pending)[^()]*)\)/gi,'').replace(/\s+/g,' ').trim();if(!s)return '';const parts=s.match(/[^.!؟]+[.!؟]?/g)||[s];s=parts.slice(0,2).join(' ').trim();if(s.length>220){const cut=s.slice(0,220),stop=Math.max(cut.lastIndexOf('،'),cut.lastIndexOf(','),cut.lastIndexOf('.'),cut.lastIndexOf('؟'));s=(stop>90?cut.slice(0,stop):cut).trim()+'…'}return s};
@@ -143,6 +144,11 @@ export function operatorModelCandidates(env=process.env){
   if(env.GROQ_API_KEY){
     const provider=createOpenAICompatible({name:'dabbirGroq',baseURL:'https://api.groq.com/openai/v1',apiKey:env.GROQ_API_KEY});
     candidates.push({name:'groq-direct',modelId:env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL,model:provider.chatModel(env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL)});
+  }
+  if(env.CLOUDFLARE_API_TOKEN&&env.CLOUDFLARE_ACCOUNT_ID){
+    const modelId=env.DABBIR_CLOUDFLARE_MODEL||DIRECT_CLOUDFLARE_MODEL;
+    const provider=createOpenAICompatible({name:'dabbirCloudflareWorkersAi',baseURL:`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID))}/ai/v1`,apiKey:env.CLOUDFLARE_API_TOKEN});
+    candidates.push({name:'cloudflare-workers-ai',modelId,model:provider.chatModel(modelId)});
   }
   candidates.push({name:'vercel-gateway',modelId:PAID_OPERATOR_MODEL,model:PAID_OPERATOR_MODEL,providerOptions:{gateway:{disallowPromptTraining:true,models:GATEWAY_FALLBACK_MODELS}}});
   return candidates;

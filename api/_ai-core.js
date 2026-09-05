@@ -3,6 +3,8 @@ const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
+const DEFAULT_CLOUDFLARE_MODEL = '@cf/zai-org/glm-4.7-flash';
+const cloudflareEndpoint = env => `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID || ''))}/ai/v1/chat/completions`;
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
@@ -27,6 +29,17 @@ export function getDABBIRAiConfig(env = process.env) {
       configured: true,
       auth_mode: 'API_KEY',
       cost_mode: 'FREE_TIER_ONLY',
+    };
+  }
+
+  if (env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID) {
+    return {
+      provider: 'cloudflare-workers-ai',
+      endpoint: cloudflareEndpoint(env),
+      model: String(env.DABBIR_CLOUDFLARE_MODEL || DEFAULT_CLOUDFLARE_MODEL),
+      configured: true,
+      auth_mode: 'API_TOKEN',
+      cost_mode: 'FREE_TIER_FIRST',
     };
   }
 
@@ -240,6 +253,9 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   const config = getDABBIRAiConfig(env);
   const geminiKey = String(env.GEMINI_API_KEY || '');
   const groqKey = String(env.GROQ_API_KEY || '');
+  const cloudflareToken = String(env.CLOUDFLARE_API_TOKEN || '');
+  const cloudflareAccountId = String(env.CLOUDFLARE_ACCOUNT_ID || '');
+  const cloudflareReady = Boolean(cloudflareToken && cloudflareAccountId);
   const messages = [
     { role: 'system', content: systemPrompt(normalizedProject, language, businessContext) },
     ...normalizeHistory(history),
@@ -266,7 +282,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         });
       }
 
-      if (groqKey || env.VERCEL_ENV) {
+      if (groqKey || cloudflareReady || env.VERCEL_ENV) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({
           project: normalizedProject,
@@ -290,7 +306,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         cost_mode: config.cost_mode,
       };
     } catch (error) {
-      if (groqKey || env.VERCEL_ENV) {
+      if (groqKey || cloudflareReady || env.VERCEL_ENV) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({
           project: normalizedProject,
@@ -316,10 +332,45 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     }
   }
 
-  if (!groqKey && env.VERCEL_ENV) {
+  if (groqKey) {
+    try {
+      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
+      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
+      if (cloudflareReady || env.VERCEL_ENV) {
+        const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+      }
+      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+    } catch (error) {
+      if (cloudflareReady || env.VERCEL_ENV) {
+        const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+      }
+      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+    }
+  }
+
+  if (cloudflareReady) {
+    try {
+      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
+      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
+      if (env.VERCEL_ENV) {
+        const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+      }
+      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `cloudflare_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+    } catch (error) {
+      if (env.VERCEL_ENV) {
+        const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+      }
+      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'cloudflare_timeout' : 'cloudflare_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+    }
+  }
+
+  if (env.VERCEL_ENV) {
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
-
     const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
     if (!result.ok) {
       return {
@@ -335,13 +386,5 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     return finalizeReply({ reply: String(result.payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, authMode: gatewayAuth.auth_mode, model: result.model });
   }
 
-  if (!groqKey) return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
-
-  try {
-    const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
-    if (!response.ok) return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
-    return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
-  } catch (error) {
-    return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
-  }
+  return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
 }
