@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080a0b">
+<meta name="theme-color" content="#07111f">
 <meta name="description" content="جرّب كيف يحوّل DABBIR استفسار غسيل سيارات متنقل إلى حجز واضح قابل للمراجعة قبل إنشاء حساب.">
 <title>DABBIR — حوّل طلبات WhatsApp إلى حجوزات غسيل مؤكدة</title>
 <style>
@@ -30,7 +30,7 @@
     <p>دبّر يفهم طلب العميل، يفحص المواعيد ويعيّن الفريق. أنت تتابع النتائج وتتدخل عند الحاجة.</p>
     <div class="promise"><span>من الرسالة إلى الحجز</span><span>منع الحجز المزدوج</span><span>سجل لكل إجراء</span><span>عربي + English</span></div>
   </div>
-  <aside class="priceCard" aria-label="السعر التجريبي">
+  <aside class="priceCard" aria-label="التجربة التوضيحية">
     <h2>جرّب قبل التسجيل</h2>
     <div class="price">بلا بطاقة <small>للتجربة التوضيحية</small></div>
     <ul><li>شاهد كيف يُرتّب طلب العميل</li><li>راجع الموعد والفريق والنتيجة</li><li>لا رسائل أو مدفوعات حقيقية</li></ul><a class="button" href="#demo">جرّب حجزًا الآن</a>
@@ -91,6 +91,7 @@
   const empty=document.querySelector('#receiptEmpty');
   const after=document.querySelector('#afterValue');
   const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const displayName=value=>({premium:'الغسيل والتلميع',essential:'الغسيل الأساسي',suv:'دفع رباعي',saloon:'صالون',dubai_marina:'دبي مارينا',business_bay:'الخليج التجاري',downtown:'وسط مدينة دبي',jvc:'قرية جميرا الدائرية',al_barsha:'البرشاء'}[value]||value);
   const operationId=()=>{try{return 'market_'+crypto.randomUUID()}catch{return 'market_'+Date.now()+'_'+Math.random().toString(16).slice(2)}};
   let currentOperation=operationId();
   const stateLabels={qualified:'فهم الطلب',offered:'حدد السعر والموعد',confirmed:'أكد الحجز',assigned:'عيّن الفريق',reminded:'جهّز التذكير'};
@@ -107,7 +108,7 @@
     document.querySelector('#bookingValue').textContent=r.outcome.booking_value.amount+' '+r.outcome.booking_value.currency;
     document.querySelector('#verifiedRevenue').textContent=r.outcome.verified_revenue.amount+' '+r.outcome.verified_revenue.currency;
     document.querySelector('#responseTime').textContent=new Intl.NumberFormat('ar-AE',{maximumFractionDigits:2}).format(r.response_ms/1000)+' ثانية';
-    document.querySelector('#bookingSummary').innerHTML='<div class="evidence"><b>الحجز:</b> '+esc(b.package)+' · '+esc(b.vehicle)+' · '+esc(b.area)+'<br><b>الفريق:</b> '+esc(b.team)+' · <b>الموعد:</b> '+esc(new Intl.DateTimeFormat('ar-AE',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Dubai'}).format(new Date(b.starts_at)))+'</div>';
+    document.querySelector('#bookingSummary').innerHTML='<div class="evidence"><b>الحجز:</b> '+esc(displayName(b.package))+' · '+esc(displayName(b.vehicle))+' · '+esc(displayName(b.area))+'<br><b>الفريق:</b> '+esc(b.team)+' · <b>الموعد:</b> '+esc(new Intl.DateTimeFormat('ar-AE',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Dubai'}).format(new Date(b.starts_at)))+'</div>';
     document.querySelector('#timeline').innerHTML=r.execution.transitions.map(step=>'<div class="step"><span class="dot"></span><div><b>'+esc(stateLabels[step.to]||step.to)+'</b><small>'+'تمت داخل التجربة'+'</small></div><em>'+(step.external_result==='SANDBOX_DELIVERED'?'إرسال تجريبي':'تم التحقق')+'</em></div>').join('');
     document.querySelector('#truthEvidence').innerHTML='<b>تجربة توضيحية:</b> لم تُرسل رسالة واتساب ولم يُحصّل مبلغ. قيمة الحجز تقديرية وليست إيرادًا.';
     status.textContent='اكتملت التجربة. راجع الحجز والخطوات أدناه.';
