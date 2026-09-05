@@ -1,4 +1,4 @@
--- DABBIR subscription catalog v1.
+-- DABBIR subscription catalog v2.
 -- Server-authoritative commercial contract for DABBIR SaaS billing.
 -- Price IDs are provider references only; no card data or payment credentials are stored here.
 
@@ -35,10 +35,10 @@ insert into public.dabbir_billing_plans(
   plan_code, display_name, amount_minor, currency, interval, trial_days,
   stripe_test_price_id, stripe_live_price_id, active, updated_at
 )
-values(
-  'owner_monthly_v1', 'DABBIR Owner Monthly', 2999, 'AED', 'month', 14,
-  null, null, true, now()
-)
+values
+  ('owner_monthly_v1', 'DABBIR Owner Base', 3999, 'AED', 'month', 14, null, null, true, now()),
+  ('owner_extra_business_v1', 'DABBIR Additional Business', 2999, 'AED', 'month', 0, null, null, true, now()),
+  ('owner_extra_branch_v1', 'DABBIR Additional Branch', 1999, 'AED', 'month', 0, null, null, true, now())
 on conflict (plan_code) do update
 set display_name=excluded.display_name,
     amount_minor=excluded.amount_minor,
@@ -48,9 +48,40 @@ set display_name=excluded.display_name,
     active=excluded.active,
     updated_at=now();
 
+alter table public.dabbir_billing_accounts
+  add column if not exists additional_businesses integer not null default 0,
+  add column if not exists additional_branches integer not null default 0,
+  add column if not exists monthly_amount_minor integer,
+  add column if not exists pricing_snapshot jsonb not null default '{}'::jsonb;
+
+do $body$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname='dabbir_billing_accounts_additional_businesses_check'
+  ) then
+    alter table public.dabbir_billing_accounts
+      add constraint dabbir_billing_accounts_additional_businesses_check check (additional_businesses >= 0);
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname='dabbir_billing_accounts_additional_branches_check'
+  ) then
+    alter table public.dabbir_billing_accounts
+      add constraint dabbir_billing_accounts_additional_branches_check check (additional_branches >= 0);
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname='dabbir_billing_accounts_monthly_amount_minor_check'
+  ) then
+    alter table public.dabbir_billing_accounts
+      add constraint dabbir_billing_accounts_monthly_amount_minor_check check (monthly_amount_minor is null or monthly_amount_minor > 0);
+  end if;
+end
+$body$;
+
 comment on table public.dabbir_billing_plans is
-  'Server-only DABBIR subscription catalog. owner_monthly_v1 is AED 29.99/month with a 14-day trial. Stripe price IDs are configured only after provider-side price verification.';
+  'Server-only DABBIR subscription catalog: AED 39.99 base, AED 29.99 per additional business, AED 19.99 per additional active non-primary branch.';
 comment on column public.dabbir_billing_plans.stripe_test_price_id is
   'Stripe Sandbox recurring Price ID. Null means checkout must fail closed as BILLING_PRICE_NOT_CONFIGURED.';
 comment on column public.dabbir_billing_plans.stripe_live_price_id is
   'Reserved Stripe Live recurring Price ID. Live billing remains disabled until a separate release gate.';
+comment on column public.dabbir_billing_accounts.pricing_snapshot is
+  'Server-verified portfolio pricing quantities mirrored from Stripe subscription items; contains no card data.';
