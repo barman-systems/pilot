@@ -1,0 +1,105 @@
+diff --git a/api/calendar-live-ui.js b/api/calendar-live-ui.js
+index 8b06dd8..60e5375 100644
+--- a/api/calendar-live-ui.js
++++ b/api/calendar-live-ui.js
+@@ -1,3 +1,4 @@
++import { bookingBrowser } from './_booking-lifecycle.js';
+ import activityProfileHandler from './activity-profile-ui.js';
+ import appointmentManagementUiHandler from './appointment-management-ui.js';
+ import salonModeUiHandler from './salon-mode-ui.js';
+@@ -68,7 +69,7 @@ const liveScript=String.raw`(()=>{
+ 
+   function removeCancelledFromActiveCalendar(){
+     enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();
+-    const screen=q('#screen-appointments');if(!screen)return;
++    const screen=q('#screen-appointments');if(!screen||window.__dabbirBookingLifecycle)return;
+     screen.querySelectorAll('.dabbirCalEvent.cancelled').forEach(node=>node.remove());
+     screen.querySelectorAll('.dabbirAgendaEvent').forEach(node=>{
+       const text=String(node.textContent||'').toLowerCase();
+@@ -153,5 +154,5 @@ export default async function handler(req,res){
+   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
+   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
+   res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v13-salon-payment-idempotency');
+-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+paymentCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
++  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body.replace(bookingBrowser+'\n','')+'\n'+salonCaptured.body.replace(bookingBrowser+'\n','')+'\n'+paymentCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+ }
+diff --git a/api/calendar-performance-ui.js b/api/calendar-performance-ui.js
+index 4e5702f..8d3ced8 100644
+--- a/api/calendar-performance-ui.js
++++ b/api/calendar-performance-ui.js
+@@ -2,25 +2,17 @@ import calendarLiveHandler from './calendar-live-ui.js';
+ import {applySalonProductModelPatches} from './salon-product-model-ui-patches.js';
+ 
+ const PATCHES=[
+-  {
+-    name:'activity-profile-business-timezone-day-key',
+-    from:`  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+-    to:`  function businessTimezone(){const b=workspace?.business||{};if(b.timezone)return String(b.timezone);const loc=String(b.locale||'ar-AE').toUpperCase();if(loc.endsWith('-SA'))return 'Asia/Riyadh';if(loc.endsWith('-KW'))return 'Asia/Kuwait';if(loc.endsWith('-QA'))return 'Asia/Qatar';if(loc.endsWith('-BH'))return 'Asia/Bahrain';if(loc.endsWith('-OM'))return 'Asia/Muscat';return 'Asia/Dubai'}\n  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:businessTimezone(),year:'numeric',month:'2-digit',day:'2-digit'}),p=Object.fromEntries(f.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day}catch{return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+-  },
++
+   {
+     name:'activity-profile-business-timezone-clock',
+     from:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
+     to:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:businessTimezone(),hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
+   },
+-  {
+-    name:'activity-profile-hide-cancelled-bookings',
+-    from:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+-    to:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!['cancelled','canceled'].includes(String(a.status||'').toLowerCase())&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+-  },
++
+   {
+     name:'activity-profile-today-metric',
+     from:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
+-    to:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(p.show_appointments){const todayCount=appointments().filter(a=>dayKey(a.starts_at)===dayKey(new Date())).length,todayStrong=cards[1]?.querySelector('strong'),nextToday=String(todayCount);if(todayStrong&&todayStrong.textContent!==nextToday)todayStrong.textContent=nextToday}\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
++    to:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(p.show_appointments){const todayCount=todayAppointments().length,todayStrong=cards[1]?.querySelector('strong'),nextToday=String(todayCount);if(todayStrong&&todayStrong.textContent!==nextToday)todayStrong.textContent=nextToday}\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
+   },
+   {
+     name:'appointment-management-business-timezone',
+diff --git a/api/car-wash-booking-edit-ui.js b/api/car-wash-booking-edit-ui.js
+index d7a3857..af11da0 100644
+--- a/api/car-wash-booking-edit-ui.js
++++ b/api/car-wash-booking-edit-ui.js
+@@ -3,7 +3,7 @@ const script=String.raw`(()=>{
+   window.__dabbirCarWashBookingEditFix=true;
+   const q=s=>document.querySelector(s);
+   const workspaceNow=()=>{try{return typeof workspace!=='undefined'?workspace:window.workspace}catch{return window.workspace||null}};
+-  const isCarWash=()=>String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
++  const isCarWash=()=>!window.__dabbirAppointmentManagement?.supportsHistoricalEdit&&String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
+   const ar=()=>document.documentElement.lang!=='en';
+   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+   const copy=()=>ar()?{title:'تعديل الحجز',customer:'العميل',time:'الموعد',status:'الحالة',save:'حفظ التعديل',cancel:'إلغاء',requested:'مطلوب',confirmed:'مؤكد',rescheduled:'أعيدت جدولته',completed:'مكتمل',cancelled:'ملغي',saved:'تم تعديل الحجز.',savedRefreshFailed:'تم حفظ الحجز، لكن تعذر تحديث عرضه. افتح الحجوزات مجددًا.',failed:'تعذر تعديل الحجز.'}:{title:'Edit booking',customer:'Customer',time:'Booking',status:'Status',save:'Save changes',cancel:'Cancel',requested:'Requested',confirmed:'Confirmed',rescheduled:'Rescheduled',completed:'Completed',cancelled:'Cancelled',saved:'Booking updated.',savedRefreshFailed:'Booking saved, but its display could not be refreshed. Reopen bookings.',failed:'Could not update booking.'};
+diff --git a/api/customer-activation-ui.js b/api/customer-activation-ui.js
+index 04f7824..699c91a 100644
+--- a/api/customer-activation-ui.js
++++ b/api/customer-activation-ui.js
+@@ -277,6 +277,7 @@ const uxFoundation=String.raw`(()=>{
+   }
+   function ensureFilters(){
+     Object.entries(FILTER_TARGETS).forEach(([screen])=>{
++      if(screen==='appointments'&&window.__dabbirBookingLifecycle){q('[data-ux-tools="appointments"]')?.remove();return}
+       if(screen==='customers'&&q('#crmSearch')){q('[data-ux-tools="customers"]')?.remove();return}
+       const host=q('#screen-'+screen);const hero=host?.querySelector('.hero');if(!host||!hero||host.querySelector('[data-ux-tools="'+screen+'"]'))return;
+       const tools=document.createElement('div');tools.className='uxScreenTools';tools.dataset.uxTools=screen;
+diff --git a/api/dabbir-runtime.js b/api/dabbir-runtime.js
+index aedbff1..1af0428 100644
+--- a/api/dabbir-runtime.js
++++ b/api/dabbir-runtime.js
+@@ -221,7 +221,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
+   const [conversations, customers, appointments, handoffs, followups] = await Promise.all([
+     rest(identity.accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&order=updated_at.desc&limit=30`, {}, 'CONVERSATIONS_LOOKUP_FAILED'),
+     rest(identity.accessToken, `dabbir_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'CUSTOMERS_LOOKUP_FAILED'),
+-    rest(identity.accessToken, `dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
++    rest(identity.accessToken, `dabbir_appointments?select=id,business_id,branch_id,worker_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at,updated_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
+     rest(identity.accessToken, `dabbir_handoffs?select=id,conversation_id,customer_id,route_class,reason,state,priority,summary,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'HANDOFFS_LOOKUP_FAILED'),
+     rest(identity.accessToken, `dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,blocked_reason,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'FOLLOWUPS_LOOKUP_FAILED'),
+   ]);
+@@ -497,7 +497,7 @@ async function createAppointment(identity, body) {
+     customerId = requirePersistedRow(customers, 'CUSTOMER_CREATE_UNVERIFIED').id;
+   }
+ 
+-  const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at', {
++  const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,business_id,branch_id,worker_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at,updated_at', {
+     method: 'POST',
+     headers: { prefer: 'return=representation' },
+     body: JSON.stringify({
