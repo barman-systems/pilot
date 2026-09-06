@@ -31,6 +31,7 @@ test('owner OTP mailer uses Resend-key server authentication and binds invitatio
   assert.match(mailer, /x-dabbir-owner-mailer-auth/);
   assert.match(mailer, /OWNER_MAILER_UNAUTHORIZED/);
   assert.match(mailer, /dabbir-owner-otp-mailer-v2/);
+  assert.doesNotMatch(mailer, /dabbir-owner-otp-mailer-v1/);
   assert.match(mailer, /invitation_generation/);
   assert.match(mailer, /identity\.payload\.invitation_generation/);
   assert.match(mailer, /INVITATION_IDENTITY_INVALID/);
@@ -39,6 +40,7 @@ test('owner OTP mailer uses Resend-key server authentication and binds invitatio
   assert.doesNotMatch(mailer, /\/domains/);
   assert.match(auth, /createHash\('sha256'\)/);
   assert.match(auth, /dabbir-owner-otp-mailer-v2/);
+  assert.doesNotMatch(auth, /dabbir-owner-otp-mailer-v1/);
   assert.match(auth, /ownerMailerAuth\(resendKey\)/);
   assert.doesNotMatch(auth, /SUPABASE_SERVICE_ROLE_KEY/);
 });
