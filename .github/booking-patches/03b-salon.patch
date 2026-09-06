@@ -1,0 +1,97 @@
+diff --git a/api/salon-mode-ui.js b/api/salon-mode-ui.js
+index a4fcf7a..41c0fc3 100644
+--- a/api/salon-mode-ui.js
++++ b/api/salon-mode-ui.js
+@@ -57,40 +61,73 @@ const script=String.raw`(()=>{
+ 
+   async function load(force=false){
+     if(!ensure()||loading)return;
+-    if(data&&!force)return;
++    const context=lifecycle.contextKey(workspace),businessId=id();
++    if(data&&dataContext===context&&!force)return;
+     loading=true;q('#salonCalendarHost').innerHTML='<div class="empty">'+esc(text().loading)+'</div>';
+     const from=plus(startDay(cursor),view==='month'?-10:view==='week'?-2:-2),to=plus(startDay(cursor),view==='month'?45:view==='week'?12:3);
+-    try{data=await api('?business_id='+encodeURIComponent(id())+'&resource=snapshot&from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(to.toISOString()));renderAllSalon()}
+-    catch(error){q('#salonCalendarHost').innerHTML='<div class="salonError">'+esc(text().failed+' · '+error.message)+'</div>'}
+-    finally{loading=false}
++    try{const result=await api('?business_id='+encodeURIComponent(businessId)+'&resource=snapshot&from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(to.toISOString()));if(context!==lifecycle.contextKey(workspace))return;data=result;dataContext=context;renderAllSalon()}
++    catch(error){if(context!==lifecycle.contextKey(workspace))return;q('#salonCalendarHost').innerHTML='<div class="salonError">'+esc(text().failed+' · '+error.message)+'</div>'}
++    finally{loading=false;if(isSalon()&&context!==lifecycle.contextKey(workspace))setTimeout(()=>load(false),0)}
+   }
+   function renderAllSalon(){if(!data)return;renderCalendar();renderToday();renderCustomers();renderScreens();}
+-  function rangeTitle(){if(view==='day')return fmt(cursor,{weekday:'long',day:'numeric',month:'long',year:'numeric'});if(view==='week'){const s=startWeek(cursor);return fmt(s,{day:'numeric',month:'short'})+' — '+fmt(plus(s,6),{day:'numeric',month:'short',year:'numeric'})}return fmt(cursor,{month:'long',year:'numeric'})}
+-  function calendarRows(){return (data?.appointments||[]).filter(a=>a.starts_at&&a.status!=='cancelled').sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}
++  function rangeTitle(){const state=lifecycle.getView(workspace);if(state.allDates)return lifecycle.labels(ar()).allDates;cursor=new Date(lifecycle.localTimeToIso(state.day+'T12:00',workspace.business));if(view==='day')return fmt(cursor,{weekday:'long',day:'numeric',month:'long',year:'numeric'});if(view==='week'){const s=startWeek(cursor);return fmt(s,{day:'numeric',month:'short'})+' — '+fmt(plus(s,6),{day:'numeric',month:'short',year:'numeric'})}return fmt(cursor,{month:'long',year:'numeric'})}
++  function calendarRows(){return reader.rows(workspace)}
+   function statusCopy(s){const t=text();return {new:t.statusNew,confirmed:t.statusConfirmed,arrived:t.statusArrived,in_progress:t.statusProgress,completed:t.statusCompleted,cancelled:t.statusCancelled,no_show:t.statusNoShow}[s]||s}
+-  function eventHtml(a){const c=customer(a.customer_id),s=service(a.service_id),duration=Math.max(5,Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)||s?.duration_minutes||60);return '<div class="salonEvent '+esc(a.status)+'" draggable="true" data-salon-appt="'+esc(a.id)+'"><b>'+esc(c?.display_name||text().customer)+'</b><small>'+esc(fmt(a.starts_at,{hour:'numeric',minute:'2-digit'}))+' · '+esc(ar()?(s?.name_ar||s?.name):(s?.name_en||s?.name))+'</small><small>'+esc(duration+' '+text().minutes+' · '+money(Number(a.quoted_price_aed||0)-Number(a.discount_aed||0)))+'</small><div class="salonEventActions"><button type="button" data-resize="-15" aria-label="-15">−</button><button type="button" data-resize="15" aria-label="+15">+</button><button type="button" data-open-appt="'+esc(a.id)+'">•••</button></div></div>'}
++  function eventHtml(a){const c=customer(a.customer_id),s=service(a.service_id),duration=Math.max(5,Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)||s?.duration_minutes||60);return '<div class="salonEvent '+esc(a.status)+'" draggable="'+(!lifecycle.terminal(a))+'" data-salon-appt="'+esc(a.id)+'"><b>'+esc(c?.display_name||text().customer)+'</b><small>'+esc(fmt(a.starts_at,{hour:'numeric',minute:'2-digit'}))+' · '+esc(ar()?(s?.name_ar||s?.name):(s?.name_en||s?.name))+'</small><small>'+esc(duration+' '+text().minutes+' · '+money(Number(a.quoted_price_aed||0)-Number(a.discount_aed||0)))+'</small><div class="salonEventActions">'+(!lifecycle.terminal(a)?'<button type="button" data-resize="-15" aria-label="-15">−</button><button type="button" data-resize="15" aria-label="+15">+</button>':'')+'<button type="button" data-open-appt="'+esc(a.id)+'">•••</button></div></div>'}
+   function bindEvents(){
+     qa('[data-salon-appt]').forEach(el=>{el.ondragstart=e=>{dragAppointment=el.dataset.salonAppt;e.dataTransfer.setData('text/plain',dragAppointment)}});
+     qa('.salonSlot[data-worker][data-time]').forEach(el=>{el.ondragover=e=>{e.preventDefault();el.classList.add('dragover')};el.ondragleave=()=>el.classList.remove('dragover');el.ondrop=e=>{e.preventDefault();el.classList.remove('dragover');moveAppointment(e.dataTransfer.getData('text/plain')||dragAppointment,el.dataset.worker,el.dataset.time)}});
+     qa('[data-open-appt]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openAppointment(btn.dataset.openAppt)});
+-    qa('[data-resize]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const a=btn.closest('[data-salon-appt]'),row=(data.appointments||[]).find(x=>x.id===a.dataset.salonAppt);if(!row)return;const duration=Math.max(15,Math.round((new Date(row.ends_at)-new Date(row.starts_at))/60000)+Number(btn.dataset.resize));updateAppointment({action:'resize',appointment_id:row.id,duration_minutes:duration})});
++    qa('[data-resize]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const a=btn.closest('[data-salon-appt]'),row=appointment(a.dataset.salonAppt);if(!row||lifecycle.terminal(row))return;const duration=Math.max(15,Math.round((new Date(row.ends_at)-new Date(row.starts_at))/60000)+Number(btn.dataset.resize));updateAppointment({action:'resize',appointment_id:row.id,duration_minutes:duration})});
++  }
++  function visibleWorkers(rows){
++    const activeWorkers=(data.workers||[]).filter(w=>w.status==='active');
++    const missing=[...new Set(rows.map(a=>a.worker_id).filter(id=>id&&!activeWorkers.some(w=>w.id===id)))].map(id=>({id,display_name:worker(id)?.display_name||text().employee}));
++    return [...activeWorkers,...missing,...((rows.some(a=>!a.worker_id)||!activeWorkers.length)?[{id:'',display_name:text().unassigned||text().employee,unassigned:true}]:[])];
+   }
+   function dayCalendar(){
+-    const t=text(),workers=(data.workers||[]).filter(w=>w.status==='active'),rows=calendarRows().filter(a=>key(a.starts_at)===key(cursor));
+-    if(!workers.length)return '<div class="empty">'+esc(t.addEmployee)+'</div>';
+-    let html='<div class="salonCalendarScroll"><div class="salonDayGrid" style="grid-template-columns:72px repeat('+workers.length+',minmax(150px,1fr))"><div class="salonCorner">'+esc(t.time)+'</div>'+workers.map(w=>'<div class="salonWorkerHead">'+esc(w.display_name)+'</div>').join('');
+-    for(let h=7;h<=21;h++)for(let m=0;m<60;m+=30){const stamp=new Date(cursor);stamp.setHours(h,m,0,0);const iso=stamp.toISOString();html+='<div class="salonTime">'+esc(fmt(stamp,{hour:'numeric',minute:'2-digit'}))+'</div>';for(const w of workers){const slot=rows.filter(a=>a.worker_id===w.id&&new Date(a.starts_at).getHours()===h&&new Date(a.starts_at).getMinutes()>=m&&new Date(a.starts_at).getMinutes()<m+30);html+='<div class="salonSlot" data-worker="'+esc(w.id)+'" data-time="'+esc(iso)+'">'+slot.map(eventHtml).join('')+'</div>'}}
++    const selected=lifecycle.getView(workspace),rows=calendarRows(),workers=visibleWorkers(rows);
++    let html='<div class="salonCalendarScroll"><div class="salonDayGrid" style="grid-template-columns:72px repeat('+workers.length+',minmax(150px,1fr))"><div class="salonCorner">'+esc(text().time)+'</div>'+workers.map(w=>'<div class="salonWorkerHead">'+esc(w.display_name)+'</div>').join('');
++    const localSlot=a=>key(a.starts_at)<selected.day?'00:00':new Intl.DateTimeFormat('en-GB',{timeZone:lifecycle.timezone(workspace.business),hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(a.starts_at));
++    for(let h=0;h<24;h++)for(let m=0;m<60;m+=30){
++      const clock=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'),iso=lifecycle.localTimeToIso(selected.day+'T'+clock,workspace.business);
++      html+='<div class="salonTime">'+clock+'</div>';
++      for(const w of workers){
++        const items=rows.filter(a=>{const [hour,minute]=localSlot(a).split(':').map(Number);return (w.unassigned?!a.worker_id:a.worker_id===w.id)&&hour===h&&minute>=m&&minute<m+30});
++        const workerAttr=w.unassigned||selected.scope!=='current'?'':' data-worker="'+esc(w.id)+'"';
++        html+='<div class="salonSlot"'+workerAttr+(iso?' data-time="'+esc(iso)+'"':'')+'>'+items.map(eventHtml).join('')+'</div>';
++      }
++    }
++    return html+'</div></div>';
++  }
++  function weekCalendar(){
++    const selected=lifecycle.getView(workspace),start=lifecycle.period(selected).from,rows=calendarRows(),workers=visibleWorkers(rows);let html='<div class="salonCalendarScroll"><div class="salonWeek">';
++    for(let i=0;i<7;i++){
++      const day=lifecycle.addDays(start,i),dayRows=rows.filter(a=>lifecycle.onDay(a,day,workspace.business));
++      html+='<div class="salonWeekDay"><div class="salonWeekHead">'+day+'</div>'+workers.map(w=>'<div class="salonWeekWorker"><span>'+esc(w.display_name)+'</span>'+dayRows.filter(a=>w.unassigned?!a.worker_id:a.worker_id===w.id).map(eventHtml).join('')+'</div>').join('')+'</div>';
++    }
++    return html+'</div></div>';
++  }
++  function monthCalendar(){
++    const selected=lifecycle.getView(workspace),start=lifecycle.period({view:'week',day:selected.day.slice(0,7)+'-01'}).from,rows=calendarRows(),today=key(new Date());let html='<div class="salonCalendarScroll"><div class="salonMonth">';
++    for(let i=0;i<42;i++){
++      const day=lifecycle.addDays(start,i),items=rows.filter(a=>lifecycle.onDay(a,day,workspace.business));
++      html+='<div class="salonMonthDay '+(day===today?'today':'')+'"><div class="salonMonthDate">'+Number(day.slice(-2))+'</div>'+items.map(a=>'<button class="salonMonthEvent" data-open-appt="'+esc(a.id)+'">'+esc(fmt(a.starts_at,{hour:'numeric',minute:'2-digit'})+' · '+(customer(a.customer_id)?.display_name||text().customer))+'</button>').join('')+'</div>';
++    }
+     return html+'</div></div>';
+   }
+-  function weekCalendar(){const start=startWeek(cursor),workers=(data.workers||[]).filter(w=>w.status==='active'),rows=calendarRows();let html='<div class="salonCalendarScroll"><div class="salonWeek">';for(let i=0;i<7;i++){const d=plus(start,i),dayRows=rows.filter(a=>key(a.starts_at)===key(d));html+='<div class="salonWeekDay"><div class="salonWeekHead">'+esc(fmt(d,{weekday:'short',day:'numeric',month:'short'}))+'</div>'+workers.map(w=>'<div class="salonWeekWorker"><span>'+esc(w.display_name)+'</span>'+(dayRows.filter(a=>a.worker_id===w.id).map(eventHtml).join('')||'<div class="salonGap">'+esc(text().availableGap)+'</div>')+'</div>').join('')+'</div>'}return html+'</div></div>'}
+-  function monthCalendar(){const first=new Date(cursor.getFullYear(),cursor.getMonth(),1),start=startWeek(first),rows=calendarRows(),today=key(new Date());let html='<div class="salonCalendarScroll"><div class="salonMonth">';for(let i=0;i<42;i++){const d=plus(start,i),items=rows.filter(a=>key(a.starts_at)===key(d));html+='<div class="salonMonthDay '+(key(d)===today?'today':'')+'"><div class="salonMonthDate">'+esc(String(d.getDate()))+'</div>'+items.slice(0,4).map(a=>'<button class="salonMonthEvent" data-open-appt="'+esc(a.id)+'">'+esc(fmt(a.starts_at,{hour:'numeric',minute:'2-digit'})+' · '+(worker(a.worker_id)?.display_name||''))+'</button>').join('')+(items.length>4?'<small>+'+(items.length-4)+'</small>':'')+'</div>'}return html+'</div></div>'}
++  function historyCalendar(){return calendarRows().map(a=>'<div class="salonRow"><small>'+esc(fmt(a.starts_at)+' · '+statusCopy(a.status))+'</small>'+eventHtml(a)+'</div>').join('')}
+   function renderCalendar(){
+-    const t=text(),host=q('#salonCalendarHost');if(!host)return;
+-    host.innerHTML='<div class="salonToolbar"><div class="salonToolbarGroup"><button data-cal-prev>‹</button><button data-cal-today>'+esc(t.today)+'</button><button data-cal-next>›</button></div><b>'+esc(rangeTitle())+'</b><div class="salonToolbarGroup"><button data-cal-view="day" class="'+(view==='day'?'on':'')+'">'+esc(t.day)+'</button><button data-cal-view="week" class="'+(view==='week'?'on':'')+'">'+esc(t.week)+'</button><button data-cal-view="month" class="'+(view==='month'?'on':'')+'">'+esc(t.month)+'</button><button class="on" data-quick-book>'+esc(t.quickBooking)+'</button></div></div><div class="salonCalendar">'+(view==='day'?dayCalendar():view==='week'?weekCalendar():monthCalendar())+'</div><p class="salonHint">'+esc(t.dragHint)+'</p>';
+-    q('[data-cal-prev]').onclick=()=>{cursor=view==='month'?new Date(cursor.getFullYear(),cursor.getMonth()-1,1):plus(cursor,view==='week'?-7:-1);load(true)};q('[data-cal-next]').onclick=()=>{cursor=view==='month'?new Date(cursor.getFullYear(),cursor.getMonth()+1,1):plus(cursor,view==='week'?7:1);load(true)};q('[data-cal-today]').onclick=()=>{cursor=new Date();load(true)};q('[data-quick-book]').onclick=openQuickBooking;
+-    qa('[data-cal-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.calView;localStorage.setItem('dabbir_salon_calendar_view',view);load(true)});bindEvents();
++    const t=text(),host=q('#salonCalendarHost');if(!host||!isSalon()||dataContext!==lifecycle.contextKey(workspace))return;
++    const selected=lifecycle.getView(workspace),labels=lifecycle.labels(ar());view=selected.view;cursor=lifecycle.wallDate(selected.day);
++    if(q('#screen-appointments')?.classList.contains('active'))void reader.ensure(workspace);
++    host.innerHTML=lifecycle.controls(workspace,[],ar())+'<div class="salonToolbar"><div class="salonToolbarGroup"><button data-cal-prev aria-label="'+esc(t.previous)+'">‹</button><button data-cal-today>'+esc(t.today)+'</button><button data-cal-next aria-label="'+esc(t.next)+'">›</button></div><b>'+esc(selected.allDates?labels.allDates:rangeTitle())+'</b><div class="salonToolbarGroup"><button data-cal-view="day" class="'+(view==='day'?'on':'')+'">'+esc(t.day)+'</button><button data-cal-view="week" class="'+(view==='week'?'on':'')+'">'+esc(t.week)+'</button><button data-cal-view="month" class="'+(view==='month'?'on':'')+'">'+esc(t.month)+'</button><button class="on" data-quick-book>'+esc(t.quickBooking)+'</button></div></div>'+(selected.scope==='current'?'':'<p class="dabbirBookingScopeHint">'+esc(selected.scope==='review'?labels.reviewHint:labels.historyHint)+'</p>')+'<div class="salonCalendar">'+(selected.allDates?historyCalendar():view==='day'?dayCalendar():view==='week'?weekCalendar():monthCalendar())+'</div>'+reader.status(workspace,ar());
++    q('[data-cal-prev]').onclick=()=>lifecycle.move(workspace,-1);q('[data-cal-next]').onclick=()=>lifecycle.move(workspace,1);q('[data-cal-today]').onclick=()=>lifecycle.setView(workspace,{day:key(new Date()),allDates:false,followToday:true});q('[data-quick-book]').onclick=openQuickBooking;
++    qa('[data-cal-view]').forEach(btn=>btn.onclick=()=>lifecycle.setView(workspace,{view:btn.dataset.calView,allDates:false}));
++    host.querySelectorAll('[data-booking-scope]').forEach(btn=>btn.onclick=()=>lifecycle.setView(workspace,{scope:btn.dataset.bookingScope}));
++    reader.bind(host,workspace);bindEvents();
+   }
+-  async function moveAppointment(appointmentId,workerId,startsAt){const row=data.appointments.find(a=>a.id===appointmentId);if(!row)return;const duration=Math.max(5,Math.round((new Date(row.ends_at)-new Date(row.starts_at))/60000)||60);await updateAppointment({action:'move',appointment_id:appointmentId,worker_id:workerId,starts_at:startsAt,duration_minutes:duration})}
++  async function moveAppointment(appointmentId,workerId,startsAt){const row=appointment(appointmentId);if(!row||lifecycle.terminal(row))return;const duration=Math.max(5,Math.round((new Date(row.ends_at)-new Date(row.starts_at))/60000)||60);await updateAppointment({action:'move',appointment_id:appointmentId,worker_id:workerId,starts_at:startsAt,duration_minutes:duration})}
+   async function updateAppointment(payload){try{await post(payload);notify(text().saved);await load(true)}catch(error){notify((/CONFLICT|SCHEDULE|UNAVAILABLE|TIME_OFF/.test(error.message)?text().conflict:text().failed)+' · '+error.message)}}
+ 
+   function customerInsights(customerId){const rows=(data.appointments||[]).filter(a=>a.customer_id===customerId).sort((a,b)=>new Date(b.starts_at)-new Date(a.starts_at)),last=rows.find(a=>a.status==='completed')||rows[0],counts=new Map();rows.forEach(a=>counts.set(a.worker_id,(counts.get(a.worker_id)||0)+1));const preferred=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];return {last,lastService:service(last?.service_id),preferred:worker(preferred),noShow:rows.filter(a=>a.status==='no_show').length}}
