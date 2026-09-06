@@ -1,4 +1,3 @@
-import { bookingBrowser } from './_booking-lifecycle.js';
 import activityProfileHandler from './activity-profile-ui.js';
 import appointmentManagementUiHandler from './appointment-management-ui.js';
 import salonModeUiHandler from './salon-mode-ui.js';
@@ -69,7 +68,7 @@ const liveScript=String.raw`(()=>{
 
   function removeCancelledFromActiveCalendar(){
     enforceBusinessModeIsolation();sanitizeResolvedBookingNotice();
-    const screen=q('#screen-appointments');if(!screen||window.__dabbirBookingLifecycle)return;
+    const screen=q('#screen-appointments');if(!screen)return;
     screen.querySelectorAll('.dabbirCalEvent.cancelled').forEach(node=>node.remove());
     screen.querySelectorAll('.dabbirAgendaEvent').forEach(node=>{
       const text=String(node.textContent||'').toLowerCase();
@@ -154,5 +153,5 @@ export default async function handler(req,res){
   if(clinicCaptured.statusCode!==200||!clinicCaptured.body)return res.status(500).end('Clinic Mode UI unavailable');
   if(businessActivityCaptured.statusCode!==200||!businessActivityCaptured.body)return res.status(500).end('Business activity profile UI unavailable');
   res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','public, max-age=300');res.setHeader('x-dabbir-calendar-live-ui','v13-salon-payment-idempotency');
-  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body.replace(bookingBrowser+'\n','')+'\n'+salonCaptured.body.replace(bookingBrowser+'\n','')+'\n'+paymentCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
+  return res.status(200).send(activityCaptured.body+'\n'+liveScript+'\n'+managementCaptured.body+'\n'+salonCaptured.body+'\n'+paymentCaptured.body+'\n'+clinicCaptured.body+'\n'+businessActivityCaptured.body);
 }

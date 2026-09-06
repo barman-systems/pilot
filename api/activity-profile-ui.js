@@ -1,7 +1,5 @@
-import { bookingBrowser } from './_booking-lifecycle.js';
 const script=String.raw`(()=>{
   if(window.__dabbirActivityProfile)return;
-  const lifecycle=window.__dabbirBookingLifecycle,reader=window.__dabbirBookingReader;
   const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
   let state=null,loading=false,lastBusiness=null;
   let calendarView=(()=>{try{return localStorage.getItem('dabbir_calendar_view')||'month'}catch{return 'month'}})();
@@ -28,16 +26,14 @@ const script=String.raw`(()=>{
   function businessId(){return workspace?.business?.id||null}
   function setText(selector,value){const el=q(selector);if(el&&value!==undefined&&value!==null)el.textContent=value}
   function setLabel(screen,value){qa('[data-screen="'+screen+'"] [data-label]').forEach(el=>{if(value)el.textContent=value})}
-  function businessTimezone(){return lifecycle.timezone(workspace?.business)}
-  function dayKey(value){return lifecycle.dayKey(value,workspace?.business)}
-  function startOfWeek(value){return lifecycle.wallDate(lifecycle.period({view:'week',day:lifecycle.wallKey(value)}).from)}
-  function plusDays(value,days){return lifecycle.wallDate(lifecycle.addDays(lifecycle.wallKey(value),days))}
+  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}
+  function plusDays(value,days){const d=new Date(value);d.setDate(d.getDate()+days);return d}
   function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
-  function fmtDay(value,opts={}){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{...opts,timeZone:'UTC'}).format(value)}catch{return ''}}
-  function customerLabel(id){const row=reader.customer(workspace,id)||(workspace?.customers||[]).find(x=>x.id===id);return row?.display_name||(ar()?'عميل':'Customer')}
-  function appointmentStatus(value){const t=copy(),s=String(value||'').toLowerCase();if(['cancelled','canceled'].includes(s))return {label:t.statusCancelled,cls:'cancelled'};if(['completed','done'].includes(s))return {label:t.statusCompleted,cls:'completed'};if(s==='no_show')return {label:ar()?'لم يحضر':'No-show',cls:'cancelled'};if(s==='in_progress'||s==='arrived')return {label:ar()?(s==='arrived'?'وصل':'قيد التنفيذ'):(s==='arrived'?'Arrived':'In progress'),cls:'confirmed'};if(['confirmed','approved'].includes(s))return {label:t.statusConfirmed,cls:'confirmed'};return {label:t.statusRequested,cls:'requested'}}
-  function appointments(){return reader.rows(workspace)}
-  function todayAppointments(){return (workspace?.appointments||[]).filter(a=>lifecycle.inContext(a,workspace)&&!['cancelled','canceled','no_show'].includes(lifecycle.status(a))&&dayKey(a.starts_at)===dayKey(new Date()))}
+  function fmtDay(value,opts={}){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',opts).format(value)}catch{return ''}}
+  function customerLabel(id){const row=(workspace?.customers||[]).find(x=>x.id===id);return row?.display_name||(ar()?'عميل':'Customer')}
+  function appointmentStatus(value){const t=copy(),s=String(value||'').toLowerCase();if(['cancelled','canceled'].includes(s))return {label:t.statusCancelled,cls:'cancelled'};if(['completed','done'].includes(s))return {label:t.statusCompleted,cls:'completed'};if(['confirmed','approved'].includes(s))return {label:t.statusConfirmed,cls:'confirmed'};return {label:t.statusRequested,cls:'requested'}}
+  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}
 
   function ensureTaskCard(){
     const screen=q('#screen-tasks');if(!screen)return null;
@@ -79,35 +75,39 @@ const script=String.raw`(()=>{
   }
 
   function calendarTitle(){
-    const view=lifecycle.getView(workspace);if(view.allDates)return lifecycle.labels(ar()).allDates;
     if(calendarView==='month')return fmtDay(calendarCursor,{month:'long',year:'numeric'});
     if(calendarView==='day')return fmtDay(calendarCursor,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     const start=startOfWeek(calendarCursor),end=plusDays(start,6);
     return fmtDay(start,{day:'numeric',month:'short'})+' — '+fmtDay(end,{day:'numeric',month:'short',year:'numeric'});
   }
 
-  function eventHtml(a,day){
-    const s=appointmentStatus(a.status);
-    return '<button type="button" class="dabbirCalEvent '+s.cls+'" data-booking-open="'+esc(a.id)+'" title="'+esc(customerLabel(a.customer_id)+' · '+fmtTime(a.starts_at)+' · '+s.label)+'">'+esc((day?day+' · ':'')+fmtTime(a.starts_at)+' · '+customerLabel(a.customer_id)+' · '+s.label)+'</button>';
-  }
   function monthBody(rows){
-    const month=calendarCursor.getUTCMonth(),first=new Date(Date.UTC(calendarCursor.getUTCFullYear(),month,1,12)),start=startOfWeek(first),today=dayKey(new Date());
+    const t=copy(),year=calendarCursor.getFullYear(),month=calendarCursor.getMonth(),first=new Date(year,month,1),start=startOfWeek(first),today=dayKey(new Date());
     const weekdays=ar()?['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت','الأحد']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const groups=new Map();rows.forEach(a=>{const key=dayKey(a.starts_at);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(a)});
     let cells='';for(let i=0;i<42;i++){
-      const date=plusDays(start,i),key=lifecycle.wallKey(date),events=rows.filter(a=>lifecycle.onDay(a,key,workspace.business));
-      cells+='<div class="dabbirCalDay '+(date.getUTCMonth()!==month?'out ':'')+(key===today?'today':'')+'"><div class="dabbirCalDate"><span>'+date.getUTCDate()+'</span><span class="dabbirCalCount">'+events.length+'</span></div>'+events.slice(0,3).map(a=>eventHtml(a)).join('')+(events.length>3?'<button type="button" class="dabbirCalEvent" data-calendar-day="'+key+'">+'+(events.length-3)+'</button>':'')+'</div>';
+      const d=plusDays(start,i),key=dayKey(d),events=groups.get(key)||[],outside=d.getMonth()!==month;
+      cells+='<div class="dabbirCalDay '+(outside?'out ':'')+(key===today?'today':'')+'"><div class="dabbirCalDate"><span>'+esc(String(d.getDate()))+'</span>'+(events.length?'<span class="dabbirCalCount">'+events.length+'</span>':'')+'</div>'+events.slice(0,3).map(a=>{const s=appointmentStatus(a.status);return '<button type="button" class="dabbirCalEvent '+s.cls+'" data-calendar-day="'+esc(key)+'" title="'+esc(customerLabel(a.customer_id)+' · '+fmtTime(a.starts_at))+'">'+esc(fmtTime(a.starts_at)+' · '+customerLabel(a.customer_id))+'</button>'}).join('')+(events.length>3?'<button type="button" class="dabbirCalEvent" data-calendar-day="'+esc(key)+'">+'+(events.length-3)+'</button>':'')+'</div>';
     }
     return '<div class="dabbirMonthWeekdays">'+weekdays.map(x=>'<span>'+esc(x)+'</span>').join('')+'</div><div class="dabbirMonthGrid">'+cells+'</div>';
   }
-  function agendaBody(rows,allDates=false){
-    return rows.length?'<div class="dabbirAgenda">'+rows.map(a=>eventHtml(a,allDates?dayKey(a.starts_at):'')).join('')+'</div>':'<div class="dabbirCalendarEmpty">'+esc(copy().noDayBookings)+'</div>';
+
+  function dayBody(rows){
+    const t=copy(),key=dayKey(calendarCursor),todayRows=rows.filter(a=>dayKey(a.starts_at)===key),byHour=new Map();
+    todayRows.forEach(a=>{const h=new Date(a.starts_at).getHours();if(!byHour.has(h))byHour.set(h,[]);byHour.get(h).push(a)});
+    const hours=[];for(let h=7;h<=21;h++)hours.push(h);
+    const body=hours.map(h=>{
+      const slot=byHour.get(h)||[];const clock=new Date(calendarCursor);clock.setHours(h,0,0,0);
+      return '<div class="dabbirAgendaRow"><div class="dabbirAgendaTime">'+esc(fmtTime(clock))+'</div><div class="dabbirAgendaSlot">'+slot.map(a=>{const s=appointmentStatus(a.status);return '<div class="dabbirAgendaEvent"><b>'+esc(customerLabel(a.customer_id))+'</b><div class="muted">'+esc(fmtTime(a.starts_at)+' · '+s.label)+'</div></div>'}).join('')+'</div></div>';
+    }).join('');
+    return todayRows.length?'<div class="dabbirAgenda">'+body+'</div>':'<div class="dabbirCalendarEmpty">'+esc(t.noDayBookings)+'</div>';
   }
-  function dayBody(rows){return agendaBody(rows.filter(a=>lifecycle.onDay(a,lifecycle.wallKey(calendarCursor),workspace.business)))}
+
   function weekBody(rows){
-    const start=startOfWeek(calendarCursor),today=dayKey(new Date());let out='<div class="dabbirWeek"><div class="dabbirWeekGrid">';
+    const t=copy(),start=startOfWeek(calendarCursor),today=dayKey(new Date());let out='<div class="dabbirWeek"><div class="dabbirWeekGrid">';
     for(let i=0;i<7;i++){
-      const date=plusDays(start,i),key=lifecycle.wallKey(date),events=rows.filter(a=>lifecycle.onDay(a,key,workspace.business));
-      out+='<div class="dabbirWeekDay '+(key===today?'today':'')+'"><div class="dabbirWeekHead">'+esc(fmtDay(date,{weekday:'short',day:'numeric',month:'short'}))+'</div>'+events.map(a=>eventHtml(a)).join('')+'</div>';
+      const d=plusDays(start,i),key=dayKey(d),events=rows.filter(a=>dayKey(a.starts_at)===key);
+      out+='<div class="dabbirWeekDay '+(key===today?'today':'')+'"><div class="dabbirWeekHead">'+esc(fmtDay(d,{weekday:'short',day:'numeric',month:'short'}))+'</div>'+(events.length?events.map(a=>{const s=appointmentStatus(a.status);return '<button type="button" class="dabbirCalEvent '+s.cls+'" data-calendar-day="'+esc(key)+'">'+esc(fmtTime(a.starts_at)+' · '+customerLabel(a.customer_id))+'</button>'}).join(''):'<div class="muted" style="font-size:8px">—</div>')+'</div>';
     }
     return out+'</div></div>';
   }
@@ -135,7 +135,6 @@ const script=String.raw`(()=>{
     try{
       const response=await fetch('/api/calendar-connections?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'CALENDAR_CONNECTIONS_FAILED');
-      if(id!==businessId())return;
       calendarConnections=body;calendarConnectionsBusiness=id;
     }catch(error){calendarConnections=null;calendarConnectionsBusiness=id;console.error('dabbir_calendar_connections_ui_failed',String(error?.message||error).slice(0,120))}
     finally{calendarConnectionsLoading=false;renderCalendarConnections()}
@@ -152,23 +151,17 @@ const script=String.raw`(()=>{
   }
 
   function bindCalendarControls(shell){
-    shell.querySelectorAll('[data-booking-scope]').forEach(btn=>btn.onclick=()=>lifecycle.setView(workspace,{scope:btn.dataset.bookingScope}));
-    shell.querySelectorAll('[data-calendar-view]').forEach(btn=>btn.onclick=()=>lifecycle.setView(workspace,{view:btn.dataset.calendarView,allDates:false}));
-    shell.querySelector('[data-calendar-today]')?.addEventListener('click',()=>lifecycle.setView(workspace,{day:dayKey(new Date()),allDates:false,followToday:true}));
-    shell.querySelector('[data-calendar-prev]')?.addEventListener('click',()=>lifecycle.move(workspace,-1));
-    shell.querySelector('[data-calendar-next]')?.addEventListener('click',()=>lifecycle.move(workspace,1));
-    shell.querySelectorAll('[data-calendar-day]').forEach(btn=>btn.onclick=()=>lifecycle.setView(workspace,{day:btn.dataset.calendarDay,view:'day',allDates:false,followToday:false}));
-    shell.querySelectorAll('[data-booking-open]').forEach(btn=>btn.onclick=()=>window.__dabbirAppointmentManagement?.open?.(btn.dataset.bookingOpen));
-    reader.bind(shell,workspace);
+    shell.querySelectorAll('[data-calendar-view]').forEach(btn=>btn.onclick=()=>{calendarView=btn.dataset.calendarView;try{localStorage.setItem('dabbir_calendar_view',calendarView)}catch{}renderCalendar()});
+    shell.querySelector('[data-calendar-today]')?.addEventListener('click',()=>{calendarCursor=new Date();renderCalendar()},{once:true});
+    shell.querySelector('[data-calendar-prev]')?.addEventListener('click',()=>{if(calendarView==='month')calendarCursor.setMonth(calendarCursor.getMonth()-1);else calendarCursor=plusDays(calendarCursor,calendarView==='week'?-7:-1);renderCalendar()},{once:true});
+    shell.querySelector('[data-calendar-next]')?.addEventListener('click',()=>{if(calendarView==='month')calendarCursor.setMonth(calendarCursor.getMonth()+1);else calendarCursor=plusDays(calendarCursor,calendarView==='week'?7:1);renderCalendar()},{once:true});
+    shell.querySelectorAll('[data-calendar-day]').forEach(btn=>btn.onclick=()=>{const parts=btn.dataset.calendarDay.split('-').map(Number);calendarCursor=new Date(parts[0],parts[1]-1,parts[2]);calendarView='day';try{localStorage.setItem('dabbir_calendar_view','day')}catch{}renderCalendar()});
   }
 
   function renderCalendar(){
-    if(!state?.profile?.show_appointments||lastBusiness!==businessId()){q('#dabbirCalendarShell')?.replaceChildren();return}const shell=ensureCalendar();if(!shell)return;
-    const selected=lifecycle.getView(workspace);calendarView=selected.view;calendarCursor=lifecycle.wallDate(selected.day);
-    if(q('#screen-appointments')?.classList.contains('active'))void reader.ensure(workspace);
-    const t=copy(),rows=appointments(),labels=lifecycle.labels(ar());
-    const body=selected.allDates?agendaBody(rows,true):calendarView==='month'?monthBody(rows):calendarView==='week'?weekBody(rows):dayBody(rows);
-    shell.innerHTML='<section class="dabbirCalendarCard">'+lifecycle.controls(workspace,[],ar())+'<div class="dabbirCalendarToolbar"><div class="dabbirCalendarNav"><button type="button" data-calendar-prev aria-label="'+esc(t.previous)+'">‹</button><button type="button" class="todayBtn" data-calendar-today>'+esc(t.today)+'</button><button type="button" data-calendar-next aria-label="'+esc(t.next)+'">›</button></div><div class="dabbirCalendarTitle">'+esc(calendarTitle())+'</div><div class="dabbirCalendarViews"><button type="button" data-calendar-view="day" class="'+(calendarView==='day'?'on':'')+'">'+esc(t.day)+'</button><button type="button" data-calendar-view="week" class="'+(calendarView==='week'?'on':'')+'">'+esc(t.week)+'</button><button type="button" data-calendar-view="month" class="'+(calendarView==='month'?'on':'')+'">'+esc(t.month)+'</button></div></div>'+(selected.scope==='current'?'':'<p class="dabbirBookingScopeHint">'+esc(selected.scope==='review'?labels.reviewHint:labels.historyHint)+'</p>')+body+reader.status(workspace,ar())+'<div class="dabbirCalendarConnections"><div class="dabbirCalendarConnectionsHead"><div><h3>'+esc(t.calendarSync)+'</h3><p>'+esc(t.calendarSyncDesc)+'</p></div></div><div id="dabbirCalendarConnections"></div></div></section>';
+    if(!state?.profile?.show_appointments)return;const shell=ensureCalendar();if(!shell)return;const t=copy(),rows=appointments();
+    const body=calendarView==='month'?monthBody(rows):calendarView==='week'?weekBody(rows):dayBody(rows);
+    shell.innerHTML='<section class="dabbirCalendarCard"><div class="dabbirCalendarToolbar"><div class="dabbirCalendarNav"><button type="button" data-calendar-prev aria-label="'+esc(t.previous)+'">‹</button><button type="button" class="todayBtn" data-calendar-today>'+esc(t.today)+'</button><button type="button" data-calendar-next aria-label="'+esc(t.next)+'">›</button></div><div class="dabbirCalendarTitle">'+esc(calendarTitle())+'</div><div class="dabbirCalendarViews"><button type="button" data-calendar-view="day" class="'+(calendarView==='day'?'on':'')+'">'+esc(t.day)+'</button><button type="button" data-calendar-view="week" class="'+(calendarView==='week'?'on':'')+'">'+esc(t.week)+'</button><button type="button" data-calendar-view="month" class="'+(calendarView==='month'?'on':'')+'">'+esc(t.month)+'</button></div></div>'+body+'<div class="dabbirCalendarConnections"><div class="dabbirCalendarConnectionsHead"><div><h3>'+esc(t.calendarSync)+'</h3><p>'+esc(t.calendarSyncDesc)+'</p></div></div><div id="dabbirCalendarConnections"></div></div></section>';
     bindCalendarControls(shell);renderCalendarConnections();loadCalendarConnections(false);
   }
 
@@ -260,10 +253,9 @@ const script=String.raw`(()=>{
     try{
       const response=await fetch('/api/activity-tasks?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const body=await response.json().catch(()=>null);if(!response.ok||!body?.ok)throw new Error(body?.error||'ACTIVITY_PROFILE_FAILED');
-      if(id!==businessId())return;
       state=body;lastBusiness=id;calendarConnections=null;calendarConnectionsBusiness=null;applyProfile();
     }catch(error){console.error('dabbir_activity_profile_failed',String(error?.message||error).slice(0,120))}
-    finally{loading=false;renderTasks();if(id!==businessId())setTimeout(()=>load(false),0)}
+    finally{loading=false;renderTasks()}
   }
 
   const observer=new MutationObserver(()=>{if(workspace?.business?.id){setTimeout(applyProfile,0);load(false)}});
@@ -278,8 +270,7 @@ const script=String.raw`(()=>{
   }
   setInterval(()=>{if(workspace?.business?.id&&workspace.business.id!==lastBusiness)load(true)},1200);
   setTimeout(()=>load(false),500);
-  ['dabbir:booking-view-changed','dabbir:booking-data-changed','dabbir:branch-scope-changed'].forEach(name=>window.addEventListener(name,renderCalendar));
-  window.__dabbirActivityProfile={ownsCalendar:true,refresh:()=>load(true),refreshCalendar:()=>{renderCalendar();return loadCalendarConnections(true)},version:'activity-profile-v3-calendar'};
+  window.__dabbirActivityProfile={refresh:()=>load(true),refreshCalendar:()=>{renderCalendar();return loadCalendarConnections(true)},version:'activity-profile-v3-calendar'};
 })();`;
 
 export default function handler(req,res){
@@ -287,5 +278,5 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300');
   res.setHeader('x-dabbir-activity-profile-ui','v3-calendar');
-  return res.status(200).send(bookingBrowser+'\n'+script);
+  return res.status(200).send(script);
 }

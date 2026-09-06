@@ -51,11 +51,10 @@ test('Unassigned salon bookings remain visible in day and week calendars',()=>{
   assert.match(patched,/unassigned:'غير مسند'/);
   const day=patched.slice(patched.indexOf('function dayCalendar()'),patched.indexOf('function weekCalendar()'));
   const week=patched.slice(patched.indexOf('function weekCalendar()'),patched.indexOf('function monthCalendar()'));
-  assert.match(patched,/rows\.some\(a=>!a\.worker_id\)/);
-  assert.match(day,/workers=visibleWorkers\(rows\)/);
+  assert.match(day,/hasUnassigned=rows\.some\(a=>!a\.worker_id\)/);
   assert.match(day,/w\.unassigned\?!a\.worker_id:a\.worker_id===w\.id/);
-  assert.match(week,/w\.unassigned\?!a\.worker_id:a\.worker_id===w\.id/);
-  assert.match(patched,/display_name:text\(\)\.unassigned/);
+  assert.match(week,/unassigned=dayRows\.filter\(a=>!a\.worker_id\)/);
+  assert.match(week,/t\.unassigned/);
 });
 
 test('New employee form can assign multiple existing services at creation time',()=>{

@@ -38,6 +38,6 @@ test('browser assigns one random request id per payment form instance',()=>{
 test('payment idempotency guard loads after Salon Mode UI',()=>{
   assert.match(calendarUi,/import salonPaymentIdempotencyUiHandler from '\.\/salon-payment-idempotency-ui\.js'/);
   assert.match(calendarUi,/await salonModeUiHandler\(req,salonCaptured\);await salonPaymentIdempotencyUiHandler\(req,paymentCaptured\)/);
-  assert.match(calendarUi,/salonCaptured\.body\.replace\(bookingBrowser\+'\\n',''\)\+'\\n'\+paymentCaptured\.body/);
+  assert.match(calendarUi,/salonCaptured\.body\+'\\n'\+paymentCaptured\.body/);
   assert.match(calendarUi,/v13-salon-payment-idempotency/);
 });

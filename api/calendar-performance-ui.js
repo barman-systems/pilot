@@ -2,17 +2,25 @@ import calendarLiveHandler from './calendar-live-ui.js';
 import {applySalonProductModelPatches} from './salon-product-model-ui-patches.js';
 
 const PATCHES=[
-
+  {
+    name:'activity-profile-business-timezone-day-key',
+    from:`  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+    to:`  function businessTimezone(){const b=workspace?.business||{};if(b.timezone)return String(b.timezone);const loc=String(b.locale||'ar-AE').toUpperCase();if(loc.endsWith('-SA'))return 'Asia/Riyadh';if(loc.endsWith('-KW'))return 'Asia/Kuwait';if(loc.endsWith('-QA'))return 'Asia/Qatar';if(loc.endsWith('-BH'))return 'Asia/Bahrain';if(loc.endsWith('-OM'))return 'Asia/Muscat';return 'Asia/Dubai'}\n  function dayKey(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:businessTimezone(),year:'numeric',month:'2-digit',day:'2-digit'}),p=Object.fromEntries(f.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day}catch{return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}}\n  function startOfWeek(value){const d=new Date(value);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);return d}`,
+  },
   {
     name:'activity-profile-business-timezone-clock',
     from:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
     to:`  function fmtTime(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:businessTimezone(),hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}`,
   },
-
+  {
+    name:'activity-profile-hide-cancelled-bookings',
+    from:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+    to:`  function appointments(){return (workspace?.appointments||[]).filter(a=>a?.starts_at&&!['cancelled','canceled'].includes(String(a.status||'').toLowerCase())&&!Number.isNaN(new Date(a.starts_at).getTime())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}`,
+  },
   {
     name:'activity-profile-today-metric',
     from:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
-    to:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(p.show_appointments){const todayCount=todayAppointments().length,todayStrong=cards[1]?.querySelector('strong'),nextToday=String(todayCount);if(todayStrong&&todayStrong.textContent!==nextToday)todayStrong.textContent=nextToday}\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
+    to:`    if(cards[1]?.querySelector('span'))cards[1].querySelector('span').textContent=p.show_appointments?appointmentLabel:(ar()?'المتابعات':'Follow-ups');\n    if(p.show_appointments){const todayCount=appointments().filter(a=>dayKey(a.starts_at)===dayKey(new Date())).length,todayStrong=cards[1]?.querySelector('strong'),nextToday=String(todayCount);if(todayStrong&&todayStrong.textContent!==nextToday)todayStrong.textContent=nextToday}\n    if(cards[2]?.querySelector('span'))cards[2].querySelector('span').textContent=customerLabel;`,
   },
   {
     name:'appointment-management-business-timezone',

@@ -221,7 +221,7 @@ async function loadWorkspace(identity, requestedBusinessId, requestedConversatio
   const [conversations, customers, appointments, handoffs, followups] = await Promise.all([
     rest(identity.accessToken, `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&order=updated_at.desc&limit=30`, {}, 'CONVERSATIONS_LOOKUP_FAILED'),
     rest(identity.accessToken, `dabbir_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'CUSTOMERS_LOOKUP_FAILED'),
-    rest(identity.accessToken, `dabbir_appointments?select=id,business_id,branch_id,worker_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at,updated_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
+    rest(identity.accessToken, `dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=50`, {}, 'APPOINTMENTS_LOOKUP_FAILED'),
     rest(identity.accessToken, `dabbir_handoffs?select=id,conversation_id,customer_id,route_class,reason,state,priority,summary,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'HANDOFFS_LOOKUP_FAILED'),
     rest(identity.accessToken, `dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,blocked_reason,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=30`, {}, 'FOLLOWUPS_LOOKUP_FAILED'),
   ]);
@@ -497,7 +497,7 @@ async function createAppointment(identity, body) {
     customerId = requirePersistedRow(customers, 'CUSTOMER_CREATE_UNVERIFIED').id;
   }
 
-  const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,business_id,branch_id,worker_id,customer_id,service_id,starts_at,ends_at,status,simulated,created_at,updated_at', {
+  const rows = await rest(identity.accessToken, 'dabbir_appointments?select=id,customer_id,service_id,starts_at,status,simulated,created_at', {
     method: 'POST',
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
