@@ -15,7 +15,8 @@ test('generic service bookings render a real day week month calendar over the ca
   assert.match(ui,/data-calendar-view="day"/);
   assert.match(ui,/data-calendar-view="week"/);
   assert.match(ui,/data-calendar-view="month"/);
-  assert.match(ui,/ws\(\)\?\.appointments/);
+  assert.match(ui,/reader\.rows\(ws\(\)\)/);
+  assert.match(ui,/ownsCalendar/);
   assert.match(index,/id="screen-appointments"/);
   assert.match(index,/id="appointmentsTable"/);
 });
@@ -30,9 +31,11 @@ test('generic calendar does not create a parallel booking model and keeps Salon 
 test('calendar events edit the same persisted appointment and cancelled items stay out of active calendar',()=>{
   assert.match(ui,/data-calendar-appt/);
   assert.match(ui,/openEdit\(btn\.dataset\.calendarAppt\)/);
-  assert.match(ui,/action:'update'.*appointment_id:editingId/);
+  assert.match(ui,/action:'update'.*appointment_id:id/);
+  assert.match(ui,/business_id:context\.business_id/);
   assert.match(ui,/action:'delete'.*appointment_id:id/);
-  assert.match(ui,/!\['cancelled','canceled'\]\.includes/);
+  assert.match(ui,/history=lifecycle\.terminal\(a\)/);
+  assert.match(ui,/reader\.rows/);
 });
 
 test('event-scoped performance wrapper remains the only shipped calendar bundle and patches business timezone',()=>{
