@@ -3,13 +3,12 @@ import { json } from './_auth-core.js';
 import { adminRpc, notifyTelegram, observeDabbirLive, runtimeEvidence, serviceRoleKey, telegramRoute } from './_barman-executive-core.js';
 import { planExecutiveCommand, readOnlyAnswer } from './_barman-executive-automation.js';
 
-const EXPECTED_SCHEDULE='*/5 * * * *';
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 function sameSecret(left,right){const a=Buffer.from(String(left||'')),b=Buffer.from(String(right||''));return a.length===b.length&&a.length>0&&timingSafeEqual(a,b)}
 export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);
-  if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
-  return clean(env.VERCEL_ENV,32)==='production'&&clean(req.headers?.['user-agent'],120).toLowerCase()==='vercel-cron/1.0'&&clean(req.headers?.['x-vercel-cron-schedule'],120)===EXPECTED_SCHEDULE?'vercel_schedule':null;
+  if(!secret)return null;
+  return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
 }
 
 function report(snapshot){

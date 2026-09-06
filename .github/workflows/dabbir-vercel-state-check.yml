@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/dabbir-vercel-state-check.yml
+      - api/barman-executive-cron.js
 
 permissions:
   contents: read

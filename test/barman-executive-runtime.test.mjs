@@ -40,10 +40,12 @@ test('deterministic fallback never turns status chatter into commands',()=>{
   assert.equal(deterministicDecision('نفذ فحص دبر').kind,'command');
 });
 
-test('Vercel runs the executive worker every five minutes with fail-closed cron auth',()=>{
+test('Vercel runs the executive worker every five minutes with CRON_SECRET-only fail-closed auth',()=>{
   assert.ok(vercel.crons.some(item=>item.path==='/api/barman-executive-cron'&&item.schedule==='*/5 * * * *'));
-  const official={headers:{'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'}};
-  assert.equal(cronAuthMode(official,{VERCEL_ENV:'production'}),'vercel_schedule');
-  assert.equal(cronAuthMode(official,{VERCEL_ENV:'preview'}),null);
-  assert.equal(cronAuthMode(official,{VERCEL_ENV:'production',CRON_SECRET:'set'}),null);
+  const forgedSchedule={headers:{'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'}};
+  assert.equal(cronAuthMode(forgedSchedule,{VERCEL_ENV:'production'}),null);
+  assert.equal(cronAuthMode(forgedSchedule,{VERCEL_ENV:'production',CRON_SECRET:'set'}),null);
+  assert.equal(cronAuthMode({headers:{authorization:'Bearer wrong'}},{CRON_SECRET:'set'}),null);
+  assert.equal(cronAuthMode({headers:{authorization:'Bearer set'}},{CRON_SECRET:'set'}),'secret');
+  assert.equal(cronAuthMode({headers:{}},{}),null);
 });
