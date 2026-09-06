@@ -12,18 +12,20 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      PRODUCTION_HOST: dabbir.bmalman.com
     steps:
-      - name: Check safe Vercel state
+      - name: Check safe Vercel state and bootstrap BARMAN cron authentication
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || exit 10
           echo "::add-mask::$VERCEL_TOKEN"
+
           p="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           e="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           echo "project_ignore=$(jq -r '.commandForIgnoringBuildStep // "<null>"' <<<"$p")"
@@ -32,3 +34,77 @@ jobs:
             targets="$(jq -r --arg k "$key" '[.envs[] | select(.key==$k) | ((.target // [])|join(","))] | unique | join(";")' <<<"$e")"
             echo "$key count=$count targets=${targets:-none}"
           done
+
+          cron_count="$(jq '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production")))] | length' <<<"$e")"
+          if [ "$cron_count" -gt 1 ]; then
+            echo "CRON_SECRET_DUPLICATE_PRODUCTION_ENTRIES=$cron_count"
+            exit 21
+          fi
+
+          cron_secret=''
+          if [ "$cron_count" -eq 0 ]; then
+            cron_secret="$(openssl rand -hex 32)"
+            test "${#cron_secret}" -eq 64
+            echo "::add-mask::$cron_secret"
+            payload="$(jq -cn --arg value "$cron_secret" '[{key:"CRON_SECRET",value:$value,type:"sensitive",target:["production"],comment:"BARMAN Executive Cron bearer authentication"}]')"
+            curl -fsS -X POST \
+              "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?upsert=true&teamId=${VERCEL_TEAM_ID}" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data "$payload" >/tmp/cron-env-create.json
+            jq -e '((.created // []) | if type=="array" then length>=1 else .!=null end) or ((.created // null) != null)' /tmp/cron-env-create.json >/dev/null
+            echo 'CRON_SECRET_BOOTSTRAPPED'
+          else
+            echo 'CRON_SECRET_ALREADY_PRESENT'
+          fi
+
+          source="$(curl -fsS "https://api.vercel.com/v13/deployments/${PRODUCTION_HOST}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          source_id="$(jq -r '.id // empty' <<<"$source")"
+          source_sha="$(jq -r '.meta.githubCommitSha // empty' <<<"$source")"
+          test "${source_id#dpl_}" != "$source_id"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "CRON_SECRET_SOURCE_DEPLOYMENT=$source_id source_sha=$source_sha"
+
+          redeploy_payload="$(jq -cn --arg deployment "$source_id" --arg project "$VERCEL_PROJECT_ID" '{name:"dabbir",project:$project,deploymentId:$deployment,target:"production"}')"
+          redeploy="$(curl -fsS -X POST \
+            "https://api.vercel.com/v13/deployments?forceNew=1&teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$redeploy_payload")"
+          redeploy_id="$(jq -r '.id // empty' <<<"$redeploy")"
+          test "${redeploy_id#dpl_}" != "$redeploy_id"
+          echo "CRON_SECRET_REDEPLOY_STARTED=$redeploy_id"
+
+          ready=''
+          for attempt in $(seq 1 90); do
+            ready="$(curl -fsS "https://api.vercel.com/v13/deployments/${redeploy_id}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+            state="$(jq -r '.readyState // .state // empty' <<<"$ready")"
+            case "$state" in
+              READY) break ;;
+              ERROR|CANCELED) echo "CRON_SECRET_REDEPLOY_${state}"; exit 22 ;;
+            esac
+            sleep 2
+          done
+          test "$(jq -r '.readyState // .state // empty' <<<"$ready")" = 'READY'
+          redeploy_sha="$(jq -r '.meta.githubCommitSha // empty' <<<"$ready")"
+          test "$redeploy_sha" = "$source_sha"
+          echo "CRON_SECRET_REDEPLOY_READY=$redeploy_id exact_sha=$redeploy_sha"
+
+          unauth_status="$(curl -sS -o /tmp/cron-unauth.json -w '%{http_code}' "https://${PRODUCTION_HOST}/api/barman-executive-cron")"
+          if [ "$unauth_status" != '401' ]; then
+            echo "CRON_UNAUTHENTICATED_PROBE_NOT_REJECTED_HTTP_${unauth_status}"
+            cat /tmp/cron-unauth.json
+            exit 23
+          fi
+          echo 'CRON_UNAUTHENTICATED_PROBE_REJECTED_401'
+
+          if [ -n "$cron_secret" ]; then
+            auth_status="$(curl -sS -o /tmp/cron-auth.json -w '%{http_code}' -H "Authorization: Bearer ${cron_secret}" "https://${PRODUCTION_HOST}/api/barman-executive-cron")"
+            if [ "$auth_status" != '200' ]; then
+              echo "CRON_AUTHENTICATED_PROBE_FAILED_HTTP_${auth_status}"
+              cat /tmp/cron-auth.json
+              exit 24
+            fi
+            jq -e '.ok == true' /tmp/cron-auth.json >/dev/null
+            echo 'CRON_AUTHENTICATED_PROBE_PASS_200'
+          fi
