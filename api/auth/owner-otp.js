@@ -26,7 +26,7 @@ async function broker(url,body,headers={}){
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   res.setHeader('pragma','no-cache');
-  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v9');
+  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v10');
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
   try{
@@ -37,7 +37,7 @@ export default async function handler(req,res){
       // Do not reveal whether an employee email exists.
       if(!validLogin(login))return json(res,200,{ok:true,otp_required:true});
       const resendKey=String(process.env.RESEND_API_KEY||'').trim();
-      const mailerAuth=ownerMailerAuth();
+      const mailerAuth=ownerMailerAuth(resendKey);
       if(!resendKey||!mailerAuth)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
       const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{'x-dabbir-owner-mailer-auth':mailerAuth});
       if(response.status===404)return json(res,200,{ok:true,otp_required:true});

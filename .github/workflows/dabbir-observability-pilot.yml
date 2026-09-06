@@ -1,0 +1,28 @@
+name: Dabbir observability pilot
+on:
+  pull_request:
+    paths:
+      - 'api/_dabbir-ai-observability.js'
+      - 'api/_dabbir-ai-budget.js'
+      - 'integrations/trigger/**'
+      - 'test/dabbir-ai-*observability.test.mjs'
+      - '.github/workflows/dabbir-observability-pilot.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-sdk-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test test/dabbir-ai-observability.test.mjs
+      - name: Install isolated Trigger SDK without lifecycle scripts
+        run: npm install --prefix integrations/trigger --ignore-scripts --no-audit --no-fund
+      - name: Check worker registration and config without cloud credentials
+        env:
+          TRIGGER_PROJECT_REF: proj_validation
+        run: |
+          node --input-type=module -e "await import('./integrations/trigger/trigger.config.mjs'); await import('./integrations/trigger/tasks/ai-budget-observation.mjs')"

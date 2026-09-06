@@ -15,17 +15,18 @@ function safeEqual(a:string,b:string){if(a.length!==b.length)return false;let o=
 async function sb(path:string,init:RequestInit={}){return fetch(`${SUPABASE_URL}${path}`,{...init,headers:{...sbHeaders(),...(init.headers||{})}})}
 async function rpc(name:string,params:Record<string,unknown>={}){const r=await sb(`/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify(params)});const p=await r.json().catch(()=>null);return{ok:r.ok,status:r.status,payload:p}}
 
-async function expectedAuth(){return sha(`${SERVICE_KEY}:dabbir-owner-otp-mailer-v1`)}
-async function authorized(req:Request){const provided=clean(req.headers.get('x-dabbir-owner-mailer-auth'),128);if(!provided)return false;return safeEqual(provided,await expectedAuth())}
+async function validMailerSignature(req:Request,resendKey:string){
+ const provided=clean(req.headers.get('x-dabbir-owner-mailer-auth'),128);if(!provided||!resendKey)return false;
+ return safeEqual(provided,await sha(`${resendKey}:dabbir-owner-otp-mailer-v2`));
+}
 function resendFrom(){const configured=clean(Deno.env.get('DABBIR_RESEND_FROM'),320);return configured&&!configured.toLowerCase().includes('@resend.dev')?configured:'DABBIR <no-reply@auth.bmalman.com>'}
 async function sendEmail(key:string,to:string,otp:string){
- const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json','user-agent':'DABBIR-owner-otp-mailer/1'},body:JSON.stringify({from:resendFrom(),to:[to],subject:'DABBIR verification code',text:`رمز دخول دبّر: ${otp}\n\nينتهي الرمز خلال 10 دقائق.\nDABBIR verification code: ${otp}\nExpires in 10 minutes.`})});
+ const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json','user-agent':'DABBIR-owner-otp-mailer/3'},body:JSON.stringify({from:resendFrom(),to:[to],subject:'DABBIR verification code',text:`رمز دخول دبّر: ${otp}\n\nينتهي الرمز خلال 10 دقائق.\nDABBIR verification code: ${otp}\nExpires in 10 minutes.`})});
  if(!r.ok){const p:any=await r.json().catch(()=>null);console.error('DABBIR_OWNER_EMAIL_DELIVERY_FAILED',JSON.stringify({status:r.status,code:clean(p?.name||p?.code||p?.type,80)||'UNKNOWN',sender_mode:'verified_auth_domain'}))}
  return r.ok;
 }
 
-async function requestOtp(body:any){
- const resendKey=clean(body?.resend_key,500);if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+async function requestOtp(body:any,resendKey:string){
  const login=clean(body?.login||body?.identifier||body?.username||'__root__',254).toLowerCase();
  const identity=await rpc('dabbir_platform_login_identity_v1',{p_login:login});
  if(!identity.ok||!identity.payload?.user_id||!identity.payload?.email)return reply(404,{ok:false,error:'PLATFORM_IDENTITY_NOT_FOUND'});
@@ -44,8 +45,9 @@ async function requestOtp(body:any){
 Deno.serve(async(req:Request)=>{
  if(req.method!=='POST')return reply(405,{ok:false,error:'METHOD_NOT_ALLOWED'});
  if(!SUPABASE_URL||!SERVICE_KEY)return reply(503,{ok:false,error:'OWNER_MAILER_NOT_CONFIGURED'});
- if(!await authorized(req))return reply(401,{ok:false,error:'OWNER_MAILER_UNAUTHORIZED'});
  let body:any;try{body=await req.json()}catch{return reply(400,{ok:false,error:'INVALID_JSON'})}
+ const resendKey=clean(body?.resend_key,500);if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+ if(!await validMailerSignature(req,resendKey))return reply(401,{ok:false,error:'OWNER_MAILER_UNAUTHORIZED'});
  if(clean(body?.action,60).toLowerCase()!=='owner_otp_request')return reply(400,{ok:false,error:'UNKNOWN_ACTION'});
- try{return await requestOtp(body)}catch(error){console.error('DABBIR_OWNER_MAILER_UNAVAILABLE',error instanceof Error?error.message:'unknown');return reply(503,{ok:false,error:'OWNER_MAILER_UNAVAILABLE'})}
+ try{return await requestOtp(body,resendKey)}catch(error){console.error('DABBIR_OWNER_MAILER_UNAVAILABLE',error instanceof Error?error.message:'unknown');return reply(503,{ok:false,error:'OWNER_MAILER_UNAVAILABLE'})}
 });
