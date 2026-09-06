@@ -4,7 +4,7 @@ on:
     branches: [fix/booking-lifecycle-all-activities-20260906]
     paths:
       - '.github/workflows/booking-lifecycle-source-audit.yml'
-      - '.github/booking-lifecycle.patch'
+      - '.github/booking-patches/**'
 permissions:
   contents: write
 jobs:
@@ -17,14 +17,16 @@ jobs:
           ref: fix/booking-lifecycle-all-activities-20260906
           fetch-depth: 0
           persist-credentials: true
-      - name: Apply reviewed lifecycle patch
+      - name: Apply reviewed lifecycle patches
         shell: bash
         run: |
           set -euo pipefail
-          test -f .github/booking-lifecycle.patch || exit 0
-          git apply --check .github/booking-lifecycle.patch
-          git apply .github/booking-lifecycle.patch
-          rm -f .github/booking-lifecycle.patch
+          shopt -s nullglob
+          patches=(.github/booking-patches/*.patch)
+          ((${#patches[@]})) || exit 0
+          for patch in "${patches[@]}"; do git apply --check "$patch"; done
+          for patch in "${patches[@]}"; do git apply "$patch"; done
+          rm -rf .github/booking-patches
           git config user.name 'barmanai'
           git config user.email 'alcaptain2014@gmail.com'
           git add -A
