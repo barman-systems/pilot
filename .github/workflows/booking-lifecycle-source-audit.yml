@@ -5,6 +5,9 @@ on:
     paths:
       - '.github/workflows/booking-lifecycle-source-audit.yml'
       - '.github/booking-patches/**'
+concurrency:
+  group: booking-lifecycle-patch-apply
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -14,10 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/booking-lifecycle-all-activities-20260906
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: true
       - name: Apply reviewed lifecycle patches
+        id: patch
         shell: bash
         run: |
           set -euo pipefail
@@ -28,17 +32,22 @@ jobs:
           git config user.name 'barmanai'
           git config user.email 'alcaptain2014@gmail.com'
           for patch in "${patches[@]}"; do
-            if ! git apply --check "$patch"; then
-              printf '%s\n' "$patch" > .github/booking-patch-failure.txt
-              git add .github/booking-patch-failure.txt
-              git commit -m 'chore(booking): record patch apply blocker'
-              git push origin HEAD:fix/booking-lifecycle-all-activities-20260906
+            if ! git apply --check "$patch" 2>patch-error.txt; then
+              printf 'FAILED_PATCH=%s\n' "$patch" > patch-failure.txt
+              cat patch-error.txt >> patch-failure.txt
               exit 1
             fi
             git apply "$patch"
           done
-          rm -rf .github/booking-patches .github/booking-patch-failure.txt
+          rm -rf .github/booking-patches
           git add -A
           git diff --cached --check
           git commit -m 'fix(bookings): separate active work from resolved history'
           git push origin HEAD:fix/booking-lifecycle-all-activities-20260906
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: booking-patch-failure-${{ github.run_id }}
+          path: patch-failure.txt
+          retention-days: 1
+          if-no-files-found: warn
