@@ -121,8 +121,25 @@ export async function planExecutiveCommand(command,env=process.env){
 
 function number(value){return Number.isFinite(Number(value))?Number(value):0}
 
-export function readOnlyAnswer(command,snapshot){
+const REGISTERED_ACCOUNT_QUESTION=/(?:العملاء|المستخدم(?:ون|ين)|الحسابات?)\s+(?:ال)?مسجل(?:ون|ين|ة)?|(?:ال)?مسجل(?:ون|ين)\s+(?:في|بـ?)\s*(?:دبر|dabbir)|registered\s+(?:accounts?|users?|customers?)/i;
+const BUSINESS_CUSTOMER_QUESTION=/(?:زبائن|عملاء)\s+(?:الأنشطة|الانشطة|النشاط|الأعمال|الاعمال|المتجر)|business\s+customers?/i;
+
+export function readMetricForQuestion(command){
   const q=clean(command,4000).toLowerCase();
+  // In owner language, "registered customers/users" means DABBIR accounts.
+  // Keep tenant CRM records behind an explicit business-customer phrase so the
+  // two populations cannot be silently conflated.
+  if(REGISTERED_ACCOUNT_QUESTION.test(q))return 'REGISTERED_ACCOUNTS_TOTAL';
+  if(BUSINESS_CUSTOMER_QUESTION.test(q))return 'CUSTOMERS_TOTAL';
+  if(/مسجل|حساب|account|user/.test(q))return 'REGISTERED_ACCOUNTS_TOTAL';
+  if(/زبائن|customers?/.test(q))return 'CUSTOMERS_TOTAL';
+  if(/حجز|موعد|appointment|booking/.test(q))return 'APPOINTMENTS_TOTAL';
+  if(/طلب|orders?/.test(q))return 'ORDERS_TOTAL';
+  if(/عمل|business|tenant/.test(q))return 'BUSINESSES_TOTAL';
+  return 'EXECUTIVE_SNAPSHOT';
+}
+
+export function readOnlyAnswer(command,snapshot){
   const accounts=number(snapshot?.registered_accounts?.total);
   const businesses=number(snapshot?.businesses?.total);
   const customers=number(snapshot?.customers?.total);
@@ -131,19 +148,20 @@ export function readOnlyAnswer(command,snapshot){
   let metric='EXECUTIVE_SNAPSHOT';
   let summary=`الحالة الحية: ${accounts} حسابات DABBIR مسجلة، ${businesses} أعمال، ${customers} زبائن داخل أعمال العملاء، ${appointments} حجوزات، و${orders} طلبات.`;
   let expected={registered_accounts_total:accounts,businesses_total:businesses,customers_total:customers,appointments_total:appointments,orders_total:orders};
-  if(/مسجل|حساب|account|user/.test(q)){
+  const requestedMetric=readMetricForQuestion(command);
+  if(requestedMetric==='REGISTERED_ACCOUNTS_TOTAL'){
     metric='REGISTERED_ACCOUNTS_TOTAL';expected={registered_accounts_total:accounts};
     summary=`عدد الحسابات الفعلية المسجلة في DABBIR حاليًا: ${accounts}.`;
-  }else if(/زبائن|customers?/.test(q)){
+  }else if(requestedMetric==='CUSTOMERS_TOTAL'){
     metric='CUSTOMERS_TOTAL';expected={customers_total:customers};
     summary=`عدد زبائن الأنشطة المسجلين داخل DABBIR حاليًا: ${customers}.`;
-  }else if(/حجز|موعد|appointment|booking/.test(q)){
+  }else if(requestedMetric==='APPOINTMENTS_TOTAL'){
     metric='APPOINTMENTS_TOTAL';expected={appointments_total:appointments};
     summary=`إجمالي الحجوزات المسجلة حاليًا: ${appointments}.`;
-  }else if(/طلب|orders?/.test(q)){
+  }else if(requestedMetric==='ORDERS_TOTAL'){
     metric='ORDERS_TOTAL';expected={orders_total:orders};
     summary=`إجمالي الطلبات المسجلة حاليًا: ${orders}.`;
-  }else if(/عمل|business|tenant/.test(q)){
+  }else if(requestedMetric==='BUSINESSES_TOTAL'){
     metric='BUSINESSES_TOTAL';expected={businesses_total:businesses};
     summary=`إجمالي سجلات الأعمال في DABBIR حاليًا: ${businesses}.`;
   }
