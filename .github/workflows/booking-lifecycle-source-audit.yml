@@ -21,9 +21,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -f .github/booking-patches/.ready || exit 0
           shopt -s nullglob
           patches=(.github/booking-patches/*.patch)
-          ((${#patches[@]})) || exit 0
+          ((${#patches[@]})) || exit 1
           for patch in "${patches[@]}"; do git apply --check "$patch"; done
           for patch in "${patches[@]}"; do git apply "$patch"; done
           rm -rf .github/booking-patches
