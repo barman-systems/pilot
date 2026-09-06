@@ -3,7 +3,7 @@ const script=String.raw`(()=>{
   window.__dabbirCarWashBookingEditFix=true;
   const q=s=>document.querySelector(s);
   const workspaceNow=()=>{try{return typeof workspace!=='undefined'?workspace:window.workspace}catch{return window.workspace||null}};
-  const isCarWash=()=>String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
+  const isCarWash=()=>!window.__dabbirAppointmentManagement?.supportsHistoricalEdit&&String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
   const ar=()=>document.documentElement.lang!=='en';
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const copy=()=>ar()?{title:'تعديل الحجز',customer:'العميل',time:'الموعد',status:'الحالة',save:'حفظ التعديل',cancel:'إلغاء',requested:'مطلوب',confirmed:'مؤكد',rescheduled:'أعيدت جدولته',completed:'مكتمل',cancelled:'ملغي',saved:'تم تعديل الحجز.',savedRefreshFailed:'تم حفظ الحجز، لكن تعذر تحديث عرضه. افتح الحجوزات مجددًا.',failed:'تعذر تعديل الحجز.'}:{title:'Edit booking',customer:'Customer',time:'Booking',status:'Status',save:'Save changes',cancel:'Cancel',requested:'Requested',confirmed:'Confirmed',rescheduled:'Rescheduled',completed:'Completed',cancelled:'Cancelled',saved:'Booking updated.',savedRefreshFailed:'Booking saved, but its display could not be refreshed. Reopen bookings.',failed:'Could not update booking.'};

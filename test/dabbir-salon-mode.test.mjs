@@ -92,12 +92,12 @@ test('calendar UI provides day, week, month, employee columns, drag/drop and dur
   assert.equal(manifest.deferred.includes('/api/calendar-live-ui'),false);
   assert.match(calendarPerformance,/import calendarLiveHandler from '\.\/calendar-live-ui\.js'/);
   assert.match(calendarOwner,/import salonModeUiHandler from '\.\/salon-mode-ui\.js'/);
-  assert.match(calendarOwner,/managementCaptured\.body\+'\\n'\+salonCaptured\.body/);
+  assert.match(calendarOwner,/managementCaptured\.body\.replace\(bookingBrowser\+'\\n',''\)\+'\\n'\+salonCaptured\.body/);
 });
 
 test('Salon Mode cannot create a self-triggering Safari mutation loop',()=>{
   assert.match(ui,/if\(!document\.body\.classList\.contains\('salonMode'\)\)document\.body\.classList\.add\('salonMode'\)/);
-  assert.match(ui,/if\(data&&!force\)return/);
+  assert.match(ui,/if\(data&&dataContext===context&&!force\)return/);
   assert.doesNotMatch(ui,/observer\.observe\(document\.body,\{attributes:true,subtree:true/);
   assert.doesNotMatch(ui,/setInterval\(/);
 });
