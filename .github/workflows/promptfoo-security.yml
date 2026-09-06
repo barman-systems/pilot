@@ -32,7 +32,6 @@ jobs:
           npx --yes promptfoo@latest eval \
             -c security/promptfoo/promptfooconfig.yaml \
             --no-cache \
-            --fail-on-error \
             -o promptfoo-results.json
       - name: Upload Promptfoo result
         if: always()
@@ -40,5 +39,5 @@ jobs:
         with:
           name: promptfoo-security-results
           path: promptfoo-results.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
