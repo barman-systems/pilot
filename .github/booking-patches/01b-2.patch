@@ -1,0 +1,46 @@
+diff --git a/api/appointment-management-ui.js b/api/appointment-management-ui.js
+index 244c9a0..2947d0f 100644
+--- a/api/appointment-management-ui.js
++++ b/api/appointment-management-ui.js
+@@ -54,7 +57,7 @@ const script=String.raw`(()=>{
+     return Number.isNaN(d.getTime())?null:d.toISOString();
+   }
+   function businessType(){return String(ws()?.business?.business_type||'').toLowerCase()}
+-  function genericCalendarEnabled(){return !['store','creator','real_estate','salon'].includes(businessType())}
++  function genericCalendarEnabled(){return !window.__dabbirActivityProfile?.ownsCalendar&&!['store','creator','real_estate','salon'].includes(businessType())}
+   function calendarDayKey(value){const raw=dubaiLocalMinute(value instanceof Date?value:new Date(value));return raw.slice(0,10)}
+   function calendarWallDate(value){const key=calendarDayKey(value);const d=new Date(key+'T12:00:00');return Number.isNaN(d.getTime())?new Date(value):d}
+   function startDay(value){const d=calendarWallDate(value);d.setHours(12,0,0,0);return d}
+@@ -65,7 +68,7 @@ const script=String.raw`(()=>{
+   function dayLabel(value,weekday=true){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{weekday:weekday?'short':undefined,month:'short',day:'numeric'}).format(value)}catch{return calendarDayKey(value)}}
+   function monthLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{month:'long',year:'numeric'}).format(value)}catch{return calendarDayKey(value).slice(0,7)}}
+   function timeLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
+-  function activeRows(){return [...(ws()?.appointments||[])].filter(a=>a?.id&&a?.starts_at&&!['cancelled','canceled'].includes(String(a.status||'').toLowerCase())).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at))}
++  function activeRows(){return reader.rows(ws())}
+   function eventClass(a){const s=String(a.status||'requested').toLowerCase();return s==='completed'?' completed':(s==='cancelled'||s==='canceled'?' cancelled':'')}
+   function eventButton(a,compact=false){const name=customerName(a.customer_id),meta=timeLabel(a.starts_at)+' · '+statusLabel(a.status);return '<button type="button" class="'+(compact?'dabbirGenericMonthEvent':'dabbirGenericEvent'+eventClass(a))+'" data-calendar-appt="'+esc(a.id)+'" title="'+esc(fmt(a.starts_at))+'"><b>'+esc(name)+'</b>'+(compact?'':'<small>'+esc(meta)+'</small>')+'</button>'}
+   function bindCalendarEvents(host){host.querySelectorAll('[data-calendar-appt]').forEach(btn=>btn.onclick=()=>openEdit(btn.dataset.calendarAppt))}
+@@ -79,8 +82,9 @@ const script=String.raw`(()=>{
+   function renderWeekCalendar(rows){const c=copy(),start=startWeek(calendarCursor),days=Array.from({length:7},(_,i)=>addDays(start,i));return '<div class="dabbirGenericWeekWrap"><div class="dabbirGenericWeek">'+days.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key);return '<div class="dabbirGenericWeekDay"><div class="dabbirGenericWeekHead">'+esc(dayLabel(day))+'</div><div class="dabbirGenericWeekEvents">'+(dayRows.length?dayRows.map(a=>eventButton(a)).join(''):'<div class="dabbirGenericEmpty">'+esc(c.noBookings)+'</div>')+'</div></div>'}).join('')+'</div></div>'}
+   function renderMonthCalendar(rows){const c=copy(),month=startMonth(calendarCursor),gridStart=startWeek(month),todayKey=calendarDayKey(new Date());const cells=Array.from({length:42},(_,i)=>addDays(gridStart,i));return '<div class="dabbirGenericMonthWrap"><div class="dabbirGenericMonth">'+cells.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key),outside=day.getMonth()!==month.getMonth(),shown=dayRows.slice(0,3),more=Math.max(0,dayRows.length-shown.length);return '<div class="dabbirGenericMonthDay'+(outside?' out':'')+(key===todayKey?' today':'')+'"><div class="dabbirGenericMonthDate">'+esc(String(day.getDate()))+'</div>'+shown.map(a=>eventButton(a,true)).join('')+(more?'<div class="dabbirGenericRange">+'+more+' '+esc(c.more)+'</div>':'')+'</div>'}).join('')+'</div></div>'}
+   function calendarRangeLabel(){if(calendarView==='day')return dayLabel(calendarCursor);if(calendarView==='month')return monthLabel(calendarCursor);const start=startWeek(calendarCursor),end=addDays(start,6);return dayLabel(start,false)+' – '+dayLabel(end,false)}
+-  function moveCalendar(delta){if(calendarView==='day')calendarCursor=addDays(calendarCursor,delta);else if(calendarView==='week')calendarCursor=addDays(calendarCursor,delta*7);else{const d=startDay(calendarCursor);d.setMonth(d.getMonth()+delta,1);calendarCursor=d}signature='';render()}
++  function moveCalendar(direction){lifecycle.move(ws(),direction)}
+   function renderCalendar(rows){
++    if(window.__dabbirActivityProfile?.ownsCalendar){q('#dabbirGenericCalendar')?.remove();return}
+     const panel=ensureCalendar();if(!panel)return;
+     const enabled=genericCalendarEnabled();panel.hidden=!enabled;
+     const table=q('#appointmentsTable');if(table)table.style.display=enabled?'none':'';
+@@ -88,10 +92,10 @@ const script=String.raw`(()=>{
+     const c=copy();
+     const body=calendarView==='day'?renderDayCalendar(rows):(calendarView==='month'?renderMonthCalendar(rows):renderWeekCalendar(rows));
+     panel.innerHTML='<div class="dabbirGenericCalendarHead"><div><div class="dabbirGenericCalendarTitle">'+esc(c.calendar)+'</div><div class="dabbirGenericRange">'+esc(calendarRangeLabel())+'</div></div><div class="dabbirGenericCalendarViews"><button type="button" data-calendar-view="day" class="'+(calendarView==='day'?'on':'')+'">'+esc(c.day)+'</button><button type="button" data-calendar-view="week" class="'+(calendarView==='week'?'on':'')+'">'+esc(c.week)+'</button><button type="button" data-calendar-view="month" class="'+(calendarView==='month'?'on':'')+'">'+esc(c.month)+'</button></div><div class="dabbirGenericCalendarControls"><button type="button" data-calendar-nav="prev" aria-label="'+esc(c.previous)+'">‹</button><button type="button" data-calendar-nav="today">'+esc(c.today)+'</button><button type="button" data-calendar-nav="next" aria-label="'+esc(c.next)+'">›</button></div></div>'+body;
+-    panel.querySelectorAll('[data-calendar-view]').forEach(btn=>btn.onclick=()=>{calendarView=btn.dataset.calendarView;localStorage.setItem('dabbir_generic_calendar_view',calendarView);signature='';render()});
++    panel.querySelectorAll('[data-calendar-view]').forEach(btn=>btn.onclick=()=>{lifecycle.setView(ws(),{view:btn.dataset.calendarView,allDates:false})});
+     panel.querySelector('[data-calendar-nav="prev"]')?.addEventListener('click',()=>moveCalendar(-1));
+     panel.querySelector('[data-calendar-nav="next"]')?.addEventListener('click',()=>moveCalendar(1));
+-    panel.querySelector('[data-calendar-nav="today"]')?.addEventListener('click',()=>{calendarCursor=new Date();signature='';render()});
++    panel.querySelector('[data-calendar-nav="today"]')?.addEventListener('click',()=>{lifecycle.setView(ws(),{day:lifecycle.dayKey(Date.now(),ws().business),allDates:false,followToday:true})});
+     bindCalendarEvents(panel);
+   }
+   function ensurePanel(){
