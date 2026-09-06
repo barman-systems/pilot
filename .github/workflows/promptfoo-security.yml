@@ -1,0 +1,43 @@
+name: DABBIR Promptfoo Security
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'integrations/**'
+      - 'security/promptfoo/**'
+      - '.github/workflows/promptfoo-security.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  promptfoo-security:
+    name: promptfoo-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Run local Promptfoo safety evaluation
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: '1'
+          PROMPTFOO_DISABLE_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          npx --yes promptfoo@latest eval \
+            -c security/promptfoo/promptfooconfig.yaml \
+            --no-cache \
+            -o promptfoo-results.json
+      - name: Upload Promptfoo result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-security-results
+          path: promptfoo-results.json
+          if-no-files-found: warn
+          retention-days: 7
