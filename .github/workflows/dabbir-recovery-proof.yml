@@ -1,0 +1,241 @@
+name: DABBIR Recovery Proof
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-recovery-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PROJECT_REF: fphpoysqdsceniwduxjq
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Normalize Supabase Session Pooler URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL:-}" || { echo 'SUPABASE_DB_URL is not configured'; exit 1; }
+          canonical=$(printf '%s' "$SUPABASE_DB_URL" | sed -E "s#^(postgres(ql)?://)[^:]+:#\\1postgres.${PROJECT_REF}:#")
+          echo "::add-mask::$canonical"
+          printf 'DATABASE_URL=%s\n' "$canonical" >> "$GITHUB_ENV"
+
+      - name: Verify Supabase production connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -e DATABASE_URL postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atqc "select 1"'
+
+      - name: Start isolated PostgreSQL 17 restore target
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name dabbir-restore-db -e POSTGRES_PASSWORD=restoreproof -e POSTGRES_DB=restoreproof -p 55432:5432 postgres:17
+          for i in $(seq 1 30); do
+            if docker exec dabbir-restore-db pg_isready -U postgres -d restoreproof >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          echo 'Restore target did not become ready' >&2
+          exit 1
+
+      - name: Create consistent logical backup and data-count baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f snapshot-id.txt release-snapshot snapshot-holder.sql row-count-queries.sql production-row-counts.sql production-row-counts.txt
+
+          cat > snapshot-holder.sql <<'SQL'
+          BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          \copy (SELECT pg_export_snapshot()) TO '/work/snapshot-id.txt'
+          \! while [ ! -f /work/release-snapshot ]; do sleep 1; done
+          COMMIT;
+          SQL
+
+          docker run --rm -e DATABASE_URL -v "$PWD:/work" postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -qf /work/snapshot-holder.sql' &
+          holder_pid=$!
+
+          cleanup_snapshot() {
+            touch release-snapshot || true
+            wait "$holder_pid" || true
+            rm -f snapshot-id.txt release-snapshot snapshot-holder.sql production-row-counts.sql
+          }
+          trap cleanup_snapshot EXIT
+
+          for i in $(seq 1 30); do
+            if [ -s snapshot-id.txt ]; then break; fi
+            kill -0 "$holder_pid" 2>/dev/null || { echo 'Snapshot holder exited early' >&2; exit 1; }
+            sleep 1
+          done
+          test -s snapshot-id.txt || { echo 'Snapshot ID was not created' >&2; exit 1; }
+
+          snapshot_id=$(tr -d '\r\n ' < snapshot-id.txt)
+          case "$snapshot_id" in
+            ''|*[!0-9A-Fa-f-]*) echo 'Invalid snapshot ID' >&2; exit 1 ;;
+          esac
+
+          docker run --rm -e DATABASE_URL -e SNAPSHOT_ID="$snapshot_id" -v "$PWD:/work" postgres:17 \
+            sh -c 'pg_dump "$DATABASE_URL" --snapshot="$SNAPSHOT_ID" --format=custom --no-owner --no-acl --schema=public --schema=dabbir_private --file=/work/dabbir-production.dump'
+          test -s dabbir-production.dump
+          sha256sum dabbir-production.dump > dabbir-production.dump.sha256
+
+          cat > generate-row-count-queries.sql <<SQL
+          BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+          SET TRANSACTION SNAPSHOT '$snapshot_id';
+          SELECT format(
+            'SELECT %L || ''|'' || %L || ''|'' || count(*) FROM %I.%I;',
+            table_schema,
+            table_name,
+            table_schema,
+            table_name
+          )
+          FROM information_schema.tables
+          WHERE table_schema IN ('public','dabbir_private')
+            AND table_type = 'BASE TABLE'
+          ORDER BY table_schema, table_name;
+          COMMIT;
+          SQL
+
+          docker run --rm -e DATABASE_URL -v "$PWD:/work" postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -qAtf /work/generate-row-count-queries.sql' \
+            > row-count-queries.sql
+          test -s row-count-queries.sql
+
+          {
+            echo 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;'
+            printf "SET TRANSACTION SNAPSHOT '%s';\n" "$snapshot_id"
+            cat row-count-queries.sql
+            echo 'COMMIT;'
+          } > production-row-counts.sql
+
+          docker run --rm -e DATABASE_URL -v "$PWD:/work" postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -qAtf /work/production-row-counts.sql' \
+            > production-row-counts.txt
+
+          touch release-snapshot
+          wait "$holder_pid"
+          trap - EXIT
+          rm -f snapshot-id.txt release-snapshot snapshot-holder.sql generate-row-count-queries.sql production-row-counts.sql
+
+      - name: Capture Auth principal IDs for isolated FK compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          # IDs are used only inside this ephemeral runner and are never uploaded.
+          docker run --rm -e DATABASE_URL -v "$PWD:/work" postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atqc "select id::text from auth.users order by id" > /work/auth-user-ids.txt'
+
+      - name: Prepare Supabase-compatible restore database
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i dabbir-restore-db psql -U postgres -d restoreproof -v ON_ERROR_STOP=1 <<'SQL'
+          DROP SCHEMA public CASCADE;
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          CREATE ROLE service_role NOLOGIN;
+          CREATE SCHEMA auth;
+          CREATE TABLE auth.users (
+            id uuid PRIMARY KEY
+          );
+          CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
+          LANGUAGE sql STABLE
+          AS $$ SELECT NULL::uuid $$;
+          CREATE OR REPLACE FUNCTION auth.role() RETURNS text
+          LANGUAGE sql STABLE
+          AS $$ SELECT 'authenticated'::text $$;
+          SQL
+          if [ -s auth-user-ids.txt ]; then
+            sed "s/.*/INSERT INTO auth.users(id) VALUES ('&');/" auth-user-ids.txt \
+              | docker exec -i dabbir-restore-db psql -U postgres -d restoreproof -v ON_ERROR_STOP=1
+          fi
+          rm -f auth-user-ids.txt
+
+      - name: Restore into isolated PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network host -e PGPASSWORD=restoreproof -v "$PWD:/work" postgres:17 \
+            pg_restore -h 127.0.0.1 -p 55432 -U postgres -d restoreproof \
+              --no-owner --no-acl --exit-on-error /work/dabbir-production.dump
+
+      - name: Compare production and restored structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          prod_sql() {
+            docker run --rm -e DATABASE_URL postgres:17 \
+              sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atqc "$1"' sh "$1"
+          }
+          restored_sql() {
+            docker exec dabbir-restore-db psql -U postgres -d restoreproof -v ON_ERROR_STOP=1 -Atqc "$1"
+          }
+
+          q_public_tables="select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE';"
+          q_private_tables="select count(*) from information_schema.tables where table_schema='dabbir_private' and table_type='BASE TABLE';"
+          q_policies="select count(*) from pg_policies where schemaname in ('public','dabbir_private');"
+          q_indexes="select count(*) from pg_indexes where schemaname in ('public','dabbir_private');"
+          q_functions="select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','dabbir_private');"
+
+          prod_tables=$(prod_sql "$q_public_tables")
+          restored_tables=$(restored_sql "$q_public_tables")
+          prod_private_tables=$(prod_sql "$q_private_tables")
+          restored_private_tables=$(restored_sql "$q_private_tables")
+          prod_policies=$(prod_sql "$q_policies")
+          restored_policies=$(restored_sql "$q_policies")
+          prod_indexes=$(prod_sql "$q_indexes")
+          restored_indexes=$(restored_sql "$q_indexes")
+          prod_functions=$(prod_sql "$q_functions")
+          restored_functions=$(restored_sql "$q_functions")
+
+          printf 'production_public_tables=%s\nrestored_public_tables=%s\nproduction_private_tables=%s\nrestored_private_tables=%s\nproduction_policies=%s\nrestored_policies=%s\nproduction_indexes=%s\nrestored_indexes=%s\nproduction_functions=%s\nrestored_functions=%s\n' \
+            "$prod_tables" "$restored_tables" "$prod_private_tables" "$restored_private_tables" "$prod_policies" "$restored_policies" "$prod_indexes" "$restored_indexes" "$prod_functions" "$restored_functions" | tee recovery-proof.txt
+
+          test "$prod_tables" = "$restored_tables"
+          test "$prod_private_tables" = "$restored_private_tables"
+          test "$prod_policies" = "$restored_policies"
+          test "$prod_indexes" = "$restored_indexes"
+          test "$prod_functions" = "$restored_functions"
+
+      - name: Compare exact dump-snapshot row counts with restored data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s production-row-counts.txt
+          test -s row-count-queries.sql
+
+          docker exec -i dabbir-restore-db \
+            psql -U postgres -d restoreproof -v ON_ERROR_STOP=1 -qAtf - \
+            < row-count-queries.sql > restored-row-counts.txt
+
+          cmp -s production-row-counts.txt restored-row-counts.txt || {
+            echo 'ROW_COUNT_PARITY_FAILED' >&2
+            diff -u production-row-counts.txt restored-row-counts.txt >&2 || true
+            exit 1
+          }
+
+          tables_compared=$(wc -l < production-row-counts.txt | tr -d ' ')
+          printf 'row_count_parity=PASS\ntables_compared=%s\n' "$tables_compared" | tee row-count-parity.txt
+          rm -f production-row-counts.txt restored-row-counts.txt row-count-queries.sql
+
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-recovery-proof
+          path: |
+            dabbir-production.dump.sha256
+            recovery-proof.txt
+            row-count-parity.txt
+          if-no-files-found: warn
+          retention-days: 14
