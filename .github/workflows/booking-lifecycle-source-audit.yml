@@ -25,13 +25,19 @@ jobs:
           shopt -s nullglob
           patches=(.github/booking-patches/*.patch)
           ((${#patches[@]})) || exit 1
-          for patch in "${patches[@]}"; do
-            git apply --check "$patch"
-            git apply "$patch"
-          done
-          rm -rf .github/booking-patches
           git config user.name 'barmanai'
           git config user.email 'alcaptain2014@gmail.com'
+          for patch in "${patches[@]}"; do
+            if ! git apply --check "$patch"; then
+              printf '%s\n' "$patch" > .github/booking-patch-failure.txt
+              git add .github/booking-patch-failure.txt
+              git commit -m 'chore(booking): record patch apply blocker'
+              git push origin HEAD:fix/booking-lifecycle-all-activities-20260906
+              exit 1
+            fi
+            git apply "$patch"
+          done
+          rm -rf .github/booking-patches .github/booking-patch-failure.txt
           git add -A
           git diff --cached --check
           git commit -m 'fix(bookings): separate active work from resolved history'
