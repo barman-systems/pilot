@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { classifyAutomationTask, deterministicPlan, readOnlyAnswer } from '../api/_barman-executive-automation.js';
+import { classifyAutomationTask, deterministicPlan, readMetricForQuestion, readOnlyAnswer } from '../api/_barman-executive-automation.js';
 
 const cron=fs.readFileSync(new URL('../api/barman-executive-cron.js',import.meta.url),'utf8');
 const verifier=fs.readFileSync(new URL('../scripts/barman-independent-verifier.mjs',import.meta.url),'utf8');
@@ -30,6 +30,18 @@ test('read-only answers distinguish DABBIR accounts from business customers',()=
   assert.match(accounts.summary,/4/);
   assert.equal(customers.metric,'CUSTOMERS_TOTAL');
   assert.match(customers.summary,/7/);
+});
+
+test('registered customers wording resolves to DABBIR accounts, never tenant CRM customers',()=>{
+  const snapshot={registered_accounts:{total:4},businesses:{total:18},customers:{total:7},appointments:{total:6},orders:{total:1}};
+  const exactOwnerQuestion='كم عدد العملاء المسجلين في دبر؟';
+  const answer=readOnlyAnswer(exactOwnerQuestion,snapshot);
+  assert.equal(readMetricForQuestion(exactOwnerQuestion),'REGISTERED_ACCOUNTS_TOTAL');
+  assert.equal(answer.metric,'REGISTERED_ACCOUNTS_TOTAL');
+  assert.deepEqual(answer.expected,{registered_accounts_total:4});
+  assert.match(answer.summary,/4/);
+  assert.doesNotMatch(answer.summary,/7/);
+  assert.equal(readMetricForQuestion('كم عدد عملاء الأنشطة؟'),'CUSTOMERS_TOTAL');
 });
 
 test('executive cron claims planner, read-only and runtime lanes separately',()=>{
