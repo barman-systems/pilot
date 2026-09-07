@@ -21,7 +21,9 @@ test('provider failover creates one durable handoff and never leaks the provider
   assert.match(helper,/wa-ai-provider-failover:\$\{result\.batch_id\}/);
   assert.doesNotMatch(helper,/attempt_count/);
   assert.match(helper,/حوّلت طلبك للفريق مباشرة/);
-  assert.doesNotMatch(helper,/continuityMessage[\s\S]*errorCode/);
+  const continuity=helper.match(/function continuityMessage\([\s\S]*?\n\}/)?.[0]||'';
+  assert.match(continuity,/customerBody/);
+  assert.doesNotMatch(continuity,/errorCode|gateway_|gemini_|groq_|cloudflare_|planner/i);
   assert.match(helper,/finalizeOutboundReply/);
   assert.match(helper,/markOutboundResult/);
 });
