@@ -70,6 +70,7 @@ while IFS= read -r path; do
     test/dabbir-protected-live-smoke.mjs|\
     .github/workflows/dabbir-protected-live-smoke.yml|\
     .github/workflows/dabbir-ai-customer-journey.yml|\
+    .github/workflows/dabbir-production-journey-owner-trigger.yml|\
     .github/workflows/dabbir-bar12-readiness.yml|\
     .github/scripts/dabbir-bar12-*|\
     scripts/dabbir-readiness-gate.mjs|\
