@@ -2,7 +2,7 @@
 
 ## Scope and provenance
 
-Implementation, not an audit-only proposal. Starting main: `e4b7d5bc63b874bbc9c6658748b00bee52b841fc`. Consolidation checkpoint: `4ddfad8`. Integrated main `b683e0e` and the existing owner PR #501 at `cca0955cd144682e7fe2b9b4a3f650c2522d2b16`, including invitation atomicity and granular permissions. No force push, replacement authentication system, new production table, or production data deletion is part of this consolidation.
+Implementation, not an audit-only proposal. Starting main: `e4b7d5bc63b874bbc9c6658748b00bee52b841fc`. Consolidation checkpoint: `4ddfad8`. Integrated main `e04ff0d` (including the newer OTP v11 OIDC authentication, Sentry preloader and authorized legacy CEO boundary) and the existing owner PR #501 at `cca0955cd144682e7fe2b9b4a3f650c2522d2b16`, including invitation atomicity and granular permissions. No force push, replacement authentication system, new production table, or production data deletion is part of this consolidation.
 
 Inspected routes, API handlers, UI import/injection chains, the deployed Supabase broker source, PostgreSQL function definitions and privileges, migrations, CI/build gates, Vercel configuration/deployments, and runtime environment variable names. No secret values are included here. Source inspection cannot establish whether the owner actually uses each tool: tool-level usage telemetry was not available. Decisions below use execution paths, duplication, permissions and actionable outputs, not guessed usage.
 
@@ -72,14 +72,14 @@ Advisors before deployment: 67 security INFO notices for RLS-enabled tables with
 
 | Gate | Result / practical limit |
 |---|---|
-| Full application build | `npm run dabbir:build`: passed; syntax, production dependency audit and all 1393 tests passed |
-| Owner regression suite | 175 tests after merge (including 12 PostgreSQL integration tests and 8 runtime broker denial/outage tests) |
+| Full application build | `npm run dabbir:build`: passed; syntax, production dependency audit and all 1411 tests passed |
+| Owner regression suite | 176 tests after merge (including 12 PostgreSQL integration tests and 8 runtime broker denial/outage tests) |
 | Type checking | `deno check supabase/functions/dabbir-owner-broker/index.ts`: passed |
 | Lint | Targeted ESLint correctness rules on changed production JS; existing repository has no general ESLint configuration |
 | PostgreSQL execution | PGlite 0.5.8 runs actual repaired SQL: scope filtering, expiry, all five scopes, support persistence + notes + audit, mismatch rejection, global CEO denial, audit source union, grants, rollback/reapply |
 | P2 migration | Actual migration executed against a disposable PostgreSQL fixture; system-role grant reconciliation revokes affected sessions; CUSTOM grants and sessions preserved |
 | API execution | Actual Node handlers against isolated transport: auth, malformed bodies, same-origin checks, upstream failures, audited receipts and independent readback for operations/support/CEO/decisions/incidents/team |
-| Browser | Chrome on isolated fixture executes real Node handlers: customer context, product activation, support creation, CEO creation, owner decision and team access persistence verified |
+| Browser | Chrome on isolated fixture executes real Node handlers: customer context, product activation, support creation and customer-visible reply, CEO creation, owner decision and team access persistence verified |
 | Root protection | Synthetic root shows no authority-edit/remove controls; RPC and regression tests retain root/self-grant/expiry guards |
 | Visual evidence | `owner-dashboard-evidence/` contains synthetic screenshots, not production customer data |
 
@@ -93,7 +93,7 @@ The customer support hub merged into main while this repair was running. Its exi
 
 Real production SQL verification in `test/owner-dashboard-db-rollback.sql` created a case, note and audit record, closed and reopened the case, asserted the persisted state, and rolled back. The post-rollback query confirmed no test cases remained. An unauthenticated live Broker request returned HTTP 401.
 
-Browser geometry confirmed no horizontal overflow: Arabic RTL phone frame 390px (375px content width), English LTR tablet frame 820px (805px content width). Captures are in `owner-dashboard-evidence/`. These are Chrome checks, not Safari device tests.
+Browser geometry confirmed no horizontal overflow: Arabic RTL phone frame 390px (375px content width), English LTR tablet frame 820px (805px content width). Captures are in `owner-dashboard-evidence/`. The customer-visible reply browser flow also passed: the case moved to waiting, the saved response appeared in the reloaded conversation, and the form reported verified persistence. These are Chrome checks, not Safari device tests.
 
 ## Remaining verification and limitations
 
@@ -102,4 +102,4 @@ Browser geometry confirmed no horizontal overflow: Arabic RTL phone frame 390px 
 - Live MRR/paying-customer revenue remains unavailable while the source is sandbox-only. Message/booking creation failure rates and infrastructure latency are not measured by the current source; the UI says so.
 - MFA enrollment is unavailable. Existing required MFA stays enforced; invitation UI cannot silently enable an unusable login requirement.
 - Bounded search/list APIs expose their limits. This consolidation does not claim full tenant workflow, outbound WhatsApp, payment, or external delivery verification from local synthetic tests.
-- Frontend PR/preview/production status is recorded separately after CI and deployment checks; source compilation is not deployment evidence.
+- The first delivered commit `09c14b74cf353e890ca39ef469941d5faa337231` reached READY in Vercel deployment `dpl_DxdVhV6pDkTFAcqsXzrJ4u3fsSCi`; its build logs independently recorded 1393 passing tests. The protected dashboard returned the owner sign-in page for a guest. A subsequent merge preserves newer main `e04ff0d`; its local build passed all 1411 tests. CI and deployment of this subsequent commit still need to be checked separately; the older preview is not proof of the new deployment.

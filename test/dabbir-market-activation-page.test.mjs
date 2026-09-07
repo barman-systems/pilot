@@ -45,7 +45,7 @@ test('root login gate offers value before account while retaining the existing a
 test('Vercel exposes the public try route without changing the protected root runtime route', () => {
   assert.ok(vercel.routes.some(route => route.src === '^/try/?$' && route.dest === '/api/dabbir-market-preview'));
   assert.ok(vercel.rewrites.some(route => route.source === '/try' && route.destination === '/api/dabbir-market-preview'));
-  assert.equal(vercel.functions['api/dabbir-market-preview.js'].includeFiles, 'try.html');
+  assert.ok(String(vercel.functions['api/dabbir-market-preview.js'].includeFiles || '').includes('try.html'));
   assert.match(previewHandler, /readFileSync\(new URL\('\.\.\/try\.html'/);
   assert.match(previewHandler, /x-dabbir-market-preview/);
   assert.ok(vercel.routes.some(route => route.src === '^/$' && route.dest === '/api/app-safari-recovery'));

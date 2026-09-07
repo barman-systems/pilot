@@ -16,3 +16,14 @@ test('decision inbox renders the real question and restricts resolution to root 
  assert.match(ui,/d\.question/);assert.match(ui,/d\.action_description/);assert.match(ui,/d\.resolution&&root/);
  assert.match(ui,/escalation_id:d\.decisionId/);assert.match(ui,/resolution:d\.resolution/);
 });
+test('legacy edge endpoint delegates authorization to the current fail-closed CEO RPC boundary',()=>{
+ const edge=fs.readFileSync(new URL('../supabase/functions/dabbir-owner-ceo-command/index.ts',import.meta.url),'utf8');
+ assert.match(edge,/dabbir_owner_session_verify_v1/);
+ assert.match(edge,/platform_owner/);
+ assert.match(edge,/dabbir_ceo_command_create_authorized_v1/);
+ assert.match(edge,/dabbir_ceo_commands_authorized_v1/);
+ assert.match(edge,/p_actor:session\.actor_user_id/);
+ assert.match(edge,/OWNER_SESSION_REQUIRED/);
+ assert.doesNotMatch(edge,/dabbir_ceo_command_create_v1/);
+ assert.doesNotMatch(edge,/dabbir_ceo_commands_recent_v1/);
+});
