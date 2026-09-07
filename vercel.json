@@ -37,49 +37,49 @@
   ],
   "functions": {
     "api/**/*.js": {
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/salon-reminders-cron.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/calendar-outbox-cron.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-whatsapp-ai-cron.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-whatsapp-ai-worker.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/barman-executive-cron.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-daily-operator-cron.js": {
       "maxDuration": 60,
-      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app.js": {
-      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app-recovery.js": {
-      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app-safari-recovery.js": {
-      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/car-wash-booking.js": {
-      "includeFiles": ["booking.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{booking.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-market-preview.js": {
-      "includeFiles": ["try.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{try.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/team-page.js": {
-      "includeFiles": ["team.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+      "includeFiles": "{team.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     }
   },
   "routes": [
