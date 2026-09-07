@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const cron=fs.readFileSync(new URL('../api/dabbir-ai-billing-reconcile-cron.js',import.meta.url),'utf8');
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260907135600_dabbir_ai_gateway_billing_reconciliation_v1.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260907135618_dabbir_ai_gateway_billing_reconciliation_v1.sql',import.meta.url),'utf8');
 const vercel=fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8');
 
 test('Gateway reconciliation reads actual billing reports by WhatsApp business and model',()=>{assert.match(cron,/getVercelOidcToken/);assert.match(cron,/group_by:'user'/);assert.match(cron,/group_by:'model'/);assert.match(cron,/user_id:businessId/);assert.match(cron,/tags:'channel:whatsapp'/);assert.match(cron,/total_cost/);assert.match(cron,/dabbir_reconcile_ai_gateway_cost_v1/)});
