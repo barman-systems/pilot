@@ -56,12 +56,15 @@ test('owner decision API is brokered, same-origin on writes, and bounded to expl
   assert.doesNotMatch(decisionsApi,/SUPABASE_SERVICE_ROLE_KEY|service_role|apikey/i);
 });
 
-test('legacy edge endpoint still fails closed while canonical API no longer depends on it',()=>{
+test('legacy edge endpoint delegates authorization to the current fail-closed CEO RPC boundary',()=>{
   assert.match(edge,/dabbir_owner_session_verify_v1/);
   assert.match(edge,/platform_owner/);
-  assert.match(edge,/dabbir_ceo_command_create_v1/);
-  assert.match(edge,/dabbir_ceo_commands_recent_v1/);
+  assert.match(edge,/dabbir_ceo_command_create_authorized_v1/);
+  assert.match(edge,/dabbir_ceo_commands_authorized_v1/);
+  assert.match(edge,/p_actor:session\.actor_user_id/);
   assert.match(edge,/OWNER_SESSION_REQUIRED/);
+  assert.doesNotMatch(edge,/dabbir_ceo_command_create_v1/);
+  assert.doesNotMatch(edge,/dabbir_ceo_commands_recent_v1/);
 });
 
 test('historical public queue was RLS protected before the private-schema migration',()=>{
