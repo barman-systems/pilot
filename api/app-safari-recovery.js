@@ -1,8 +1,10 @@
+import './_sentry-runtime.js';
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
 const UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
+const SENTRY_BROWSER_MONITOR = `/api/ui-sentry?v=${UI_CACHE_BUST}`;
 const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});`;
 const LEGACY_STORE_APPOINTMENT_REDIRECT = `if(name==='appointments'&&String(workspace?.business?.business_type||'').toLowerCase()==='store') name='dashboard';`;
 const OWNER_FIRST_SCRIPT_RE = /<script src="\/api\/dabbir-owner-first-ui\?v=[^"\s<]+"><\/script>/g;
@@ -147,6 +149,9 @@ function orderOwnerFirstBeforeAuthBoot(body) {
 function injectSafariAuthFailOpen(body) {
   if (typeof body !== 'string') return body;
   let next = body;
+  if (!next.includes('/api/ui-sentry')) {
+    next = next.replace('</body>', `<script src="${SENTRY_BROWSER_MONITOR}"></script>\n</body>`);
+  }
   if (!next.includes('/api/dabbir-safari-auth-fail-open-ui')) {
     next = next.replace('</body>', `<script src="${SAFARI_AUTH_FAIL_OPEN}"></script>\n</body>`);
   }
@@ -181,8 +186,6 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-first-paint-authority', 'owner-first-inline-before-auth-boot-v2');
       res.setHeader('x-dabbir-design-authority', 'executive-calm-v1');
       res.statusCode = Number(proxy.statusCode || 200);
-      // Error/method responses have no HTML bootstrap to reorder.
-      // Preserve the upstream status and body instead of turning a 405 into a 500.
       if (res.statusCode !== 200) return res.end(body);
       const fresh = bustUiAssetVersion(body);
       const canonical = stripLegacyNavigationOverrides(fresh);

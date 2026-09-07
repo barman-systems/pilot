@@ -277,6 +277,7 @@ const uxFoundation=String.raw`(()=>{
   }
   function ensureFilters(){
     Object.entries(FILTER_TARGETS).forEach(([screen])=>{
+      if(screen==='appointments'&&window.__dabbirBookingLifecycle){q('[data-ux-tools="appointments"]')?.remove();return}
       if(screen==='customers'&&q('#crmSearch')){q('[data-ux-tools="customers"]')?.remove();return}
       const host=q('#screen-'+screen);const hero=host?.querySelector('.hero');if(!host||!hero||host.querySelector('[data-ux-tools="'+screen+'"]'))return;
       const tools=document.createElement('div');tools.className='uxScreenTools';tools.dataset.uxTools=screen;

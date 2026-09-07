@@ -11,6 +11,38 @@ async function broker(body){
   return {r,p};
 }
 
+function count(value){
+  const n=Number(value);
+  return Number.isFinite(n)&&n>=0?n:0;
+}
+
+export function normalizeOverviewForUi(payload){
+  const source=payload&&typeof payload==='object'&&!Array.isArray(payload)?payload:{};
+  const customers=count(source.customers?.accounts);
+  const businesses=count(source.customers?.live_businesses);
+  const needsReview=[
+    source.support?.open,
+    source.incidents?.open,
+    source.ceo?.blocked,
+    source.ceo?.decisions_waiting,
+    source.whatsapp?.error,
+    source.calendar?.error,
+    source.payments?.failed
+  ].reduce((sum,value)=>sum+count(value),0);
+
+  // Compatibility summary for the current owner shell. Keep the structured broker
+  // payload intact so newer executive panels continue to use their native sections.
+  return {
+    ...source,
+    total_customers:customers,
+    customer_count:customers,
+    total_businesses:businesses,
+    business_count:businesses,
+    needs_review:needsReview,
+    review_count:needsReview
+  };
+}
+
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
@@ -28,7 +60,7 @@ export default async function handler(req,res){
     if(!r.ok||!p?.ok){
       return json(res,r.status===401?401:r.status>=500?503:r.status,{ok:false,error:p?.error||'OWNER_DATA_FAILED'});
     }
-    if(action==='overview')return json(res,200,{ok:true,overview:p.payload});
+    if(action==='overview')return json(res,200,{ok:true,overview:normalizeOverviewForUi(p.payload)});
     if(action==='executive')return json(res,200,{ok:true,executive:p.payload});
     return json(res,200,{ok:true,...(p.payload||{})});
   }catch{

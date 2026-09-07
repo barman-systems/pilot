@@ -48,3 +48,47 @@ test('extracts inbound text message', () => {
   assert.equal(routed.classification, 'APPOINTMENT_REQUEST');
   assert.ok(routed.workflow.includes('BOOKING'));
 });
+
+test('extracts WhatsApp Business App message echoes for coexistence', () => {
+  const payload = {
+    entry: [{ changes: [{ field: 'smb_message_echoes', value: {
+      metadata: { phone_number_id: '123', display_phone_number: '+971500000000' },
+      messages: [{ id: 'wamid.echo.1', from: '971500000000', to: '971501234567', timestamp: '2', type: 'text', text: { body: 'تم استلام طلبك' } }]
+    } }] }]
+  };
+  const events = extractWhatsAppEvents(payload);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'app_message_echo');
+  assert.equal(events[0].sourceField, 'smb_message_echoes');
+  assert.equal(events[0].text, 'تم استلام طلبك');
+  assert.equal(events[0].to, '971501234567');
+});
+
+test('extracts coexistence history messages', () => {
+  const payload = {
+    entry: [{ changes: [{ field: 'history', value: {
+      phone_number_id: '123',
+      history: { messages: [{ id: 'wamid.history.1', from: '971501234567', timestamp: '3', type: 'text', text: { body: 'رسالة سابقة' } }] }
+    } }] }]
+  };
+  const events = extractWhatsAppEvents(payload);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'history_message');
+  assert.equal(events[0].sourceField, 'history');
+  assert.equal(events[0].text, 'رسالة سابقة');
+});
+
+test('extracts WhatsApp Business App state sync events', () => {
+  const payload = {
+    entry: [{ changes: [{ field: 'smb_app_state_sync', value: {
+      phone_number_id: '123',
+      state: 'SYNCED',
+      timestamp: '4'
+    } }] }]
+  };
+  const events = extractWhatsAppEvents(payload);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'app_state_sync');
+  assert.equal(events[0].sourceField, 'smb_app_state_sync');
+  assert.equal(events[0].state, 'SYNCED');
+});

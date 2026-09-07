@@ -51,8 +51,9 @@ test('calendar correctness uses business timezone, hides cancelled bookings and 
   assert.match(body,/function businessTimezone\(\)/);
   for(const zone of ['Asia/Dubai','Asia/Riyadh','Asia/Kuwait','Asia/Qatar','Asia/Bahrain','Asia/Muscat']) assert.ok(body.includes(zone));
   assert.match(body,/timeZone:businessTimezone\(\)/);
-  assert.match(body,/\['cancelled','canceled'\]\.includes\(String\(a\.status\|\|''\)\.toLowerCase\(\)\)/);
-  assert.match(body,/const todayCount=appointments\(\)\.filter\(a=>dayKey\(a\.starts_at\)===dayKey\(new Date\(\)\)\)\.length/);
+  assert.match(body,/!\['cancelled','canceled','no_show'\]\.includes\(lifecycle\.status\(a\)\)/);
+  assert.match(body,/const todayCount=todayAppointments\(\)\.length/);
+  assert.match(body,/dayKey\(a\.starts_at\)===dayKey\(new Date\(\)\)/);
   assert.match(body,/todayStrong&&todayStrong\.textContent!==nextToday/);
 });
 

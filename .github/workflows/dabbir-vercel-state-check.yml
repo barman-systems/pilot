@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/dabbir-vercel-state-check.yml
+      - api/barman-executive-cron.js
 
 permissions:
   contents: read
@@ -12,18 +13,20 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      PRODUCTION_HOST: dabbir.bmalman.com
     steps:
-      - name: Check safe Vercel state
+      - name: Check safe Vercel state and prove BARMAN cron authentication
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || exit 10
           echo "::add-mask::$VERCEL_TOKEN"
+
           p="$(curl -fsS "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           e="$(curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           echo "project_ignore=$(jq -r '.commandForIgnoringBuildStep // "<null>"' <<<"$p")"
@@ -32,3 +35,63 @@ jobs:
             targets="$(jq -r --arg k "$key" '[.envs[] | select(.key==$k) | ((.target // [])|join(","))] | unique | join(";")' <<<"$e")"
             echo "$key count=$count targets=${targets:-none}"
           done
+
+          cron_count="$(jq '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production")))] | length' <<<"$e")"
+          if [ "$cron_count" -gt 1 ]; then
+            echo "CRON_SECRET_DUPLICATE_PRODUCTION_ENTRIES=$cron_count"
+            exit 21
+          fi
+
+          if [ "$cron_count" -eq 0 ]; then
+            cron_secret="$(openssl rand -hex 32)"
+            test "${#cron_secret}" -eq 64
+            echo "::add-mask::$cron_secret"
+            payload="$(jq -cn --arg value "$cron_secret" '[{key:"CRON_SECRET",value:$value,type:"sensitive",target:["production"],comment:"BARMAN Executive Cron bearer authentication"}]')"
+            curl -fsS -X POST \
+              "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?upsert=true&teamId=${VERCEL_TEAM_ID}" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data "$payload" >/tmp/cron-env-create.json
+            echo 'CRON_SECRET_BOOTSTRAPPED'
+          else
+            echo 'CRON_SECRET_ALREADY_PRESENT'
+          fi
+
+          # Never start a competing Production deployment here. The GitHub integration
+          # is the source of truth; wait for the exact pushed SHA so provenance remains intact.
+          exact_deployment=''
+          for attempt in $(seq 1 120); do
+            deployments="$(curl -fsS "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&target=production&limit=30&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+            exact_deployment="$(jq -c --arg sha "$GITHUB_SHA" '[.deployments[] | select(.meta.githubCommitSha==$sha)] | sort_by(.created) | last // empty' <<<"$deployments")"
+            if [ -n "$exact_deployment" ]; then
+              state="$(jq -r '.readyState // .state // empty' <<<"$exact_deployment")"
+              id="$(jq -r '.uid // .id // empty' <<<"$exact_deployment")"
+              case "$state" in
+                READY)
+                  echo "CRON_SECRET_EXACT_PRODUCTION_READY=$id exact_sha=$GITHUB_SHA"
+                  break
+                  ;;
+                ERROR)
+                  echo "EXACT_PRODUCTION_ERROR=$id sha=$GITHUB_SHA"
+                  exit 22
+                  ;;
+              esac
+            fi
+            exact_deployment=''
+            sleep 2
+          done
+          test -n "$exact_deployment"
+          test "$(jq -r '.readyState // .state // empty' <<<"$exact_deployment")" = 'READY'
+
+          # Before CRON_SECRET, these spoofable schedule headers were accepted.
+          # Once the secret is injected, the same forged request must be rejected.
+          spoof_status="$(curl -sS -o /tmp/cron-spoof.json -w '%{http_code}' \
+            -H 'User-Agent: vercel-cron/1.0' \
+            -H 'x-vercel-cron-schedule: */5 * * * *' \
+            "https://${PRODUCTION_HOST}/api/barman-executive-cron")"
+          if [ "$spoof_status" != '401' ]; then
+            echo "CRON_SPOOFED_SCHEDULE_NOT_REJECTED_HTTP_${spoof_status}"
+            cat /tmp/cron-spoof.json
+            exit 23
+          fi
+          echo 'CRON_SPOOFED_SCHEDULE_REJECTED_401'

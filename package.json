@@ -18,6 +18,9 @@
     "@vercel/oidc": "3.8.5",
     "ai": "^6.0.0"
   },
+  "devDependencies": {
+    "@trigger.dev/sdk": "4.5.16"
+  },
   "engines": {
     "node": "24.x"
   }
