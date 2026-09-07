@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
+// Controlled Production proof: temporary five-minute cadence is accepted only in this PR and reverted after verification.
 const cron=fs.readFileSync(new URL('../api/dabbir-ai-billing-reconcile-cron.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907135618_dabbir_ai_gateway_billing_reconciliation_v1.sql',import.meta.url),'utf8');
 const vercel=fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8');
