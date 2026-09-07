@@ -48,15 +48,16 @@ test('exact connection authority scopes reads rotation and deletion to one conne
   assert.doesNotMatch(exactConnection,/dabbir_whatsapp_connections\?business_id=eq\.\$\{encodeURIComponent\(String\(row\.business_id\)\)\}/);
 });
 
-test('reply reserves the branch connection before loading and sending through that exact connection',()=>{
-  assert.match(reply,/loadExactBusinessConnection/);
+test('reply reserves the branch connection before service-role loading and sending through that exact connection',()=>{
+  assert.match(reply,/serviceRpc\('dabbir_whatsapp_ai_connection'/);
   const reserveIndex=reply.indexOf('reservation = await reserveOutboundReply');
-  const loadIndex=reply.indexOf('const connection = await loadExactBusinessConnection');
+  const loadIndex=reply.indexOf("const connection = await serviceRpc('dabbir_whatsapp_ai_connection'");
   const sendIndex=reply.indexOf('sent = await sendMetaText');
   assert.ok(reserveIndex>=0&&loadIndex>reserveIndex&&sendIndex>loadIndex);
-  assert.match(reply,/reservation\.connectionId/);
+  assert.match(reply,/p_connection_id:\s*reservation\.connectionId/);
   assert.match(reply,/WHATSAPP_BRANCH_CONNECTION_UNAVAILABLE_AFTER_RESERVATION/);
   assert.doesNotMatch(reply,/loadBusinessConnection\(/);
+  assert.doesNotMatch(reply,/loadExactBusinessConnection\(/);
 });
 
 test('branch status uses branch-specific connection and branch-specific operational evidence',()=>{
