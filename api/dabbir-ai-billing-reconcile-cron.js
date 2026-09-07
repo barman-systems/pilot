@@ -4,8 +4,8 @@ import { json, SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 const SCHEDULE='23 2 * * *';
-const SETTLEMENT_LAG_DAYS=2;
-const RECONCILE_DAYS=3;
+const SETTLEMENT_LAG_DAYS=0;
+const RECONCILE_DAYS=1;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clean=(value,max=400)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const num=value=>Number.isFinite(Number(value))?Number(value):0;
