@@ -1,6 +1,6 @@
 import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
-import { generateDABBIRAiReply, getDABBIRAiConfig, getDABBIRAiRedundancy } from './_ai-core.js';
+import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 function json(res, status, body) {
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
@@ -11,7 +11,6 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const config = getDABBIRAiConfig();
-    const redundancy = getDABBIRAiRedundancy();
     if (String(singleQueryValue(req, 'synthetic') || '') === '1') {
       // Synthetic probes call the real provider. Keep them on the same protected
       // write path as production AI so a public query cannot consume capacity.
@@ -27,10 +26,6 @@ export default async function handler(req, res) {
       configured: config.configured,
       auth_mode: config.auth_mode,
       cost_mode: config.cost_mode,
-      configured_provider_count: redundancy.configured_provider_count,
-      direct_provider_count: redundancy.direct_provider_count,
-      gateway_fallback_configured: redundancy.gateway_fallback_configured,
-      redundancy_ready: redundancy.redundancy_ready,
       data_mode: 'SYNTHETIC_ONLY',
       external_side_effects: false,
     });

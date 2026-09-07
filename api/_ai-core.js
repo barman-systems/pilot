@@ -7,9 +7,6 @@ const DEFAULT_CLOUDFLARE_MODEL = '@cf/zai-org/glm-4.7-flash';
 const cloudflareEndpoint = env => `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID || ''))}/ai/v1/chat/completions`;
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7'];
-const DIRECT_PROVIDER_TIMEOUT_MS = 5000;
-const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
-const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
 export function getDABBIRAiConfig(env = process.env) {
@@ -69,22 +66,6 @@ export function getDABBIRAiConfig(env = process.env) {
     configured: false,
     auth_mode: 'MISSING',
     cost_mode: 'FREE_TIER_ONLY',
-  };
-}
-
-export function getDABBIRAiRedundancy(env = process.env) {
-  const directProviderCount = [
-    Boolean(env.GEMINI_API_KEY),
-    Boolean(env.GROQ_API_KEY),
-    Boolean(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID),
-  ].filter(Boolean).length;
-  const gatewayFallbackConfigured = Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
-  const configuredProviderCount = directProviderCount + (gatewayFallbackConfigured ? 1 : 0);
-  return {
-    direct_provider_count: directProviderCount,
-    gateway_fallback_configured: gatewayFallbackConfigured,
-    configured_provider_count: configuredProviderCount,
-    redundancy_ready: configuredProviderCount >= 2,
   };
 }
 
@@ -203,7 +184,7 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = 5000 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -228,7 +209,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
 
 async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl }) {
   const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
-  const deadline = Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
+  const deadline = Date.now() + 5000;
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
 
   for (let index = 0; index < models.length; index += 1) {
@@ -236,7 +217,7 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
     if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
 
     const model = models[index];
-    const timeoutMs = index === 0 ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining) : remaining;
+    const timeoutMs = index === 0 ? Math.min(2500, remaining) : remaining;
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GATEWAY_ENDPOINT,
@@ -289,7 +270,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         model: config.model,
         messages,
         fetchImpl,
-        timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS,
+        timeoutMs: 5000,
       });
       if (response.ok) {
         return finalizeReply({
@@ -353,7 +334,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
   if (groqKey) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
       if (cloudflareReady || env.VERCEL_ENV) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
@@ -371,7 +352,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
   if (cloudflareReady) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: 5000 });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
       if (env.VERCEL_ENV) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
