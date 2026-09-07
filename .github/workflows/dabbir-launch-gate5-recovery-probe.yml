@@ -1,3 +1,4 @@
+# Launch gate 5: read-only recovery capability probe. Never starts a restore.
 name: DABBIR Launch Gate 5 Recovery Probe
 
 on:
