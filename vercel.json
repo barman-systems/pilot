@@ -5,6 +5,7 @@
   "buildCommand": "npm run dabbir:build",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
+    "NODE_OPTIONS": "--import=./api/_sentry-preload.js",
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com",
     "DABBIR_GEMINI_MODEL": "gemini-3.7-flash",
     "DABBIR_GROQ_MODEL": "openai/gpt-oss-20b",
@@ -35,41 +36,50 @@
     }
   ],
   "functions": {
+    "api/**/*.js": {
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
+    },
     "api/salon-reminders-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/calendar-outbox-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/dabbir-whatsapp-ai-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/dabbir-whatsapp-ai-worker.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/barman-executive-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/dabbir-daily-operator-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": ["api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/app.js": {
-      "includeFiles": "index.html"
+      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/app-recovery.js": {
-      "includeFiles": "index.html"
+      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/app-safari-recovery.js": {
-      "includeFiles": "index.html"
+      "includeFiles": ["index.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/car-wash-booking.js": {
-      "includeFiles": "booking.html"
+      "includeFiles": ["booking.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/dabbir-market-preview.js": {
-      "includeFiles": "try.html"
+      "includeFiles": ["try.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     },
     "api/team-page.js": {
-      "includeFiles": "team.html"
+      "includeFiles": ["team.html", "api/_sentry-preload.js", "api/_sentry-runtime.js", "api/_sentry-core.js"]
     }
   },
   "routes": [
@@ -172,7 +182,8 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net"
+        }
       ]
     }
   ]
