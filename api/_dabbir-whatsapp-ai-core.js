@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { generateDABBIRAiReply } from './_ai-core.js';
+import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { serviceRpc, finalizeOutboundReply, markOutboundResult, sendMetaText } from './_whatsapp-live-core.js';
 import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 
@@ -80,8 +80,10 @@ function parseDecision(raw){
   }catch{return null}
 }
 function compactContext(context,recent){
+  const batch=arr(context?.batch_messages);const lastBatch=batch.at(-1)||{};
   return JSON.stringify({
-    business:{name:clean(context?.business?.name,160),type:clean(context?.business?.business_type,80),country_code:clean(context?.business?.country_code,12),currency_code:clean(context?.business?.currency_code,12),timezone:clean(context?.business?.timezone,80),current_local_time:localNow(context?.business?.timezone)},
+    business:{id:clean(context?.business?.id,80),name:clean(context?.business?.name,160),type:clean(context?.business?.business_type,80),country_code:clean(context?.business?.country_code,12),currency_code:clean(context?.business?.currency_code,12),timezone:clean(context?.business?.timezone,80),current_local_time:localNow(context?.business?.timezone)},
+    conversation:{id:clean(context?.conversation?.id,80)},batch_message_created_at:lastBatch?.created_at||null,
     customer:{name:clean(context?.customer?.display_name,120)},
     conversation_history:plannerHistory(context),
     services:arr(context?.services).slice(0,12).map(x=>({name:clean(x.name_ar||x.name||x.name_en,140),price:x.price,duration_minutes:x.duration_minutes})),
