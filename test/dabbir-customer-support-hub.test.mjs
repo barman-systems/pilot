@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [migration,permissionMigration,api,ui,staffApi,staffThreadUi,bundles]=await Promise.all([
+const [migration,permissionMigration,api,ui,staffApi,staffThreadUi,bundles,lazyLoader]=await Promise.all([
   read('supabase/migrations/20260907124500_dabbir_customer_support_hub_v1.sql'),
   read('supabase/migrations/20260907124600_dabbir_customer_support_hub_permission_v2.sql'),
   read('api/customer-support.js'),
@@ -11,6 +11,7 @@ const [migration,permissionMigration,api,ui,staffApi,staffThreadUi,bundles]=awai
   read('api/platform-customer-support.js'),
   read('api/platform-customer-support-thread-ui.js'),
   read('config/dabbir-ui-bundles.json'),
+  read('api/car-wash-loader-ui.js'),
 ]);
 
 test('customer support keeps the ledger private and browser access server-mediated',()=>{
@@ -84,12 +85,16 @@ test('delegated platform staff must retain manage_support permission for summary
   assert.doesNotMatch(permissionMigration,/platform_assert_admin\(p_actor_user_id\)/);
 });
 
-test('support modules are part of the generated DABBIR UI bundle in customer-before-staff order',()=>{
+test('support UI reuses the existing shell slot and does not grow the frozen bundle',()=>{
   const config=JSON.parse(bundles);
-  const customer=config.deferred.indexOf('/api/customer-support-ui');
-  const admin=config.deferred.indexOf('/api/platform-customer-support-ui');
-  const thread=config.deferred.indexOf('/api/platform-customer-support-thread-ui');
-  assert.ok(customer>=0);
-  assert.ok(admin>customer);
-  assert.ok(thread>admin);
+  assert.equal(config.critical.length,3);
+  assert.equal(config.deferred.length,23);
+  assert.equal(config.critical.length+config.deferred.length,26);
+  assert.ok(config.deferred.includes('/api/car-wash-loader-ui'));
+  assert.ok(config.deferred.includes('/api/platform-customer-support-ui'));
+  assert.ok(!config.deferred.includes('/api/customer-support-ui'));
+  assert.ok(!config.deferred.includes('/api/platform-customer-support-thread-ui'));
+  assert.match(lazyLoader,/\/api\/customer-support-ui\?v=20260907-1/);
+  assert.match(lazyLoader,/\/api\/platform-customer-support-thread-ui\?v=20260907-1/);
+  assert.match(lazyLoader,/loadGlobalSupport/);
 });
