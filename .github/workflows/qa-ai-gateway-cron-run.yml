@@ -20,31 +20,30 @@ jobs:
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
       PRODUCTION_HOST: dabbir.bmalman.com
     steps:
-      - name: Diagnose and invoke exact Production reconciliation route securely
+      - name: Invoke exact Production reconciliation route securely
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}"
           echo "::add-mask::$VERCEL_TOKEN"
 
-          env_status="$(curl -sS -o /tmp/env.json -w '%{http_code}' "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=true&teamId=${VERCEL_TEAM_ID}" -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          echo "env_http=$env_status"
-          if [ "$env_status" != '200' ]; then
-            jq -c '{error,code,message}' /tmp/env.json || true
-            exit 31
-          fi
+          curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" > /tmp/env-list.json
+          env_id="$(jq -r '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production"))) | .id] | unique | if length==1 then .[0] else empty end' /tmp/env-list.json)"
+          test -n "$env_id"
 
-          matches="$(jq '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production")))] | length' /tmp/env.json)"
-          decrypted="$(jq -r '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production"))) | (.decrypted // false)] | unique | join(",")' /tmp/env.json)"
-          value_count="$(jq '[.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production")) and ((.value // "")|length>0))] | length' /tmp/env.json)"
-          echo "cron_matches=$matches decrypted=${decrypted:-unknown} nonempty_values=$value_count"
-          test "$matches" = '1'
-          test "$value_count" = '1'
-
-          cron_secret="$(jq -r '.envs[] | select(.key=="CRON_SECRET" and ((.target // []) | index("production"))) | .value' /tmp/env.json)"
+          detail_status="$(curl -sS -o /tmp/env-detail.json -w '%{http_code}' \
+            "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/env/${env_id}?teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "env_detail_http=$detail_status"
+          test "$detail_status" = '200'
+          cron_secret="$(jq -r '.value // empty' /tmp/env-detail.json)"
+          test -n "$cron_secret"
           echo "::add-mask::$cron_secret"
 
-          status="$(curl -sS -o /tmp/reconcile.json -w '%{http_code}' -H "Authorization: Bearer ${cron_secret}" "https://${PRODUCTION_HOST}/api/dabbir-ai-billing-reconcile-cron")"
+          status="$(curl -sS -o /tmp/reconcile.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${cron_secret}" \
+            "https://${PRODUCTION_HOST}/api/dabbir-ai-billing-reconcile-cron")"
           echo "reconcile_http=$status"
           jq -c '{ok,error,dates,businesses,models,total_microusd}' /tmp/reconcile.json || true
           test "$status" = '200'
