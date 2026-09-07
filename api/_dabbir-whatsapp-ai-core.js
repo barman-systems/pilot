@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { generateDABBIRAiReply } from './_ai-core.js';
 import { serviceRpc, finalizeOutboundReply, markOutboundResult, sendMetaText } from './_whatsapp-live-core.js';
-import { loadBusinessConnectionWithServiceKey } from './_whatsapp-service-connection.js';
+import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_ISO=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/;
 const ARABIC=/[\u0600-\u06ff]/;
 const HUMAN_REQUEST=/(?:\b(?:human|agent|person|staff|manager|owner)\b|موظف(?:ة)?|شخص حقيقي|إنسان|انسان|بشر|المالك|المدير|أكلم أحد|اكلم احد|حوّلني|حولني)/i;
 const CHOICE=[/(?:^|\s)(?:1|الأول|الاول|اول|أول|first)(?:\s|$)/i,/(?:^|\s)(?:2|الثاني|ثاني|second)(?:\s|$)/i,/(?:^|\s)(?:3|الثالث|ثالث|third)(?:\s|$)/i];
+const PERMANENT_AI_FAILURES=new Set(['AI_CONTEXT_UNVERIFIED','AI_PENDING_ACTION_INVALID','AI_CONVERSATION_NOT_FOUND','WHATSAPP_CONNECTION_AMBIGUOUS_BRANCH','WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH','WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED']);
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
 const one=v=>Array.isArray(v)?v[0]??null:v??null;
@@ -21,6 +22,20 @@ function exactNamed(items,name,keys){const wanted=norm(name);if(!wanted)return n
 function choiceIndex(text){for(let i=0;i<CHOICE.length;i+=1)if(CHOICE[i].test(String(text||'')))return i;return null}
 function latestText(context){return arr(context?.batch_messages).map(x=>clean(x?.body,1500)).filter(Boolean).join('\n').slice(0,2500)}
 function safeUuid(value){const v=clean(value,80);return UUID.test(v)?v:null}
+function looksLikePlannerEnvelope(value){
+  const text=clean(value,1800).replace(/^```(?:json)?\s*/i,'').trim();
+  return /^[\[{]/.test(text)&&/(?:["']?action["']?\s*:|["']?service_name["']?\s*:|["']?selected_slot_index["']?\s*:)/i.test(text);
+}
+function customerReply(value){const text=clean(value,1400);return looksLikePlannerEnvelope(text)?'':text}
+function plannerHistory(context){
+  return arr(context?.history).map(item=>{
+    const sender=clean(item?.sender_type,30).toLowerCase();
+    const body=clean(item?.body,600);
+    if(!body||!['customer','ai','human'].includes(sender))return null;
+    if(sender==='ai'&&looksLikePlannerEnvelope(body))return null;
+    return {sender_type:sender,body,created_at:item?.created_at||null};
+  }).filter(Boolean).slice(-8);
+}
 function localNow(timezone){
   try{
     const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
@@ -36,7 +51,7 @@ function parseDecision(raw){
     const action=clean(x.action,40).toUpperCase();
     if(!['REPLY','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF'].includes(action))return null;
     return {
-      action,reply:clean(x.reply,1400),serviceName:clean(x.service_name,180)||null,workerName:clean(x.worker_name,180)||null,
+      action,reply:customerReply(x.reply),serviceName:clean(x.service_name,180)||null,workerName:clean(x.worker_name,180)||null,
       requestedLocal:LOCAL_ISO.test(clean(x.requested_local,40))?clean(x.requested_local,40):null,
       slotIndex:Number.isInteger(Number(x.selected_slot_index))?Number(x.selected_slot_index)-1:null,
       appointmentIndex:Number.isInteger(Number(x.appointment_index))?Number(x.appointment_index)-1:null,
@@ -46,15 +61,16 @@ function parseDecision(raw){
 }
 function compactContext(context,recent){
   return JSON.stringify({
-    business:{name:context?.business?.name,type:context?.business?.business_type,country_code:context?.business?.country_code,currency_code:context?.business?.currency_code,timezone:context?.business?.timezone,current_local_time:localNow(context?.business?.timezone)},
-    customer:{name:context?.customer?.display_name},
-    services:arr(context?.services).slice(0,20).map(x=>({name:x.name_ar||x.name||x.name_en,price:x.price,duration_minutes:x.duration_minutes})),
-    workers:arr(context?.workers).slice(0,20).map(x=>({name:x.display_name,job_title:x.job_title})),
+    business:{name:clean(context?.business?.name,160),type:clean(context?.business?.business_type,80),country_code:clean(context?.business?.country_code,12),currency_code:clean(context?.business?.currency_code,12),timezone:clean(context?.business?.timezone,80),current_local_time:localNow(context?.business?.timezone)},
+    customer:{name:clean(context?.customer?.display_name,120)},
+    conversation_history:plannerHistory(context),
+    services:arr(context?.services).slice(0,12).map(x=>({name:clean(x.name_ar||x.name||x.name_en,140),price:x.price,duration_minutes:x.duration_minutes})),
+    workers:arr(context?.workers).slice(0,10).map(x=>({name:clean(x.display_name,120),job_title:clean(x.job_title,100)})),
     upcoming:arr(context?.upcoming_appointments).slice(0,6).map(x=>({starts_at:x.starts_at,status:x.status,service_id:x.service_id,worker_id:x.worker_id,confirmation_gate:x.confirmation_gate})),
-    recent:arr(recent).slice(0,5).map(x=>({service_name:x.service_name,worker_name:x.worker_name,starts_at:x.starts_at,status:x.status})),
+    recent:arr(recent).slice(0,5).map(x=>({service_name:clean(x.service_name,140),worker_name:clean(x.worker_name,120),starts_at:x.starts_at,status:x.status,service_id:x.service_id,worker_id:x.worker_id})),
     pending:context?.pending_state||null,
-    knowledge:arr(context?.knowledge).slice(0,8).map(x=>({key:x.key,type:x.type,value:x.value})),
-  }).slice(0,3900);
+    knowledge:arr(context?.knowledge).slice(0,6).map(x=>({key:clean(x.key,100),type:clean(x.type,60),value:clean(x.value,260)})),
+  });
 }
 async function decide(context,recent){
   const text=latestText(context),lang=language(text),tz=clean(context?.business?.timezone,80);
@@ -63,6 +79,7 @@ async function decide(context,recent){
     'Allowed actions: REPLY, CHECK_AVAILABILITY, CREATE_BOOKING, CANCEL_BOOKING, RESCHEDULE_BOOKING, HANDOFF.',
     'Schema: {"action":"...","reply":"...","service_name":null,"worker_name":null,"requested_local":null,"selected_slot_index":null,"appointment_index":null,"reuse_last":false,"route_class":"SUPPORT"}',
     'Never invent a service, worker, price, policy, appointment, availability, or booking result. Use VERIFIED CONTEXT only.',
+    'Use conversation_history and pending state for short follow-ups such as price questions, "same as before", "I told you", or a time sent after choosing a service.',
     'service_name and worker_name must exactly match a name in VERIFIED CONTEXT when supplied.',
     `Business timezone is ${tz}; current local time is ${localNow(tz)}. Convert clear relative dates to requested_local YYYY-MM-DDTHH:MM:SS.`,
     'If date/time is genuinely ambiguous, use REPLY and ask only the missing detail. Do not guess a broad daypart.',
@@ -75,7 +92,9 @@ async function decide(context,recent){
   ].join('\n');
   const ai=await generateDABBIRAiReply({project:'dabbir_businesses',message:prompt,language:lang,businessContext:compactContext(context,recent),history:[]});
   if(!ai?.ok||!clean(ai?.reply))throw Object.assign(new Error(clean(ai?.error,160)||'AI_PLANNER_UNAVAILABLE'),{code:clean(ai?.error,160)||'AI_PLANNER_UNAVAILABLE'});
-  return parseDecision(ai.reply)||{action:'REPLY',reply:clean(ai.reply,1400),serviceName:null,workerName:null,requestedLocal:null,slotIndex:null,appointmentIndex:null,reuseLast:false,routeClass:'SUPPORT'};
+  const decision=parseDecision(ai.reply);
+  if(!decision)throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
+  return decision;
 }
 function fmtWhen(value,timezone,lang){
   try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return clean(value,80)}
@@ -109,7 +128,7 @@ async function deliver(claim,context,body,purpose='reply'){
   const reservation=await reserveReply(claim,context,body,purpose);
   if(reservation.should_send!==true)return {deduplicated:true,state:clean(reservation.reservation_state,40),providerMessageId:clean(reservation.provider_message_id,320)||null};
   const key=serviceKey();if(!key)throw Object.assign(new Error('WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED'),{code:'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED'});
-  const connection=await loadBusinessConnectionWithServiceKey(key,context.business.id);
+  const connection=await loadConversationConnectionWithServiceKey(key,context.business.id,context.conversation.id);
   if(!connection||connection.status!=='connected')throw Object.assign(new Error('WHATSAPP_TENANT_NOT_LINKED'),{code:'WHATSAPP_TENANT_NOT_LINKED'});
   try{
     const sent=await sendMetaText({connection,businessId:context.business.id,recipient:reservation.recipient_handle,body});
@@ -191,17 +210,18 @@ async function processClaim(claim){
   await deliver(claim,context,decision.reply||(lang==='ar'?'كيف أقدر أساعدك؟':'How can I help?'),'reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY'};
 }
 
+async function requireHumanForFailure(claim,code,reason){
+  try{const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});await handoff(context,reason,code,'SUPPORT')}catch{}
+  await finish(claim,'HUMAN_REQUIRED',code).catch(()=>null);return {state:'HUMAN_REQUIRED',error:code};
+}
 async function handleFailure(claim,error){
   const code=clean(error?.code||error?.message||'AI_BATCH_FAILED',240);
-  if(error?.ambiguous===true){
-    try{const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});await handoff(context,'Ambiguous WhatsApp delivery requires human review',code,'SUPPORT')}catch{}
-    await finish(claim,'HUMAN_REQUIRED',`AMBIGUOUS_OUTBOUND:${code}`).catch(()=>null);return {state:'HUMAN_REQUIRED',error:code};
-  }
+  if(error?.ambiguous===true){return requireHumanForFailure(claim,`AMBIGUOUS_OUTBOUND:${code}`,'Ambiguous WhatsApp delivery requires human review')}
   if(Number(error?.providerStatus)===429){await finish(claim,'RETRY',code).catch(()=>null);return {state:'RETRY',error:code}}
-  if(error?.definitive===true||Number(error?.providerStatus)>=400&&Number(error?.providerStatus)<500){
-    try{const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});await handoff(context,'WhatsApp delivery failed and needs human review',code,'SUPPORT')}catch{}
-    await finish(claim,'HUMAN_REQUIRED',code).catch(()=>null);return {state:'HUMAN_REQUIRED',error:code};
-  }
+  if(error?.definitive===true||Number(error?.providerStatus)>=400&&Number(error?.providerStatus)<500){return requireHumanForFailure(claim,code,'WhatsApp delivery failed and needs human review')}
+  if(PERMANENT_AI_FAILURES.has(code)){return requireHumanForFailure(claim,code,'Permanent AI or routing contract failure requires human review')}
+  if(code==='AI_PLANNER_CONTRACT_INVALID'&&Number(claim?.attempt_count||0)>=2){return requireHumanForFailure(claim,code,'AI planner returned an invalid action contract repeatedly')}
+  if(Number(claim?.attempt_count||0)>=5){return requireHumanForFailure(claim,code,'AI processing exhausted safe retry attempts')}
   await finish(claim,'RETRY',code).catch(()=>null);return {state:'RETRY',error:code};
 }
 export async function processClaimedWhatsAppAiBatch(claim){try{return await processClaim(claim)}catch(error){return handleFailure(claim,error)}}
