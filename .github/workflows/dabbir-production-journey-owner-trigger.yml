@@ -1,0 +1,49 @@
+name: DABBIR Production Journey Owner Trigger
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dabbir-production-journey-owner-trigger
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: >-
+      github.event.issue.pull_request &&
+      github.actor == 'barmanai' &&
+      github.event.comment.body == '/dabbir-production-journey'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate trusted owner request
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ACTOR: ${{ github.actor }}
+          COMMENT_ASSOCIATION: ${{ github.event.comment.author_association }}
+        run: |
+          set -euo pipefail
+          [ "$COMMENT_ACTOR" = 'barmanai' ] || { echo 'Production journey actor denied'; exit 2; }
+          case "$COMMENT_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR) ;;
+            *) echo 'Production journey association denied'; exit 2 ;;
+          esac
+          [[ "$COMMENT_BODY" != *$'\n'* ]] || { echo 'Production journey command must be exactly one line'; exit 2; }
+          [ "$COMMENT_BODY" = '/dabbir-production-journey' ] || { echo 'Production journey command denied'; exit 2; }
+      - name: Dispatch canonical main-only Production journey without capacity load
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run dabbir-ai-customer-journey.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f run_capacity=false
+          echo 'DABBIR_PRODUCTION_JOURNEY_DISPATCHED ref=main run_capacity=false'
