@@ -28,7 +28,7 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.116.0
 
       - name: Capture managed-backup existence
         shell: bash
@@ -140,7 +140,6 @@ jobs:
           mkdir -p recovery-sandbox
           cd recovery-sandbox
           supabase init
-          # Keep Auth, REST and Storage enabled because Gate 5 verifies them.
           supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime --ignore-health-check >/tmp/dabbir-recovery-supabase-start.log 2>&1
           cd ..
           db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
@@ -153,18 +152,12 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${RECOVERY_DB_CONTAINER:-}"
-
-          # Local Supabase already owns its provider-managed roles. Keep ordinary
-          # dump setup and role definitions, but strip hosted-only role/session
-          # logging configuration which is not application recovery state.
           awk 'BEGIN{IGNORECASE=1} !/log_min_messages/ && !/^[[:space:]]*ALTER[[:space:]]+ROLE.*[[:space:]]+SET[[:space:]]/' \
             recovery-private/roles.sql > recovery-private/roles-restore.sql
           test -s recovery-private/roles-restore.sql
 
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/roles-restore.sql
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/schema.sql
-          # Supabase CLI data dumps begin with session_replication_role=replica,
-          # allowing circular-FK data to be restored exactly and checked later.
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/data.sql
           docker exec "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';" >/dev/null
           echo "LOGICAL_RESTORE_COMPLETED"
@@ -325,12 +318,7 @@ jobs:
           const app=read('recovery-evidence/application-smoke.json');
           const parts={managed_backup:managed.verdict,data_integrity:integrity.verdict,fk_integrity:fk.verdict,structure:structure.verdict,storage:storage.verdict,application_smoke:app.verdict};
           const verdict=Object.values(parts).every(v=>v==='PASS')?'PASS':'FAIL';
-          const out={
-            gate:'DABBIR_LAUNCH_GATE_5_RECOVERY',verdict,parts,
-            source_project:'fphpoysqdsceniwduxjq',isolated_restore_target:'LOCAL_SUPABASE_EPHEMERAL',
-            production_data_mutated:false,temporary_source_login_role_removed:true,
-            external_customer_sends_exercised:false,raw_backup_rows_uploaded:false,
-          };
+          const out={gate:'DABBIR_LAUNCH_GATE_5_RECOVERY',verdict,parts,source_project:'fphpoysqdsceniwduxjq',isolated_restore_target:'LOCAL_SUPABASE_EPHEMERAL',production_data_mutated:false,temporary_source_login_role_removed:true,external_customer_sends_exercised:false,raw_backup_rows_uploaded:false};
           fs.writeFileSync('recovery-evidence/launch-gate5.json',JSON.stringify(out,null,2));
           console.log(JSON.stringify(out));
           if(verdict!=='PASS') process.exit(1);
