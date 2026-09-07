@@ -24,45 +24,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : > recovery-probe.jsonl
           TOKEN="${SUPABASE_ACCESS_TOKEN:-${SUPABASE_MANAGEMENT_TOKEN:-}}"
           if [ -z "$TOKEN" ]; then
-            echo 'SUPABASE_MANAGEMENT_TOKEN_MISSING'
+            echo '{"error":"SUPABASE_MANAGEMENT_TOKEN_MISSING"}' | tee -a recovery-probe.jsonl
             exit 2
           fi
           auth=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/json')
 
           backups_file="$(mktemp)"
           backups_status="$(curl --silent --show-error --output "$backups_file" --write-out '%{http_code}' "${auth[@]}" "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/backups")"
-          echo "BACKUPS_HTTP=$backups_status"
-          if [ "$backups_status" = '200' ]; then
-            BACKUPS_FILE="$backups_file" node <<'NODE'
-          const fs=require('fs');
-          const raw=JSON.parse(fs.readFileSync(process.env.BACKUPS_FILE,'utf8'));
+          BACKUPS_FILE="$backups_file" BACKUPS_HTTP="$backups_status" node <<'NODE' | tee -a recovery-probe.jsonl
+          const fs=require('fs');let raw={};try{raw=JSON.parse(fs.readFileSync(process.env.BACKUPS_FILE,'utf8'))}catch{}
           const list=Array.isArray(raw)?raw:(Array.isArray(raw.backups)?raw.backups:[]);
           const completed=list.filter(x=>String(x.status||'').toLowerCase()==='completed');
           const latest=[...completed].sort((a,b)=>String(a.completed_at||a.inserted_at||a.created_at||'').localeCompare(String(b.completed_at||b.inserted_at||b.created_at||''))).at(-1)||null;
-          console.log(JSON.stringify({backup_count:list.length,completed_count:completed.length,latest_backup:latest&&{id:latest.id,status:latest.status,completed_at:latest.completed_at||null,inserted_at:latest.inserted_at||null,created_at:latest.created_at||null,type:latest.type||latest.backup_type||null}}));
+          console.log(JSON.stringify({kind:'backups',http:Number(process.env.BACKUPS_HTTP),backup_count:list.length,completed_count:completed.length,latest_backup:latest&&{id:latest.id,status:latest.status,completed_at:latest.completed_at||null,inserted_at:latest.inserted_at||null,created_at:latest.created_at||null,type:latest.type||latest.backup_type||null},message:raw.message||raw.error||null}));
           NODE
-          else
-            BACKUPS_FILE="$backups_file" node <<'NODE'
-          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync(process.env.BACKUPS_FILE,'utf8'))}catch{};console.log(JSON.stringify({backup_error:x.message||x.error||'unknown'}));
-          NODE
-          fi
 
           clone_file="$(mktemp)"
           clone_status="$(curl --silent --show-error --output "$clone_file" --write-out '%{http_code}' "${auth[@]}" "https://api.supabase.com/platform/database/${PROJECT_REF}/clone")"
-          echo "CLONE_CAPABILITY_HTTP=$clone_status"
-          CLONE_FILE="$clone_file" CLONE_HTTP="$clone_status" node <<'NODE'
+          CLONE_FILE="$clone_file" CLONE_HTTP="$clone_status" node <<'NODE' | tee -a recovery-probe.jsonl
           const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync(process.env.CLONE_FILE,'utf8'))}catch{};
           const backups=Array.isArray(x.backups)?x.backups:(Array.isArray(x.physical_backups)?x.physical_backups:[]);
-          console.log(JSON.stringify({clone_endpoint_accessible:process.env.CLONE_HTTP==='200',pitr_enabled:x.pitr_enabled??null,backup_count:backups.length,message:x.message||x.error||null,response_keys:Object.keys(x).filter(k=>!/(pass|token|key|secret)/i.test(k)).slice(0,20)}));
+          console.log(JSON.stringify({kind:'clone_capability',http:Number(process.env.CLONE_HTTP),accessible:process.env.CLONE_HTTP==='200',pitr_enabled:x.pitr_enabled??null,backup_count:backups.length,message:x.message||x.error||null,response_keys:Object.keys(x).filter(k=>!/(pass|token|key|secret)/i.test(k)).slice(0,20)}));
           NODE
 
           status_file="$(mktemp)"
           status_http="$(curl --silent --show-error --output "$status_file" --write-out '%{http_code}' "${auth[@]}" "https://api.supabase.com/platform/database/${PROJECT_REF}/clone/status")"
-          echo "CLONE_STATUS_HTTP=$status_http"
-          STATUS_FILE="$status_file" STATUS_HTTP="$status_http" node <<'NODE'
-          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync(process.env.STATUS_FILE,'utf8'))}catch{};console.log(JSON.stringify({clone_status_endpoint_accessible:process.env.STATUS_HTTP==='200',status:x.status||x.state||null,message:x.message||x.error||null}));
+          STATUS_FILE="$status_file" STATUS_HTTP="$status_http" node <<'NODE' | tee -a recovery-probe.jsonl
+          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync(process.env.STATUS_FILE,'utf8'))}catch{};console.log(JSON.stringify({kind:'clone_status',http:Number(process.env.STATUS_HTTP),accessible:process.env.STATUS_HTTP==='200',status:x.status||x.state||null,message:x.message||x.error||null}));
           NODE
 
           test "$backups_status" = '200'
+
+      - name: Upload sanitized recovery probe
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-launch-gate5-recovery-probe
+          path: recovery-probe.jsonl
+          if-no-files-found: error
+          retention-days: 7
