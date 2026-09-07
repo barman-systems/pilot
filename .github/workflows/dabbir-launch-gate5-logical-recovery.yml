@@ -1,4 +1,4 @@
-name: DABBIR Launch Gate 5 Logical Recovery
+name: DABBIR Launch Gate 5 Recovery Proof
 
 on:
   push:
@@ -11,14 +11,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: dabbir-launch-gate5-logical-recovery
+  group: dabbir-launch-gate5-recovery-proof
   cancel-in-progress: false
 
 jobs:
   recovery:
-    name: Export + isolated restore + integrity proof
+    name: Backup + isolated restore + Storage + application smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       PROJECT_REF: fphpoysqdsceniwduxjq
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -30,13 +30,33 @@ jobs:
         with:
           version: latest
 
-      - name: Export independent logical recovery set
+      - name: Capture managed-backup existence
         shell: bash
         run: |
           set -euo pipefail
           test -n "${SUPABASE_ACCESS_TOKEN:-}"
           mkdir -p recovery-private recovery-evidence
+          status="$(curl --silent --show-error --output recovery-private/managed-backups.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Accept: application/json' \
+            "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/backups")"
+          test "$status" = '200'
+          MANAGED_BACKUPS_FILE=recovery-private/managed-backups.json node <<'NODE'
+          import fs from 'node:fs';
+          const raw=JSON.parse(fs.readFileSync(process.env.MANAGED_BACKUPS_FILE,'utf8'));
+          const list=Array.isArray(raw)?raw:(Array.isArray(raw.backups)?raw.backups:[]);
+          const completed=list.filter(x=>String(x.status||'').toLowerCase()==='completed');
+          const latest=[...completed].sort((a,b)=>String(a.completed_at||a.inserted_at||a.created_at||'').localeCompare(String(b.completed_at||b.inserted_at||b.created_at||''))).at(-1)||null;
+          if(!latest) throw new Error('NO_COMPLETED_MANAGED_BACKUP');
+          const out={verdict:'PASS',completed_backup_count:completed.length,latest_backup:{id:latest.id,status:latest.status,completed_at:latest.completed_at||null,inserted_at:latest.inserted_at||null,created_at:latest.created_at||null}};
+          fs.writeFileSync('recovery-evidence/managed-backup.json',JSON.stringify(out,null,2));
+          console.log(JSON.stringify(out));
+          NODE
 
+      - name: Export independent logical recovery set
+        shell: bash
+        run: |
+          set -euo pipefail
           supabase db dump --project-ref "$PROJECT_REF" --role-only -f recovery-private/roles.sql
           supabase db dump --project-ref "$PROJECT_REF" -f recovery-private/schema.sql
           supabase db dump --project-ref "$PROJECT_REF" --schema auth -f recovery-private/auth-schema.sql
@@ -52,14 +72,12 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, pathlib, re
           root=pathlib.Path('recovery-private')
-          out={'project_ref':'fphpoysqdsceniwduxjq','artifacts':{},'contains_row_content':True}
+          out={'project_ref':'fphpoysqdsceniwduxjq','artifacts':{},'raw_artifacts_uploaded':False}
           for name in ['roles.sql','schema.sql','auth-schema.sql','storage-schema.sql','data.sql']:
               b=(root/name).read_bytes()
               out['artifacts'][name]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
 
-          counts={}
-          columns={}
-          current=None
+          counts={}; columns={}; current=None
           data=(root/'data.sql').read_text('utf-8',errors='replace').splitlines()
           copy_re=re.compile(r'^COPY\s+"([^"]+)"\."([^"]+)"\s*\((.*)\)\s+FROM\s+stdin;$')
           for line in data:
@@ -67,39 +85,31 @@ jobs:
                   m=copy_re.match(line)
                   if m:
                       current=f'{m.group(1)}.{m.group(2)}'
-                      cols=re.findall(r'"([^"]+)"',m.group(3))
-                      columns[current]=cols
+                      columns[current]=re.findall(r'"([^"]+)"',m.group(3))
                       counts[current]=0
                   continue
-              if line == r'\.':
-                  current=None
-              else:
-                  counts[current]+=1
+              if line == r'\.': current=None
+              else: counts[current]+=1
 
           auth_cols=columns.get('auth.users',[])
           auth_nonempty_passwords=0
           if auth_cols and 'encrypted_password' in auth_cols:
-              idx=auth_cols.index('encrypted_password')
-              current=None
+              idx=auth_cols.index('encrypted_password'); current=None
               for line in data:
                   if current is None:
                       m=copy_re.match(line)
-                      if m:
-                          current=f'{m.group(1)}.{m.group(2)}'
+                      if m: current=f'{m.group(1)}.{m.group(2)}'
                       continue
-                  if line == r'\.':
-                      current=None
-                      continue
+                  if line == r'\.': current=None; continue
                   if current=='auth.users':
                       parts=line.split('\t')
-                      if idx < len(parts) and parts[idx] not in ('',r'\N'):
-                          auth_nonempty_passwords += 1
+                      if idx < len(parts) and parts[idx] not in ('',r'\N'): auth_nonempty_passwords += 1
 
           out['data_sections']={
               'copy_statements':len(counts),
-              'auth_copy_sections':sum(1 for k in counts if k.startswith('auth.')),
-              'storage_copy_sections':sum(1 for k in counts if k.startswith('storage.')),
-              'public_copy_sections':sum(1 for k in counts if k.startswith('public.')),
+              'auth_copy_sections':sum(k.startswith('auth.') for k in counts),
+              'storage_copy_sections':sum(k.startswith('storage.') for k in counts),
+              'public_copy_sections':sum(k.startswith('public.') for k in counts),
               'total_rows':sum(counts.values()),
               'auth_users':counts.get('auth.users'),
               'auth_identities':counts.get('auth.identities'),
@@ -107,7 +117,7 @@ jobs:
           }
           pathlib.Path('recovery-evidence/backup-table-counts.json').write_text(json.dumps(counts,sort_keys=True),encoding='utf-8')
           pathlib.Path('recovery-evidence/export.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
-          print(json.dumps({**out,'contains_row_content':False},separators=(',',':')))
+          print(json.dumps(out,separators=(',',':')))
           PY
 
       - name: Remove temporary source database login role
@@ -120,7 +130,7 @@ jobs:
               -X DELETE "https://api.supabase.com/v1/projects/${PROJECT_REF}/cli/login-role" \
               -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}")"
             echo "TEMP_LOGIN_ROLE_DELETE_HTTP=$status"
-            test "$status" = '200' || test "$status" = '204'
+            if [ "$status" != '200' ] && [ "$status" != '204' ]; then exit 1; fi
           fi
 
       - name: Start isolated local Supabase recovery target
@@ -130,32 +140,36 @@ jobs:
           mkdir -p recovery-sandbox
           cd recovery-sandbox
           supabase init
-          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime --ignore-health-check
+          # Keep Auth, REST and Storage enabled because Gate 5 verifies them.
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime --ignore-health-check >/tmp/dabbir-recovery-supabase-start.log 2>&1
           cd ..
           db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
           test -n "$db_container"
           echo "RECOVERY_DB_CONTAINER=$db_container" >> "$GITHUB_ENV"
           echo "ISOLATED_SUPABASE_DB_READY"
 
-      - name: Restore roles, schema and data into isolated target
+      - name: Restore roles, application schema and all recoverable data
         shell: bash
         run: |
           set -euo pipefail
           test -n "${RECOVERY_DB_CONTAINER:-}"
 
-          # The hosted project role dump contains provider-only ALTER ROLE ... SET
-          # parameters (for example log_min_messages) which the isolated local
-          # postgres deliberately does not allow a normal restore session to set.
-          # They are runtime/provider configuration, not application recovery state.
-          awk '!/^ALTER ROLE .* SET /' recovery-private/roles.sql > recovery-private/roles-restore.sql
+          # Local Supabase already owns its provider-managed roles. Keep ordinary
+          # dump setup and role definitions, but strip hosted-only role/session
+          # logging configuration which is not application recovery state.
+          awk 'BEGIN{IGNORECASE=1} !/log_min_messages/ && !/^[[:space:]]*ALTER[[:space:]]+ROLE.*[[:space:]]+SET[[:space:]]/' \
+            recovery-private/roles.sql > recovery-private/roles-restore.sql
           test -s recovery-private/roles-restore.sql
 
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/roles-restore.sql
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/schema.sql
+          # Supabase CLI data dumps begin with session_replication_role=replica,
+          # allowing circular-FK data to be restored exactly and checked later.
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/data.sql
+          docker exec "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';" >/dev/null
           echo "LOGICAL_RESTORE_COMPLETED"
 
-      - name: Verify every dumped table count and Auth password-hash presence
+      - name: Verify every dumped table count and Auth recovery material
         shell: bash
         run: |
           set -euo pipefail
@@ -172,7 +186,6 @@ jobs:
 
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < recovery-evidence/count-restore.sql > recovery-evidence/restored-counts.tsv
-
           docker exec "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 \
             -c "select count(*) from auth.users where coalesce(encrypted_password,'') <> '';" \
             > recovery-evidence/restored-auth-password-count.txt
@@ -182,9 +195,8 @@ jobs:
           expected=json.loads(pathlib.Path('recovery-evidence/backup-table-counts.json').read_text())
           actual={}
           for line in pathlib.Path('recovery-evidence/restored-counts.tsv').read_text().splitlines():
-              if not line.strip(): continue
-              table,n=line.rsplit('\t',1)
-              actual[table]=int(n)
+              if line.strip():
+                  table,n=line.rsplit('\t',1); actual[table]=int(n)
           missing=sorted(set(expected)-set(actual))
           mismatches={k:{'backup':expected[k],'restore':actual.get(k)} for k in expected if actual.get(k)!=expected[k]}
           export=json.loads(pathlib.Path('recovery-evidence/export.json').read_text())
@@ -192,39 +204,30 @@ jobs:
           restored_hashes=int(pathlib.Path('recovery-evidence/restored-auth-password-count.txt').read_text().strip() or 0)
           verdict='PASS' if not missing and not mismatches and restored_hashes==expected_hashes else 'FAIL'
           result={
-              'verdict':verdict,
-              'tables_compared':len(expected),
-              'missing_tables':missing,
-              'mismatch_count':len(mismatches),
-              'mismatches':mismatches,
-              'auth_users':expected.get('auth.users'),
-              'auth_identities':expected.get('auth.identities'),
-              'auth_password_hashes_backup':expected_hashes,
-              'auth_password_hashes_restore':restored_hashes,
+              'verdict':verdict,'tables_compared':len(expected),'missing_tables':missing,
+              'mismatch_count':len(mismatches),'mismatches':mismatches,
+              'auth_users':expected.get('auth.users'),'auth_identities':expected.get('auth.identities'),
+              'auth_password_hashes_backup':expected_hashes,'auth_password_hashes_restore':restored_hashes,
+              'password_hash_values_exposed':False,
           }
           pathlib.Path('recovery-evidence/data-integrity.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
           print(json.dumps(result,separators=(',',':')))
           if verdict!='PASS': raise SystemExit(1)
           PY
 
-      - name: Verify foreign-key integrity after trigger-disabled restore
+      - name: Verify all restored foreign-key relationships
         shell: bash
         run: |
           set -euo pipefail
           cat > recovery-evidence/fk-integrity.sql <<'SQL'
           DO $$
-          DECLARE
-            r record;
-            join_cond text;
-            nonnull_cond text;
-            orphan_count bigint;
+          DECLARE r record; join_cond text; nonnull_cond text; orphan_count bigint;
           BEGIN
             FOR r IN
               SELECT c.oid,c.conname,c.conrelid,c.confrelid,c.conkey,c.confkey
               FROM pg_constraint c
               JOIN pg_namespace n ON n.oid=(SELECT relnamespace FROM pg_class WHERE oid=c.conrelid)
-              WHERE c.contype='f'
-                AND n.nspname NOT IN ('pg_catalog','information_schema')
+              WHERE c.contype='f' AND n.nspname NOT IN ('pg_catalog','information_schema')
             LOOP
               SELECT
                 string_agg(format('child.%I = parent.%I',ca.attname,pa.attname),' AND ' ORDER BY ck.ord),
@@ -234,23 +237,16 @@ jobs:
               JOIN unnest(r.confkey) WITH ORDINALITY fk(attnum,ord) USING(ord)
               JOIN pg_attribute ca ON ca.attrelid=r.conrelid AND ca.attnum=ck.attnum
               JOIN pg_attribute pa ON pa.attrelid=r.confrelid AND pa.attnum=fk.attnum;
-
-              EXECUTE format(
-                'SELECT count(*) FROM %s child WHERE %s AND NOT EXISTS (SELECT 1 FROM %s parent WHERE %s)',
-                r.conrelid::regclass,nonnull_cond,r.confrelid::regclass,join_cond
-              ) INTO orphan_count;
-              IF orphan_count > 0 THEN
-                RAISE EXCEPTION 'FK integrity failure: constraint % has % orphan rows',r.conname,orphan_count;
-              END IF;
+              EXECUTE format('SELECT count(*) FROM %s child WHERE %s AND NOT EXISTS (SELECT 1 FROM %s parent WHERE %s)',r.conrelid::regclass,nonnull_cond,r.confrelid::regclass,join_cond) INTO orphan_count;
+              IF orphan_count > 0 THEN RAISE EXCEPTION 'FK integrity failure: constraint % has % orphan rows',r.conname,orphan_count; END IF;
             END LOOP;
           END $$;
           SQL
-          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
-            < recovery-evidence/fk-integrity.sql >/dev/null
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-evidence/fk-integrity.sql >/dev/null
           echo '{"verdict":"PASS","all_restored_foreign_keys_checked":true}' > recovery-evidence/fk-integrity.json
           echo "FK_INTEGRITY_PASS"
 
-      - name: Capture sanitized restored structural evidence
+      - name: Verify restored application structure matches live baseline
         shell: bash
         run: |
           set -euo pipefail
@@ -264,34 +260,104 @@ jobs:
           SQL
           python3 - <<'PY'
           import json,pathlib
-          d={}
+          restored={}
           for line in pathlib.Path('recovery-evidence/structure.tsv').read_text().splitlines():
-              if line.strip():
-                  k,v=line.split('\t',1);d[k]=int(v)
-          pathlib.Path('recovery-evidence/structure.json').write_text(json.dumps(d,indent=2),encoding='utf-8')
-          print(json.dumps(d,separators=(',',':')))
+              if line.strip(): k,v=line.split('\t',1); restored[k]=int(v)
+          live={'tables':183,'columns':2125,'indexes':651,'functions':358,'triggers':128,'policies':237}
+          verdict='PASS' if restored==live else 'FAIL'
+          out={'verdict':verdict,'live_baseline':live,'restored':restored,'difference':{k:restored.get(k,0)-v for k,v in live.items()}}
+          pathlib.Path('recovery-evidence/structure.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
+          print(json.dumps(out,separators=(',',':')))
+          if verdict!='PASS': raise SystemExit(1)
           PY
 
-      - name: Destroy isolated database and row-bearing recovery files
+      - name: Load isolated local API credentials without exposing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd recovery-sandbox && supabase status -o env) > recovery-private/local.env
+          set -a
+          source recovery-private/local.env
+          set +a
+          local_url="${API_URL:-}"
+          publishable="${PUBLISHABLE_KEY:-${ANON_KEY:-}}"
+          service="${SECRET_KEY:-${SERVICE_ROLE_KEY:-}}"
+          test -n "$local_url" && test -n "$publishable" && test -n "$service"
+          [[ "$local_url" == http://127.0.0.1:* ]]
+          echo "::add-mask::$publishable"
+          echo "::add-mask::$service"
+          echo "LOCAL_SUPABASE_URL=$local_url" >> "$GITHUB_ENV"
+          echo "LOCAL_SUPABASE_SERVICE_KEY=$service" >> "$GITHUB_ENV"
+          echo "SUPABASE_URL=$local_url" >> "$GITHUB_ENV"
+          echo "SUPABASE_AUTH_URL=$local_url" >> "$GITHUB_ENV"
+          echo "SUPABASE_DATA_URL=$local_url" >> "$GITHUB_ENV"
+          echo "SUPABASE_PUBLISHABLE_KEY=$publishable" >> "$GITHUB_ENV"
+          echo "LOCAL_API_CREDENTIALS_READY"
+
+      - name: Restore and byte-verify every live Storage object
+        shell: bash
+        env:
+          STORAGE_EVIDENCE_PATH: recovery-evidence/storage-restore.json
+        run: |
+          set -euo pipefail
+          node recovery/launch-gate5-storage-restore.mjs
+
+      - name: Run real DABBIR auth/runtime smoke against restored backend
+        shell: bash
+        env:
+          APP_SMOKE_EVIDENCE_PATH: recovery-evidence/application-smoke.json
+        run: |
+          set -euo pipefail
+          node recovery/launch-gate5-app-smoke.mjs
+
+      - name: Require complete Gate 5 PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const read=p=>JSON.parse(fs.readFileSync(p,'utf8'));
+          const managed=read('recovery-evidence/managed-backup.json');
+          const integrity=read('recovery-evidence/data-integrity.json');
+          const fk=read('recovery-evidence/fk-integrity.json');
+          const structure=read('recovery-evidence/structure.json');
+          const storage=read('recovery-evidence/storage-restore.json');
+          const app=read('recovery-evidence/application-smoke.json');
+          const parts={managed_backup:managed.verdict,data_integrity:integrity.verdict,fk_integrity:fk.verdict,structure:structure.verdict,storage:storage.verdict,application_smoke:app.verdict};
+          const verdict=Object.values(parts).every(v=>v==='PASS')?'PASS':'FAIL';
+          const out={
+            gate:'DABBIR_LAUNCH_GATE_5_RECOVERY',verdict,parts,
+            source_project:'fphpoysqdsceniwduxjq',isolated_restore_target:'LOCAL_SUPABASE_EPHEMERAL',
+            production_data_mutated:false,temporary_source_login_role_removed:true,
+            external_customer_sends_exercised:false,raw_backup_rows_uploaded:false,
+          };
+          fs.writeFileSync('recovery-evidence/launch-gate5.json',JSON.stringify(out,null,2));
+          console.log(JSON.stringify(out));
+          if(verdict!=='PASS') process.exit(1);
+          NODE
+
+      - name: Destroy isolated target and all row-bearing recovery files
         if: always()
         shell: bash
         run: |
           set +e
-          if [ -d recovery-sandbox ]; then
-            (cd recovery-sandbox && supabase stop --no-backup) || true
-          fi
+          if [ -d recovery-sandbox ]; then (cd recovery-sandbox && supabase stop --no-backup) || true; fi
           rm -rf recovery-private
           rm -f recovery-evidence/restored-counts.tsv recovery-evidence/restored-auth-password-count.txt recovery-evidence/count-restore.sql recovery-evidence/fk-integrity.sql recovery-evidence/backup-table-counts.json recovery-evidence/structure.tsv
 
-      - name: Upload sanitized recovery evidence only
+      - name: Upload sanitized Gate 5 evidence only
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: dabbir-launch-gate5-logical-recovery-evidence
+          name: dabbir-launch-gate5-recovery-proof
           path: |
+            recovery-evidence/managed-backup.json
             recovery-evidence/export.json
             recovery-evidence/data-integrity.json
             recovery-evidence/fk-integrity.json
             recovery-evidence/structure.json
+            recovery-evidence/storage-restore.json
+            recovery-evidence/application-smoke.json
+            recovery-evidence/launch-gate5.json
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
