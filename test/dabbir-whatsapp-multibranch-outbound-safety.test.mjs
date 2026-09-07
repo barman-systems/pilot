@@ -20,7 +20,8 @@ test('exact branch and conversation-scoped service-key loaders exist for branch-
   assert.match(serviceConnection,/channel_type !== 'whatsapp'/);
 });
 
-test('legacy WhatsApp AI outbound cannot silently pick one of multiple branch connections',()=>{
-  assert.match(aiCore,/loadBusinessConnectionWithServiceKey/);
-  assert.match(serviceConnection,/WHATSAPP_CONNECTION_AMBIGUOUS_BRANCH/);
+test('WhatsApp AI outbound resolves the exact connection from the conversation branch',()=>{
+  assert.match(aiCore,/loadConversationConnectionWithServiceKey/);
+  assert.match(aiCore,/loadConversationConnectionWithServiceKey\(key,context\.business\.id,context\.conversation\.id\)/);
+  assert.doesNotMatch(aiCore,/loadBusinessConnectionWithServiceKey\(/);
 });
