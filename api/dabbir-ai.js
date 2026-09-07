@@ -6,6 +6,14 @@ function json(res, status, body) {
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
 }
 
+function configuredDirectProviders(env = process.env) {
+  return [
+    env.GEMINI_API_KEY ? 'google-gemini' : null,
+    env.GROQ_API_KEY ? 'groq' : null,
+    env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? 'cloudflare-workers-ai' : null,
+  ].filter(Boolean);
+}
+
 export default async function handler(req, res) {
   const environment = process.env.VERCEL_ENV === 'production' ? 'PRODUCTION_DABBIR' : 'PREVIEW_DABBIR';
 
@@ -29,6 +37,7 @@ export default async function handler(req, res) {
       cost_mode: config.cost_mode,
       configured_provider_count: redundancy.configured_provider_count,
       direct_provider_count: redundancy.direct_provider_count,
+      direct_providers: configuredDirectProviders(),
       gateway_fallback_configured: redundancy.gateway_fallback_configured,
       redundancy_ready: redundancy.redundancy_ready,
       data_mode: 'SYNTHETIC_ONLY',
