@@ -30,7 +30,7 @@ test('selecting a service returns verified duration and price then asks for time
 });
 
 test('service booking time is handled deterministically before generic planner fallback',()=>{
-  assert.match(menu,/parseRequestedLocal/);
+  assert.match(menu,/resolveRequestedLocal/);
   assert.match(menu,/dabbir_whatsapp_ai_check_availability/);
   assert.match(menu,/setState\(context,'choose_slot'/);
   const menuPos=menu.indexOf('tryServiceFlow(claim)');
