@@ -1,0 +1,37 @@
+name: QA AI Gateway Cron Run
+
+on:
+  push:
+    branches:
+      - qa/ai-gateway-cron-run-20260907
+    paths:
+      - .github/workflows/qa-ai-gateway-cron-run.yml
+
+permissions:
+  contents: read
+
+jobs:
+  run-production-cron:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+    steps:
+      - name: Require Vercel token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}"
+      - name: Link exact DABBIR Vercel project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_TEAM_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+      - name: Trigger deployed reconciliation cron once
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest crons run /api/dabbir-ai-billing-reconcile-cron --token "$VERCEL_TOKEN" --scope "$VERCEL_TEAM_ID"
