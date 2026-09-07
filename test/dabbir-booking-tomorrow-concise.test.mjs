@@ -22,9 +22,9 @@ test('Arabic customer prefix and tomorrow synonyms are accepted',()=>{
   }
 });
 
-test('routine AI replies are deliberately low-token and hide internal details',()=>{
+test('routine AI replies stay concise while structured planners get a bounded completion budget',()=>{
   assert.match(aiCore,/Hard limit: 25 words/);
-  assert.match(aiCore,/max_tokens: 60/);
+  assert.match(aiCore,/max_tokens: 320/);
   assert.match(aiCore,/Never include internal IDs, UUIDs, diagnostics/);
   assert.match(aiCore,/history\.slice\(-4\)/);
 });
