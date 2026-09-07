@@ -9,7 +9,7 @@ import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-co
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ARABIC=/[\u0600-\u06ff]/;
-const PROVIDER_FAILURE=/^(?:gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|empty_ai_response)/i;
+const PROVIDER_FAILURE=/^(?:gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|empty_ai_response)/i;
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const one=value=>Array.isArray(value)?value[0]??null:value??null;
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
