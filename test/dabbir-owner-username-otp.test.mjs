@@ -27,7 +27,7 @@ test('platform authentication is actor-bound brokered Resend OTP with Vercel OID
   assert.doesNotMatch(source, /barman2013@icloud\.com/);
 });
 
-test('owner OTP mailer authenticates only the exact Vercel production identity before login lookup', async () => {
+test('owner OTP mailer authenticates only the exact Vercel production identity before request processing', async () => {
   const mailer = await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
   assert.match(mailer, /createRemoteJWKSet/);
   assert.match(mailer, /decodeJwt/);
@@ -43,8 +43,10 @@ test('owner OTP mailer authenticates only the exact Vercel production identity b
   assert.doesNotMatch(mailer, /x-dabbir-owner-mailer-auth|dabbir-owner-otp-mailer-v2|validMailerSignature/);
   assert.doesNotMatch(mailer, /onboarding@resend\.dev/);
   assert.doesNotMatch(mailer, /x-dabbir-supabase-service-key/);
-  assert.ok(mailer.indexOf('verifyVercelIdentity(bearer(req))') < mailer.indexOf("await req.json()"));
-  assert.ok(mailer.indexOf('verifyVercelIdentity(bearer(req))') < mailer.indexOf('dabbir_platform_login_identity_v1'));
+  const serveBody=mailer.slice(mailer.indexOf('Deno.serve'));
+  assert.ok(serveBody.indexOf('verifyVercelIdentity(bearer(req))') >= 0);
+  assert.ok(serveBody.indexOf('verifyVercelIdentity(bearer(req))') < serveBody.indexOf('await req.json()'));
+  assert.ok(serveBody.indexOf('verifyVercelIdentity(bearer(req))') < serveBody.indexOf('return await requestOtp(body,resendKey)'));
 });
 
 test('owner broker supports modern Supabase secret keys and actor-aware incidents', async () => {
