@@ -5,6 +5,7 @@
   "buildCommand": "npm run dabbir:build",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
+    "NODE_OPTIONS": "--import=./api/_sentry-preload.js",
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com",
     "DABBIR_GEMINI_MODEL": "gemini-3.7-flash",
     "DABBIR_GROQ_MODEL": "openai/gpt-oss-20b",
@@ -13,157 +14,90 @@
     "DABBIR_DAILY_OPERATOR_MODEL": "google/gemini-3.7-flash"
   },
   "crons": [
-    {
-      "path": "/api/salon-reminders-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/calendar-outbox-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/dabbir-whatsapp-ai-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/barman-executive-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/dabbir-daily-operator-cron",
-      "schedule": "15 5 * * *"
-    }
+    { "path": "/api/salon-reminders-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/calendar-outbox-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/dabbir-whatsapp-ai-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/barman-executive-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/dabbir-daily-operator-cron", "schedule": "15 5 * * *" }
   ],
   "functions": {
     "api/salon-reminders-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/calendar-outbox-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-whatsapp-ai-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-whatsapp-ai-worker.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/barman-executive-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-daily-operator-cron.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app.js": {
-      "includeFiles": "index.html"
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app-recovery.js": {
-      "includeFiles": "index.html"
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app-safari-recovery.js": {
-      "includeFiles": "index.html"
+      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/car-wash-booking.js": {
-      "includeFiles": "booking.html"
+      "includeFiles": "{booking.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-market-preview.js": {
-      "includeFiles": "try.html"
+      "includeFiles": "{try.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/team-page.js": {
-      "includeFiles": "team.html"
+      "includeFiles": "{team.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
+    },
+    "api/**/*.js": {
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     }
   },
   "routes": [
-    {
-      "src": "^/privacy/?$",
-      "dest": "/privacy.html"
-    },
-    {
-      "src": "^/terms/?$",
-      "dest": "/terms.html"
-    },
-    {
-      "src": "^/support/?$",
-      "dest": "/support.html"
-    },
-    {
-      "src": "^/team/?$",
-      "dest": "/api/team-page"
-    },
-    {
-      "src": "^/team\\.html/?$",
-      "dest": "/api/team-page"
-    },
-    {
-      "src": "^/owner/?$",
-      "dest": "/api/owner-login"
-    },
-    {
-      "src": "^/owner-dashboard/?$",
-      "dest": "/api/owner-dashboard-gateway"
-    },
-    {
-      "src": "^/book/?$",
-      "dest": "/api/car-wash-booking"
-    },
-    {
-      "src": "^/try/?$",
-      "dest": "/api/dabbir-market-preview"
-    },
-    {
-      "src": "^/$",
-      "dest": "/api/app-safari-recovery"
-    }
+    { "src": "^/privacy/?$", "dest": "/privacy.html" },
+    { "src": "^/terms/?$", "dest": "/terms.html" },
+    { "src": "^/support/?$", "dest": "/support.html" },
+    { "src": "^/team/?$", "dest": "/api/team-page" },
+    { "src": "^/team\\.html/?$", "dest": "/api/team-page" },
+    { "src": "^/owner/?$", "dest": "/api/owner-login" },
+    { "src": "^/owner-dashboard/?$", "dest": "/api/owner-dashboard-gateway" },
+    { "src": "^/book/?$", "dest": "/api/car-wash-booking" },
+    { "src": "^/try/?$", "dest": "/api/dabbir-market-preview" },
+    { "src": "^/$", "dest": "/api/app-safari-recovery" }
   ],
   "rewrites": [
-    {
-      "source": "/privacy",
-      "destination": "/privacy.html"
-    },
-    {
-      "source": "/terms",
-      "destination": "/terms.html"
-    },
-    {
-      "source": "/support",
-      "destination": "/support.html"
-    },
-    {
-      "source": "/team",
-      "destination": "/api/team-page"
-    },
-    {
-      "source": "/owner",
-      "destination": "/api/owner-login"
-    },
-    {
-      "source": "/owner-dashboard",
-      "destination": "/api/owner-dashboard-gateway"
-    },
-    {
-      "source": "/book",
-      "destination": "/api/car-wash-booking"
-    },
-    {
-      "source": "/try",
-      "destination": "/api/dabbir-market-preview"
-    },
-    {
-      "source": "/",
-      "destination": "/api/app-safari-recovery"
-    }
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/support", "destination": "/support.html" },
+    { "source": "/team", "destination": "/api/team-page" },
+    { "source": "/owner", "destination": "/api/owner-login" },
+    { "source": "/owner-dashboard", "destination": "/api/owner-dashboard-gateway" },
+    { "source": "/book", "destination": "/api/car-wash-booking" },
+    { "source": "/try", "destination": "/api/dabbir-market-preview" },
+    { "source": "/", "destination": "/api/app-safari-recovery" }
   ],
   "headers": [
     {
       "source": "/dabbir-ui-(critical|deferred)\\.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
       "source": "/(dabbir-app-icon|favicon)\\.(png|ico)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
       "source": "/(.*)",
