@@ -1,5 +1,5 @@
 import { json, readJsonBody } from './_auth-core.js';
-import { processWhatsAppAiDispatchToken } from './_dabbir-whatsapp-ai-core.js';
+import { processWhatsAppDispatchWithServiceMenu } from './_dabbir-whatsapp-service-menu.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clean=(v,max=160)=>String(v??'').trim().slice(0,max);
@@ -10,7 +10,7 @@ export default async function handler(req,res){
   const token=clean(body?.dispatch_token,80);
   if(!UUID.test(token))return json(res,202,{ok:true,accepted:false});
   try{
-    const result=await processWhatsAppAiDispatchToken(token);
+    const result=await processWhatsAppDispatchWithServiceMenu(token);
     console.info('dabbir_whatsapp_ai_dispatch',{claimed:result?.claimed===true,state:clean(result?.state,40)||'NOOP'});
     return json(res,202,{ok:true,accepted:true});
   }catch(error){
