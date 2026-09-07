@@ -245,7 +245,7 @@ declare
   v_business uuid;
   v_result jsonb;
 begin
-  perform dabbir_private.platform_assert_admin(p_actor_user_id);
+  perform dabbir_private.platform_assert_permission(p_actor_user_id,'manage_support');
   v_no:=upper(trim(coalesce(p_customer_no,'')));
   v_message:=trim(coalesce(p_message,''));
   select a.user_id into v_target from public.dabbir_user_accounts a where a.customer_no=v_no;
@@ -284,7 +284,7 @@ set search_path = ''
 as $$
 declare v_target uuid; v_no text; v_cases jsonb; v_timeline jsonb; v_open int; v_waiting int; v_resolved int;
 begin
-  perform dabbir_private.platform_assert_admin(p_actor_user_id);
+  perform dabbir_private.platform_assert_permission(p_actor_user_id,'manage_support');
   v_no := upper(trim(coalesce(p_customer_no,'')));
   select a.user_id into v_target from public.dabbir_user_accounts a where a.customer_no=v_no;
   if v_target is null then raise exception 'DABBIR_CUSTOMER_ACCOUNT_NOT_FOUND'; end if;
