@@ -18,7 +18,8 @@
     { "path": "/api/calendar-outbox-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/dabbir-whatsapp-ai-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/barman-executive-cron", "schedule": "*/5 * * * *" },
-    { "path": "/api/dabbir-daily-operator-cron", "schedule": "15 5 * * *" }
+    { "path": "/api/dabbir-daily-operator-cron", "schedule": "15 5 * * *" },
+    { "path": "/api/dabbir-ai-billing-reconcile-cron", "schedule": "23 2 * * *" }
   ],
   "functions": {
     "api/salon-reminders-cron.js": {
@@ -42,6 +43,10 @@
       "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-daily-operator-cron.js": {
+      "maxDuration": 60,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
+    },
+    "api/dabbir-ai-billing-reconcile-cron.js": {
       "maxDuration": 60,
       "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
