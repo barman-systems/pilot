@@ -22,9 +22,12 @@ test('Arabic customer prefix and tomorrow synonyms are accepted',()=>{
   }
 });
 
-test('routine AI replies are deliberately low-token and hide internal details',()=>{
+test('routine AI replies remain concise while structured planner output has bounded headroom',()=>{
   assert.match(aiCore,/Hard limit: 25 words/);
-  assert.match(aiCore,/max_tokens: 60/);
+  const tokenBudget=aiCore.match(/max_tokens:\s*(\d+)/);
+  assert.ok(tokenBudget,'AI output budget must remain explicitly bounded');
+  assert.ok(Number(tokenBudget[1])>=256,'structured planner needs enough room to finish valid JSON');
+  assert.ok(Number(tokenBudget[1])<=512,'AI output budget must stay bounded');
   assert.match(aiCore,/Never include internal IDs, UUIDs, diagnostics/);
   assert.match(aiCore,/history\.slice\(-4\)/);
 });
