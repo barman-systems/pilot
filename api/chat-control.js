@@ -64,11 +64,18 @@ async function sendLiveWhatsApp(req,token,user,businessId,conversationId,message
     error.status=503;
     throw error;
   }
+  const browserCookie=cleanText(req.headers?.cookie,8192);
+  if(!browserCookie){
+    const error=new Error('WHATSAPP_REPLY_AUTH_COOKIE_UNAVAILABLE');
+    error.status=401;
+    throw error;
+  }
   const response=await fetch(`${origin}/api/dabbir-whatsapp-reply`,{
     method:'POST',
     cache:'no-store',
     headers:{
       authorization:`Bearer ${token}`,
+      cookie:browserCookie,
       origin,
       'content-type':'application/json',
       accept:'application/json',
