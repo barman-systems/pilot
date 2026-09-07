@@ -21,6 +21,7 @@ begin
   return new;
 end;
 $$;
+revoke all on function dabbir_private.ai_booking_funnel_decision_trigger() from public,anon,authenticated;
 
 create or replace function dabbir_private.ai_booking_funnel_appointment_trigger()
 returns trigger
@@ -72,6 +73,7 @@ begin
   return new;
 end;
 $$;
+revoke all on function dabbir_private.ai_booking_funnel_appointment_trigger() from public,anon,authenticated;
 
 drop trigger if exists dabbir_ai_booking_funnel_appointment_event on public.dabbir_appointments;
 create trigger dabbir_ai_booking_funnel_appointment_event
