@@ -1,6 +1,7 @@
 import { json } from './_auth-core.js';
 import { cronAuthMode } from './salon-reminders-cron.js';
 import { processWhatsAppRecoveryWithServiceMenu } from './_dabbir-whatsapp-service-menu.js';
+import { recoverWhatsAppAiProviderFailovers } from './_dabbir-whatsapp-ai-provider-failover.js';
 
 const clean=(v,max=160)=>String(v??'').trim().slice(0,max);
 
@@ -9,8 +10,9 @@ export default async function handler(req,res){
   const authMode=cronAuthMode(req);if(!authMode)return json(res,401,{ok:false,error:'CRON_AUTH_REQUIRED'});
   try{
     const result=await processWhatsAppRecoveryWithServiceMenu({limit:12});
-    console.info('dabbir_whatsapp_ai_recovery',{auth_mode:authMode,processed:result.processed});
-    return json(res,200,{ok:true,processed:result.processed});
+    const failover=await recoverWhatsAppAiProviderFailovers({limit:12});
+    console.info('dabbir_whatsapp_ai_recovery',{auth_mode:authMode,processed:result.processed,provider_failovers:failover.processed});
+    return json(res,200,{ok:true,processed:result.processed,provider_failovers:failover.processed});
   }catch(error){
     const code=clean(error?.code||error?.message||'AI_RECOVERY_FAILED');
     console.error('dabbir_whatsapp_ai_recovery_failed',{error:code});
