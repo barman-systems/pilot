@@ -67,7 +67,7 @@ async function workspace(req,ctx){
 
   const [businessRows,conversations,appointments]=await Promise.all([
     rest(ctx.token,`dabbir_businesses?select=id,slug,name,business_type,locale,demo_mode,country_code,currency_code,timezone,phone_country_prefix,created_at,updated_at&id=eq.${enc(businessId)}&limit=1`,'BUSINESS_LOOKUP_FAILED'),
-    rest(ctx.token,`dabbir_conversations?select=id,branch_id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${enc(businessId)}${suffix}&channel_type=eq.web&order=updated_at.desc&limit=50`,'CONVERSATIONS_LOOKUP_FAILED'),
+    rest(ctx.token,`dabbir_conversations?select=id,branch_id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${enc(businessId)}${suffix}&channel_type=in.(web,whatsapp,instagram)&order=updated_at.desc&limit=50`,'CONVERSATIONS_LOOKUP_FAILED'),
     rest(ctx.token,`dabbir_appointments?select=id,branch_id,customer_id,service_id,worker_id,starts_at,ends_at,status,simulated,created_at,updated_at&business_id=eq.${enc(businessId)}${suffix}&order=starts_at.desc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
   ]);
   const business=businessRows?.[0]||null;
