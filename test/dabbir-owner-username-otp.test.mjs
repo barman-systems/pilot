@@ -10,6 +10,9 @@ test('platform authentication is actor-bound brokered Resend OTP with isolated s
   assert.match(source, /EMAIL_RE/);
   assert.match(source, /requireSameOrigin\(req\)/);
   assert.match(source, /RESEND_API_KEY/);
+  assert.match(source, /getVercelOidcToken/);
+  assert.match(source, /VERCEL_OIDC_TOKEN/);
+  assert.match(source, /authorization:`Bearer \$\{oidcToken\}`/);
   assert.match(source, /dabbir-owner-broker/);
   assert.match(source, /dabbir-owner-otp-mailer/);
   assert.match(source, /ownerMailerAuth/);
@@ -25,7 +28,7 @@ test('platform authentication is actor-bound brokered Resend OTP with isolated s
   assert.doesNotMatch(source, /barman2013@icloud\.com/);
 });
 
-test('owner OTP mailer uses verified auth domain and Resend-derived server-only authentication', async () => {
+test('owner OTP mailer uses verified auth domain and Resend-derived server-only compatibility authentication', async () => {
   const mailer = await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
   const auth = await read('api/_owner-mailer-auth.js');
   assert.match(mailer, /no-reply@auth\.bmalman\.com/);

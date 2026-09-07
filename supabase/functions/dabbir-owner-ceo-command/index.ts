@@ -8,18 +8,21 @@ const bytesToHex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart
 async function sha(value:string){return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))))}
 async function tokenHash(token:string){return sha(`${SERVICE_KEY}:dabbir-owner-session:${token}`)}
 async function sb(path:string,init:RequestInit={}){return fetch(`${SUPABASE_URL}${path}`,{...init,headers:{...sbHeaders(),...(init.headers||{})}})}
+async function rpc(name:string,params:Record<string,unknown>={}){
+ const r=await sb(`/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify(params)});
+ const p=await r.json().catch(()=>null);
+ return {ok:r.ok,status:r.status,payload:p};
+}
 async function verifySession(token:string){
  if(!token||token.length<24||token.length>256)return null;
- const r=await sb('/rest/v1/rpc/dabbir_owner_session_verify_v1',{method:'POST',body:JSON.stringify({p_token_hash:await tokenHash(token)})});
- if(!r.ok)return null;
- const p=await r.json().catch(()=>null);
- return p?.authenticated===true&&p?.role==='platform_owner'&&p?.actor_user_id?p:null;
+ const r=await rpc('dabbir_owner_session_verify_v1',{p_token_hash:await tokenHash(token)});
+ const p=r.payload;
+ return r.ok&&p?.authenticated===true&&p?.role==='platform_owner'&&p?.actor_user_id?p:null;
 }
-async function recent(limit=20){
- const r=await sb('/rest/v1/rpc/dabbir_ceo_commands_recent_v1',{method:'POST',body:JSON.stringify({p_limit:Math.max(1,Math.min(Number(limit)||20,50))})});
+async function recent(session:any,limit=20){
+ const r=await rpc('dabbir_ceo_commands_authorized_v1',{p_actor:session.actor_user_id,p_limit:Math.max(1,Math.min(Number(limit)||20,50))});
  if(!r.ok)return null;
- const p=await r.json().catch(()=>null);
- return Array.isArray(p)?p:[];
+ return Array.isArray(r.payload)?r.payload:[];
 }
 Deno.serve(async(req:Request)=>{
  if(req.method!=='POST')return reply(405,{ok:false,error:'METHOD_NOT_ALLOWED'});
@@ -29,8 +32,8 @@ Deno.serve(async(req:Request)=>{
  if(!session)return reply(401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
  const action=String(body?.action||'list').trim().toLowerCase();
  if(action==='list'){
-  const commands=await recent(body?.limit);
-  if(commands===null)return reply(503,{ok:false,error:'CEO_COMMAND_READ_FAILED'});
+  const commands=await recent(session,body?.limit);
+  if(commands===null)return reply(403,{ok:false,error:'CEO_COMMAND_READ_DENIED'});
   return reply(200,{ok:true,commands});
  }
  if(action==='create'){
@@ -38,11 +41,17 @@ Deno.serve(async(req:Request)=>{
   const priority=String(body?.priority||'P1').trim().toUpperCase();
   if(commandText.length<4||commandText.length>4000)return reply(400,{ok:false,error:'COMMAND_TEXT_INVALID'});
   if(!['P0','P1','P2','P3'].includes(priority))return reply(400,{ok:false,error:'PRIORITY_INVALID'});
-  const r=await sb('/rest/v1/rpc/dabbir_ceo_command_create_v1',{method:'POST',body:JSON.stringify({p_created_by:session.actor_user_id,p_command_text:commandText,p_priority:priority})});
-  if(!r.ok)return reply(503,{ok:false,error:'CEO_COMMAND_CREATE_FAILED'});
-  const command=await r.json().catch(()=>null);
-  const commands=await recent(body?.limit);
-  return reply(200,{ok:true,command,commands:Array.isArray(commands)?commands:[]});
+  const r=await rpc('dabbir_ceo_command_create_authorized_v1',{
+   p_actor:session.actor_user_id,
+   p_command_text:commandText,
+   p_priority:priority,
+   p_objective:null,
+   p_acceptance_criteria:[],
+   p_due_at:null,
+  });
+  if(!r.ok)return reply(403,{ok:false,error:'CEO_COMMAND_CREATE_DENIED'});
+  const commands=await recent(session,body?.limit);
+  return reply(200,{ok:true,command:r.payload,commands:Array.isArray(commands)?commands:[]});
  }
  return reply(400,{ok:false,error:'UNKNOWN_ACTION'});
 });
