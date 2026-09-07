@@ -9,10 +9,16 @@ import {
 } from './_whatsapp-live-core.js';
 import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 import { processClaimedWhatsAppAiBatch } from './_dabbir-whatsapp-ai-core.js';
+import {
+  isConversationNudge,
+  looksLikeServiceIntent,
+  previousCustomerText,
+  resolveRequestedLocal,
+  wantsServiceMenu,
+} from './_dabbir-whatsapp-understanding.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ARABIC=/[\u0600-\u06ff]/;
-const MENU_REQUEST=/(?:الخدمات|خدماتكم|شو\s+(?:عندكم|تقدمون)|وش\s+(?:عندكم|تقدمون)|ايش\s+(?:عندكم|تقدمون)|ماذا\s+تقدمون|قائمة\s+الخدمات|services|service menu|what do you offer)/i;
 const PRICE_REQUEST=/(?:بكم|كم\s+(?:السعر|سعرها|سعره)|السعر|price|how much)/i;
 const PERMANENT_SERVICE_FAILURES=new Set([
   'AI_PENDING_ACTION_INVALID',
@@ -70,23 +76,6 @@ function serviceDetails(service,context,lang){
   if(price!==null)parts.push(`Price: ${price} ${currency}`);
   return `${parts.join('\n')}\n\nWhat time works for you?`;
 }
-function localParts(timezone){
-  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
-  const get=t=>parts.find(p=>p.type===t)?.value||'';
-  return {year:Number(get('year')),month:Number(get('month')),day:Number(get('day')),hour:Number(get('hour')),minute:Number(get('minute'))};
-}
-function parseRequestedLocal(text,timezone){
-  const source=String(text||'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
-  const today=/(?:اليوم|today)/i.test(source),tomorrow=/(?:باجر|بكره|بكرة|غدا|غداً|tomorrow)/i.test(source);
-  const m=source.match(/(?:الساع(?:ة|ه)?\s*)?([01]?\d|2[0-3])(?::([0-5]\d))?\s*(ص|م|am|pm)?/i);
-  if(!m||(!today&&!tomorrow))return null;
-  let hour=Number(m[1]),minute=Number(m[2]||0);const marker=String(m[3]||'').toLowerCase();
-  if((marker==='م'||marker==='pm')&&hour<12)hour+=12;if((marker==='ص'||marker==='am')&&hour===12)hour=0;
-  const p=localParts(timezone);const d=new Date(Date.UTC(p.year,p.month-1,p.day+(tomorrow?1:0),12,0,0));
-  const y=d.getUTCFullYear(),mo=String(d.getUTCMonth()+1).padStart(2,'0'),da=String(d.getUTCDate()).padStart(2,'0');
-  if(today&&!marker&&(hour<p.hour||(hour===p.hour&&minute<=p.minute)))return null;
-  return `${y}-${mo}-${da}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00`;
-}
 function slotText(slots,lang,timezone){
   const locale=lang==='ar'?'ar-AE':'en-AE';
   const lines=arr(slots).slice(0,3).map((s,i)=>{
@@ -94,8 +83,18 @@ function slotText(slots,lang,timezone){
     try{when=new Intl.DateTimeFormat(locale,{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(s.starts_at));}catch{}
     return `${i+1}) ${when}`;
   });
-  if(!lines.length)return lang==='ar'?'لا يوجد موعد متاح قريب من الوقت المطلوب. ارسل وقتًا آخر.':'No nearby time is available. Send another time.';
+  if(!lines.length)return lang==='ar'?'لا يوجد موعد متاح قريب من الوقت المطلوب. أرسل وقتًا آخر.':'No nearby time is available. Send another time.';
   return lang==='ar'?`الأوقات المتاحة:\n${lines.join('\n')}\nاختر رقم الموعد.`:`Available times:\n${lines.join('\n')}\nReply with the slot number.`;
+}
+function timingReply(timing,lang){
+  if(timing?.status==='ambiguous'){
+    const hour=clean(timing?.hour,20)||'';
+    return lang==='ar'?`تقصد الساعة ${hour} صباحًا أم مساءً؟`:`Do you mean ${hour} AM or PM?`;
+  }
+  if(timing?.status==='past'){
+    return lang==='ar'?'هذا الوقت مضى اليوم. أرسل وقتًا لاحقًا يناسبك.':'That time has already passed today. Send a later time.';
+  }
+  return lang==='ar'?'أنا معك. أرسل اليوم والوقت الذي يناسبك.':'I am with you. Send the day and time that works for you.';
 }
 
 async function reserve(claim,context,body,purpose){
@@ -175,7 +174,8 @@ async function tryServiceFlow(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)return null;
   const text=latestText(context),lang=langOf(text),services=arr(context?.services);
-  if(MENU_REQUEST.test(text)){
+  if(wantsServiceMenu(text)){
+    await setState(context,'none',{});
     await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SERVICE_MENU'};
   }
   const selected=serviceBySelection(context,text);
@@ -189,13 +189,25 @@ async function tryServiceFlow(claim){
     if(PRICE_REQUEST.test(text)){
       await sendReservedText(claim,context,serviceDetails(selectedService,context,lang),'service-price');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SERVICE_DETAILS'};
     }
-    const timezone=clean(context?.business?.timezone,80)||'Asia/Dubai';const requested=parseRequestedLocal(text,timezone);
-    if(requested){
-      const av=await serviceRpc('dabbir_whatsapp_ai_check_availability',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:pending.payload.service_id,p_worker_id:null,p_requested_local:requested});
+    const timezone=clean(context?.business?.timezone,80)||'Asia/Dubai';
+    let timing=resolveRequestedLocal(text,timezone,{allowImplicitToday:true});
+    if(timing.status!=='resolved'&&isConversationNudge(text)){
+      const previous=previousCustomerText(context?.history);
+      if(previous)timing=resolveRequestedLocal(previous,timezone,{allowImplicitToday:true});
+    }
+    if(timing.status==='resolved'&&timing.local){
+      const av=await serviceRpc('dabbir_whatsapp_ai_check_availability',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:pending.payload.service_id,p_worker_id:null,p_requested_local:timing.local});
       const slots=arr(av?.slots).slice(0,3);
       await setState(context,'choose_slot',{mode:'booking',slots},900);
       await sendReservedText(claim,context,slotText(slots,lang,timezone),'service-slots');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
     }
+    if(timing.status==='ambiguous'||timing.status==='past'||isConversationNudge(text)){
+      await sendReservedText(claim,context,timingReply(timing,lang),'service-time-clarify');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CLARIFY_TIME'};
+    }
+  }
+  if(looksLikeServiceIntent(text)){
+    await setState(context,'none',{});
+    await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SERVICE_MENU'};
   }
   return null;
 }

@@ -5,8 +5,8 @@ const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash';
 const DEFAULT_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_CLOUDFLARE_MODEL = '@cf/zai-org/glm-4.7-flash';
 const cloudflareEndpoint = env => `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID || ''))}/ai/v1/chat/completions`;
-const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3-free';
-const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7-free'];
+const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3';
+const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7'];
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
 export function getDABBIRAiConfig(env = process.env) {
