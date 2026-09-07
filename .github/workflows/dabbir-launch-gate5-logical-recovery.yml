@@ -142,7 +142,15 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${RECOVERY_DB_CONTAINER:-}"
-          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/roles.sql
+
+          # The hosted project role dump contains provider-only ALTER ROLE ... SET
+          # parameters (for example log_min_messages) which the isolated local
+          # postgres deliberately does not allow a normal restore session to set.
+          # They are runtime/provider configuration, not application recovery state.
+          awk '!/^ALTER ROLE .* SET /' recovery-private/roles.sql > recovery-private/roles-restore.sql
+          test -s recovery-private/roles-restore.sql
+
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/roles-restore.sql
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/schema.sql
           docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/data.sql
           echo "LOGICAL_RESTORE_COMPLETED"
