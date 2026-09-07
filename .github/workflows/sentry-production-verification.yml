@@ -1,0 +1,28 @@
+name: Sentry production verification
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/sentry-production-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send privacy-safe synthetic event through production relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/sentry-response.json --write-out '%{http_code}' \
+            --request POST 'https://dabbir.bmalman.com/api/sentry-browser' \
+            --header 'Origin: https://dabbir.bmalman.com' \
+            --header 'Content-Type: application/json' \
+            --header 'x-dabbir-client: web' \
+            --data '{"source":"production-verification","name":"DABBIRSentryVerification","message":"DABBIR_SENTRY_PRODUCTION_VERIFICATION_20260907","path":"/sentry-verification"}')"
+          cat /tmp/sentry-response.json
+          test "$status" = '202'
+          grep -q '"ok":true' /tmp/sentry-response.json
