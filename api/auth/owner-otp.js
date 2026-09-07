@@ -1,3 +1,4 @@
+import { getVercelOidcToken } from '@vercel/oidc';
 import { json, parseCookies, readJsonBody, requireSameOrigin } from '../_auth-core.js';
 import { ownerMailerAuth } from '../_owner-mailer-auth.js';
 
@@ -22,11 +23,16 @@ async function broker(url,body,headers={}){
   const payload=await response.json().catch(()=>({}));
   return {response,payload};
 }
+async function ownerMailerOidc(){
+  const envToken=String(process.env.VERCEL_OIDC_TOKEN||'').trim();
+  if(envToken)return envToken;
+  try{return String(await getVercelOidcToken()||'').trim()}catch{return ''}
+}
 
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   res.setHeader('pragma','no-cache');
-  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v10');
+  res.setHeader('x-dabbir-owner-auth','actor-bound-otp-v11');
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
   try{
@@ -37,9 +43,10 @@ export default async function handler(req,res){
       // Do not reveal whether an employee email exists.
       if(!validLogin(login))return json(res,200,{ok:true,otp_required:true});
       const resendKey=String(process.env.RESEND_API_KEY||'').trim();
-      const mailerAuth=ownerMailerAuth(resendKey);
-      if(!resendKey||!mailerAuth)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
-      const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{'x-dabbir-owner-mailer-auth':mailerAuth});
+      const mailerAuth=ownerMailerAuth(resendKey); // Temporary compatibility while the Edge mailer transitions to Vercel OIDC-only auth.
+      const oidcToken=await ownerMailerOidc();
+      if(!resendKey||!mailerAuth||!oidcToken)return json(res,503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+      const {response,payload}=await broker(OTP_MAILER_URL,{action:'owner_otp_request',login,resend_key:resendKey},{authorization:`Bearer ${oidcToken}`,'x-dabbir-owner-mailer-auth':mailerAuth});
       if(response.status===404)return json(res,200,{ok:true,otp_required:true});
       if(!response.ok||!payload?.ok||!payload?.challenge_id)return json(res,response.status===429?429:503,{ok:false,error:response.status===429?'OTP_RATE_LIMITED':(payload?.error||'OWNER_AUTH_UNAVAILABLE')});
       res.setHeader('set-cookie',challengeCookie(payload.challenge_id));
