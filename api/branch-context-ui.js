@@ -5,10 +5,10 @@ const css=String.raw`
 
 const script=String.raw`(()=>{
   if(window.__dabbirBranchContextUi)return;
-  window.__dabbirBranchContextUi='v4-server-scoped-whatsapp-business';
+  window.__dabbirBranchContextUi='v5-all-scope-multichannel-runtime';
   const PREFIX='dabbir_active_branch_scope:';
   let activeBusiness=null,context=null,loading=null,apiPatched=false,fetchPatched=false;
-  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v4';document.head.append(style);
+  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v5';document.head.append(style);
 
   function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return''}}
   function key(id){return PREFIX+String(id||'')}
@@ -35,15 +35,17 @@ const script=String.raw`(()=>{
     const bid=String(parsed.searchParams.get('business_id')||body?.business_id||businessId()||'').trim();
     if(!bid)return original(url,options);
     const scope=currentScope(bid);
-    if(!scope||scope==='all')return original(url,options);
+    if(!scope)return original(url,options);
 
     if(method==='GET'){
       const target=new URL('/api/branch-workspace',location.origin);
       target.searchParams.set('business_id',bid);
-      target.searchParams.set('branch_id',scope);
+      if(scope!=='all')target.searchParams.set('branch_id',scope);
       const cid=parsed.searchParams.get('conversation_id');if(cid)target.searchParams.set('conversation_id',cid);
       return original(target.pathname+target.search,options);
     }
+
+    if(scope==='all')return original(url,options);
 
     if(method==='POST'&&body&&['start_conversation','create_appointment'].includes(String(body.action||''))){
       const next=Object.assign({},body,{business_id:bid,branch_id:scope});
@@ -200,6 +202,6 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-branch-context','server-scoped-v4-whatsapp-business');
+  res.setHeader('x-dabbir-branch-context','server-scoped-v5-all-scope-multichannel');
   return res.end(script);
 }
