@@ -1,19 +1,11 @@
-import { json, parseCookies } from './_auth-core.js';
+import { json } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
-
-const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
-const BROKER_URL=String(process.env.DABBIR_OWNER_BROKER_URL||`${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/,'');
-const SESSION_COOKIE='__Host-dabbir_owner_session';
-
-async function broker(body){
-  const r=await fetch(BROKER_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-  const p=await r.json().catch(()=>({}));
-  return {r,p};
-}
+import { ownerBroker, ownerSessionToken } from './_owner-broker-client.js';
 
 function count(value){
+  if(!['number','string'].includes(typeof value)||String(value).trim()==='')return null;
   const n=Number(value);
-  return Number.isFinite(n)&&n>=0?n:0;
+  return Number.isInteger(n)&&n>=0?n:null;
 }
 
 export function normalizeOverviewForUi(payload){
@@ -28,7 +20,8 @@ export function normalizeOverviewForUi(payload){
     source.whatsapp?.error,
     source.calendar?.error,
     source.payments?.failed
-  ].reduce((sum,value)=>sum+count(value),0);
+  ].map(count);
+  const reviewCount=needsReview.every(v=>v!==null)?needsReview.reduce((sum,value)=>sum+value,0):null;
 
   // Compatibility summary for the current owner shell. Keep the structured broker
   // payload intact so newer executive panels continue to use their native sections.
@@ -38,8 +31,8 @@ export function normalizeOverviewForUi(payload){
     customer_count:customers,
     total_businesses:businesses,
     business_count:businesses,
-    needs_review:needsReview,
-    review_count:needsReview
+    needs_review:reviewCount,
+    review_count:reviewCount
   };
 }
 
@@ -47,22 +40,35 @@ export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
 
-  const sessionToken=parseCookies(req.headers.cookie||'')[SESSION_COOKIE];
+  const sessionToken=ownerSessionToken(req);
   if(!sessionToken)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
 
   const action=String(singleQueryValue(req,'action')||'overview').trim();
-  if(!['overview','search','executive'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
+  if(!['overview','search','executive','identity','customer360','operations','operation_entities','feedback','audit'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
 
   try{
-    const body={action:'owner_data',session_token:sessionToken,data_action:action};
+    const body={};
     if(action==='search')body.q=String(singleQueryValue(req,'q')||'').trim().slice(0,160);
-    const {r,p}=await broker(body);
-    if(!r.ok||!p?.ok){
-      return json(res,r.status===401?401:r.status>=500?503:r.status,{ok:false,error:p?.error||'OWNER_DATA_FAILED'});
+    if(action==='customer360'||action==='operation_entities'){
+      const key=action==='customer360'?'user_id':'business_id';
+      const id=String(singleQueryValue(req,key)||'').trim();
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return json(res,400,{ok:false,error:'INVALID_TARGET_ID'});
+      body[key]=id;
     }
+    if(action==='operation_entities'){
+      body.entity_type=String(singleQueryValue(req,'entity_type')||'').toUpperCase();
+      if(!['ORDER','BOOKING','PRODUCT','SERVICE','BRANCH','WHATSAPP','CALENDAR'].includes(body.entity_type))return json(res,400,{ok:false,error:'INVALID_ENTITY_TYPE'});
+    }
+    const {status,payload:p}=await ownerBroker(req,action,body);
+    if(status!==200||!p?.ok){
+      return json(res,status,{ok:false,error:p?.error||'OWNER_DATA_FAILED'});
+    }
+    if(!p.payload||typeof p.payload!=='object'||Array.isArray(p.payload))return json(res,502,{ok:false,error:'OWNER_DATA_INVALID_RESPONSE'});
+    const collection={search:'accounts',operations:'businesses',operation_entities:'entities',feedback:'feedback',audit:'entries'}[action];
+    if(collection&&!Array.isArray(p.payload[collection]))return json(res,502,{ok:false,error:'OWNER_DATA_INVALID_RESPONSE'});
     if(action==='overview')return json(res,200,{ok:true,overview:normalizeOverviewForUi(p.payload)});
     if(action==='executive')return json(res,200,{ok:true,executive:p.payload});
-    return json(res,200,{ok:true,...(p.payload||{})});
+    return json(res,200,{...(p.payload||{}),ok:true});
   }catch{
     return json(res,503,{ok:false,error:'OWNER_DATA_FAILED'});
   }

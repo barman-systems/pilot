@@ -81,6 +81,7 @@
     { "src": "^/team\\.html/?$", "dest": "/api/team-page" },
     { "src": "^/owner/?$", "dest": "/api/owner-login" },
     { "src": "^/owner-dashboard/?$", "dest": "/api/owner-dashboard-gateway" },
+    { "src": "^/api/owner-command-center-v[0-9]+(?:\\.js)?/?$", "dest": "/api/owner-command-center" },
     { "src": "^/book/?$", "dest": "/api/car-wash-booking" },
     { "src": "^/try/?$", "dest": "/api/dabbir-market-preview" },
     { "src": "^/$", "dest": "/api/app-safari-recovery" }

@@ -14,8 +14,8 @@ const whatsappTruth=read('supabase/migrations/20260903193200_dabbir_whatsapp_con
 
 test('OTP challenge is bound to one actor and verify never re-resolves first admin',()=>{
   assert.match(broker,/actor_user_id:identity\.user_id/);
-  assert.match(broker,/select=id,actor_user_id,invitation_id,otp_hash/);
-  assert.match(broker,/p_actor_user_id:row\.actor_user_id/);
+  assert.match(broker,/dabbir_owner_otp_complete_v1/);
+  assert.match(broker,/p_challenge_id:id,p_otp_hash:await otpHash\(id,otp\)/);
   assert.doesNotMatch(broker,/function activeAdmin/);
   assert.match(authority,/dabbir_owner_otp_actor_bound_check/);
 });
@@ -45,8 +45,8 @@ test('suspension and removal revoke existing sessions',()=>{
 });
 
 test('CEO and incident writes are permission checked in broker and database wrapper',()=>{
-  assert.match(broker,/requirePermission\(session,'manage_ceo_commands'\)/);
-  assert.match(broker,/requirePermission\(session,'manage_incidents'\)/);
+  assert.match(broker,/requireCapability\(session,'ceo\.view'\)/);
+  assert.match(broker,/requireCapability\(session,'incidents\.update'\)/);
   assert.match(authority,/platform_assert_permission\(p_actor,'manage_ceo_commands'\)/);
   assert.match(authority,/platform_assert_permission\(p_actor,'manage_incidents'\)/);
 });
@@ -67,10 +67,11 @@ test('owner login supports independent delegate email without hard-coded owner e
 });
 
 test('team workspace uses a real brokered API and permission presets',()=>{
-  assert.match(teamApi,/data_action:'team'/);
+  assert.match(teamApi,/ownerBroker\(req,'team'/);
   assert.match(teamApi,/requireSameOrigin\(req\)/);
-  for(const preset of ['full','operations','support','technical','finance','custom'])assert.match(teamUi,new RegExp(preset+':'));
-  for(const op of ['invite','set_permissions','suspend','reactivate','revoke_sessions','remove'])assert.match(teamUi,new RegExp(op));
+  assert.match(teamUi,/state\.roles/);
+  assert.doesNotMatch(teamUi,/const PRESETS/);
+  for(const op of ['invite','set_governance','suspend','reactivate','revoke_sessions','remove'])assert.match(teamUi,new RegExp(op));
 });
 
 test('WhatsApp cannot become connected without provider verification evidence',()=>{

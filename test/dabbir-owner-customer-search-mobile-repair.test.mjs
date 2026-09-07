@@ -15,12 +15,8 @@ test('owner customer search uses literal substring matching without fragile LIKE
   assert.match(sql, /grant execute[\s\S]*service_role/i);
 });
 
-test('owner design system makes legacy customer and support surfaces readable on iPhone', async () => {
-  const ui = await read('api/_owner-command-center-design-system.js');
-  assert.match(ui, /body \.muted,body \.state\{font-size:13px!important/);
-  assert.match(ui, /body \.item small\{font-size:12px!important/);
-  assert.match(ui, /body \.field,body #customers input/);
-  assert.match(ui, /#customers \.row\.mobileStack\{display:grid!important;grid-template-columns:1fr!important/);
-  assert.match(ui, /--owner-accent:#5b6ff5/);
-  assert.match(ui, /body \.btn\.primary[\s\S]*background:var\(--owner-accent\)!important/);
+test('owner design keeps readable mobile controls without legacy override selectors',async()=>{
+  const css=await read('api/_owner-command-center-design-system.js');
+  assert.match(css,/font-size:16px|font:16px/);assert.match(css,/min-height:46px/);
+  assert.match(css,/@media\(max-width:560px\)/);assert.doesNotMatch(css,/oc23|ownerMainTab29/);
 });

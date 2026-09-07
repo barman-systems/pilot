@@ -1,24 +1,25 @@
-import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
-import { ownerSessionToken } from './_owner-broker-client.js';
+import { json, requireSameOrigin } from './_auth-core.js';
+import { readOwnerBody, ownerSessionToken, ownerBroker } from './_owner-broker-client.js';
 import { singleQueryValue } from './_request-query.js';
 
-const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
-const BROKER_URL=String(process.env.DABBIR_OWNER_BROKER_URL||`${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/,'');
 const PRIORITIES=new Set(['P0','P1','P2','P3']);
 const OPERATIONS=new Set(['reprioritize','set_due_at','add_guidance','cancel','resume']);
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-async function broker(sessionToken,dataAction,payload={}){
-  try{
-    const r=await fetch(BROKER_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'owner_data',session_token:sessionToken,data_action:dataAction,...payload}),cache:'no-store',signal:AbortSignal.timeout(12000)});
-    const p=await r.json().catch(()=>({ok:false,error:'OWNER_BROKER_INVALID_RESPONSE'}));
-    return {status:r.status,body:p};
-  }catch{return {status:503,body:{ok:false,error:'OWNER_BROKER_UNAVAILABLE'}}}
+async function recent(req,limit=30){
+  const call=await ownerBroker(req,'ceo_commands',{limit:Math.max(1,Math.min(Number(limit)||30,50))});
+  if(!call.payload?.ok)return {status:call.status,ok:false,error:call.payload?.error||'CEO_COMMAND_READ_FAILED',commands:[]};
+  const commands=call.payload?.payload?.commands;
+  return Array.isArray(commands)?{status:200,ok:true,commands}:{status:502,ok:false,error:'CEO_COMMAND_RESPONSE_INVALID'};
 }
 
-async function recent(sessionToken,limit=30){
-  const call=await broker(sessionToken,'ceo_commands',{limit:Math.max(1,Math.min(Number(limit)||30,50))});
-  if(!call.body?.ok)return {status:call.status,ok:false,error:call.body?.error||'CEO_COMMAND_READ_FAILED',commands:[]};
-  return {status:200,ok:true,commands:Array.isArray(call.body?.payload?.commands)?call.body.payload.commands:[]};
+async function mutationResult(req,res,call,expected){
+  const command=call.payload?.payload?.command;
+  if(!UUID.test(command?.id||''))return json(res,502,{ok:false,error:'CEO_COMMAND_RECEIPT_MISSING',retry_safe:false});
+  const list=await recent(req,50);
+  const row=list.ok?list.commands.find(item=>item.id===command.id):null;
+  const verified=Boolean(row&&expected(row));
+  return json(res,200,{ok:true,command,commands:list.ok?list.commands:null,readback_verified:verified,readback_error:verified?null:list.error||'CEO_COMMAND_READBACK_MISMATCH',retry_safe:false});
 }
 
 export default async function handler(req,res){
@@ -28,12 +29,12 @@ export default async function handler(req,res){
   if(!sessionToken)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
 
   if(req.method==='GET'){
-    const out=await recent(sessionToken,singleQueryValue(req,'limit')||30);
+    const out=await recent(req,singleQueryValue(req,'limit')||30);
     return json(res,out.ok?200:out.status,{ok:out.ok,...(out.ok?{commands:out.commands}:{error:out.error})});
   }
 
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
-  let body;try{body=await readJsonBody(req,16384)}catch{return json(res,400,{ok:false,error:'INVALID_JSON'})}
+  let body;try{body=await readOwnerBody(req,16384)}catch{return json(res,400,{ok:false,error:'INVALID_JSON'})}
   const operation=String(body?.operation||'create').trim().toLowerCase();
 
   if(operation==='create'){
@@ -45,10 +46,9 @@ export default async function handler(req,res){
     if(commandText.length<4||commandText.length>4000)return json(res,400,{ok:false,error:'COMMAND_TEXT_INVALID'});
     if(!PRIORITIES.has(priority))return json(res,400,{ok:false,error:'PRIORITY_INVALID'});
     if(dueAt&&Number.isNaN(Date.parse(dueAt)))return json(res,400,{ok:false,error:'DUE_AT_INVALID'});
-    const call=await broker(sessionToken,'ceo_command_create',{command_text:commandText,priority,objective,acceptance_criteria:acceptance,due_at:dueAt});
-    if(!call.body?.ok)return json(res,call.status===401?401:call.status>=500?503:call.status,{ok:false,error:call.body?.error||'CEO_COMMAND_CREATE_FAILED'});
-    const list=await recent(sessionToken,30);
-    return json(res,200,{ok:true,command:call.body?.payload?.command||null,commands:list.commands});
+    const call=await ownerBroker(req,'ceo_command_create',{command_text:commandText,priority,objective,acceptance_criteria:acceptance,due_at:dueAt});
+    if(!call.payload?.ok)return json(res,call.status===401?401:call.status>=500?503:call.status,{ok:false,error:call.payload?.error||'CEO_COMMAND_CREATE_FAILED'});
+    return mutationResult(req,res,call,row=>row.command_text===commandText&&row.priority===priority&&row.objective===objective&&JSON.stringify(row.acceptance_criteria)===JSON.stringify(acceptance)&&(dueAt?Date.parse(row.due_at)===Date.parse(dueAt):!row.due_at));
   }
 
   if(!OPERATIONS.has(operation))return json(res,400,{ok:false,error:'UNKNOWN_COMMAND_OPERATION'});
@@ -60,8 +60,7 @@ export default async function handler(req,res){
   if(operation==='reprioritize'&&!PRIORITIES.has(priority))return json(res,400,{ok:false,error:'PRIORITY_INVALID'});
   if(operation==='set_due_at'&&dueAt!==null&&(!dueAt||Number.isNaN(Date.parse(dueAt))))return json(res,400,{ok:false,error:'DUE_AT_INVALID'});
   if(operation==='add_guidance'&&(!guidance||guidance.length<3))return json(res,400,{ok:false,error:'GUIDANCE_REQUIRED'});
-  const call=await broker(sessionToken,'ceo_command_update',{command_id:commandId,operation,priority,due_at:dueAt,guidance});
-  if(!call.body?.ok)return json(res,call.status===401?401:call.status>=500?503:call.status,{ok:false,error:call.body?.error||'CEO_COMMAND_UPDATE_FAILED'});
-  const list=await recent(sessionToken,30);
-  return json(res,200,{ok:true,command:call.body?.payload?.command||null,commands:list.commands});
+  const call=await ownerBroker(req,'ceo_command_update',{command_id:commandId,operation,priority,due_at:dueAt,guidance});
+  if(!call.payload?.ok)return json(res,call.status===401?401:call.status>=500?503:call.status,{ok:false,error:call.payload?.error||'CEO_COMMAND_UPDATE_FAILED'});
+  return mutationResult(req,res,call,row=>row.id===commandId&&(operation==='reprioritize'?row.priority===priority:operation==='set_due_at'?dueAt===null?row.due_at===null:Date.parse(row.due_at)===Date.parse(dueAt):operation==='add_guidance'?row.guidance?.some(item=>item.text===guidance):operation==='cancel'?row.status==='CANCELLED':['QUEUED','IN_PROGRESS'].includes(row.status)));
 }

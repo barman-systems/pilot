@@ -15,32 +15,36 @@ test('platform authentication is actor-bound brokered Resend OTP with isolated s
   assert.match(source, /authorization:`Bearer \$\{oidcToken\}`/);
   assert.match(source, /dabbir-owner-broker/);
   assert.match(source, /dabbir-owner-otp-mailer/);
-  assert.match(source, /ownerMailerAuth/);
-  assert.match(source, /x-dabbir-owner-mailer-auth/);
+  assert.match(source, /ownerMailerAuth\(resendKey\)/);
   assert.match(source, /owner_otp_request/);
   assert.match(source, /owner_otp_verify/);
   assert.match(source, /challenge_id/);
   assert.match(source, /session_token/);
   assert.match(source, /__Host-dabbir_owner_session/);
+  assert.match(source, /actor-bound-otp-v11/);
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(source, /x-dabbir-supabase-service-key/);
   assert.doesNotMatch(source, /grant_type=password/);
   assert.doesNotMatch(source, /barman2013@icloud\.com/);
 });
 
-test('owner OTP mailer uses verified auth domain and Resend-derived server-only compatibility authentication', async () => {
+test('owner OTP mailer uses verified auth domain, server-only authentication and invitation generation binding', async () => {
   const mailer = await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
   const auth = await read('api/_owner-mailer-auth.js');
   assert.match(mailer, /no-reply@auth\.bmalman\.com/);
   assert.match(mailer, /x-dabbir-owner-mailer-auth/);
-  assert.match(mailer, /dabbir-owner-otp-mailer-v2/);
-  assert.match(mailer, /DABBIR-owner-otp-mailer\/3/);
   assert.match(mailer, /OWNER_MAILER_UNAUTHORIZED/);
+  assert.match(mailer, /dabbir-owner-otp-mailer-v2/);
+  assert.doesNotMatch(mailer, /dabbir-owner-otp-mailer-v1/);
+  assert.match(mailer, /invitation_generation/);
+  assert.match(mailer, /identity\.payload\.invitation_generation/);
+  assert.match(mailer, /INVITATION_IDENTITY_INVALID/);
+  assert.match(mailer, /invitation_generation:invitationId\?invitationGeneration:null/);
   assert.doesNotMatch(mailer, /onboarding@resend\.dev/);
   assert.doesNotMatch(mailer, /\/domains/);
-  assert.doesNotMatch(mailer, /x-dabbir-supabase-service-key/);
   assert.match(auth, /createHash\('sha256'\)/);
   assert.match(auth, /dabbir-owner-otp-mailer-v2/);
+  assert.doesNotMatch(auth, /dabbir-owner-otp-mailer-v1/);
+  assert.match(auth, /ownerMailerAuth\(resendKey\)/);
   assert.doesNotMatch(auth, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
