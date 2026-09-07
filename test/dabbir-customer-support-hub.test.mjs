@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [migration,api,ui,staffApi,staffThreadUi,bundles]=await Promise.all([
+const [migration,permissionMigration,api,ui,staffApi,staffThreadUi,bundles]=await Promise.all([
   read('supabase/migrations/20260907124500_dabbir_customer_support_hub_v1.sql'),
+  read('supabase/migrations/20260907124600_dabbir_customer_support_hub_permission_v2.sql'),
   read('api/customer-support.js'),
   read('api/customer-support-ui.js'),
   read('api/platform-customer-support.js'),
@@ -73,6 +74,14 @@ test('staff support can see and answer only customer-visible threads while inter
   assert.match(staffThreadUi,/reply_customer/);
   assert.match(staffThreadUi,/محادثة مرئية للعميل/);
   assert.match(staffThreadUi,/\/api\/platform-customer-support/);
+});
+
+test('delegated platform staff must retain manage_support permission for summary and customer replies',()=>{
+  assert.match(permissionMigration,/dabbir_platform_support_reply_customer/);
+  assert.match(permissionMigration,/dabbir_platform_support_summary/);
+  const gates=permissionMigration.match(/platform_assert_permission\(p_actor_user_id,'manage_support'\)/g)||[];
+  assert.equal(gates.length,2);
+  assert.doesNotMatch(permissionMigration,/platform_assert_admin\(p_actor_user_id\)/);
 });
 
 test('support modules are part of the generated DABBIR UI bundle in customer-before-staff order',()=>{
