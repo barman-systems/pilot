@@ -10,17 +10,17 @@ const health = fs.readFileSync(new URL('../api/sentry-health.js', import.meta.ur
 const browser = fs.readFileSync(new URL('../api/sentry-browser.js', import.meta.url), 'utf8');
 
 const REQUIRED_FILES = ['api/_sentry-preload.js', 'api/_sentry-runtime.js', 'api/_sentry-core.js'];
+const includesFile = (config, file) => String(config?.includeFiles || '').includes(file);
 
 test('every Vercel function bundle preloads the Sentry runtime without build-time instrumentation', () => {
   assert.equal(vercel.env.NODE_OPTIONS, '--import=./api/_sentry-preload.js');
   const wildcard = vercel.functions['api/**/*.js'];
   assert.ok(wildcard, 'api/**/*.js function coverage is required');
-  for (const file of REQUIRED_FILES) assert.ok(wildcard.includeFiles.includes(file), `${file} must be included globally`);
+  for (const file of REQUIRED_FILES) assert.ok(includesFile(wildcard, file), `${file} must be included globally`);
 
   for (const [pattern, config] of Object.entries(vercel.functions)) {
     if (pattern === 'api/**/*.js') continue;
-    const includeFiles = Array.isArray(config.includeFiles) ? config.includeFiles : [config.includeFiles].filter(Boolean);
-    for (const file of REQUIRED_FILES) assert.ok(includeFiles.includes(file), `${pattern} must include ${file}`);
+    for (const file of REQUIRED_FILES) assert.ok(includesFile(config, file), `${pattern} must include ${file}`);
   }
 
   assert.match(preload, /AWS_LAMBDA_FUNCTION_NAME/);
