@@ -15,10 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  export:
-    name: Independent logical export
+  recovery:
+    name: Export + isolated restore + integrity proof
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       PROJECT_REF: fphpoysqdsceniwduxjq
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -30,7 +30,7 @@ jobs:
         with:
           version: latest
 
-      - name: Export roles, application schema, managed schema definitions and all recoverable data
+      - name: Export independent logical recovery set
         shell: bash
         run: |
           set -euo pipefail
@@ -50,29 +50,67 @@ jobs:
           done
 
           python3 - <<'PY'
-          import hashlib, json, os, pathlib, re
+          import hashlib, json, pathlib, re
           root=pathlib.Path('recovery-private')
           out={'project_ref':'fphpoysqdsceniwduxjq','artifacts':{},'contains_row_content':True}
           for name in ['roles.sql','schema.sql','auth-schema.sql','storage-schema.sql','data.sql']:
-              p=root/name
-              b=p.read_bytes()
-              out['artifacts'][name]={
-                  'bytes':len(b),
-                  'sha256':hashlib.sha256(b).hexdigest(),
-              }
-          data=(root/'data.sql').read_text('utf-8',errors='replace')
+              b=(root/name).read_bytes()
+              out['artifacts'][name]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
+
+          counts={}
+          columns={}
+          current=None
+          data=(root/'data.sql').read_text('utf-8',errors='replace').splitlines()
+          copy_re=re.compile(r'^COPY\s+"([^"]+)"\."([^"]+)"\s*\((.*)\)\s+FROM\s+stdin;$')
+          for line in data:
+              if current is None:
+                  m=copy_re.match(line)
+                  if m:
+                      current=f'{m.group(1)}.{m.group(2)}'
+                      cols=re.findall(r'"([^"]+)"',m.group(3))
+                      columns[current]=cols
+                      counts[current]=0
+                  continue
+              if line == r'\.':
+                  current=None
+              else:
+                  counts[current]+=1
+
+          auth_cols=columns.get('auth.users',[])
+          auth_nonempty_passwords=0
+          if auth_cols and 'encrypted_password' in auth_cols:
+              idx=auth_cols.index('encrypted_password')
+              current=None
+              for line in data:
+                  if current is None:
+                      m=copy_re.match(line)
+                      if m:
+                          current=f'{m.group(1)}.{m.group(2)}'
+                      continue
+                  if line == r'\.':
+                      current=None
+                      continue
+                  if current=='auth.users':
+                      parts=line.split('\t')
+                      if idx < len(parts) and parts[idx] not in ('',r'\N'):
+                          auth_nonempty_passwords += 1
+
           out['data_sections']={
-              'copy_statements':len(re.findall(r'^COPY ',data,re.M)),
-              'auth_copy_sections':len(re.findall(r'^COPY auth\\.',data,re.M)),
-              'storage_copy_sections':len(re.findall(r'^COPY storage\\.',data,re.M)),
-              'public_copy_sections':len(re.findall(r'^COPY public\\.',data,re.M)),
+              'copy_statements':len(counts),
+              'auth_copy_sections':sum(1 for k in counts if k.startswith('auth.')),
+              'storage_copy_sections':sum(1 for k in counts if k.startswith('storage.')),
+              'public_copy_sections':sum(1 for k in counts if k.startswith('public.')),
+              'total_rows':sum(counts.values()),
+              'auth_users':counts.get('auth.users'),
+              'auth_identities':counts.get('auth.identities'),
+              'auth_users_with_password_hash':auth_nonempty_passwords,
           }
+          pathlib.Path('recovery-evidence/backup-table-counts.json').write_text(json.dumps(counts,sort_keys=True),encoding='utf-8')
           pathlib.Path('recovery-evidence/export.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
-          safe={**out,'artifacts':{k:{'bytes':v['bytes'],'sha256':v['sha256']} for k,v in out['artifacts'].items()}}
-          print(json.dumps(safe,separators=(',',':')))
+          print(json.dumps({**out,'contains_row_content':False},separators=(',',':')))
           PY
 
-      - name: Remove temporary CLI database login role
+      - name: Remove temporary source database login role
         if: always()
         shell: bash
         run: |
@@ -85,17 +123,167 @@ jobs:
             test "$status" = '200' || test "$status" = '204'
           fi
 
-      - name: Destroy row-bearing files before artifact upload
+      - name: Start isolated local Supabase recovery target
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p recovery-sandbox
+          cd recovery-sandbox
+          supabase init
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime --ignore-health-check
+          cd ..
+          db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
+          test -n "$db_container"
+          echo "RECOVERY_DB_CONTAINER=$db_container" >> "$GITHUB_ENV"
+          echo "ISOLATED_SUPABASE_DB_READY"
+
+      - name: Restore roles, schema and data into isolated target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RECOVERY_DB_CONTAINER:-}"
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/roles.sql
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/schema.sql
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < recovery-private/data.sql
+          echo "LOGICAL_RESTORE_COMPLETED"
+
+      - name: Verify every dumped table count and Auth password-hash presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib
+          counts=json.loads(pathlib.Path('recovery-evidence/backup-table-counts.json').read_text())
+          lines=[]
+          for table in sorted(counts):
+              schema,name=table.split('.',1)
+              q=lambda s:'"'+s.replace('"','""')+'"'
+              lines.append("SELECT '"+table.replace("'","''")+"' || E'\\t' || count(*)::text FROM "+q(schema)+'.'+q(name)+';')
+          pathlib.Path('recovery-evidence/count-restore.sql').write_text('\n'.join(lines)+'\n')
+          PY
+
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < recovery-evidence/count-restore.sql > recovery-evidence/restored-counts.tsv
+
+          docker exec "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "select count(*) from auth.users where coalesce(encrypted_password,'') <> '';" \
+            > recovery-evidence/restored-auth-password-count.txt
+
+          python3 - <<'PY'
+          import json, pathlib
+          expected=json.loads(pathlib.Path('recovery-evidence/backup-table-counts.json').read_text())
+          actual={}
+          for line in pathlib.Path('recovery-evidence/restored-counts.tsv').read_text().splitlines():
+              if not line.strip(): continue
+              table,n=line.rsplit('\t',1)
+              actual[table]=int(n)
+          missing=sorted(set(expected)-set(actual))
+          mismatches={k:{'backup':expected[k],'restore':actual.get(k)} for k in expected if actual.get(k)!=expected[k]}
+          export=json.loads(pathlib.Path('recovery-evidence/export.json').read_text())
+          expected_hashes=int(export['data_sections']['auth_users_with_password_hash'] or 0)
+          restored_hashes=int(pathlib.Path('recovery-evidence/restored-auth-password-count.txt').read_text().strip() or 0)
+          verdict='PASS' if not missing and not mismatches and restored_hashes==expected_hashes else 'FAIL'
+          result={
+              'verdict':verdict,
+              'tables_compared':len(expected),
+              'missing_tables':missing,
+              'mismatch_count':len(mismatches),
+              'mismatches':mismatches,
+              'auth_users':expected.get('auth.users'),
+              'auth_identities':expected.get('auth.identities'),
+              'auth_password_hashes_backup':expected_hashes,
+              'auth_password_hashes_restore':restored_hashes,
+          }
+          pathlib.Path('recovery-evidence/data-integrity.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+          print(json.dumps(result,separators=(',',':')))
+          if verdict!='PASS': raise SystemExit(1)
+          PY
+
+      - name: Verify foreign-key integrity after trigger-disabled restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > recovery-evidence/fk-integrity.sql <<'SQL'
+          DO $$
+          DECLARE
+            r record;
+            join_cond text;
+            nonnull_cond text;
+            orphan_count bigint;
+          BEGIN
+            FOR r IN
+              SELECT c.oid,c.conname,c.conrelid,c.confrelid,c.conkey,c.confkey
+              FROM pg_constraint c
+              JOIN pg_namespace n ON n.oid=(SELECT relnamespace FROM pg_class WHERE oid=c.conrelid)
+              WHERE c.contype='f'
+                AND n.nspname NOT IN ('pg_catalog','information_schema')
+            LOOP
+              SELECT
+                string_agg(format('child.%I = parent.%I',ca.attname,pa.attname),' AND ' ORDER BY ck.ord),
+                string_agg(format('child.%I IS NOT NULL',ca.attname),' AND ' ORDER BY ck.ord)
+              INTO join_cond,nonnull_cond
+              FROM unnest(r.conkey) WITH ORDINALITY ck(attnum,ord)
+              JOIN unnest(r.confkey) WITH ORDINALITY fk(attnum,ord) USING(ord)
+              JOIN pg_attribute ca ON ca.attrelid=r.conrelid AND ca.attnum=ck.attnum
+              JOIN pg_attribute pa ON pa.attrelid=r.confrelid AND pa.attnum=fk.attnum;
+
+              EXECUTE format(
+                'SELECT count(*) FROM %s child WHERE %s AND NOT EXISTS (SELECT 1 FROM %s parent WHERE %s)',
+                r.conrelid::regclass,nonnull_cond,r.confrelid::regclass,join_cond
+              ) INTO orphan_count;
+              IF orphan_count > 0 THEN
+                RAISE EXCEPTION 'FK integrity failure: constraint % has % orphan rows',r.conname,orphan_count;
+              END IF;
+            END LOOP;
+          END $$;
+          SQL
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < recovery-evidence/fk-integrity.sql >/dev/null
+          echo '{"verdict":"PASS","all_restored_foreign_keys_checked":true}' > recovery-evidence/fk-integrity.json
+          echo "FK_INTEGRITY_PASS"
+
+      - name: Capture sanitized restored structural evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL' > recovery-evidence/structure.tsv
+          select 'tables' || E'\t' || count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind in ('r','p');
+          select 'columns' || E'\t' || count(*) from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind in ('r','p') and a.attnum>0 and not a.attisdropped;
+          select 'indexes' || E'\t' || count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind='i';
+          select 'functions' || E'\t' || count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','dabbir_private');
+          select 'triggers' || E'\t' || count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and not t.tgisinternal;
+          select 'policies' || E'\t' || count(*) from pg_policy p join pg_class c on c.oid=p.polrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private');
+          SQL
+          python3 - <<'PY'
+          import json,pathlib
+          d={}
+          for line in pathlib.Path('recovery-evidence/structure.tsv').read_text().splitlines():
+              if line.strip():
+                  k,v=line.split('\t',1);d[k]=int(v)
+          pathlib.Path('recovery-evidence/structure.json').write_text(json.dumps(d,indent=2),encoding='utf-8')
+          print(json.dumps(d,separators=(',',':')))
+          PY
+
+      - name: Destroy isolated database and row-bearing recovery files
         if: always()
         shell: bash
         run: |
+          set +e
+          if [ -d recovery-sandbox ]; then
+            (cd recovery-sandbox && supabase stop --no-backup) || true
+          fi
           rm -rf recovery-private
+          rm -f recovery-evidence/restored-counts.tsv recovery-evidence/restored-auth-password-count.txt recovery-evidence/count-restore.sql recovery-evidence/fk-integrity.sql recovery-evidence/backup-table-counts.json recovery-evidence/structure.tsv
 
-      - name: Upload sanitized export evidence only
+      - name: Upload sanitized recovery evidence only
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: dabbir-launch-gate5-logical-export-evidence
-          path: recovery-evidence/export.json
-          if-no-files-found: error
+          name: dabbir-launch-gate5-logical-recovery-evidence
+          path: |
+            recovery-evidence/export.json
+            recovery-evidence/data-integrity.json
+            recovery-evidence/fk-integrity.json
+            recovery-evidence/structure.json
+          if-no-files-found: warn
           retention-days: 14
