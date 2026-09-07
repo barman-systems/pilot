@@ -4,6 +4,25 @@ const script=String.raw`(()=>{
   const isCarWash=()=>String(workspaceNow()?.business?.business_type||'').toLowerCase()==='car_wash';
   let loading=false,loaded=false,attempts=0;
 
+  function loadGlobalSupport(){
+    const modules=[
+      {ready:'__dabbirCustomerSupportUi',dataset:'dabbirCustomerSupportUi',selector:'script[data-dabbir-customer-support-ui="1"]',src:'/api/customer-support-ui?v=20260907-1',error:'dabbir_customer_support_ui_load_failed'},
+      {ready:'__dabbirPlatformCustomerSupportThreadUi',dataset:'dabbirPlatformSupportThreadUi',selector:'script[data-dabbir-platform-support-thread-ui="1"]',src:'/api/platform-customer-support-thread-ui?v=20260907-1',error:'dabbir_platform_support_thread_ui_load_failed'},
+    ];
+    let touched=false;
+    for(const item of modules){
+      if(window[item.ready]||document.querySelector(item.selector))continue;
+      const node=document.createElement('script');
+      node.src=item.src;
+      node.async=true;
+      node.dataset[item.dataset]='1';
+      node.onerror=()=>console.error(item.error);
+      document.head.appendChild(node);
+      touched=true;
+    }
+    return touched;
+  }
+
   function enforceSingleCalendar(){
     const duplicate=document.querySelector('#dabbirGenericCalendar');
     if(!duplicate)return false;
@@ -48,7 +67,7 @@ const script=String.raw`(()=>{
   }
 
   function load(){
-    enforceSingleCalendar();loadManualBooking();loadBookingEdit();
+    loadGlobalSupport();enforceSingleCalendar();loadManualBooking();loadBookingEdit();
     if(loaded||loading||!isCarWash())return false;
     if(window.__dabbirCarWashBookingUi){loaded=true;return true}
     const existing=document.querySelector('script[data-dabbir-car-wash-ui="1"]');
@@ -58,20 +77,21 @@ const script=String.raw`(()=>{
     node.src='/api/car-wash-booking-ui?v=20260831-ops-v1';
     node.async=true;
     node.dataset.dabbirCarWashUi='1';
-    node.onload=()=>{loaded=true;loading=false;enforceSingleCalendar();loadManualBooking();loadBookingEdit()};
+    node.onload=()=>{loaded=true;loading=false;loadGlobalSupport();enforceSingleCalendar();loadManualBooking();loadBookingEdit()};
     node.onerror=()=>{loading=false;console.error('dabbir_car_wash_ui_load_failed')};
     document.head.appendChild(node);
     return true;
   }
 
-  const timer=setInterval(()=>{attempts+=1;enforceSingleCalendar();loadManualBooking();loadBookingEdit();if(load()||attempts>=40)clearInterval(timer)},500);
-  const loaderObserver=new MutationObserver(()=>{if(load())loaderObserver.disconnect()});
+  loadGlobalSupport();
+  const timer=setInterval(()=>{attempts+=1;loadGlobalSupport();enforceSingleCalendar();loadManualBooking();loadBookingEdit();if(load()||attempts>=40)clearInterval(timer)},500);
+  const loaderObserver=new MutationObserver(()=>{loadGlobalSupport();if(load())loaderObserver.disconnect()});
   loaderObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   const calendarObserver=new MutationObserver(enforceSingleCalendar);
   calendarObserver.observe(document.documentElement,{subtree:true,childList:true});
-  setTimeout(()=>{load();enforceSingleCalendar();loadManualBooking();loadBookingEdit();if(attempts>=40)loaderObserver.disconnect()},20000);
-  window.addEventListener('focus',()=>{load();enforceSingleCalendar();loadManualBooking();loadBookingEdit()},{passive:true});
-  window.__dabbirCarWashLoader={load,enforceSingleCalendar,loadManualBooking,loadBookingEdit,get loaded(){return loaded}};
+  setTimeout(()=>{loadGlobalSupport();load();enforceSingleCalendar();loadManualBooking();loadBookingEdit();if(attempts>=40)loaderObserver.disconnect()},20000);
+  window.addEventListener('focus',()=>{loadGlobalSupport();load();enforceSingleCalendar();loadManualBooking();loadBookingEdit()},{passive:true});
+  window.__dabbirCarWashLoader={load,loadGlobalSupport,enforceSingleCalendar,loadManualBooking,loadBookingEdit,get loaded(){return loaded}};
 })();`;
 
 export default function handler(req,res){
