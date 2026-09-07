@@ -1,0 +1,101 @@
+name: DABBIR Launch Gate 5 Logical Recovery
+
+on:
+  push:
+    branches:
+      - recovery/launch-gate-5-proof-20260907
+    paths:
+      - .github/workflows/dabbir-launch-gate5-logical-recovery.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-launch-gate5-logical-recovery
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Independent logical export
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PROJECT_REF: fphpoysqdsceniwduxjq
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Export roles, application schema, managed schema definitions and all recoverable data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}"
+          mkdir -p recovery-private recovery-evidence
+
+          supabase db dump --project-ref "$PROJECT_REF" --role-only -f recovery-private/roles.sql
+          supabase db dump --project-ref "$PROJECT_REF" -f recovery-private/schema.sql
+          supabase db dump --project-ref "$PROJECT_REF" --schema auth -f recovery-private/auth-schema.sql
+          supabase db dump --project-ref "$PROJECT_REF" --schema storage -f recovery-private/storage-schema.sql
+          supabase db dump --project-ref "$PROJECT_REF" --data-only --use-copy \
+            -x 'storage.buckets_vectors' -x 'storage.vector_indexes' \
+            -f recovery-private/data.sql
+
+          for file in roles.sql schema.sql auth-schema.sql storage-schema.sql data.sql; do
+            test -s "recovery-private/$file"
+          done
+
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re
+          root=pathlib.Path('recovery-private')
+          out={'project_ref':'fphpoysqdsceniwduxjq','artifacts':{},'contains_row_content':True}
+          for name in ['roles.sql','schema.sql','auth-schema.sql','storage-schema.sql','data.sql']:
+              p=root/name
+              b=p.read_bytes()
+              out['artifacts'][name]={
+                  'bytes':len(b),
+                  'sha256':hashlib.sha256(b).hexdigest(),
+              }
+          data=(root/'data.sql').read_text('utf-8',errors='replace')
+          out['data_sections']={
+              'copy_statements':len(re.findall(r'^COPY ',data,re.M)),
+              'auth_copy_sections':len(re.findall(r'^COPY auth\\.',data,re.M)),
+              'storage_copy_sections':len(re.findall(r'^COPY storage\\.',data,re.M)),
+              'public_copy_sections':len(re.findall(r'^COPY public\\.',data,re.M)),
+          }
+          pathlib.Path('recovery-evidence/export.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
+          safe={**out,'artifacts':{k:{'bytes':v['bytes'],'sha256':v['sha256']} for k,v in out['artifacts'].items()}}
+          print(json.dumps(safe,separators=(',',':')))
+          PY
+
+      - name: Remove temporary CLI database login role
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            status="$(curl --silent --show-error --output /tmp/delete-login-role.json --write-out '%{http_code}' \
+              -X DELETE "https://api.supabase.com/v1/projects/${PROJECT_REF}/cli/login-role" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}")"
+            echo "TEMP_LOGIN_ROLE_DELETE_HTTP=$status"
+            test "$status" = '200' || test "$status" = '204'
+          fi
+
+      - name: Destroy row-bearing files before artifact upload
+        if: always()
+        shell: bash
+        run: |
+          rm -rf recovery-private
+
+      - name: Upload sanitized export evidence only
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-launch-gate5-logical-export-evidence
+          path: recovery-evidence/export.json
+          if-no-files-found: error
+          retention-days: 14
