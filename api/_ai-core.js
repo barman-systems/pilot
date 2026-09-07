@@ -196,7 +196,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         model,
         messages,
         temperature: 0.15,
-        max_tokens: 60,
+        max_tokens: 320,
         stream: false,
       }),
     });
