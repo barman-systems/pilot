@@ -1,9 +1,35 @@
-import { json, readJsonBody, requireSameOrigin } from './_auth-core.js';
-import { singleQueryValue } from './_request-query.js';
-import { ownerBroker } from './_owner-broker-client.js';
+import { json, requireSameOrigin } from './_auth-core.js';
+import { readOwnerBody, ownerBroker, ownerSessionToken } from './_owner-broker-client.js';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTIONS=new Set(['set_inventory','set_product_active','cancel_pending_order','set_service_active','support_create_case','support_add_note','support_set_status','update_business_profile','update_customer_profile']);
-const OPTIONAL=new Set(['support_create_case']);
-const safe=v=>UUID.test(String(v||'').trim())?String(v).trim():null;
-export default async function handler(req,res){if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET, POST'});if(req.method==='GET'){const businessId=safe(singleQueryValue(req,'business_id'));if(!businessId)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});const{status,payload}=await ownerBroker(req,'audit',{business_id:businessId});if(status===401)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});if(status!==200||!payload?.ok)return json(res,status>=500?503:status,{ok:false,error:payload?.error||'OWNER_AUDIT_FAILED'});return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_audited_actions',actions:[...ACTIONS],audit:Array.isArray(payload.audit)?payload.audit:[]})}
- if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});let body;try{body=await readJsonBody(req,16384)}catch{return json(res,400,{ok:false,error:'INVALID_JSON'})}const businessId=safe(body.business_id),action=String(body.action||'').trim(),raw=String(body.entity_id||'').trim(),entityId=raw?safe(raw):null,reason=String(body.reason||'').trim().slice(0,500),confirmation=String(body.confirmation||'').trim();if(!businessId)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});if(!ACTIONS.has(action))return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});if((!OPTIONAL.has(action)&&!entityId)||(raw&&!entityId))return json(res,400,{ok:false,error:'INVALID_ENTITY_ID'});if(reason.length<8)return json(res,400,{ok:false,error:'REASON_REQUIRED'});if(confirmation!=='EXECUTE')return json(res,400,{ok:false,error:'CONFIRMATION_REQUIRED'});const payload=body.payload&&typeof body.payload==='object'&&!Array.isArray(body.payload)?body.payload:{};const call=await ownerBroker(req,'execute',{business_id:businessId,owner_action:action,entity_id:entityId,reason,confirmation,payload});if(call.status===401)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});if(call.status!==200||!call.payload?.ok)return json(res,call.status>=500?503:call.status,{ok:false,error:call.payload?.error||'OWNER_ACTION_FAILED'});const audit=await ownerBroker(req,'audit',{business_id:businessId});return json(res,200,{ok:true,result:call.payload.result||null,audit:Array.isArray(audit.payload?.audit)?audit.payload.audit:[]})}
+// Reuse the audited RPC. Provider state, payments and booking lifecycle cannot
+// be asserted by a generic status editor.
+export const OWNER_OPERATION_ACTIONS=Object.freeze({
+  PRODUCT_SET_ACTIVE:{type:'PRODUCT',field:'active'},
+  SERVICE_SET_ACTIVE:{type:'SERVICE',field:'active'},
+  BRANCH_SET_STATUS:{type:'BRANCH',field:'status'},
+  CALENDAR_SET_SYNC:{type:'CALENDAR',field:'sync_enabled'},
+});
+export default async function handler(req,res){
+  res.setHeader('cache-control','no-store, max-age=0');
+  if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
+  if(!ownerSessionToken(req))return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
+  if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
+  let body;try{body=await readOwnerBody(req,16384)}catch{return json(res,400,{ok:false,error:'INVALID_JSON'})}
+  const businessId=String(body.business_id||''),entityId=String(body.entity_id||'');
+  const action=String(body.action||'').trim().toUpperCase(),definition=Object.hasOwn(OWNER_OPERATION_ACTIONS,action)?OWNER_OPERATION_ACTIONS[action]:null;
+  if(!UUID.test(businessId)||!UUID.test(entityId))return json(res,400,{ok:false,error:'INVALID_OPERATION_TARGET'});
+  if(!definition)return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});
+  const reason=String(body.reason||'').trim(),confirmation=String(body.confirmation||'').trim();
+  if(reason.length<8||reason.length>500)return json(res,400,{ok:false,error:'REASON_REQUIRED'});
+  if(confirmation!==`EXECUTE ${action}`)return json(res,400,{ok:false,error:'CONFIRMATION_REQUIRED'});
+  const value=body.payload?.[definition.field];
+  if(definition.field==='status'?!['active','inactive'].includes(value):typeof value!=='boolean')return json(res,400,{ok:false,error:'INVALID_OPERATION_VALUE'});
+  const call=await ownerBroker(req,'operation_execute',{business_id:businessId,entity_id:entityId,operation:action,reason,confirmation,payload:{[definition.field]:value}});
+  if(call.status!==200||!call.payload.ok)return json(res,call.status,{ok:false,error:call.payload.error||'OWNER_ACTION_FAILED'});
+  const receipt=call.payload.payload;
+  if(receipt?.result!=='SUCCESS'||!UUID.test(receipt?.audit_id||'')||!receipt.after_state)return json(res,502,{ok:false,error:'OWNER_ACTION_RECEIPT_MISSING',execution_state:'UNKNOWN',retry_safe:false});
+  const readback=await ownerBroker(req,'operation_entities',{business_id:businessId,entity_type:definition.type});
+  const row=readback.payload?.payload?.entities?.find?.(entry=>entry.id===entityId);
+  const verified=readback.status===200&&readback.payload.ok&&row?.[definition.field]===value;
+  return json(res,200,{ok:true,result:receipt,readback_verified:verified,readback_error:verified?null:'OWNER_ACTION_READBACK_UNVERIFIED',retry_safe:false});
+}

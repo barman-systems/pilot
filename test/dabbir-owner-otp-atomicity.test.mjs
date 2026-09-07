@@ -8,6 +8,28 @@ import { webcrypto } from 'node:crypto';
 const source = readFileSync(new URL('../supabase/functions/dabbir-owner-broker/index.ts', import.meta.url), 'utf8');
 const hash = async text => Buffer.from(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(text))).toString('hex');
 
+for (const [name,scenario,body,expected] of [
+ ['verification outage preserves an unavailable result','outage',{action:'owner_session_verify'},503],
+ ['malformed verification fails closed as unavailable','malformed',{action:'owner_session_verify'},503],
+ ['network rejection in async owner data is caught','network',{action:'owner_data',data_action:'overview'},503],
+ ['a rejected session is unauthorized','invalid',{action:'owner_session_verify'},401],
+ ['business-scoped delegates cannot read global CEO work','scoped',{action:'owner_data',data_action:'ceo_commands'},403],
+ ['granular access overrides coarse CEO grants','granular',{action:'owner_data',data_action:'ceo_commands'},403],
+ ['reply access cannot resolve support cases','granular',{action:'owner_data',data_action:'support_action',operation:'UPDATE',status:'resolved'},403],
+ ['generic provider status changes are rejected','root',{action:'owner_data',data_action:'operation_execute',operation:'WHATSAPP_SET_STATUS'},400],
+]) test(name,async()=>{
+ let handler;
+ const session={authenticated:true,actor_user_id:'ccbe8166-d3f4-4058-a178-78ad348520f7',authority_role:scenario==='root'?'ROOT_OWNER':'OWNER_DELEGATE',permissions:['manage_ceo_commands','manage_support'],granular_permissions:['support.reply'],access_scope:{type:scenario==='scoped'?'OWN_TASKS_ONLY':'ALL_BUSINESSES'}};
+ const fetch=async url=>{
+  assert.ok(new URL(url).pathname.endsWith('/dabbir_owner_session_verify_v1'),'no downstream RPC may execute after a denied request');
+  if(scenario==='network')throw new Error('isolated network failure');
+  return Response.json(scenario==='invalid'?{authenticated:false}:scenario==='malformed'?{}:session,{status:scenario==='outage'?503:200});
+ };
+ vm.runInContext(stripTypeScriptTypes(source),vm.createContext({Deno:{env:{get:name=>name==='SUPABASE_URL'?'https://isolated.invalid':'test-key'},serve:fn=>{handler=fn}},fetch,crypto:webcrypto,Response,Request,TextEncoder,Uint8Array,Uint32Array,btoa,console,performance}));
+ const response=await handler(new Request('https://isolated.invalid',{method:'POST',body:JSON.stringify({...body,session_token:'isolated-session-token-at-least-24-characters'})}));
+ assert.equal(response.status,expected);assert.equal((await response.json()).ok,false);
+});
+
 test('one OTP can issue at most one session when two requests verify it concurrently', async () => {
   const challengeId = 'ee420731-3fc0-41c9-9519-dee987c23147';
   const actor = 'ccbe8166-d3f4-4058-a178-78ad348520f7';

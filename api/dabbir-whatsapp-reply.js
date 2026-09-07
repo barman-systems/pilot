@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import { json, readJsonBody, requireSameOrigin, supabaseRest } from './_auth-core.js';
 import { ownerContext } from './_whatsapp-embedded-core.js';
-import { loadExactBusinessConnection } from './_whatsapp-branch-connection.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
 import {
   finalizeOutboundReply,
   markOutboundResult,
   reserveOutboundReply,
   sendMetaText,
+  serviceRpc,
 } from './_whatsapp-live-core.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -147,11 +147,14 @@ export default async function handler(req, res) {
       });
     }
 
-    const connection = await loadExactBusinessConnection(
-      owner.accessToken,
-      businessId,
-      reservation.connectionId,
-    );
+    // Authorization remains bound to the authenticated owner/admin above. After the
+    // exact branch connection is reserved, load its encrypted provider credentials
+    // through a service-role-only RPC. Do not re-read this secrets-bearing row through
+    // authenticated RLS: that couples message delivery to unrelated user-table grants.
+    const connection = await serviceRpc('dabbir_whatsapp_ai_connection', {
+      p_business_id: businessId,
+      p_connection_id: reservation.connectionId,
+    });
     if (!connection || connection.status !== 'connected') {
       await markOutboundResult(reservation.reservationId, 'FAILED', 'WHATSAPP_BRANCH_CONNECTION_UNAVAILABLE_AFTER_RESERVATION');
       return json(res, 409, { ok: false, state: 'FAILED', error: 'WHATSAPP_BRANCH_CONNECTION_UNAVAILABLE_AFTER_RESERVATION' });
@@ -211,7 +214,7 @@ export default async function handler(req, res) {
       message: persisted,
       truth: {
         state: 'VERIFIED_PERSISTED_PROVIDER_ACCEPTED',
-        source: 'BRANCH_RESERVATION_EXACT_CONNECTION_META_SEND_FINALIZE_READBACK',
+        source: 'BRANCH_RESERVATION_SERVICE_ROLE_EXACT_CONNECTION_META_SEND_FINALIZE_READBACK',
         verified_at: new Date().toISOString(),
       },
       automatic_resend_blocked: true,

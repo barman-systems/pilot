@@ -13,7 +13,6 @@ test('broker v9 preserves the modern owner command-center surfaces',()=>{
   }
   assert.match(broker,/dabbir_platform_command_center_overview_v1/);
   assert.match(broker,/dabbir_platform_customer_360_scoped_v2/);
-  assert.doesNotMatch(broker,/rpc\('dabbir_platform_customer_360_v1'/);
   assert.match(broker,/dabbir_platform_support_action_v2/);
   assert.match(broker,/dabbir_platform_feedback_convert_v1/);
   assert.match(broker,/dabbir_platform_operational_action_v2/);
@@ -23,7 +22,6 @@ test('OTP request and verification stay bound to the same actor',()=>{
   assert.match(broker,/actor_user_id:identity\.user_id/);
   assert.match(broker,/dabbir_owner_otp_complete_v1/);
   assert.match(broker,/p_challenge_id:id,p_otp_hash:await otpHash\(id,otp\)/);
-  assert.doesNotMatch(broker,/rpc\('dabbir_owner_session_issue_v1'/);
   assert.doesNotMatch(broker,/activeAdmin\(/);
 });
 

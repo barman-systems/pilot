@@ -1,13 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "fluid": true,
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "buildCommand": "npm run dabbir:build",
   "ignoreCommand": "bash ./vercel-ignore-if-unaffected.sh",
   "env": {
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com",
     "DABBIR_GEMINI_MODEL": "gemini-3.7-flash",
-    "DABBIR_GROQ_MODEL": "llama-3.3-70b-versatile",
+    "DABBIR_GROQ_MODEL": "openai/gpt-oss-20b",
     "DABBIR_AI_GATEWAY_MODEL": "google/gemini-3.7-flash",
     "DABBIR_AI_GATEWAY_FALLBACK_MODELS": "google/gemini-3.7-flash",
     "DABBIR_DAILY_OPERATOR_MODEL": "google/gemini-3.7-flash"
@@ -102,6 +104,10 @@
       "dest": "/api/owner-dashboard-gateway"
     },
     {
+      "src": "^/api/owner-command-center-v[0-9]+(?:\\.js)?/?$",
+      "dest": "/api/owner-command-center"
+    },
+    {
       "src": "^/book/?$",
       "dest": "/api/car-wash-booking"
     },
@@ -156,23 +162,44 @@
     {
       "source": "/dabbir-ui-(critical|deferred)\\.js",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
       ]
     },
     {
       "source": "/(dabbir-app-icon|favicon)\\.(png|ico)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net"
+        }
       ]
     }
   ]

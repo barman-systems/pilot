@@ -81,19 +81,26 @@ export async function loadBusinessBranchConnection(accessToken,businessId,branch
   return row;
 }
 
-export async function loadPrimaryBusinessConnection(accessToken,businessId,options={}){
-  const business=safeId(businessId);
-  if(!business)throw Object.assign(new Error('BUSINESS_ID_REQUIRED'),{status:400});
-  const branch=await withServerReadTimeout(async signal=>{
-    const path=`dabbir_business_branches?select=id,business_id,status,is_primary&business_id=eq.${encodeURIComponent(business)}&status=eq.active&is_primary=eq.true&limit=1`;
+async function loadPreferredBusinessBranch(accessToken,business,options={}){
+  return withServerReadTimeout(async signal=>{
+    const path=`dabbir_business_branches?select=id,business_id,status,is_primary&business_id=eq.${encodeURIComponent(business)}&status=eq.active&order=is_primary.desc&limit=2`;
     const response=await supabaseRest(path,accessToken,{signal});
-    const rows=await readRows(response,'WHATSAPP_PRIMARY_BRANCH_READ_FAILED');
-    return rows[0]||null;
+    const rows=await readRows(response,'WHATSAPP_PRIMARY_BRANCH_READ_FAILED',{max:2});
+    const primary=rows.find(row=>row?.is_primary===true);
+    if(primary)return primary;
+    if(rows.length===1)return rows[0];
+    return null;
   },{
     label:'WHATSAPP_PRIMARY_BRANCH_READ',
     errorCode:'WHATSAPP_PRIMARY_BRANCH_READ_TIMEOUT',
     timeoutMs:options.timeoutMs??READ_TIMEOUT_MS,
   });
+}
+
+export async function loadPrimaryBusinessConnection(accessToken,businessId,options={}){
+  const business=safeId(businessId);
+  if(!business)throw Object.assign(new Error('BUSINESS_ID_REQUIRED'),{status:400});
+  const branch=await loadPreferredBusinessBranch(accessToken,business,options);
   if(!branch?.id||branch.business_id!==business)throw Object.assign(new Error('WHATSAPP_PRIMARY_BRANCH_REQUIRED'),{status:409});
   return loadBusinessBranchConnection(accessToken,business,branch.id,options);
 }

@@ -40,4 +40,4 @@ jobs:
       - name: Execute one BARMAN tool-agent command
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/barman-tool-agent.mjs
+        run: node --import=./scripts/barman-git-apply-normalizer.mjs scripts/barman-tool-agent.mjs

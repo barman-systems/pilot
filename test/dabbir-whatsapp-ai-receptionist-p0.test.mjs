@@ -86,11 +86,14 @@ test('same-as-last-time is grounded from customer booking history',()=>{
 });
 
 test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{
-  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([\s\S]*?)\n  \}\n  if\(Number\(error\?\.providerStatus\)===429\)/)?.[1]||'';
+  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([^\n]+)\}/)?.[1]||'';
   assert.ok(ambiguous,'ambiguous-outbound branch must exist before retry classification');
+  must(ambiguous,/requireHumanForFailure/);
   must(ambiguous,/Ambiguous WhatsApp delivery requires human review/);
-  must(ambiguous,/finish\(claim,'HUMAN_REQUIRED'/);
   assert.doesNotMatch(ambiguous,/finish\(claim,'RETRY'/);
+  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?\n\}/)?.[0]||'';
+  must(escalation,/finish\(claim,'HUMAN_REQUIRED'/);
+  must(escalation,/dabbir_whatsapp_ai_handoff|handoff\(context/);
 });
 
 test('worker requires a UUID capability token and does not expose execution state',()=>{

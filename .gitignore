@@ -2,4 +2,3 @@ node_modules/
 .env*
 .vercel/
 .expo/
-api/_owner-command-center-runtime.generated.js

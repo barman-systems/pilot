@@ -123,6 +123,18 @@ export default async function handler(req,res){
       return json(res,201,{ok:true,note_id:noteId});
     }
 
+    if(body.action==='reply_customer'){
+      const caseId=uuid(body.case_id);
+      if(!caseId)return json(res,400,{ok:false,error:'INVALID_SUPPORT_CASE'});
+      const result=await serviceRpc(context.key,'dabbir_platform_support_reply_customer',{
+        p_actor_user_id:context.user.id,
+        p_customer_no:no,
+        p_case_id:caseId,
+        p_message:String(body.message||'').trim().slice(0,4000),
+      });
+      return json(res,200,{ok:true,case:result});
+    }
+
     if(body.action==='set_status'){
       const caseId=uuid(body.case_id);
       if(!caseId)return json(res,400,{ok:false,error:'INVALID_SUPPORT_CASE'});
