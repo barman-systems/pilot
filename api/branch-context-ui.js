@@ -5,10 +5,10 @@ const css=String.raw`
 
 const script=String.raw`(()=>{
   if(window.__dabbirBranchContextUi)return;
-  window.__dabbirBranchContextUi='v3-server-scoped-whatsapp';
+  window.__dabbirBranchContextUi='v4-server-scoped-whatsapp-business';
   const PREFIX='dabbir_active_branch_scope:';
   let activeBusiness=null,context=null,loading=null,apiPatched=false,fetchPatched=false;
-  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v3';document.head.append(style);
+  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v4';document.head.append(style);
 
   function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return''}}
   function key(id){return PREFIX+String(id||'')}
@@ -99,8 +99,10 @@ const script=String.raw`(()=>{
         return original(input,options);
       }
 
-      if(scope&&scope!=='all'&&['/api/dabbir-whatsapp-embedded-config','/api/dabbir-whatsapp-status'].includes(path)&&method==='GET'){
-        parsed.searchParams.set('business_id',bid);parsed.searchParams.set('branch_id',scope);
+      if(['/api/dabbir-whatsapp-embedded-config','/api/dabbir-whatsapp-status'].includes(path)&&method==='GET'){
+        parsed.searchParams.set('business_id',bid);
+        if(scope&&scope!=='all')parsed.searchParams.set('branch_id',scope);
+        else parsed.searchParams.delete('branch_id');
         return original(parsed.pathname+parsed.search,options);
       }
 
@@ -198,6 +200,6 @@ export default async function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','no-store');
   res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('x-dabbir-branch-context','server-scoped-v3-whatsapp');
+  res.setHeader('x-dabbir-branch-context','server-scoped-v4-whatsapp-business');
   return res.end(script);
 }
