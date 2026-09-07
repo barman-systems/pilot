@@ -8,6 +8,7 @@ const LOCAL_ISO=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/;
 const ARABIC=/[\u0600-\u06ff]/;
 const HUMAN_REQUEST=/(?:\b(?:human|agent|person|staff|manager|owner)\b|موظف(?:ة)?|شخص حقيقي|إنسان|انسان|بشر|المالك|المدير|أكلم أحد|اكلم احد|حوّلني|حولني)/i;
 const CHOICE=[/(?:^|\s)(?:1|الأول|الاول|اول|أول|first)(?:\s|$)/i,/(?:^|\s)(?:2|الثاني|ثاني|second)(?:\s|$)/i,/(?:^|\s)(?:3|الثالث|ثالث|third)(?:\s|$)/i];
+const MUTATING_ACTIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
 const PERMANENT_AI_FAILURES=new Set([
   'AI_CONTEXT_UNVERIFIED',
   'AI_PENDING_ACTION_INVALID',
@@ -63,6 +64,14 @@ function localNow(timezone){
     return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
   }catch{return new Date().toISOString()}
 }
+function defaultIntent(action){
+  if(action==='CHECK_AVAILABILITY'||action==='CREATE_BOOKING')return 'BOOKING';
+  if(action==='CANCEL_BOOKING')return 'CANCEL_BOOKING';
+  if(action==='RESCHEDULE_BOOKING')return 'RESCHEDULE_BOOKING';
+  if(action==='HANDOFF')return 'HUMAN_ASSISTANCE';
+  return 'SUPPORT';
+}
+function defaultRisk(action){return MUTATING_ACTIONS.has(action)?'MEDIUM':action==='HANDOFF'?'HIGH':'LOW'}
 function parseDecision(raw){
   const text=clean(raw,3500).replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
   const a=text.indexOf('{'),b=text.lastIndexOf('}');if(a<0||b<=a)return null;
@@ -70,14 +79,27 @@ function parseDecision(raw){
     const x=JSON.parse(text.slice(a,b+1));if(!x||typeof x!=='object'||Array.isArray(x))return null;
     const action=clean(x.action,40).toUpperCase();
     if(!['REPLY','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF'].includes(action))return null;
+    const rawConfidence=Number(x.confidence),risk=clean(x.risk_level,20).toUpperCase();
+    const confidence=Number.isFinite(rawConfidence)?Math.max(0,Math.min(1,rawConfidence)):0.5;
     return {
       action,reply:customerReply(x.reply),serviceName:clean(x.service_name,180)||null,workerName:clean(x.worker_name,180)||null,
       requestedLocal:LOCAL_ISO.test(clean(x.requested_local,40))?clean(x.requested_local,40):null,
       slotIndex:Number.isInteger(Number(x.selected_slot_index))?Number(x.selected_slot_index)-1:null,
       appointmentIndex:Number.isInteger(Number(x.appointment_index))?Number(x.appointment_index)-1:null,
       reuseLast:x.reuse_last===true,routeClass:clean(x.route_class,40).toUpperCase()||'SUPPORT',
+      intent:clean(x.intent,80).toUpperCase()||defaultIntent(action),
+      confidence,
+      riskLevel:['LOW','MEDIUM','HIGH'].includes(risk)?risk:defaultRisk(action),
+      missingFields:arr(x.missing_fields).map(v=>clean(v,80)).filter(Boolean).slice(0,8),
+      reasonCode:clean(x.reason_code,120).toUpperCase()||'UNSPECIFIED',
     };
   }catch{return null}
+}
+function guardDecision(decision){
+  if(!decision)return decision;
+  if(decision.riskLevel==='HIGH'&&decision.action!=='HANDOFF')return {...decision,action:'HANDOFF',routeClass:'SUPPORT',reasonCode:'HIGH_RISK_ESCALATION'};
+  if(MUTATING_ACTIONS.has(decision.action)&&decision.missingFields.length){return {...decision,action:'REPLY',riskLevel:'LOW',reasonCode:'MUTATION_BLOCKED_MISSING_FIELDS'};}
+  return decision;
 }
 function compactContext(context,recent){
   const batch=arr(context?.batch_messages);const lastBatch=batch.at(-1)||{};
@@ -99,7 +121,10 @@ async function decide(context,recent){
   const prompt=[
     'You are the DABBIR WhatsApp receptionist action planner for a GCC business. Return ONLY one minified JSON object.',
     'Allowed actions: REPLY, CHECK_AVAILABILITY, CREATE_BOOKING, CANCEL_BOOKING, RESCHEDULE_BOOKING, HANDOFF.',
-    'Schema: {"action":"...","reply":"...","service_name":null,"worker_name":null,"requested_local":null,"selected_slot_index":null,"appointment_index":null,"reuse_last":false,"route_class":"SUPPORT"}',
+    'Schema: {"action":"...","intent":"SUPPORT|SERVICE_DISCOVERY|BOOKING|CANCEL_BOOKING|RESCHEDULE_BOOKING|HUMAN_ASSISTANCE","confidence":0.0,"risk_level":"LOW|MEDIUM|HIGH","missing_fields":[],"reason_code":"SHORT_CODE","reply":"...","service_name":null,"worker_name":null,"requested_local":null,"selected_slot_index":null,"appointment_index":null,"reuse_last":false,"route_class":"SUPPORT"}',
+    'confidence means confidence that the chosen action is supported by VERIFIED CONTEXT, from 0 to 1. risk_level is LOW for read/reply, MEDIUM for verified booking mutations, and HIGH when uncertainty or policy conflict could cause harmful action.',
+    'List every required missing fact in missing_fields. If any required fact is missing for CREATE_BOOKING, CANCEL_BOOKING, or RESCHEDULE_BOOKING, choose REPLY and ask only for the missing fact instead of mutating.',
+    'If risk_level would be HIGH, choose HANDOFF. Do not perform a high-risk business mutation.',
     'Never invent a service, worker, price, policy, appointment, availability, or booking result. Use VERIFIED CONTEXT only.',
     'Use conversation_history and pending state for short follow-ups such as price questions, "same as before", "I told you", or a time sent after choosing a service.',
     'service_name and worker_name must exactly match a name in VERIFIED CONTEXT when supplied.',
@@ -116,7 +141,20 @@ async function decide(context,recent){
   if(!ai?.ok||!clean(ai?.reply))throw Object.assign(new Error(clean(ai?.error,160)||'AI_PLANNER_UNAVAILABLE'),{code:clean(ai?.error,160)||'AI_PLANNER_UNAVAILABLE'});
   const decision=parseDecision(ai.reply);
   if(!decision)throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
-  return decision;
+  return guardDecision(decision);
+}
+async function recordDecision(claim,context,decision){
+  return serviceRpc('dabbir_record_ai_operator_decision_v1',{
+    p_business_id:context.business.id,
+    p_conversation_id:context.conversation.id,
+    p_batch_id:claim.batch_id,
+    p_action:decision.action,
+    p_intent:decision.intent||defaultIntent(decision.action),
+    p_confidence:Number.isFinite(Number(decision.confidence))?Number(decision.confidence):0.5,
+    p_risk_level:decision.riskLevel||defaultRisk(decision.action),
+    p_missing_fields:arr(decision.missingFields),
+    p_reason_code:decision.reasonCode||'UNSPECIFIED',
+  }).catch(()=>null);
 }
 function fmtWhen(value,timezone,lang){
   try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return clean(value,80)}
@@ -190,6 +228,7 @@ async function processClaim(claim){
   if(context?.conversation?.newer_customer_message_exists===true){await finish(claim,'CANCELLED','SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE');return {state:'CANCELLED',reason:'newer_message'}}
   if(context?.conversation?.state==='human_active'||context?.conversation?.state==='action_required'){await finish(claim,'HUMAN_REQUIRED','HUMAN_TAKEOVER_ACTIVE');return {state:'HUMAN_REQUIRED'}}
   if(HUMAN_REQUEST.test(text)){
+    await recordDecision(claim,context,{action:'HANDOFF',intent:'HUMAN_ASSISTANCE',confidence:1,riskLevel:'HIGH',missingFields:[],reasonCode:'CUSTOMER_REQUESTED_HUMAN'});
     const h=await handoff(context,'Customer requested human assistance',text,'SUPPORT');
     const reply=lang==='ar'?'تمام، حوّلت المحادثة للفريق ليتابع معك شخص.':'Done — I handed the conversation to the team for a person to continue.';
     await deliver(claim,context,reply,'handoff').catch(()=>null);await finish(claim,'HUMAN_REQUIRED','CUSTOMER_REQUESTED_HUMAN');return {state:'HUMAN_REQUIRED',handoff:h};
@@ -197,11 +236,14 @@ async function processClaim(claim){
 
   const direct=choiceIndex(text);
   if(direct!==null&&pendingSlots(context)[direct]){
+    const directAction=context?.pending_state?.payload?.mode==='reschedule'?'RESCHEDULE_BOOKING':'CREATE_BOOKING';
+    await recordDecision(claim,context,{action:directAction,intent:directAction==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':'BOOKING',confidence:1,riskLevel:'MEDIUM',missingFields:[],reasonCode:'VERIFIED_SLOT_SELECTION'});
     try{const done=await executeSelectedSlot(claim,context,direct,lang);if(done){await finish(claim,'PROCESSED');return {state:'PROCESSED',...done}}}
     catch(error){if(String(error?.code||error?.message).includes('ACTION_SLOT_UNAVAILABLE')){await setState(context,'none',{});await deliver(claim,context,lang==='ar'?'هذا الوقت لم يعد متاحًا. أعطني الوقت الذي يناسبك وسأبحث من جديد.':'That slot is no longer available. Send me another time and I’ll check again.','slot-race');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SLOT_RACE'}}throw error}
   }
 
   const recent=await recentBookings(context),decision=await decide(context,recent);
+  await recordDecision(claim,context,decision);
   if(decision.action==='HANDOFF'){
     const h=await handoff(context,'AI routed customer to human',text,decision.routeClass);await deliver(claim,context,decision.reply||(lang==='ar'?'حوّلت المحادثة للفريق ليتابع معك شخص.':'I handed this to the team for a person to continue.'),'handoff').catch(()=>null);await finish(claim,'HUMAN_REQUIRED','AI_HANDOFF');return {state:'HUMAN_REQUIRED',handoff:h};
   }
