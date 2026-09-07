@@ -1,6 +1,6 @@
 -- DABBIR WhatsApp AI provider failover v1
--- A complete provider-chain outage must never leave a customer silently waiting.
--- Provider failures are converted once into a durable human handoff; external
+-- A complete AI/provider-chain failure must never leave a customer silently waiting.
+-- AI failures are converted once into a durable human handoff; external
 -- delivery remains handled by the application after this transaction commits.
 
 create or replace function public.dabbir_whatsapp_ai_provider_failover(
@@ -17,6 +17,8 @@ declare
   v_handoff jsonb;
   v_customer_body text;
   v_error text := left(trim(coalesce(p_error,'')),240);
+  v_effective_error text;
+  v_already_terminal boolean := false;
 begin
   if coalesce(auth.role(),'') <> 'service_role' then
     raise exception 'SERVICE_ROLE_REQUIRED';
@@ -33,41 +35,17 @@ begin
     return jsonb_build_object('ok',true,'handled',false,'state','NOT_FOUND');
   end if;
 
-  if v_batch.state = 'HUMAN_REQUIRED' then
-    return jsonb_build_object(
-      'ok',true,'handled',true,'already_handled',true,
-      'batch_id',v_batch.id,'business_id',v_batch.business_id,
-      'conversation_id',v_batch.conversation_id
-    );
+  v_effective_error := left(
+    coalesce(nullif(trim(v_batch.last_error),''),nullif(v_error,''),'AI_PROVIDER_CHAIN_UNAVAILABLE'),
+    240
+  );
+
+  if v_effective_error !~* '^(gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|empty_ai_response)' then
+    return jsonb_build_object('ok',true,'handled',false,'state','NOT_AI_FAILURE');
   end if;
 
-  if v_batch.state <> 'RETRY' then
+  if v_batch.state not in ('RETRY','HUMAN_REQUIRED') then
     return jsonb_build_object('ok',true,'handled',false,'state',v_batch.state);
-  end if;
-
-  if coalesce(v_batch.last_error,v_error,'') !~* '^(gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|empty_ai_response)' then
-    return jsonb_build_object('ok',true,'handled',false,'state','NOT_PROVIDER_FAILURE');
-  end if;
-
-  -- Never escalate an obsolete turn after the customer has already sent a newer message.
-  if exists (
-    select 1
-    from public.dabbir_messages m
-    where m.business_id = v_batch.business_id
-      and m.conversation_id = v_batch.conversation_id
-      and m.sender_type = 'customer'
-      and m.created_at > v_batch.last_message_at
-  ) then
-    update public.dabbir_message_batches
-       set state='CANCELLED',
-           processed_at=now(),
-           next_attempt_at=null,
-           lock_token=null,
-           locked_until=null,
-           last_error='SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE',
-           updated_at=now()
-     where id=v_batch.id;
-    return jsonb_build_object('ok',true,'handled',false,'state','SUPERSEDED');
   end if;
 
   select m.body
@@ -79,28 +57,56 @@ begin
   order by m.created_at desc
   limit 1;
 
+  -- Never escalate or notify for an obsolete turn after a newer customer message.
+  if exists (
+    select 1
+    from public.dabbir_messages m
+    where m.business_id = v_batch.business_id
+      and m.conversation_id = v_batch.conversation_id
+      and m.sender_type = 'customer'
+      and m.created_at > v_batch.last_message_at
+  ) then
+    if v_batch.state='RETRY' then
+      update public.dabbir_message_batches
+         set state='CANCELLED',
+             processed_at=now(),
+             next_attempt_at=null,
+             lock_token=null,
+             locked_until=null,
+             last_error='SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE',
+             updated_at=now()
+       where id=v_batch.id;
+    end if;
+    return jsonb_build_object('ok',true,'handled',false,'state','SUPERSEDED');
+  end if;
+
+  v_already_terminal := v_batch.state='HUMAN_REQUIRED';
+
+  -- The handoff function is itself idempotent for an already-active handoff.
+  -- Calling it here also repairs the rare case where batch finalization succeeded
+  -- but the first handoff write did not.
   v_handoff := public.dabbir_whatsapp_ai_handoff(
     v_batch.business_id,
     v_batch.conversation_id,
     'SUPPORT',
     'AI provider chain unavailable; immediate continuity handoff',
-    coalesce(nullif(v_error,''),coalesce(v_batch.last_error,'AI_PROVIDER_CHAIN_UNAVAILABLE'))
+    v_effective_error
   );
 
   update public.dabbir_message_batches
      set state='HUMAN_REQUIRED',
-         processed_at=now(),
+         processed_at=coalesce(processed_at,now()),
          next_attempt_at=null,
          lock_token=null,
          locked_until=null,
-         last_error=coalesce(nullif(v_error,''),v_batch.last_error,'AI_PROVIDER_CHAIN_UNAVAILABLE'),
+         last_error=v_effective_error,
          updated_at=now()
    where id=v_batch.id;
 
   return jsonb_build_object(
     'ok',true,
     'handled',true,
-    'already_handled',false,
+    'already_handled',v_already_terminal,
     'batch_id',v_batch.id,
     'business_id',v_batch.business_id,
     'conversation_id',v_batch.conversation_id,
@@ -122,9 +128,12 @@ as $$
   from public.dabbir_message_batches b
   where coalesce(auth.role(),'')='service_role'
     and b.channel_type='whatsapp'
-    and b.state='RETRY'
     and b.dispatch_token is not null
-    and coalesce(b.last_error,'') ~* '^(gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|empty_ai_response)'
+    and (
+      b.state='RETRY'
+      or (b.state='HUMAN_REQUIRED' and b.updated_at >= now()-interval '10 minutes')
+    )
+    and coalesce(b.last_error,'') ~* '^(gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|empty_ai_response)'
     and not exists (
       select 1
       from public.dabbir_messages m
@@ -143,4 +152,4 @@ grant execute on function public.dabbir_whatsapp_ai_provider_failover(uuid,text)
 grant execute on function public.dabbir_whatsapp_ai_provider_failover_candidates(integer) to service_role;
 
 comment on function public.dabbir_whatsapp_ai_provider_failover(uuid,text) is
-'Atomically converts an exhausted WhatsApp AI provider failure into one durable human handoff. Service-role only; stale turns are cancelled.';
+'Atomically converts a WhatsApp AI/provider failure into one durable human handoff. Service-role only; stale turns are cancelled and terminal retries remain idempotent.';
