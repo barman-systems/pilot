@@ -7,6 +7,7 @@
   "env": {
     "NODE_OPTIONS": "--import=./api/_sentry-preload.js",
     "DABBIR_META_APP_DOMAIN": "dabbir.bmalman.com",
+    "CLOUDFLARE_ACCOUNT_ID": "5d3fa7dfe0b6a38bb4f2b526279fb380",
     "DABBIR_GEMINI_MODEL": "gemini-3.7-flash",
     "DABBIR_GROQ_MODEL": "openai/gpt-oss-20b",
     "DABBIR_AI_GATEWAY_MODEL": "google/gemini-3.7-flash",
