@@ -18,35 +18,21 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
       VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
-      PRODUCTION_HOST: dabbir.bmalman.com
+      VERCEL_TEAM_SLUG: nd56cm4j5v-3619s-projects
     steps:
-      - name: Invoke exact Production reconciliation route securely
+      - name: Require Vercel token
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}"
-          echo "::add-mask::$VERCEL_TOKEN"
-
+      - name: Link exact DABBIR Vercel project
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_TEAM_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
-
-          npx --yes vercel@latest env pull /tmp/dabbir-production.env \
-            --environment=production \
-            --yes \
-            --token "$VERCEL_TOKEN" \
-            --scope "$VERCEL_TEAM_ID" >/tmp/vercel-env-pull.log 2>&1
-
-          set -a
-          source /tmp/dabbir-production.env
-          set +a
-          rm -f /tmp/dabbir-production.env
-          test -n "${CRON_SECRET:-}"
-          echo "::add-mask::$CRON_SECRET"
-
-          status="$(curl -sS -o /tmp/reconcile.json -w '%{http_code}' \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://${PRODUCTION_HOST}/api/dabbir-ai-billing-reconcile-cron")"
-          echo "reconcile_http=$status"
-          jq -c '{ok,error,dates,businesses,models,total_microusd}' /tmp/reconcile.json || true
-          test "$status" = '200'
-          jq -e '.ok == true' /tmp/reconcile.json >/dev/null
+      - name: Trigger deployed reconciliation cron once
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest crons run /api/dabbir-ai-billing-reconcile-cron --token "$VERCEL_TOKEN" --scope "$VERCEL_TEAM_SLUG"
