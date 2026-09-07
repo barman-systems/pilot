@@ -12,7 +12,7 @@ export default async function handler(req,res){
   if(!UUID.test(token))return json(res,202,{ok:true,accepted:false});
   try{
     let result=await processWhatsAppDispatchWithServiceMenu(token);
-    if(result?.state==='RETRY'&&result?.error){
+    if(['RETRY','HUMAN_REQUIRED'].includes(result?.state)&&result?.error){
       const failover=await failoverWhatsAppAiProvider(token,result.error).catch(()=>({handled:false}));
       if(failover?.handled===true)result={...result,state:'HUMAN_REQUIRED',provider_failover:true};
     }
