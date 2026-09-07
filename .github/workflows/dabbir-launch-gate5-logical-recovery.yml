@@ -243,7 +243,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker exec "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL' > recovery-evidence/structure.tsv
+          docker exec -i "$RECOVERY_DB_CONTAINER" psql -X -A -t -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL' > recovery-evidence/structure.tsv
           select 'tables' || E'\t' || count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind in ('r','p');
           select 'columns' || E'\t' || count(*) from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind in ('r','p') and a.attnum>0 and not a.attisdropped;
           select 'indexes' || E'\t' || count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','dabbir_private') and c.relkind='i';
