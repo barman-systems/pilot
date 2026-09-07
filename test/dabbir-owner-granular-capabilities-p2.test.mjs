@@ -38,7 +38,7 @@ test('system role snapshots reconcile and active sessions are revoked on authori
   assert.match(migration,/P2_ROLE_CAPABILITY_RECONCILED/);
   assert.match(migration,/update dabbir_private\.owner_sessions[\s\S]*revoked_at=coalesce\(revoked_at,now\(\)\)/);
   assert.match(migration,/role_code in \('EXECUTIVE_ADMIN','OPERATIONS_MANAGER','CUSTOMER_SUPPORT','FINANCE','GROWTH_SALES','TECHNICAL_ADMIN','VIEWER_AUDITOR'\)/);
-  assert.doesNotMatch(migration,/role_code in \([^)]*CUSTOM[^)]*\)/);
+  assert.doesNotMatch(migration,/role_code in \([^)]*'CUSTOM'[^)]*\)/);
 });
 
 test('incident RPCs enforce operation-specific granular capability plus business scope',()=>{

@@ -39,12 +39,11 @@ test('security RPC execution remains server-only',()=>{
   }
 });
 
-test('owner broker binds OTP to exact invitation id and generation',()=>{
+test('owner broker delegates OTP completion to the atomic challenge-bound RPC',()=>{
   assert.match(broker,/invitation_generation:invitationId\?invitationGeneration:null/);
-  assert.match(broker,/select=id,actor_user_id,invitation_id,invitation_generation,otp_hash/);
-  assert.match(broker,/dabbir_platform_staff_accept_for_user_v2/);
-  assert.match(broker,/p_invitation_id:row\.invitation_id/);
-  assert.match(broker,/p_generation:generation/);
+  assert.match(broker,/dabbir_owner_otp_complete_v1/);
+  assert.match(broker,/p_challenge_id:id,p_otp_hash:await otpHash\(id,otp\)/);
+  assert.doesNotMatch(broker,/rpc\('dabbir_owner_session_issue_v1'/);
   assert.doesNotMatch(broker,/dabbir_platform_staff_accept_for_user_v1'\s*,\s*\{p_user_id:row\.actor_user_id/);
 });
 
@@ -57,9 +56,10 @@ test('resend and revoke are explicit broker operations and unknown operations fa
   assert.match(broker,/\['set_governance','set_permissions','suspend','reactivate','revoke_sessions','remove'\]\.includes\(op\)/);
 });
 
-test('invite email delivery is persisted through v2 delivery contract',()=>{
+test('invite email delivery is persisted against its exact generation',()=>{
   assert.match(broker,/sendEmailDetailed/);
-  assert.match(broker,/dabbir_platform_staff_invite_delivery_v2/);
+  assert.match(broker,/dabbir_platform_staff_invite_delivery_v3/);
+  assert.match(broker,/p_generation:generation/);
   assert.match(broker,/TEAM_INVITE_DELIVERY_RECORD_FAILED/);
   assert.match(broker,/TEAM_INVITE_DELIVERY_FAILED/);
   assert.match(teamApi,/operation==='invite'\|\|operation==='invite_resend'/);

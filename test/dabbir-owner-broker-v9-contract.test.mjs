@@ -21,8 +21,9 @@ test('broker v9 preserves the modern owner command-center surfaces',()=>{
 
 test('OTP request and verification stay bound to the same actor',()=>{
   assert.match(broker,/actor_user_id:identity\.user_id/);
-  assert.match(broker,/select=id,actor_user_id,invitation_id,invitation_generation,otp_hash/);
-  assert.match(broker,/p_actor_user_id:row\.actor_user_id/);
+  assert.match(broker,/dabbir_owner_otp_complete_v1/);
+  assert.match(broker,/p_challenge_id:id,p_otp_hash:await otpHash\(id,otp\)/);
+  assert.doesNotMatch(broker,/rpc\('dabbir_owner_session_issue_v1'/);
   assert.doesNotMatch(broker,/activeAdmin\(/);
 });
 
