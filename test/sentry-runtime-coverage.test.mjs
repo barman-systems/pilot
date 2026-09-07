@@ -49,12 +49,12 @@ test('Sentry transport is HTTPS-only, bounded, release-aware, and redacts secret
   assert.match(core, /stackFrames/);
 });
 
-test('health exposes instrumentation truth and probe remains preview-only', () => {
+test('health exposes instrumentation truth without a write-capable probe', () => {
   assert.match(health, /runtime_instrumented/);
-  assert.match(health, /captureSentryPreviewProbe/);
-  assert.match(health, /VERCEL_ENV/);
-  assert.match(health, /PREVIEW_ONLY/);
-  assert.match(health, /transport_accepted/);
+  assert.match(health, /sentryStatus/);
+  assert.match(health, /ingest_host/);
+  assert.doesNotMatch(health, /captureSentryPreviewProbe/);
+  assert.doesNotMatch(health, /transport_accepted|event_id|PREVIEW_ONLY/);
 });
 
 test('browser relay no longer claims success when Sentry rejects delivery', () => {
