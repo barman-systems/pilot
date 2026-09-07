@@ -1,5 +1,6 @@
 import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
+import { configuredDirectProviders } from './_ai-provider-readiness.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig, getDABBIRAiRedundancy } from './_ai-core.js';
 
 function json(res, status, body) {
@@ -29,6 +30,7 @@ export default async function handler(req, res) {
       cost_mode: config.cost_mode,
       configured_provider_count: redundancy.configured_provider_count,
       direct_provider_count: redundancy.direct_provider_count,
+      direct_providers: configuredDirectProviders(),
       gateway_fallback_configured: redundancy.gateway_fallback_configured,
       redundancy_ready: redundancy.redundancy_ready,
       data_mode: 'SYNTHETIC_ONLY',
