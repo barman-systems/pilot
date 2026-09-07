@@ -14,6 +14,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const ARABIC=/[\u0600-\u06ff]/;
 const MENU_REQUEST=/(?:الخدمات|خدماتكم|شو\s+(?:عندكم|تقدمون)|وش\s+(?:عندكم|تقدمون)|ايش\s+(?:عندكم|تقدمون)|ماذا\s+تقدمون|قائمة\s+الخدمات|services|service menu|what do you offer)/i;
 const PRICE_REQUEST=/(?:بكم|كم\s+(?:السعر|سعرها|سعره)|السعر|price|how much)/i;
+const PERMANENT_SERVICE_FAILURES=new Set(['AI_PENDING_ACTION_INVALID','AI_CONVERSATION_NOT_FOUND','WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH','WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED','WHATSAPP_MENU_CONTEXT_INCOMPLETE']);
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
 const one=v=>Array.isArray(v)?v[0]??null:v??null;
@@ -135,6 +136,23 @@ async function sendServiceMenu(claim,context,lang){
 }
 async function setState(context,action,payload={},ttl=900){return serviceRpc('dabbir_whatsapp_ai_set_state',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_pending_action:action,p_payload:payload,p_ttl_seconds:ttl});}
 async function finish(claim,outcome,error=null){return serviceRpc('dabbir_whatsapp_ai_finish_batch',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_outcome:outcome,p_error:error});}
+async function serviceHandoff(claim,code,reason){
+  try{
+    const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
+    if(context?.business?.id&&context?.conversation?.id)await serviceRpc('dabbir_whatsapp_ai_handoff',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_route_class:'SUPPORT',p_reason:clean(reason,500),p_summary:clean(code,1200)});
+  }catch{}
+  await finish(claim,'HUMAN_REQUIRED',code).catch(()=>null);
+  return {state:'HUMAN_REQUIRED',error:code};
+}
+async function handleServiceFailure(claim,error,label){
+  const code=clean(error?.code||error?.message||label||'SERVICE_MENU_FAILED',200);
+  if(Number(error?.providerStatus)===429){await finish(claim,'RETRY',code).catch(()=>null);return {state:'RETRY',error:code};}
+  if(error?.ambiguous===true)return serviceHandoff(claim,`AMBIGUOUS_OUTBOUND:${code}`,'Ambiguous service-menu delivery requires human review');
+  if(error?.definitive===true||Number(error?.providerStatus)>=400&&Number(error?.providerStatus)<500)return serviceHandoff(claim,code,'Service-menu delivery failed definitively');
+  if(PERMANENT_SERVICE_FAILURES.has(code))return serviceHandoff(claim,code,'Permanent service-menu contract failure');
+  if(Number(claim?.attempt_count||0)>=5)return serviceHandoff(claim,code,'Service-menu processing exhausted safe retry attempts');
+  await finish(claim,'RETRY',code).catch(()=>null);return {state:'RETRY',error:code};
+}
 
 async function tryServiceFlow(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
@@ -173,7 +191,7 @@ export async function processWhatsAppDispatchWithServiceMenu(dispatchToken){
   }
   if(claim?.state!=='CLAIMED')return {claimed:false,state:clean(claim?.state,40)||'NOOP'};
   try{const handled=await tryServiceFlow(claim);if(handled)return {claimed:true,...handled};}
-  catch(error){await finish(claim,'RETRY',clean(error?.code||error?.message||'SERVICE_MENU_FAILED',200)).catch(()=>null);return {claimed:true,state:'RETRY',error:clean(error?.code||error?.message,160)};}
+  catch(error){return {claimed:true,...await handleServiceFailure(claim,error,'SERVICE_MENU_FAILED')}}
   return {claimed:true,...await processClaimedWhatsAppAiBatch(claim)};
 }
 
@@ -182,7 +200,7 @@ export async function processWhatsAppRecoveryWithServiceMenu({limit=12}={}){
   for(let i=0;i<Math.max(1,Math.min(25,Number(limit)||12));i+=1){
     const claim=await serviceRpc('dabbir_whatsapp_ai_claim_next',{});if(claim?.state==='EMPTY')break;if(claim?.state!=='CLAIMED'){results.push({state:claim?.state||'NOOP'});continue;}
     try{const handled=await tryServiceFlow(claim);results.push(handled||await processClaimedWhatsAppAiBatch(claim));}
-    catch(error){await finish(claim,'RETRY',clean(error?.code||error?.message||'SERVICE_MENU_RECOVERY_FAILED',200)).catch(()=>null);results.push({state:'RETRY'});}
+    catch(error){results.push(await handleServiceFailure(claim,error,'SERVICE_MENU_RECOVERY_FAILED'));}
   }
   return {processed:results.length,results};
 }
