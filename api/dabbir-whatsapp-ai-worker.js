@@ -12,7 +12,9 @@ export default async function handler(req,res){
   if(!UUID.test(token))return json(res,202,{ok:true,accepted:false});
   try{
     let result=await processWhatsAppDispatchWithServiceMenu(token);
-    if(['RETRY','HUMAN_REQUIRED'].includes(result?.state)&&result?.error){
+    // Only retryable provider degradation is eligible for continuity handling.
+    // HUMAN_REQUIRED means ownership has already moved out of AI and is terminal here.
+    if(result?.state==='RETRY'&&result?.error){
       const failover=await failoverWhatsAppAiProvider(token,result.error).catch(()=>({handled:false}));
       if(failover?.handled===true)result={...result,state:clean(failover.state,40)||result.state,provider_failover:true,provider_degraded:failover.degraded===true};
     }
