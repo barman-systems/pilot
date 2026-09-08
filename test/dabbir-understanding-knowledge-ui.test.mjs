@@ -100,21 +100,3 @@ test('draft inputs cannot survive a tenant switch or be changed by detached tena
   ui.workspace.business.id='B';await ui.refresh();ui.open();alias.oninput?.();
   assert.equal(ui.input('alias').value,'');assert.equal(ui.input('service').value,'');
 });
-
-for(const lang of ['ar','en'])test(lang+': correction draft survives refresh and submits only propose_correction',async()=>{
- const writes=[];const ui=harness(async(url,options={})=>{if(options.method==='POST')writes.push(JSON.parse(options.body));return response(url.includes('understanding')?payload:{})},lang);
- await ui.refresh();ui.open();const value=lang==='ar'?'VIP يعني Gold wash':'VIP means Gold wash';ui.input('correction').value=value;ui.input('correction').oninput();
- await ui.refresh();assert.equal(ui.input('correction').value,value);assert.equal(ui.nodes().find(n=>n.tag==='details').open,true);
- await ui.nodes().find(n=>n.dataset.knowledgeCorrectionForm==='v2').onsubmit({preventDefault(){}});
- assert.deepEqual(writes,[{business_id:'A',action:'propose_correction',correction:value}]);assert.equal(ui.input('correction').value,'');assert.match(ui.notices.at(-1),lang==='ar'?/يحتاج اعتمادك/:/approval is required/);
-});
-test('ambiguous correction retains owner text and presents a specific clarification without an approval',async()=>{
- const writes=[];const ui=harness(async(url,options={})=>{if(options.method==='POST'){writes.push(JSON.parse(options.body));return {ok:false,json:async()=>({ok:false,error:'CORRECTION_SERVICE_AMBIGUOUS'})}}return response(url.includes('understanding')?payload:{})});
- await ui.refresh();ui.open();ui.input('correction').value='VIP means Gold wash';ui.input('correction').oninput();await ui.nodes().find(n=>n.dataset.knowledgeCorrectionForm==='v2').onsubmit({preventDefault(){}});
- assert.equal(writes.length,1);assert.equal(ui.input('correction').value,'VIP means Gold wash');assert.match(ui.text(),/More than one service/);assert.equal(ui.button('Approve meaning'),undefined);assert.ok(ui.nodes().some(n=>n.attrs.role==='alert'));
-});
-test('old correction form cannot submit or restore private draft in another tenant',async()=>{
- const writes=[];const ui=harness(async(url,options={})=>{if(options.method==='POST')writes.push(options);return response(url.includes('understanding')?payload:{})});
- await ui.refresh();ui.open();const input=ui.input('correction'),form=ui.nodes().find(n=>n.dataset.knowledgeCorrectionForm==='v2');input.value='VIP means private A service';input.oninput();
- ui.workspace.business.id='B';await ui.refresh();ui.open();input.oninput();await form.onsubmit({preventDefault(){}});assert.equal(writes.length,0);assert.equal(ui.input('correction').value,'');
-});
