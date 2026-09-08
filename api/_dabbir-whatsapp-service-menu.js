@@ -10,6 +10,11 @@ import {
 import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 import { processClaimedWhatsAppAiBatch } from './_dabbir-whatsapp-ai-core.js';
 import {
+  catalogMenuForContext,
+  resolveCatalogService,
+  sendMetaCatalogProducts,
+} from './_dabbir-whatsapp-catalog.js';
+import {
   isConversationNudge,
   looksLikeServiceIntent,
   previousCustomerText,
@@ -37,6 +42,7 @@ const PERMANENT_SERVICE_FAILURES=new Set([
   'WHATSAPP_TENANT_NOT_LINKED',
   'WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED',
   'WHATSAPP_MENU_CONTEXT_INCOMPLETE',
+  'WHATSAPP_CATALOG_SEND_CONTEXT_INCOMPLETE',
 ]);
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
@@ -45,7 +51,7 @@ const hash=v=>createHash('sha256').update(String(v)).digest('hex');
 const safeUuid=v=>UUID.test(clean(v,80))?clean(v,80):null;
 const langOf=text=>ARABIC.test(String(text||''))?'ar':'en';
 const norm=value=>clean(value,220).toLocaleLowerCase().normalize('NFKD').replace(/[\u064b-\u065f\u0670]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-const serviceName=s=>clean(s?.name_ar||s?.name||s?.name_en,180);
+const serviceName=s=>clean(s?.service_name||s?.name_ar||s?.name||s?.name_en,180);
 const money=n=>Number.isFinite(Number(n))?Number(n).toLocaleString('en-US',{maximumFractionDigits:2}):null;
 
 function latestText(context){
@@ -59,6 +65,19 @@ function serviceBySelection(context,text){
   if(prefix.length===1)return prefix[0];
   const mentioned=services.filter(s=>{const n=norm(serviceName(s));return n&&wanted.includes(n)});
   return mentioned.length===1?mentioned[0]:null;
+}
+function decodeRetailer(value){try{return clean(decodeURIComponent(String(value||'')),255)}catch{return ''}}
+function catalogSelection(text){
+  const source=String(text||'');
+  const product=source.match(/\[DABBIR_CATALOG_PRODUCT\s+catalog_id=([0-9]{5,40})\s+product_retailer_id=([^\]\s]+)\]/);
+  if(product)return {kind:'product',catalogId:product[1],productRetailerId:decodeRetailer(product[2]),itemCount:1};
+  const order=source.match(/\[DABBIR_CATALOG_ORDER\s+catalog_id=([0-9]{5,40})\s+items=([^\]]+)\]/);
+  if(!order)return null;
+  const items=String(order[2]||'').split(',').map(part=>{
+    const star=part.lastIndexOf('*');
+    return decodeRetailer(star>=0?part.slice(0,star):part);
+  }).filter(Boolean);
+  return {kind:'order',catalogId:order[1],productRetailerId:items.length===1?items[0]:null,itemCount:items.length};
 }
 function serviceDetails(service,context,lang){
   const name=serviceName(service);
@@ -124,7 +143,26 @@ async function sendReservedText(claim,context,body,purpose){
   try{const sent=await sendMetaText({connection,businessId:context.business.id,recipient:reservation.recipient_handle,body});return finalizeReservation(reservation,sent.providerMessageId);}
   catch(error){await markOutboundResult(reservation.reservation_id,error?.ambiguous?'AMBIGUOUS':'FAILED',clean(error?.code||error?.message,160));throw error;}
 }
+async function tryCatalogMenu(claim,context,lang){
+  const connection=await connectionFor(context);
+  const menu=await catalogMenuForContext({context,connection});
+  if(!menu?.items?.length)return false;
+  const body=lang==='ar'?'اختر الخدمة التي تريدها من الكتالوج.':'Choose the service you want from the catalog.';
+  const reservation=await reserve(claim,context,body,'catalog-products');
+  if(!reservation?.reservation_id)throw new Error('WHATSAPP_MENU_RESERVATION_UNVERIFIED');
+  if(reservation.should_send!==true)return true;
+  try{
+    const sent=await sendMetaCatalogProducts({connection,businessId:context.business.id,recipient:reservation.recipient_handle,catalogId:menu.catalogId,items:menu.items,lang});
+    await finalizeReservation(reservation,sent.providerMessageId);return true;
+  }catch(error){
+    await markOutboundResult(reservation.reservation_id,error?.ambiguous?'AMBIGUOUS':'FAILED',clean(error?.code||error?.message,160));
+    if(error?.ambiguous===true)throw error;
+    if(error?.definitive===true||Number(error?.providerStatus)>=400&&Number(error?.providerStatus)<500)return false;
+    throw error;
+  }
+}
 async function sendServiceMenu(claim,context,lang){
+  if(await tryCatalogMenu(claim,context,lang))return {catalog:true};
   const services=arr(context?.services).filter(s=>safeUuid(s?.id)&&serviceName(s)).slice(0,10);
   if(!services.length)return sendReservedText(claim,context,lang==='ar'?'لا توجد خدمات مفعلة حاليًا.':'There are no active services right now.','service-empty');
   const body=lang==='ar'?'اختر الخدمة التي تريدها من القائمة.':'Choose a service from the list.';
@@ -174,9 +212,17 @@ async function tryServiceFlow(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)return null;
   const text=latestText(context),lang=langOf(text),services=arr(context?.services);
+  const catalog=catalogSelection(text);
+  if(catalog){
+    if(catalog.itemCount!==1||!catalog.productRetailerId)return serviceHandoff(claim,'WHATSAPP_CATALOG_MULTI_ITEM_REQUIRES_HUMAN','Multiple catalog items cannot be converted into one booking safely');
+    const mapped=await resolveCatalogService({businessId:context.business.id,conversationId:context.conversation.id,catalogId:catalog.catalogId,productRetailerId:catalog.productRetailerId});
+    if(!mapped?.service_id)return serviceHandoff(claim,'WHATSAPP_CATALOG_PRODUCT_UNMAPPED','Catalog product is not mapped to an active service in this tenant and branch');
+    await setState(context,'service_selected',{service_id:mapped.service_id,service_name:mapped.service_name,duration_minutes:mapped.duration_minutes,price:mapped.price,catalog_id:mapped.catalog_id,product_retailer_id:mapped.product_retailer_id},900);
+    await sendReservedText(claim,context,serviceDetails(mapped,context,lang),'catalog-service-details');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_SERVICE_DETAILS'};
+  }
   if(wantsServiceMenu(text)){
     await setState(context,'none',{});
-    await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SERVICE_MENU'};
+    const sent=await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:sent?.catalog?'CATALOG_MENU':'SERVICE_MENU'};
   }
   const selected=serviceBySelection(context,text);
   if(selected){
@@ -207,7 +253,7 @@ async function tryServiceFlow(claim){
   }
   if(looksLikeServiceIntent(text)){
     await setState(context,'none',{});
-    await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'SERVICE_MENU'};
+    const sent=await sendServiceMenu(claim,context,lang);await finish(claim,'PROCESSED');return {state:'PROCESSED',action:sent?.catalog?'CATALOG_MENU':'SERVICE_MENU'};
   }
   return null;
 }
