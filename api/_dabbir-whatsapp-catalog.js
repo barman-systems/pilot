@@ -1,6 +1,6 @@
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { embeddedPlatformConfig, openAccessToken } from './_whatsapp-embedded-core.js';
-import { serviceRpc } from './_whatsapp-live-core.js';
+import { assertWhatsAppConnectionSendable, serviceRpc } from './_whatsapp-live-core.js';
 
 const META_ID=/^[0-9]{5,40}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -201,6 +201,7 @@ export async function resolveCatalogService({businessId,conversationId,catalogId
 }
 
 export async function sendMetaCatalogProducts({connection,businessId,recipient,catalogId,items,lang='ar'}){
+  await assertWhatsAppConnectionSendable({businessId,connectionId:connection?.id});
   const platform=applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
   const token=openAccessToken(connection,platform,businessId);
   const phoneNumberId=clean(connection?.phone_number_id,160);
