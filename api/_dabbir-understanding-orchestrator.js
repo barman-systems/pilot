@@ -5,6 +5,7 @@ const val=(s,k)=>s.entities[k]?.value;
 const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
 const SEMANTIC_INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
+const DETERMINISTIC_AUTHORITY_REASONS=new Set(['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED']);
 export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
@@ -74,10 +75,22 @@ function orphanChoiceOnly(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
   return /^(?:[123]|الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|the first|the second|the third)$/.test(text);
 }
+function normalizedTurnText(messages){return normalizeSemanticText(arr(messages).map(x=>String((x?.language_body??x?.body)||'')).filter(Boolean).join(' '));}
 function naturalLanguageTurn(messages){
-  const text=normalizeSemanticText(arr(messages).map(x=>String((x?.language_body??x?.body)||'')).filter(Boolean).join(' '));
+  const text=normalizedTurnText(messages);
   if(!text||orphanChoiceOnly(messages))return false;
   return text.length>=2;
+}
+function constrainedContinuation(messages,previous){
+  const text=normalizedTurnText(messages),key=previous?.clarification_entity;
+  if(!text||!key)return false;
+  if(key==='intent_confirmation'&&/^(?:هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(text))return true;
+  if(key==='date'&&/^(?:اليوم|اباليوم|باليوم|باجر|باكر|بكره|غدا|عقب باجر|بعد باجر|بعد بكره|بعد غد|today|tomorrow|day after tomorrow|20\d{2}-\d{2}-\d{2})$/.test(text))return true;
+  if(key==='time'){
+    if(/^(?:المساء|المسا|العصر|الليل|الصباح|الصبح|الفجر|morning|afternoon|evening|night)$/.test(text))return true;
+    if(/^(?:(?:الساعه|الساع|at)\s*)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?(?:\s*(?:am|pm|ص|م|صباح|مساء|المسا|العصر|الليل))?$/.test(text))return true;
+  }
+  return false;
 }
 function greetingDecision(state,sessionReset){
   state.sub_intent='GREETING';state.missing_fields=[];state.unresolved_references=[];
@@ -156,7 +169,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
   if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);
   const deterministic={state:structuredClone(state),decision:{...decision}};
-  const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&naturalLanguageTurn(c.batch_messages));
+  const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&!constrainedContinuation(c.batch_messages,semanticPrevious)&&naturalLanguageTurn(c.batch_messages));
   if(shouldInterpret){
     budget();let proposal,plannerFailure;
     try{proposal=await planner(c,aiFirstPlannerContext(c,state));}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
