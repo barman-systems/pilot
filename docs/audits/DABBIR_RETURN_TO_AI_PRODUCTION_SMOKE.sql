@@ -19,6 +19,9 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
  set local role authenticated;
  perform public.dabbir_takeover_conversation(biz,conv);
+ reset role;
+ update public.dabbir_handoffs set route_class='OWNER_DECISION',reason='routine_followup',priority=30 where business_id=biz and conversation_id=conv and state='HUMAN_ACTIVE';
+ set local role authenticated;
  result:=public.dabbir_return_conversation_to_ai(biz,conv);
  if result->>'state'<>'waiting_customer' then raise exception 'QA_RETURN_FAILED'; end if;
  perform public.dabbir_return_conversation_to_ai(biz,conv);
@@ -35,16 +38,6 @@ begin
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
  blocked:=false;begin perform public.dabbir_semantic_assert_current_v2(batch,token,1);exception when others then if sqlerrm='SEMANTIC_SUPERSEDED' then blocked:=true;else raise;end if;end;
  if not blocked then raise exception 'QA_OLD_DECISION_STILL_AUTHORIZED';end if;
- perform set_config('request.jwt.claim.role','authenticated',true);
- perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
- set local role authenticated;
- perform public.dabbir_takeover_conversation(biz,conv);
- reset role;
- update public.dabbir_handoffs set route_class='OWNER_DECISION',reason='routine_followup',priority=30 where business_id=biz and conversation_id=conv and state='HUMAN_ACTIVE';
- set local role authenticated;
- perform public.dabbir_return_conversation_to_ai(biz,conv);
- perform public.dabbir_return_conversation_to_ai(biz,conv);
- reset role;
  if (select count(*) from public.dabbir_owner_decision_observations where business_id=biz)<>1 or exists(select 1 from public.dabbir_owner_policy_versions where business_id=biz) then raise exception 'QA_OWNER_OBSERVATION_FAILED';end if;
  insert into public.account_access_state(user_id,status,reason,suspended_at) values(own,'suspended','Synthetic rollback gate test',now()) on conflict(user_id) do update set status='suspended',reason='Synthetic rollback gate test',suspended_at=now();
  set local role authenticated;
