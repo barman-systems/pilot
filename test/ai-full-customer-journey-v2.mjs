@@ -365,9 +365,10 @@ async function browserJourney() {
     const menu=page.locator('#menuBtn:visible');
     assert(await menu.count()===1,'ACTIVITY_RESPONSIVE_MENU_MISSING');
     await menu.click();
-    const settingsNav=page.locator('#side.open #nav [data-screen="settings"]:visible');
-    await settingsNav.waitFor({state:'visible',timeout:10000});
-    await settingsNav.click();
+    const moreNav=page.locator('#side.open #nav [data-screen="more"]:visible');
+    await moreNav.waitFor({state:'visible',timeout:10000});
+    await moreNav.click();
+    await page.locator('#screen-more [data-screen="settings"]').click();
     console.log('ACTIVITY_SETTINGS_NAVIGATION=responsive_sidebar');
   }
   await page.locator('#screen-settings.active').waitFor({state:'visible',timeout:10000});
