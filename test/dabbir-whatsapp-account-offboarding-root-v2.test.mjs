@@ -21,6 +21,10 @@ function before(text,a,b,message){
   assert.ok(left<right,`${message}: ${a} must occur before ${b}`);
 }
 
+function logBodies(text){
+  return [...text.matchAll(/logEvent\((?:'[^']+'|"[^"]+"),\s*\{([\s\S]*?)\}\);/g)].map(match=>match[1]);
+}
+
 test('safety migration blocks cascade deletion and provides non-sendable pending state',()=>{
   assert.match(safety,/DABBIR_WHATSAPP_OFFBOARDING_REQUIRED_BEFORE_BUSINESS_DELETE/);
   assert.match(safety,/offboarding_pending/);
@@ -97,7 +101,9 @@ test('signed webhook extracts provider account_update lifecycle evidence',()=>{
   });
   assert.match(webhook,/dabbir_whatsapp_apply_account_update/);
   assert.match(webhook,/account_updates_matched/);
-  assert.doesNotMatch(webhook,/logEvent\([^]*phoneNumber|logEvent\([^]*wabaId/);
+  const bodies=logBodies(webhook);
+  assert.ok(bodies.length>0,'expected structured logEvent calls');
+  for(const body of bodies)assert.doesNotMatch(body,/\bwabaId\b|\bphoneNumber\b/);
 });
 
 test('provider sends re-check exact live connection status immediately before Meta',()=>{
