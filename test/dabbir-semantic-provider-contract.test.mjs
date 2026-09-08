@@ -41,6 +41,20 @@ test('invalid output from every provider fails closed without any proposed actio
   await assert.rejects(interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response('hello')}),{code:'AI_PLANNER_UNAVAILABLE'});
 });
 
+test('context-only service hallucination is stripped before semantic grounding',async()=>{
+  const hallucinated={...proposal,service_name:'غسيل كامل'};
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(hallucinated))});
+  assert.equal(result.proposal.serviceName,null);
+});
+
+test('explicit current-message catalog service is retained as a semantic proposal',async()=>{
+  const named={...proposal,service_name:'غسيل كامل'};
+  const result=await interpretSemanticMessage({message:'أبي غسيل كامل بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(named))});
+  assert.equal(result.proposal.serviceName,'غسيل كامل');
+});
+
 test('ordinary customer replies retain their short answer contract and contact guard',async()=>{
   let body;
   const result=await generateDABBIRAiReply({project:'dabbir_businesses',message:'contact?',env:{GROQ_API_KEY:'test'},
