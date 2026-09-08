@@ -29,10 +29,13 @@ test('service-role and provider secret names cannot enter client-delivered sourc
 });
 
 test('committed live-token and private-key values are rejected', () => {
+  const stripePrefix = ['sk', 'live', ''].join('_');
+  const supabasePrefix = ['sb', 'secret', ''].join('_');
+  const privateKeyMarker = ['-----BEGIN', 'PRIVATE', 'KEY-----'].join(' ');
   const source = [
-    `const stripe='sk_live_1234567890abcdefgh';`,
-    `const supabase='sb_secret_abcdefghijklmnopqrstuvwxyz';`,
-    '-----BEGIN PRIVATE KEY-----',
+    `const stripe='${stripePrefix}1234567890abcdefgh';`,
+    `const supabase='${supabasePrefix}abcdefghijklmnopqrstuvwxyz';`,
+    privateKeyMarker,
   ].join('\n');
   const findings = scanSecretValues('api/accidental-secret.js', source);
   assert(codes(findings).includes('COMMITTED_SECRET_VALUE'));
