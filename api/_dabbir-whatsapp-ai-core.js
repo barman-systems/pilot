@@ -1,5 +1,6 @@
 import { runUnderstandingTurn } from './_dabbir-understanding-orchestrator.js';
 import { catalogMenuForContext, resolveCatalogService, sendMetaCatalogProducts } from './_dabbir-whatsapp-catalog.js';
+import { getPublishedBookingFlow, sendMetaBookingFlow } from './_dabbir-whatsapp-flows.js';
 import { createHash } from 'node:crypto';
 import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { serviceRpc, finalizeOutboundReply, markOutboundResult, sendMetaText } from './_whatsapp-live-core.js';
@@ -238,6 +239,16 @@ async function processClaim(claim){
   return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,
     deliverMenu:async(guarded,c,lang)=>{
       const connection=await loadConversationConnectionWithServiceKey(serviceKey(),c.business.id,c.conversation.id);
+      const flow=await getPublishedBookingFlow({businessId:c.business.id,connectionId:connection.id});
+      if(flow?.id){
+        try{
+          return await deliver(guarded,c,lang==='ar'?'أكمل طلب الحجز في نموذج واحد.':'Complete your booking request in one form.','booking-flow',(conn,recipient)=>sendMetaBookingFlow({context:c,connection:conn,recipient,lang,flow}));
+        }catch(error){
+          if(error?.ambiguous===true||Number(error?.providerStatus)===429)throw error;
+          const safeFallback=error?.flowFallbackSafe===true||(error?.definitive===true&&Number(error?.providerStatus)>=400&&Number(error?.providerStatus)<500);
+          if(!safeFallback)throw error;
+        }
+      }
       const menu=await catalogMenuForContext({context:c,connection,allowSync:false});
       if(!menu?.items?.length)return null;
       try{return await deliver(guarded,c,lang==='ar'?'اختر الخدمة التي تريدها من الكتالوج.':'Choose the service you want from the catalog.','catalog-products',(conn,recipient)=>sendMetaCatalogProducts({connection:conn,businessId:c.business.id,recipient,catalogId:menu.catalogId,items:menu.items,lang}));}
