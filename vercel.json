@@ -74,6 +74,7 @@
     }
   },
   "routes": [
+    { "src": "^/api/dabbir-whatsapp-webhook/?$", "dest": "/api/dabbir-whatsapp-webhook-coexistence" },
     { "src": "^/privacy/?$", "dest": "/privacy.html" },
     { "src": "^/terms/?$", "dest": "/terms.html" },
     { "src": "^/support/?$", "dest": "/support.html" },
