@@ -47,15 +47,14 @@ begin
      and (s.expires_at is null or s.expires_at>now())
    limit 1;
 
+  -- Fail closed only on a genuine provider/language mismatch. Do not require every
+  -- voice turn during booking to contain a date/time: greetings and questions are
+  -- valid conversational turns and must continue through the normal AI state machine.
   if not v_uncertain
      and lower(trim(coalesce(p_provider,'')))='cloudflare-workers-ai'
      and lower(coalesce(v_business_locale,'')) like 'ar%'
      and v_language='en'
      and v_transcript !~ '[\u0600-\u06FF]' then
-    v_uncertain:=true;
-  end if;
-
-  if not v_uncertain and v_pending_action='service_selected' and v_transcript !~* '([0-9٠-٩]|اليوم|باجر|بكره|بكرة|غد|غداً|غدا|السبت|الأحد|الاحد|الاثنين|الثلاثاء|الأربعاء|الاربعاء|الخميس|الجمعة|ساعة|الساعه|الساعة|صباح|مساء|ظهر|عصر|مغرب|عشاء|فجر|today|tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\mam\M|\mpm\M|\mat\M)' then
     v_uncertain:=true;
   end if;
 
@@ -79,7 +78,7 @@ begin
   end if;
 
   if v_uncertain then
-    v_body:=case when v_language='ar' then '[رسالة صوتية غير واضحة بما يكفي للتنفيذ]'
+    v_body:=case when lower(coalesce(v_business_locale,'')) like 'ar%' then '[رسالة صوتية غير واضحة بما يكفي للتنفيذ]'
                  when v_language='en' then '[Voice note was not clear enough to execute safely]'
                  else '[Voice note unclear / الرسالة الصوتية غير واضحة]'
             end;
@@ -105,7 +104,7 @@ begin
       'transcription_provider',left(coalesce(p_provider,''),120),'transcription_model',left(coalesce(p_model,''),160),
       'transcription_language',v_language,'transcription_confidence',v_confidence,
       'needs_confirmation',v_uncertain,'raw_audio_persisted',false,
-      'booking_transcript_guard',v_pending_action='service_selected'
+      'booking_context',v_pending_action='service_selected'
     )
   );
 
