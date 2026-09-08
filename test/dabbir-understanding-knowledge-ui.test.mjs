@@ -53,3 +53,13 @@ test('duplicate submit sends one request; completion after business switch canno
 test('failed knowledge read gives retry, not an empty success or actionable form',async()=>{let fail=true;const ui=harness(async url=>{if(url.includes('understanding')&&fail)throw new Error('network');return response(url.includes('understanding')?payload:{})});await ui.refresh();ui.open();assert.match(ui.text(),/Could not load/);assert.equal(ui.form(),undefined);fail=false;await ui.button('Retry').onclick();assert.ok(ui.form())});
 test('owner role removed closes knowledge and discards in-flight data',async()=>{const ui=harness(async url=>response(url.includes('understanding')?payload:{}));await ui.refresh();ui.open();ui.workspace.membership.role='employee';await ui.refresh();assert.equal(ui.form(),undefined);assert.equal(ui.button('DABBIR Policies'),undefined)});
 test('untrusted alias remains text and cannot create markup',async()=>{const ui=harness(async url=>response(url.includes('understanding')?{...payload,proposals:[{id:'p',entity_type:'service',alias:'<img src=x onerror=alert(1)>',target_id:'service-A',status:'PROPOSED',version:1}]}:{}));await ui.refresh();ui.open();assert.match(ui.text(),/<img src=x/);assert.equal(ui.nodes().some(n=>n.tag==='img'),false);assert.ok(ui.nodes().every(n=>!n.innerHTML))});
+
+test('the shipped deferred bundle mounts owner knowledge, beyond the historical module-order comment',async()=>{
+  const fs=await import('node:fs');
+  const manifest=JSON.parse(fs.readFileSync('config/dabbir-ui-bundles.json','utf8'));
+  assert.equal(manifest.deferred.filter(x=>x==='/api/dabbir-owner-decision-memory-ui').length,1);
+  const bundle=fs.readFileSync('public/dabbir-ui-deferred.js','utf8');
+  assert.match(bundle,/owner-decision-memory-ui-v2/);
+  assert.match(bundle,/معاني الخدمات/);
+  assert.match(bundle,/\/api\/understanding-knowledge/);
+});
