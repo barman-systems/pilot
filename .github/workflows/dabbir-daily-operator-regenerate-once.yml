@@ -22,11 +22,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Verify configured production cron
+      - name: Prepare linked Vercel project context
         shell: bash
         run: |
           set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || { echo 'VERCEL_TOKEN_MISSING'; exit 2; }
+          mkdir -p .vercel
+          jq -nc --arg org "$VERCEL_ORG_ID" --arg project "$VERCEL_PROJECT_ID" '{orgId:$org,projectId:$project}' > .vercel/project.json
+      - name: Verify configured production cron
+        shell: bash
+        run: |
+          set -euo pipefail
           npx --yes vercel@58.4.4 crons list --format=json --token "$VERCEL_TOKEN" > crons.json
           jq -e '.[] | select(.path == "/api/dabbir-daily-operator-cron")' crons.json >/dev/null
           echo 'DAILY_OPERATOR_CRON_VERIFIED'
