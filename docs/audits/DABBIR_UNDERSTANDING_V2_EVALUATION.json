@@ -1,0 +1,124 @@
+{
+  "suite": "DABBIR Understanding V2",
+  "generated_at": "2026-09-08T03:25:36.072Z",
+  "source_sha": "fce8deb8aea041a2232edbe4fd940017b3f4ef8f",
+  "scope": "Synthetic labeled contracts, deterministic reducer, no external model and no real Meta inbound. Punctuation variants are reported separately from distinct cases.",
+  "distinct_scenarios": 71,
+  "total_variants": 139,
+  "all_cases": {
+    "passed": 139,
+    "total": 139,
+    "percent": 100
+  },
+  "measured": {
+    "intent_accuracy": {
+      "passed": 83,
+      "total": 83,
+      "percent": 100
+    },
+    "entity_accuracy": {
+      "passed": 126,
+      "total": 126,
+      "percent": 100
+    },
+    "reference_resolution_accuracy": {
+      "passed": 34,
+      "total": 34,
+      "percent": 100
+    },
+    "correction_resolution_accuracy": {
+      "passed": 32,
+      "total": 32,
+      "percent": 100
+    },
+    "missing_field_detection_accuracy": {
+      "passed": 31,
+      "total": 31,
+      "percent": 100
+    },
+    "clarification_precision": {
+      "passed": 61,
+      "total": 61,
+      "percent": 100
+    },
+    "tool_selection_accuracy": {
+      "passed": 139,
+      "total": 139,
+      "percent": 100
+    },
+    "mutation_safety_rate": {
+      "passed": 123,
+      "total": 123,
+      "percent": 100
+    },
+    "cross_tenant_isolation_contract": {
+      "passed": 14,
+      "total": 14,
+      "percent": 100
+    },
+    "voice_semantic_accuracy": {
+      "passed": 7,
+      "total": 7,
+      "percent": 100
+    }
+  },
+  "baseline": {
+    "full_project_tests": {
+      "passed": 1461,
+      "total": 1461,
+      "sha": "fce8deb8aea041a2232edbe4fd940017b3f4ef8f"
+    },
+    "legacy_deterministic_time_parser_only": {
+      "passed": 3,
+      "total": 8,
+      "percent": 37.5
+    },
+    "v2_same_time_cases": {
+      "passed": 8,
+      "total": 8,
+      "percent": 100
+    },
+    "caveat": "This compares the actual legacy deterministic time parser against the reducer on the same labeled time cases. It is not a full LLM or production baseline.",
+    "time_cases": [
+      {
+        "id": "correction-5 م",
+        "pass": false
+      },
+      {
+        "id": "correction-٥ م",
+        "pass": false
+      },
+      {
+        "id": "correction-5 مساء",
+        "pass": false
+      },
+      {
+        "id": "correction-5 PM",
+        "pass": false
+      },
+      {
+        "id": "correction-same-message",
+        "pass": false
+      },
+      {
+        "id": "english-complete",
+        "pass": true
+      },
+      {
+        "id": "mixed",
+        "pass": true
+      },
+      {
+        "id": "fragmented",
+        "pass": true
+      }
+    ]
+  },
+  "unmeasured": {
+    "full_live_llm_before_after": "No controlled live provider comparison yet",
+    "production_booking_completion": "Not yet measured",
+    "production_hallucination_rate": "Not yet measured",
+    "real_meta_whatsapp_e2e": "Not yet performed"
+  },
+  "failures": []
+}

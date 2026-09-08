@@ -171,6 +171,12 @@ async function handleServiceFailure(claim,error,label){
 }
 
 async function tryServiceFlow(claim){
+  // V2 owns catalog, time, clarification and mutation routing in one pipeline.
+  return processClaimedWhatsAppAiBatch(claim);
+}
+
+// Retained rendering helpers for interactive menu compatibility; not an execution path.
+async function legacyServiceRendering(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)return null;
   const text=latestText(context),lang=langOf(text),services=arr(context?.services);

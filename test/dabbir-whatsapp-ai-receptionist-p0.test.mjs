@@ -24,8 +24,10 @@ test('signed inbound persistence durably enqueues before returning and duplicate
 
 test('AI queue uses lease tokens, bounded retries, stale turn detection and human takeover stop',()=>{
   for(const token of ['dabbir_whatsapp_ai_claim_dispatch','dabbir_whatsapp_ai_claim_next','lock_token','locked_until','attempt_count','max_attempts','HUMAN_REQUIRED','newer_customer_message_exists','SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE'])must(queue,new RegExp(token));
-  must(core,/newer_customer_message_exists===true[\s\S]+CANCELLED/);
-  must(core,/state==='human_active'\|\|context\?\.conversation\?\.state==='action_required'/);
+  const semantic=fs.readFileSync(path.join(root,'api/_dabbir-semantic-engine.js'),'utf8');
+  must(semantic,/newer_customer_message_exists/);
+  must(core,/SEMANTIC_SUPERSEDED[\s\S]+CANCELLED/);
+  must(semantic,/human_active','action_required/);
 });
 
 test('AI outbound identity is truthful and service-role only',()=>{

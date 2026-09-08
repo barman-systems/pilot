@@ -85,7 +85,7 @@ async function recordUsage({businessId,operationKey,result,attempts,usage,actual
 }
 
 export async function generateDABBIRAiReply(args={}){
-  const identity=contextIdentity(args.businessContext);
+  const identity=contextIdentity(args.meteringContext||args.businessContext);
   const attempts=[];
   let successfulPayload=null;
   let successfulResponse=null;
