@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {runUnderstandingTurn} from '../api/_dabbir-understanding-orchestrator.js';
+import {bookingText} from '../api/_dabbir-whatsapp-ai-core.js';
 import {context,now,ids,offered,slots} from './fixtures/understanding/cases.mjs';
 function harness({text='ابا غسيل باجر',extra={},fail=null,resolveProduct=null,deliverMenu=null}={}){
  const calls=[],replies=[];let persisted=null,version=0,mutations=0,stale=false;
@@ -28,3 +29,4 @@ test('runtime: native catalog mapping enters the same state and asks only the mi
 test('runtime: foreign product mapping never becomes an entity',async()=>{const h=harness({text:'[DABBIR_CATALOG_PRODUCT catalog_id=123456 product_retailer_id=wash]',resolveProduct:async()=>({service_id:'foreign'})});const r=await h.run();assert.equal(r.action,'HANDOFF');assert.equal(h.mutations,0);});
 test('runtime: multi-quantity catalog order requires handoff',async()=>{const h=harness({text:'[DABBIR_CATALOG_ORDER catalog_id=123456 items=wash*2]',resolveProduct:async()=>{throw Error('must not resolve');}});assert.equal((await h.run()).action,'HANDOFF');});
 test('runtime: native catalog delivery is bound to the persisted semantic version',async()=>{let version;const h=harness({text:'شو عندكم',deliverMenu:async claim=>{version=claim.semantic_version;return {providerMessageId:'meta.catalog'};}});assert.equal((await h.run()).action,'CATALOG_MENU');assert.equal(version,1);assert.equal(h.replies.length,0);});
+test('runtime: recording a new appointment does not claim confirmed booking',()=>{const base={timezone:'Asia/Dubai',starts_at:slots[0].starts_at};assert.doesNotMatch(bookingText({...base,status:'new'},'en'),/is confirmed/);assert.match(bookingText({...base,status:'new'},'ar'),/بانتظار التأكيد/);assert.match(bookingText({...base,status:'confirmed'},'en'),/is confirmed/);});
