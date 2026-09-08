@@ -11,11 +11,26 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
 
 // One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
 // Adapter injection makes provider/retry/concurrency tests exercise the real runtime path.
-export async function runUnderstandingTurn({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,planner,now=()=>new Date()}) {
+export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,planner,now=()=>new Date()}) {
   const started=Date.now();let steps=0;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   const c={...context,...load};
+  // Product markers originate in the signed webhook. They are still customer
+  // selections; only the scoped catalog RPC can ground their service identity.
+  c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
+    const body=String(message.body||'');
+    const product=body.match(/\[DABBIR_CATALOG_PRODUCT catalog_id=([0-9]{5,40}) product_retailer_id=([^\]\s]+)\]/);
+    const order=body.match(/\[DABBIR_CATALOG_ORDER catalog_id=([0-9]{5,40}) items=([^\]]+)\]/);
+    if(!product&&!order)return message;
+    const items=order?order[2].split(','):[];
+    if(order&&(items.length!==1||!items[0].endsWith('*1'))){c.catalog_error='CATALOG_MULTIPLE_ITEMS';return message;}
+    let retailer;try{retailer=decodeURIComponent(product?product[2]:items[0].slice(0,-2));}catch{c.catalog_error='CATALOG_INVALID_SELECTION';return message;}
+    budget();
+    const mapped=resolveProduct?await resolveProduct({businessId:c.business.id,conversationId:c.conversation.id,catalogId:product?.[1]||order[1],productRetailerId:retailer}):null;
+    if(!mapped?.service_id||!arr(c.services).some(s=>s.id===mapped.service_id)){c.catalog_error='CATALOG_UNMAPPED';return message;}
+    return {...message,body:body.replace(/\[DABBIR_CATALOG_(?:PRODUCT|ORDER)[^\]]*\]/g,'').trim(),catalog_service_id:mapped.service_id};
+  }));
   let {state,decision}=understandConversation({context:c,previous:load.semantic_state,now:now()});
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   // A model is needed only when deterministic evidence does not resolve the request.
@@ -79,6 +94,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,finish,han
     }
   }
   if(decision.action==='PRICING'||decision.action==='SERVICE_MENU') {
+    if(decision.action==='SERVICE_MENU'&&deliverMenu){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}
     const services=arr(c.services).filter(x=>decision.action==='SERVICE_MENU'||!val(state,'service')||x.id===val(state,'service')).slice(0,10);
     decision.reply=services.map((x,i)=>`${i+1}) ${x.name_ar||x.name||x.name_en} — ${Number(x.price)} ${c.business.currency_code}`).join('\n')||(lang==='ar'?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
   }

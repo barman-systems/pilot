@@ -21,7 +21,7 @@ export default async function handler(req,res){
     }
     const action=String(body.action||'');let name,args;
     if(action==='propose'){
-      if(!id(body.target_id)||!['service','worker','branch'].includes(body.entity_type)||typeof body.alias!=='string'||body.alias.trim().length>80)return json(res,400,{ok:false,error:'INVALID_PROPOSAL'});
+      if(!id(body.target_id)||!['service','worker','branch'].includes(body.entity_type)||typeof body.alias!=='string'||!body.alias.trim()||body.alias.trim().length>80||(body.conversation_id&&!id(body.conversation_id))||(body.correction_id&&!id(body.correction_id)))return json(res,400,{ok:false,error:'INVALID_PROPOSAL'});
       name='dabbir_knowledge_propose_v2';args={p_business_id:businessId,p_conversation_id:id(body.conversation_id),p_correction_id:id(body.correction_id),p_entity_type:body.entity_type,p_alias:body.alias.trim(),p_target_id:id(body.target_id)};
     }else if(['approve','reject','revoke','rollback'].includes(action)&&id(body.proposal_id)){
       name='dabbir_knowledge_review_v2';args={p_business_id:businessId,p_proposal_id:id(body.proposal_id),p_action:action};

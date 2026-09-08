@@ -1,4 +1,5 @@
 import { runUnderstandingTurn } from './_dabbir-understanding-orchestrator.js';
+import { catalogMenuForContext, resolveCatalogService, sendMetaCatalogProducts } from './_dabbir-whatsapp-catalog.js';
 import { createHash } from 'node:crypto';
 import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { serviceRpc, finalizeOutboundReply, markOutboundResult, sendMetaText } from './_whatsapp-live-core.js';
@@ -190,7 +191,7 @@ async function reserveReply(claim,context,body,purpose){
   if(!row?.reservation_id)throw Object.assign(new Error('AI_OUTBOUND_RESERVATION_UNVERIFIED'),{code:'AI_OUTBOUND_RESERVATION_UNVERIFIED'});
   return row;
 }
-async function deliver(claim,context,body,purpose='reply'){
+async function deliver(claim,context,body,purpose='reply',transport=null){
   const reservation=await reserveReply(claim,context,body,purpose);
   if(reservation.should_send!==true){
     if(claim.semantic_version&&!reservation.provider_message_id)throw Object.assign(new Error('SEMANTIC_OUTBOUND_UNCERTAIN'),{code:'SEMANTIC_OUTBOUND_UNCERTAIN',ambiguous:true});
@@ -200,7 +201,7 @@ async function deliver(claim,context,body,purpose='reply'){
   const connection=await loadConversationConnectionWithServiceKey(key,context.business.id,context.conversation.id);
   if(!connection||connection.status!=='connected')throw Object.assign(new Error('WHATSAPP_TENANT_NOT_LINKED'),{code:'WHATSAPP_TENANT_NOT_LINKED'});
   try{
-    const sent=await sendMetaText({connection,businessId:context.business.id,recipient:reservation.recipient_handle,body});
+    const sent=transport?await transport(connection,reservation.recipient_handle):await sendMetaText({connection,businessId:context.business.id,recipient:reservation.recipient_handle,body});
     try{return {...await finalizeOutboundReply({reservationId:reservation.reservation_id,providerMessageId:sent.providerMessageId}),providerMessageId:sent.providerMessageId}}
     catch(error){await markOutboundResult(reservation.reservation_id,'AMBIGUOUS','WHATSAPP_OUTBOUND_FINALIZE_UNCERTAIN');error.ambiguous=true;throw error}
   }catch(error){
@@ -233,7 +234,14 @@ async function executeSelectedSlot(claim,context,index,lang){
 async function processClaim(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)throw Object.assign(new Error('AI_CONTEXT_UNVERIFIED'),{code:'AI_CONTEXT_UNVERIFIED'});
-  return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,
+  return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,
+    deliverMenu:async(guarded,c,lang)=>{
+      const connection=await loadConversationConnectionWithServiceKey(serviceKey(),c.business.id,c.conversation.id);
+      const menu=await catalogMenuForContext({context:c,connection,allowSync:false});
+      if(!menu?.items?.length)return null;
+      try{return await deliver(guarded,c,lang==='ar'?'اختر الخدمة التي تريدها من الكتالوج.':'Choose the service you want from the catalog.','catalog-products',(conn,recipient)=>sendMetaCatalogProducts({connection:conn,businessId:c.business.id,recipient,catalogId:menu.catalogId,items:menu.items,lang}));}
+      catch(error){if(error?.ambiguous!==true&&error?.definitive===true&&Number(error?.providerStatus)!==429)return null;throw error;}
+    },
     planner:async(c,safeContext)=>{
       const deadline=Date.now()+18000;let providerAttempts=0;
       const fetchBounded=async(url,options={})=>{if(++providerAttempts>4||Date.now()>=deadline)throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});const signal=AbortSignal.timeout(Math.max(1,deadline-Date.now()));return fetch(url,{...options,signal:options.signal?AbortSignal.any([signal,options.signal]):signal});};

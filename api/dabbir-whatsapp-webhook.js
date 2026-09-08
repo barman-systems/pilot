@@ -84,12 +84,59 @@ function parseRawBody(rawBody) {
   }
 }
 
+function safeMetaId(value) {
+  const text = String(value || '').trim();
+  return /^[0-9]{5,40}$/.test(text) ? text : '';
+}
+
+function safeRetailerId(value) {
+  return String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255);
+}
+
+function catalogEnvelope(message = {}) {
+  const referred = message?.context?.referred_product || null;
+  const referredCatalogId = safeMetaId(referred?.catalog_id);
+  const referredRetailerId = safeRetailerId(referred?.product_retailer_id);
+  if (referredCatalogId && referredRetailerId) {
+    return {
+      catalogId: referredCatalogId,
+      productRetailerId: referredRetailerId,
+      orderItems: [],
+      marker: `[DABBIR_CATALOG_PRODUCT catalog_id=${referredCatalogId} product_retailer_id=${encodeURIComponent(referredRetailerId)}]`,
+    };
+  }
+
+  const order = message?.order || null;
+  const orderCatalogId = safeMetaId(order?.catalog_id);
+  const orderItems = (Array.isArray(order?.product_items) ? order.product_items : [])
+    .map(item => ({
+      product_retailer_id: safeRetailerId(item?.product_retailer_id),
+      quantity: Math.max(1, Math.min(Number.parseInt(String(item?.quantity || '1'), 10) || 1, 999)),
+    }))
+    .filter(item => item.product_retailer_id)
+    .slice(0, 30);
+  if (orderCatalogId && orderItems.length) {
+    const ids = orderItems.map(item => `${encodeURIComponent(item.product_retailer_id)}*${item.quantity}`).join(',');
+    return {
+      catalogId: orderCatalogId,
+      productRetailerId: orderItems.length === 1 ? orderItems[0].product_retailer_id : null,
+      orderItems,
+      marker: `[DABBIR_CATALOG_ORDER catalog_id=${orderCatalogId} items=${ids}]`,
+    };
+  }
+  return { catalogId: null, productRetailerId: null, orderItems: [], marker: '' };
+}
+
 function messageText(message = {}) {
-  return message.text?.body
+  const base = message.text?.body
     || message.button?.text
     || message.interactive?.button_reply?.title
     || message.interactive?.list_reply?.title
+    || message.order?.text
     || '';
+  const envelope = catalogEnvelope(message);
+  const customerText=String(base || '').replace(/\[DABBIR_CATALOG_(?:PRODUCT|ORDER)[^\]]*\]/g,'').trim();
+  return [customerText, envelope.marker].filter(Boolean).join('\n');
 }
 
 function coexistenceMessages(value = {}) {
@@ -118,6 +165,7 @@ export function extractWhatsAppEvents(payload = {}) {
         const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
           .map(contact => [String(contact?.wa_id || ''), String(contact?.profile?.name || '').slice(0, 120)]));
         for (const message of value.messages || []) {
+          const envelope = catalogEnvelope(message);
           events.push({
             type: 'message',
             messageId: message.id || null,
@@ -129,6 +177,9 @@ export function extractWhatsAppEvents(payload = {}) {
             mediaId: message.audio?.id || null,
             mediaMimeType: message.audio?.mime_type || null,
             voice: message.audio?.voice === true,
+            catalogId: envelope.catalogId,
+            productRetailerId: envelope.productRetailerId,
+            orderItems: envelope.orderItems,
             phoneNumberId,
             displayPhoneNumber,
           });
@@ -153,6 +204,7 @@ export function extractWhatsAppEvents(payload = {}) {
         const messages = coexistenceMessages(value);
         if (messages.length) {
           for (const message of messages) {
+            const envelope = catalogEnvelope(message);
             events.push({
               type: change.field === 'smb_message_echoes' ? 'app_message_echo' : 'history_message',
               sourceField: change.field,
@@ -162,6 +214,9 @@ export function extractWhatsAppEvents(payload = {}) {
               timestamp: message.timestamp || null,
               messageType: message.type || null,
               text: String(messageText(message) || '').slice(0, 4000),
+              catalogId: envelope.catalogId,
+              productRetailerId: envelope.productRetailerId,
+              orderItems: envelope.orderItems,
               phoneNumberId,
               displayPhoneNumber,
             });
@@ -185,6 +240,12 @@ export function extractWhatsAppEvents(payload = {}) {
 
 export function classifyDABBIREvent(event, project = 'generic') {
   if (event.type !== 'message') return { classification: 'MESSAGE_STATUS', workflow: ['STATUS_UPDATE'] };
+  if (event.messageType === 'order' && event.catalogId) {
+    return { classification: 'CATALOG_ORDER', workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'BOOKING', 'TASK', 'FOLLOW_UP'] };
+  }
+  if (event.catalogId && event.productRetailerId) {
+    return { classification: 'CATALOG_PRODUCT_ENQUIRY', workflow: ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'BOOKING', 'TASK', 'FOLLOW_UP'] };
+  }
   if (project === 'dabbir_clinics') {
     const classification = classifyClinicMessage(event.text);
     return { classification, workflow: classification === 'APPOINTMENT_REQUEST' ? ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'BOOKING', 'TASK', 'FOLLOW_UP'] : ['CLASSIFY', 'CUSTOMER', 'CONVERSATION', 'TASK', 'FOLLOW_UP'] };
@@ -239,6 +300,7 @@ export default async function handler(req, res) {
   const routed = events.map((event) => ({ ...event, ...classifyDABBIREvent(event, project) }));
   const messageCount = routed.filter(e => e.type === 'message').length;
   const voiceMessageCount = routed.filter(e => e.type === 'message' && e.messageType === 'audio' && e.mediaId).length;
+  const catalogMessageCount = routed.filter(e => e.type === 'message' && e.catalogId).length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const coexistenceCount = routed.filter(e => ['app_message_echo', 'history_message', 'app_state_sync', 'coexistence_sync'].includes(e.type)).length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
@@ -282,6 +344,7 @@ export default async function handler(req, res) {
       event_count: routed.length,
       message_count: messageCount,
       voice_message_count: voiceMessageCount,
+      catalog_message_count: catalogMessageCount,
       status_count: statusCount,
       coexistence_event_count: coexistenceCount,
     });
@@ -311,6 +374,7 @@ export default async function handler(req, res) {
     event_count: routed.length,
     message_count: messageCount,
     voice_message_count: voiceMessageCount,
+    catalog_message_count: catalogMessageCount,
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
@@ -332,6 +396,7 @@ export default async function handler(req, res) {
     event_count: routed.length,
     message_count: messageCount,
     voice_message_count: voiceMessageCount,
+    catalog_message_count: catalogMessageCount,
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),

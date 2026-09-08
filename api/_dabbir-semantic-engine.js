@@ -134,7 +134,8 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   s.business_constraints=arr(c.understanding_policy?.required_fields).filter(x=>['location','vehicle','worker'].includes(x));
   s.owner_policies=arr(c.approved_aliases).map(x=>({id:x.id,version:x.version})).slice(0,20);
   s.ontology=Object.keys(ONTOLOGIES).find(k=>k!=='default' && String(c.business?.business_type).includes(k))||'default';
-  const texts=arr(c.batch_messages).map(x=>clean(x.body,1500)).filter(Boolean).slice(-12).flatMap(t=>t.split(/(?=لا قصدي|i mean)/i));
+  const turns=arr(c.batch_messages).slice(-12).flatMap(x=>clean(x.body,1500).split(/(?=لا قصدي|i mean)/i).map(body=>({body,catalog_service_id:x.catalog_service_id})));
+  const texts=turns.map(x=>x.body);
   const all=normalizeSemanticText(texts.join(' '));
   s.language=/[\u0600-\u06ff]/.test(all)?'ar':/[a-z]/.test(all)?'en':s.language;
   s.dialect=/ابا|ابي|ابغي|باجر|عقب|طرش|دز|هيه|شو|ماشي/.test(all)?'GCC':s.dialect;
@@ -144,6 +145,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   const refuse=/انس(?:ى)?\s+تعليمات|ignore\s+(?:all\s+|previous\s+)?instructions|باقي العملاء|عملاء نشاط اخر|other (?:customers|tenants)|system prompt|api.?key|access.?token/.test(all);
   if(!scopeValid(c)){s.overall_confidence=0;return route('HANDOFF','TENANT_SCOPE_UNVERIFIED');}
   if(c.conversation.newer_customer_message_exists){s.overall_confidence=0;return route('SUPERSEDED','NEWER_CUSTOMER_MESSAGE');}
+  if(c.catalog_error)return route('HANDOFF',c.catalog_error);
   if(['human_active','action_required'].includes(c.conversation.state)||c.human_takeover){return route('HANDOFF','HUMAN_TAKEOVER_ACTIVE');}
   if(refuse){s.intent='UNSUPPORTED';s.overall_confidence=1;return route('REPLY','UNTRUSTED_INSTRUCTION',s.language==='ar'?'أقدر أساعدك بخدمات هذا النشاط ومواعيدك فقط.':'I can help with this business and your own appointments only.');}
   if(/(?:ابا|ابي|ابغي|اريد|اكلم|كلم|حولني|مع)\s*(?:اكلم\s*)?(?:المدير|المالك|موظف|انسان|شخص)|\b(?:human|manager|speak to staff|talk to the owner)\b/.test(all)){s.goal='HUMAN_ASSISTANCE';s.intent='HUMAN_ASSISTANCE';s.overall_confidence=1;return route('HANDOFF','CUSTOMER_REQUESTED_HUMAN');}
@@ -152,7 +154,10 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   if(valueOf(s,'service')&&!scoped(c.services,c).some(x=>x.id===valueOf(s,'service')))invalidate(s,'service',stamp);
   if(valueOf(s,'worker')&&!scoped(c.workers,c).some(x=>x.id===valueOf(s,'worker')))invalidate(s,'worker',stamp);
   fact(s,'branch',c.conversation.branch_id,'DATABASE_FACT',1,stamp);
-  for(const raw of texts) {
+  for(const turn of turns) {
+    const raw=turn.body;
+    const catalogService=scoped(c.services,c).find(x=>x.id===turn.catalog_service_id);
+    if(catalogService){invalidate(s,'slot',stamp);fact(s,'service',catalogService.id,'CUSTOMER_STATED',.99,stamp,{label:nameOf(catalogService),grounded_by:'DATABASE_FACT'});fact(s,'price',catalogService.price,'DATABASE_FACT',1,stamp);s.goal='BOOK_SERVICE';s.intent='BOOKING';s.intent_confirmed=true;s.policy_dependencies=[];}
     const t=normalizeSemanticText(raw),correction=/لا قصدي|قصدي|مو هذا|مب هذا|i mean|actually|instead/.test(t),source=correction?'CUSTOMER_CORRECTION':'CUSTOMER_STATED';
     const positive=t.replace(/(?:لا|مب|مو|not|dont|don't)\s+(?:تلغي|تلغ|cancel)(?:\s+(?:الاول|الثاني|the first|the second))?/g,' ');
     const cancel=/(?:^|\s)(?:الغ|الغيه|الغي|الغاء|تلغي|cancel)(?:\s|$)/.test(positive);
@@ -185,7 +190,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     const ordinal=resolveOrdinal(raw),slots=arr(c.pending_state?.payload?.slots);
     const pendingLive=c.pending_state?.payload?.presented===true && c.pending_state?.expires_at && Date.parse(c.pending_state.expires_at)>now.getTime();
     if(ordinal.ambiguous)s.unresolved_references.push('multiple_options');
-    if(['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent)) {
+    if(['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent) && !(s.intent==='RESCHEDULE_BOOKING' && pendingLive && c.pending_state?.pending_action==='choose_slot' && ordinal.index!=null && !d && !time)) {
       const appointments=scoped(c.upcoming_appointments,c);
       // Ordinals refer only to appointments actually presented, with a stable id order.
       const offered=arr(c.pending_state?.payload?.appointments);

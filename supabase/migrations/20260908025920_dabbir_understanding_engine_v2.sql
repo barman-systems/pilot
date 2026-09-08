@@ -229,7 +229,8 @@ begin
     select * into entry from public.dabbir_ai_action_ledger where business_id=b.business_id and operation_key=k;
     insert into public.dabbir_customer_memory(business_id,customer_id,memory_key,value,source,confidence,status,version,last_confirmed_at,expires_at,verified_action_id)
       values(b.business_id,b.customer_id,'last_verified_service',jsonb_build_object('id',sid),'DATABASE_FACT',1,'verified',1,now(),now()+interval '180 days',entry.id)
-      on conflict(business_id,customer_id,memory_key) do update set value=excluded.value,source=excluded.source,confidence=1,status='verified',version=public.dabbir_customer_memory.version+1,last_confirmed_at=now(),expires_at=excluded.expires_at,verified_action_id=excluded.verified_action_id;
+      on conflict(business_id,customer_id,memory_key) do update set value=excluded.value,source=excluded.source,confidence=1,status='verified',version=public.dabbir_customer_memory.version+1,last_confirmed_at=now(),expires_at=excluded.expires_at,verified_action_id=excluded.verified_action_id
+      where public.dabbir_customer_memory.status<>'revoked';
   end if;
   insert into public.dabbir_ai_understanding_events(business_id,conversation_id,batch_id,event_type,version,metrics) values(b.business_id,b.conversation_id,b.id,'VERIFIED_ACTION',p_version,jsonb_build_object('action',p_action,'verified',true,'provider_verified',false)) on conflict do nothing;
   return result;
