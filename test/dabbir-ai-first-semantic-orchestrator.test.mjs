@@ -90,3 +90,16 @@ test('availability intent correction retains exact current-message evidence with
   assert.ok(h.committed.missing_fields.includes('service'));
   assert.equal(h.calls.some(c=>c.name==='dabbir_whatsapp_ai_check_availability'),false);
 });
+
+for(const [text,time] of [['فاضين بكره 9 الصبح','09:00'],['فاضين بكره 5 المسا','17:00']])test('full-sentence clock evidence remains grounded: '+text,async()=>{
+  const h=harness({text,planner:()=>({action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,riskLevel:'LOW',serviceName:null,
+    entities:[{entity:'time',value:time,evidence:text,confidence:.99,correction:false}]})});
+  await h.run();assert.equal(h.executions,0);assert.equal(h.committed.entities.time.value,time);
+  assert.equal(h.committed.entities.time.source,'CUSTOMER_STATED');
+});
+
+test('a quantity before a morning phrase does not become a verified clock',async()=>{
+  const h=harness({text:'عندي 9 سيارات الصبح',planner:()=>({action:'CLARIFY',intent:'BOOKING',confidence:.98,riskLevel:'LOW',serviceName:null,
+    entities:[{entity:'time',value:'09:00',evidence:'عندي 9 سيارات الصبح',confidence:.99,correction:false}]})});
+  await h.run();assert.equal(h.executions,0);assert.equal(h.committed.entities.time.source,'AI_INFERENCE');
+});
