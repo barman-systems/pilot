@@ -45,10 +45,10 @@ export async function probeSemanticInterpreter() {
     referenceTime:'2026-09-08T18:10:11Z',context:{business:{type:'car_wash',timezone:'Asia/Dubai'},
       services:[{name:'غسيل كامل'}],activity:{delivery_mode:'MOBILE',required:['service','vehicle','location','date','time']}}});
   const p=result.proposal;
-  const has=(entity,value)=>p.entities.some(f=>f.entity===entity && f.value===value && 'فاضين بكره 9 الصبح'.includes(f.evidence));
-  const passed=p.intent==='BOOKING' && p.riskLevel==='LOW' && p.serviceName===null
+  const has=(entity,value)=>p.entities.some(f=>f.entity===entity && f.value===value && f.confidence>=.9 && 'فاضين بكره 9 الصبح'.includes(f.evidence));
+  const passed=p.intent==='BOOKING' && p.confidence>=.86 && p.riskLevel==='LOW' && p.serviceName===null
     && has('date','2026-09-09') && has('time','09:00');
   return {ok:passed,state:passed?'SUCCESS':'PROVIDER_ERROR',error:passed?null:'SEMANTIC_PROBE_FAILED',
     provider:result.provider,model:result.model,semantic_probe:true,case_id:'gcc_availability_tomorrow_morning',
-    checks:{booking_intent:p.intent==='BOOKING',date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null}};
+    checks:{booking_intent:p.intent==='BOOKING' && p.confidence>=.86,date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null}};
 }

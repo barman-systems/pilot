@@ -67,7 +67,8 @@ function parseTime(raw,s) {
   const broad=/(?:عقب|بعد|ع)\s*(?:المغرب|العصر)|(?:after|around)\s+(?:sunset|maghrib|asr)/.test(t);
   const clockContext=/(?:الساعه|الساع|at\s|:|\b[ap]m\b)/.test(t)||corrected||/^\d{1,2}(?:\s|$)/.test(t);
   if(clockContext)for(const [w,n] of Object.entries(CLOCK_WORDS))t=t.replace(new RegExp('(^|\\s)'+w+'(?=\\s|$)','g'),'$1'+n);
-  const clock=t.match(/(?:الساعه\s*|الساع\s*|at\s+|^)([01]?\d|2[0-3])(?::([0-5]\d))?(?:\s*(am|pm|ص|م))?(?=\s|$)/);
+  const clock=t.match(/(?:الساعه\s*|الساع\s*|at\s+|^)([01]?\d|2[0-3])(?::([0-5]\d))?(?:\s*(am|pm|ص|م))?(?=\s|$)/)
+    || t.match(/(?:^|\s)(0?[1-9]|1[0-2])(?::([0-5]\d))?\s*(am|pm|ص|م|الصبح|صباحا|صباح|مساء|المسا|morning|evening)(?=\s|$)/);
   let period=/(?:مساء|المسا|المغرب|الليل|العصر|evening|afternoon|night|\bpm\b)/.test(t)?'pm':/(?:صباح|الصبح|الفجر|morning|\bam\b)/.test(t)?'am':null;
   if(broad && !clock)return {value:null,confidence:.55,part:t.includes('مغرب')||/sunset|maghrib/.test(t)?'after_maghrib':'after_asr'};
   if(!clock) {
@@ -79,7 +80,7 @@ function parseTime(raw,s) {
     return null;
   }
   const h=Number(clock[1]),minute=Number(clock[2]||0);
-  if(clock[3])period=/^(pm|م)$/.test(clock[3])?'pm':'am';
+  if(clock[3] && /^(am|pm|ص|م)$/.test(clock[3]))period=/^(pm|م)$/.test(clock[3])?'pm':'am';
   // Reuse only a period explicitly stated by the same customer in this semantic session.
   if(!period && s.entities.time?.period_explicit && ['CUSTOMER_STATED','CUSTOMER_CORRECTION','CUSTOMER_CONFIRMED'].includes(s.entities.time.source))period=s.entities.time.period;
   else if(!period && corrected && s.entities.time?.period)period=s.entities.time.period;
