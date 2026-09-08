@@ -30,12 +30,3 @@ test('authoritative ledger exposes per-business channel provider model and expli
   assert.match(migration,/business_id/);
   assert.match(migration,/on conflict \(business_id,operation_key\) do update/i);
 });
-
-test('failed provider diagnostics include HTTP and network evidence without customer data or credentials',async()=>{
-  const {generateDABBIRAiReply}=await import('../api/_dabbir-whatsapp-ai-meter.js');
-  const logs=[],warn=console.warn;console.warn=(...args)=>logs.push(args);
-  try{
-    for(const network of [false,true])await generateDABBIRAiReply({project:'dabbir_businesses',message:'PRIVATE_CUSTOMER_TEXT',businessContext:'PRIVATE_BUSINESS_CONTEXT',env:{GROQ_API_KEY:'TEST_CREDENTIAL_NEVER_LOG'},fetchImpl:async()=>{if(network)throw new Error('TEST_CREDENTIAL_NEVER_LOG');return new Response('{}',{status:429});}});
-  }finally{console.warn=warn;}
-  const raw=JSON.stringify(logs);assert.match(raw,/dabbir_whatsapp_ai_provider_chain_failed/);assert.match(raw,/429/);assert.match(raw,/NETWORK_ERROR/);assert.doesNotMatch(raw,/PRIVATE_|TEST_CREDENTIAL|https:/);
-});

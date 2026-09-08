@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { isWhatsAppAiProviderFailure, verifiedContinuityReplay } from '../api/_dabbir-whatsapp-ai-provider-failover.js';
+import { isWhatsAppAiProviderFailure } from '../api/_dabbir-whatsapp-ai-provider-failover.js';
 
 const helper=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-provider-failover.js',import.meta.url),'utf8');
 const worker=fs.readFileSync(new URL('../api/dabbir-whatsapp-ai-worker.js',import.meta.url),'utf8');
 const cron=fs.readFileSync(new URL('../api/dabbir-whatsapp-ai-cron.js',import.meta.url),'utf8');
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260908173803_dabbir_provider_retry_checkpoint_v1.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260907081000_dabbir_whatsapp_ai_provider_failover_v1.sql',import.meta.url),'utf8');
 
-test('all supported AI provider and planner failures are classified for bounded continuity failover',()=>{
+test('all supported AI provider and planner failures are classified for immediate continuity failover',()=>{
   for(const code of ['gateway_http_404','gateway_timeout','gemini_http_429','groq_network_error','cloudflare_timeout','AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','empty_ai_response']){
     assert.equal(isWhatsAppAiProviderFailure(code),true,code);
   }
@@ -28,12 +28,12 @@ test('provider failover creates one durable handoff and never leaks the provider
   assert.match(helper,/markOutboundResult/);
 });
 
-test('fast WhatsApp dispatch defers the retry decision to the database and preserves terminal outcomes',()=>{
+test('fast WhatsApp dispatch converts provider RETRY or terminal planner failure into continuity handoff',()=>{
   const processPos=worker.indexOf('processWhatsAppDispatchWithServiceMenu');
   const failoverPos=worker.indexOf('failoverWhatsAppAiProvider(token,result.error)');
   assert.ok(processPos>=0&&failoverPos>processPos);
   assert.match(worker,/\['RETRY','HUMAN_REQUIRED'\]\.includes\(result\?\.state\)/);
-  assert.match(worker,/state:failover.state/);
+  assert.match(worker,/state:'HUMAN_REQUIRED'/);
 });
 
 test('recovery cron drains AI failure retries so an interrupted fast dispatch cannot stay silent',()=>{
@@ -41,8 +41,8 @@ test('recovery cron drains AI failure retries so an interrupted fast dispatch ca
   assert.match(cron,/provider_failovers/);
   assert.match(helper,/dabbir_whatsapp_ai_provider_failover_candidates/);
   assert.match(migration,/b\.state='RETRY'/);
-  assert.match(migration,/b\.attempt_count>=2/);
-  assert.match(migration,/coalesce\(v_batch\.attempt_count,0\)<2/);
+  assert.match(migration,/b\.state='HUMAN_REQUIRED'/);
+  assert.match(migration,/now\(\)-interval '10 minutes'/);
 });
 
 test('database failover is service-role only, stale-turn safe, atomic, terminal, and preserves the real failure',()=>{
@@ -56,10 +56,4 @@ test('database failover is service-role only, stale-turn safe, atomic, terminal,
   assert.match(migration,/state='HUMAN_REQUIRED'/);
   assert.match(migration,/revoke all on function public\.dabbir_whatsapp_ai_provider_failover\(uuid,text\) from public,anon,authenticated/i);
   assert.match(migration,/grant execute on function public\.dabbir_whatsapp_ai_provider_failover\(uuid,text\) to service_role/i);
-});
-
-test('a deduplicated reservation is proof of delivery only with terminal success and a provider ID',()=>{
-  for(const reservation_state of ['RESERVED','SENDING','FAILED','AMBIGUOUS'])assert.equal(verifiedContinuityReplay({reservation_state,provider_message_id:'meta-id'}).delivered,false);
-  assert.equal(verifiedContinuityReplay({reservation_state:'SENT'}).delivered,false);
-  assert.equal(verifiedContinuityReplay({reservation_state:'SENT',provider_message_id:'meta-id'}).delivered,true);
 });

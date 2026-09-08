@@ -64,7 +64,7 @@ function sessionPrevious(previous,c,at){
   const updated=Date.parse(previous?.updated_at||previous?.created_at||'');
   const expired=previous?.expires_at&&Date.parse(previous.expires_at)<=at.getTime();
   const idle=!Number.isFinite(updated)||at.getTime()-updated>SEMANTIC_SESSION_IDLE_MS;
-  if((expired||idle)&&!pendingStateLive(c,at)&&!(previous.recovery_required===true&&!expired))return {previous:null,reset:true};
+  if((expired||idle)&&!pendingStateLive(c,at))return {previous:null,reset:true};
   return {previous,reset:false};
 }
 function greetingOnly(messages){
@@ -91,19 +91,6 @@ function constrainedContinuation(messages,previous){
     if(/^(?:(?:الساعه|الساع|at)\s*)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?(?:\s*(?:am|pm|ص|م|صباح|مساء|المسا|العصر|الليل))?$/.test(text))return true;
   }
   return false;
-}
-function recoveryGreetingDecision(state,c,at){
-  // A greeting never confirms an interrupted operation or an old slot.
-  delete state.entities.slot;
-  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:c.business.timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(at).map(p=>[p.type,p.value]));
-  const today=`${parts.year}-${parts.month}-${parts.day}`,clock=`${parts.hour}:${parts.minute}`;
-  const day=val(state,'date'),time=val(state,'time');
-  if(day&&day<today){delete state.entities.date;delete state.entities.time;}
-  else if(day===today&&time&&time<=clock)delete state.entities.time;
-  state.pending_action='CLARIFY';state.clarification_entity='intent_confirmation';state.intent_confirmed=false;
-  state.missing_fields=['intent_confirmation'];state.operational_confidence=0;
-  return {action:'CLARIFY',intent:state.intent,confidence:state.semantic_confidence||0,riskLevel:'LOW',missingFields:state.missing_fields,
-    reasonCode:'INTERRUPTED_REQUEST_RESUME',reply:state.language==='ar'?'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟':'Hello. Your previous request is unfinished. Would you like to continue it?'};
 }
 function greetingDecision(state,sessionReset){
   state.sub_intent='GREETING';state.missing_fields=[];state.unresolved_references=[];
@@ -181,32 +168,30 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   state.model_calls=0;state.semantic_interpreter='deterministic';delete state.planner_failure_code;delete state.semantic_ai_override;
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
-  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);
+  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);
   const deterministic={state:structuredClone(state),decision:{...decision}};
-  const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&(!constrainedContinuation(c.batch_messages,semanticPrevious)||semanticPrevious?.recovery_required===true)&&naturalLanguageTurn(c.batch_messages));
+  const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&!constrainedContinuation(c.batch_messages,semanticPrevious)&&naturalLanguageTurn(c.batch_messages));
   if(shouldInterpret){
     budget();let proposal,plannerFailure;
     try{proposal=await planner(c,aiFirstPlannerContext(c,state));}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
     if(plannerFailure){
-      await rpc('dabbir_semantic_checkpoint_failure_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
-        p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_error:plannerFailure});
       if(Number(claim.attempt_count||1)<2){await finish(claim,'RETRY',plannerFailure);return {state:'RETRY',action:'RETRY',error:plannerFailure};}
       await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
       await handoff(c,'AI_PROVIDER_FAILED_TWICE','AI interpretation failed twice','SUPPORT');
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
-      return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
+      return {state:'HUMAN_REQUIRED',action:'HANDOFF',customer_requested_human:false};
     }else{
       const conflict=proposalConflicts(state,proposal);const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=understandConversation({context:providerContext,previous:providerPrevious,now:turnNow,proposal}));
-      state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
+      state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;
       if(conflict&&!state.semantic_ai_override)state.semantic_ai_override={from:deterministic.state.intent,to:normalizedProposalIntent(proposal),confidence:Number(proposal?.confidence)||0};
     }
   }
   if(session.reset)state.session_reset=true;else delete state.session_reset;
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
-  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);}
+  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);}
   const version=committed.version,lang=state.language;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});

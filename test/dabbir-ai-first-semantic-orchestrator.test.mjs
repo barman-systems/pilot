@@ -15,7 +15,6 @@ function harness({text,planner,extra={}}){
   const rpc=async(name,args)=>{
     calls.push({name,args});
     if(name==='dabbir_semantic_load_v2')return {semantic_state:{},version:0,message_revision:1,verified_memory:c.verified_memory,approved_aliases:[],branches:c.branches};
-    if(name==='dabbir_semantic_checkpoint_failure_v1')return {ok:true,version:1,executable:false};
     if(name==='dabbir_semantic_commit_v2'){committed=args.p_state;return {version:1,state:committed,replay:false};}
     if(name==='dabbir_semantic_assert_current_v2')return true;
     if(name==='dabbir_semantic_set_pending_v2')return {pending_action:args.p_action};
