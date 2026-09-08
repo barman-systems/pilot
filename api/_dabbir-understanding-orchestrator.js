@@ -3,12 +3,13 @@ import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
 const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
+const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
 export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
-  tool_selection:d.reasonCode,model_calls:s.model_calls||0,session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
+  tool_selection:d.reasonCode,model_calls:s.model_calls||0,planner_failure_code:s.planner_failure_code||null,session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
 function exactServiceByText(c,raw,allowedIds=null){
@@ -89,6 +90,15 @@ function staleChoiceDecision(state){
   return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:ar?'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.':'The previous list has expired. Tell me what you need or ask for the services again.'};
 }
 
+function plannerRecoveryDecision(state,code){
+  state.model_calls=1;state.planner_failure_code=code;
+  state.pending_action='CLARIFY';state.clarification_entity='request';
+  state.overall_confidence=.35;state.semantic_confidence=.35;
+  state.operational_confidence=Math.min(.35,state.transcription_confidence??1);
+  return {action:'CLARIFY',intent:state.intent,confidence:.35,riskLevel:'LOW',missingFields:[],reasonCode:'PLANNER_RECOVERY_CLARIFICATION',
+    reply:state.language==='ar'?'تقصد الاستفسار عن الخدمات والأسعار، أو تبا تحجز؟':'Are you asking about services and prices, or would you like to book?'};
+}
+
 // One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
 // Adapter injection makes provider/retry/concurrency tests exercise the real runtime path.
 export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,planner,now=()=>new Date()}) {
@@ -122,23 +132,34 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const newScope=!sameSemanticScope(load.semantic_state,c);
   const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
   if(session.reset)state.session_reset=true;else delete state.session_reset;
-  if(orphanChoice)decision=staleChoiceDecision(state);
-  else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
+  // A convenience reply cannot override takeover, tenant, stale-message or voice gates.
+  const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
+  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);
+  else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);
+  state.model_calls=0;delete state.planner_failure_code;
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   // A model is needed only when deterministic evidence does not resolve the request.
   // It receives bounded, de-identified context; its result must pass the same reducer.
   if(decision.reasonCode==='NO_OPERATIONAL_AUTHORITY' && planner && arr(c.batch_messages).some(x=>String(x.body||'').length>12)) {
     budget();
-    const proposal=await planner(c,semanticPlannerContext(c,state));
-    ({state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow,proposal}));
-    state.model_calls=1;
+    let proposal,plannerFailure;
+    try{proposal=await planner(c,semanticPlannerContext(c,state));}
+    catch(error){
+      if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;
+      plannerFailure=error.code;
+    }
+    if(plannerFailure)decision=plannerRecoveryDecision(state,plannerFailure);
+    else {
+      ({state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow,proposal}));
+      state.model_calls=1;delete state.planner_failure_code;
+    }
   }
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
     p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
   if(committed.replay){
     state=committed.state;decision={...decision,action:state.pending_action||decision.action};
-    if(orphanChoice)decision=staleChoiceDecision(state);else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
+    if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);
   }
   const version=committed.version,lang=state.language;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
@@ -191,7 +212,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   }
   if(decision.action==='PRICING'||decision.action==='SERVICE_MENU') {
     if(decision.action==='SERVICE_MENU'&&deliverMenu){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}
-    const services=arr(c.services).filter(x=>decision.action==='SERVICE_MENU'||!val(state,'service')||x.id===val(state,'service')).slice(0,10);
+    const services=scopedServices(c).filter(x=>decision.action==='SERVICE_MENU'||!val(state,'service')||x.id===val(state,'service')).slice(0,10);
     if(services.length){c.servicePresentation={services:services.map(x=>({id:x.id,label:serviceLabel(x)})),presented:false};await setPending('choose_service',c.servicePresentation);}
     decision.reply=services.map((x,i)=>`${i+1}) ${serviceLabel(x)} — ${Number(x.price)} ${c.business.currency_code}`).join('\n')||(lang==='ar'?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
   }
