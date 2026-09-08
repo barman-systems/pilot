@@ -41,6 +41,15 @@ test('invalid output from every provider fails closed without any proposed actio
   await assert.rejects(interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response('hello')}),{code:'AI_PLANNER_UNAVAILABLE'});
 });
 
+test('provider risk is telemetry only and cannot control semantic authority',async()=>{
+  for(const risk_level of ['LOW','MEDIUM','HIGH']){
+    const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},env:{GROQ_API_KEY:'test'},
+      fetchImpl:async()=>response(JSON.stringify({...proposal,risk_level}))});
+    assert.equal(result.proposal.riskLevel,'LOW');
+    assert.equal(result.proposal.modelRiskLevel,risk_level);
+  }
+});
+
 test('ordinary customer replies retain their short answer contract and contact guard',async()=>{
   let body;
   const result=await generateDABBIRAiReply({project:'dabbir_businesses',message:'contact?',env:{GROQ_API_KEY:'test'},
