@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260908105600_dabbir_customer_name_owner_override_v1.sql',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/customer-profile.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/customer-name-ui.js',import.meta.url),'utf8');
+const loader=fs.readFileSync(new URL('../api/car-wash-loader-ui.js',import.meta.url),'utf8');
 const bundles=JSON.parse(fs.readFileSync(new URL('../config/dabbir-ui-bundles.json',import.meta.url),'utf8'));
 const webhook=fs.readFileSync(new URL('../api/dabbir-whatsapp-webhook.js',import.meta.url),'utf8');
 const coexistence=fs.readFileSync(new URL('../api/_whatsapp-coexistence.js',import.meta.url),'utf8');
@@ -29,8 +30,11 @@ test('only an active owner or admin can set the canonical customer name',()=>{
   assert.match(api,/CUSTOMER_NAME_UPDATE_UNVERIFIED/);
 });
 
-test('owner UI exposes customer name edit from customer list and conversation header',()=>{
-  assert.ok(bundles.deferred.includes('/api/customer-name-ui'));
+test('owner UI exposes customer name edit without growing the frozen shell bundle',()=>{
+  assert.equal(bundles.critical.length+bundles.deferred.length,26);
+  assert.ok(!bundles.deferred.includes('/api/customer-name-ui'));
+  assert.match(loader,/src:'\/api\/customer-name-ui\?v=20260908-1'/);
+  assert.match(loader,/ready:'__dabbirCustomerNameEditor'/);
   assert.match(ui,/data\.customerNameEdit=customer\.id/);
   assert.match(ui,/id='dabbirChatCustomerEdit'/);
   assert.match(ui,/\/api\/customer-profile/);
