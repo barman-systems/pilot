@@ -351,14 +351,26 @@ async function browserJourney() {
   assert(operationalBranches.ok&&operationalBranches.json?.branches?.length,'ACTIVITY_BRANCHES_READ_FAILED');
   const operationalBranch=operationalBranches.json.branches[0].id;
   const readOperational=()=>ownerSession.request('/api/activity-intelligence?'+new URLSearchParams({business_id:businessId,branch_id:operationalBranch}));
-  const supportNavigationClear=await page.evaluate(()=>{
-    const support=document.querySelector('#dshFab')?.getBoundingClientRect();
-    const navigation=document.querySelector('#bottomNav')?.getBoundingClientRect();
-    return !!support&&!!navigation&&support.bottom<=navigation.top;
-  });
-  assert(supportNavigationClear,'SUPPORT_BUTTON_OVERLAPS_MOBILE_NAVIGATION');
-  await page.locator('#bottomNav [data-screen="more"]').click();
-  await page.locator('#screen-more [data-screen="settings"]').click();
+  if(await page.locator('#bottomNav').isVisible()){
+    const supportNavigationClear=await page.evaluate(()=>{
+      const support=document.querySelector('#dshFab')?.getBoundingClientRect();
+      const navigation=document.querySelector('#bottomNav')?.getBoundingClientRect();
+      return !!support&&!!navigation&&support.bottom<=navigation.top;
+    });
+    assert(supportNavigationClear,'SUPPORT_BUTTON_OVERLAPS_MOBILE_NAVIGATION');
+    await page.locator('#bottomNav [data-screen="more"]').click();
+    await page.locator('#screen-more [data-screen="settings"]').click();
+    console.log('ACTIVITY_SETTINGS_NAVIGATION=bottom_navigation');
+  }else{
+    const menu=page.locator('#menuBtn:visible');
+    assert(await menu.count()===1,'ACTIVITY_RESPONSIVE_MENU_MISSING');
+    await menu.click();
+    const settingsNav=page.locator('#side.open #nav [data-screen="settings"]:visible');
+    await settingsNav.waitFor({state:'visible',timeout:10000});
+    await settingsNav.click();
+    console.log('ACTIVITY_SETTINGS_NAVIGATION=responsive_sidebar');
+  }
+  await page.locator('#screen-settings.active').waitFor({state:'visible',timeout:10000});
   const operationalForm=page.locator('#dabbirOperationalServices form');
   await operationalForm.waitFor({state:'visible',timeout:20000});
   await operationalForm.locator('[name="branch"]').selectOption(operationalBranch);
