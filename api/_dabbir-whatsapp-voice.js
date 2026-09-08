@@ -37,6 +37,10 @@ function languageFromText(text,fallback='auto'){
   const base=clean(fallback,20).toLowerCase();
   return base.startsWith('ar')?'ar':base.startsWith('en')?'en':'auto';
 }
+function languageHint(value='auto'){
+  const base=clean(value,20).toLowerCase();
+  return base.startsWith('ar')?'ar':base.startsWith('en')?'en':'auto';
+}
 function normalizeMime(value){
   const raw=clean(value,160).toLowerCase().split(';')[0].trim();
   if(!raw.startsWith('audio/'))return '';
@@ -128,13 +132,14 @@ async function loadMetaAudio(claim,{env=process.env,fetchImpl=fetch}={}){
   return {bytes,mimeType:responseMime,connection};
 }
 
-async function transcribeWithGemini(audioBuffer,mimeType,{env=process.env,fetchImpl=fetch}={}){
+async function transcribeWithGemini(audioBuffer,mimeType,{env=process.env,fetchImpl=fetch,languageHint='auto'}={}){
   const key=clean(env.GEMINI_API_KEY,8192);
   if(!key)return null;
+  const expected=languageHint==='ar'?'Arabic (Gulf/UAE dialect likely)':languageHint==='en'?'English':'Arabic or English';
   const model=clean(env.DABBIR_VOICE_GEMINI_MODEL||env.DABBIR_GEMINI_MODEL||'gemini-3.7-flash',160);
   const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//,''))}:generateContent`;
   const prompt=[
-    'Transcribe this WhatsApp voice note faithfully. Preserve Gulf Arabic dialect, names, numbers, dates, times, prices, locations, and any English words exactly as spoken.',
+    `Transcribe this WhatsApp voice note faithfully. Expected primary language: ${expected}. Preserve Gulf Arabic dialect, names, numbers, dates, times, prices, locations, and any English words exactly as spoken.`,
     'Never infer missing words. If audio is noisy, clipped, ambiguous, or any operational detail such as service, date, time, price, location, person name, or number is uncertain, set needs_confirmation=true.',
     'Return ONLY one minified JSON object with schema:',
     '{"transcript":"","language":"ar|en|auto","confidence":0.0,"needs_confirmation":false,"uncertain_terms":[]}',
@@ -156,28 +161,33 @@ async function transcribeWithGemini(audioBuffer,mimeType,{env=process.env,fetchI
   const transcript=clean(parsed.transcript,4000);
   if(!transcript)return null;
   const confidence=Number(parsed.confidence);
+  const detected=languageFromText(transcript,parsed.language||languageHint);
+  const mismatch=(languageHint==='ar'&&detected==='en')||(languageHint==='en'&&detected==='ar');
   return {
     transcript,
-    language:languageFromText(transcript,parsed.language),
-    confidence:Number.isFinite(confidence)?Math.max(0,Math.min(1,confidence)):0.78,
-    needsConfirmation:parsed.needs_confirmation===true,
+    language:detected,
+    confidence:mismatch?Math.min(0.6,Number.isFinite(confidence)?confidence:0.6):(Number.isFinite(confidence)?Math.max(0,Math.min(1,confidence)):0.78),
+    needsConfirmation:parsed.needs_confirmation===true||mismatch,
     uncertainTerms:Array.isArray(parsed.uncertain_terms)?parsed.uncertain_terms.map(v=>clean(v,80)).filter(Boolean).slice(0,8):[],
     provider:'google-gemini',model,
   };
 }
 
-async function transcribeWithCloudflare(audioBuffer,{env=process.env,fetchImpl=fetch}={}){
+async function transcribeWithCloudflare(audioBuffer,{env=process.env,fetchImpl=fetch,languageHint='auto'}={}){
   const token=clean(env.CLOUDFLARE_API_TOKEN,8192),account=clean(env.CLOUDFLARE_ACCOUNT_ID,200);
   if(!token||!account)return null;
+  const hint=languageHint==='ar'||languageHint==='en'?languageHint:'auto';
   const endpoint=`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/ai/run/${CLOUDFLARE_STT_MODEL}`;
+  const request={
+    audio:audioBuffer.toString('base64'),task:'transcribe',vad_filter:true,condition_on_previous_text:false,
+    initial_prompt:hint==='ar'?'ملاحظة صوتية واتساب لنشاط إماراتي. فرّغ العربية الخليجية كما قيلت حرفيًا، مع الأسماء والأرقام والأوقات والمواقع.':'Business WhatsApp voice note. Transcribe exactly; preserve names, numbers, times and locations.',
+    no_speech_threshold:0.6,log_prob_threshold:-1,compression_ratio_threshold:2.4,hallucination_silence_threshold:1,
+  };
+  if(hint!=='auto')request.language=hint;
   const response=await fetchBounded(endpoint,{
     method:'POST',cache:'no-store',redirect:'error',
     headers:{authorization:`Bearer ${token}`,'content-type':'application/json',accept:'application/json'},
-    body:JSON.stringify({
-      audio:audioBuffer.toString('base64'),task:'transcribe',vad_filter:true,condition_on_previous_text:false,
-      initial_prompt:'Gulf Arabic and English business WhatsApp voice note. Preserve dialect, names, numbers, times and locations exactly.',
-      no_speech_threshold:0.6,log_prob_threshold:-1,compression_ratio_threshold:2.4,
-    }),
+    body:JSON.stringify(request),
   },CLOUDFLARE_TIMEOUT_MS,fetchImpl);
   const payload=await response.json().catch(()=>({}));
   if(!response.ok||payload?.success===false){
@@ -185,25 +195,28 @@ async function transcribeWithCloudflare(audioBuffer,{env=process.env,fetchImpl=f
   }
   const transcript=clean(payload?.result?.text||payload?.result?.transcription_info?.text||payload?.text,4000);
   if(!transcript)return null;
-  return {transcript,language:languageFromText(transcript),confidence:0.88,needsConfirmation:false,uncertainTerms:[],provider:'cloudflare-workers-ai',model:CLOUDFLARE_STT_MODEL};
+  const detected=languageFromText(transcript,hint);
+  const mismatch=(hint==='ar'&&detected==='en')||(hint==='en'&&detected==='ar');
+  return {transcript,language:detected,confidence:mismatch?0.55:0.84,needsConfirmation:mismatch,uncertainTerms:[],provider:'cloudflare-workers-ai',model:CLOUDFLARE_STT_MODEL};
 }
 
-export async function transcribeWhatsAppVoiceAudio(audioBuffer,mimeType,{env=process.env,fetchImpl=fetch}={}){
+export async function transcribeWhatsAppVoiceAudio(audioBuffer,mimeType,{env=process.env,fetchImpl=fetch,languageHint='auto'}={}){
   if(!Buffer.isBuffer(audioBuffer)||!audioBuffer.length)throw errorWithCode('VOICE_AUDIO_EMPTY');
   if(audioBuffer.length>MAX_AUDIO_BYTES)throw errorWithCode('VOICE_AUDIO_TOO_LARGE');
   const mime=normalizeMime(mimeType);
   if(!mime)throw errorWithCode('VOICE_AUDIO_MIME_INVALID');
+  const hint=languageHint==='ar'||languageHint==='en'?languageHint:'auto';
   let geminiError=null;
   if(env.GEMINI_API_KEY){
     try{
-      const result=await transcribeWithGemini(audioBuffer,mime,{env,fetchImpl});
+      const result=await transcribeWithGemini(audioBuffer,mime,{env,fetchImpl,languageHint:hint});
       if(result)return result;
       geminiError=errorWithCode('VOICE_GEMINI_TRANSCRIPT_INVALID',{retryable:true});
     }catch(error){geminiError=error;}
   }
   if(env.CLOUDFLARE_API_TOKEN&&env.CLOUDFLARE_ACCOUNT_ID){
     try{
-      const result=await transcribeWithCloudflare(audioBuffer,{env,fetchImpl});
+      const result=await transcribeWithCloudflare(audioBuffer,{env,fetchImpl,languageHint:hint});
       if(result)return result;
     }catch(error){if(!geminiError)geminiError=error;}
   }
@@ -278,7 +291,8 @@ function retryable(error){
 async function processClaim(claim,{env=process.env,fetchImpl=fetch}={}){
   if(claim?.clarification_pending===true)return {state:'CLARIFICATION_REQUIRED',...(await completeClarification(claim,fallbackLanguage(claim)))};
   const media=await loadMetaAudio(claim,{env,fetchImpl});
-  const transcription=await transcribeWhatsAppVoiceAudio(media.bytes,media.mimeType,{env,fetchImpl});
+  const tenantLanguage=fallbackLanguage(claim);
+  const transcription=await transcribeWhatsAppVoiceAudio(media.bytes,media.mimeType,{env,fetchImpl,languageHint:tenantLanguage});
   const finalized=await serviceRpc('dabbir_whatsapp_voice_finalize',{
     p_voice_ingest_id:claim.voice_ingest_id,p_lock_token:claim.lock_token,
     p_transcript:transcription.transcript,p_language:transcription.language,p_confidence:transcription.confidence,
@@ -287,7 +301,7 @@ async function processClaim(claim,{env=process.env,fetchImpl=fetch}={}){
   });
   await recordVoiceUsage(claim,transcription,media.bytes.length);
   if(finalized?.state==='CLARIFICATION_PENDING'){
-    await completeClarification(claim,transcription.language);
+    await completeClarification(claim,tenantLanguage);
     return {state:'CLARIFICATION_REQUIRED',provider:transcription.provider,model:transcription.model,confidence:transcription.confidence};
   }
   return {state:'PROCESSED',provider:transcription.provider,model:transcription.model,confidence:transcription.confidence,message_id:finalized?.message_id||null};
