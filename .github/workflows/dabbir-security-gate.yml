@@ -1,0 +1,72 @@
+name: DABBIR Security Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '43 1 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-security-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-gate:
+    name: tenant privacy and security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DABBIR_SECURITY_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+      DABBIR_SECURITY_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      DABBIR_SECURITY_GATE_REPORT: dabbir-security-gate-report.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run fail-closed repository security policy
+        run: node scripts/dabbir-security-gate.mjs
+
+      - name: Run security regression contracts
+        run: >-
+          node --test
+          test/dabbir-security-gate.test.mjs
+          test/dabbir-bar16-privacy-recovery-contract.test.mjs
+          test/dabbir-whatsapp-ai-closed-loop-hardening.test.mjs
+          test/dabbir-whatsapp-multibranch-outbound-safety.test.mjs
+          test/dabbir-whatsapp-voice-notes-ai-v1.test.mjs
+
+      - name: Publish security verdict summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$DABBIR_SECURITY_GATE_REPORT" ]; then
+            echo '### DABBIR Security Gate' >> "$GITHUB_STEP_SUMMARY"
+            echo '- Verdict: **NO REPORT / FAIL-CLOSED**' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          verdict="$(jq -r '.verdict // "UNKNOWN"' "$DABBIR_SECURITY_GATE_REPORT")"
+          failures="$(jq -r '.required_failures // -1' "$DABBIR_SECURITY_GATE_REPORT")"
+          changed="$(jq -r '.changed_files_scanned // 0' "$DABBIR_SECURITY_GATE_REPORT")"
+          tracked="$(jq -r '.tracked_files_scanned // 0' "$DABBIR_SECURITY_GATE_REPORT")"
+          {
+            echo '### DABBIR Security Gate'
+            echo "- Verdict: **${verdict}**"
+            echo "- Required failures: ${failures}"
+            echo "- Changed files inspected: ${changed}"
+            echo "- Tracked files scanned for client-secret / committed-secret invariants: ${tracked}"
+          } >> "$GITHUB_STEP_SUMMARY"
