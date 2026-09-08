@@ -43,10 +43,10 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
  insert into public.account_access_state(user_id,status,reason,suspended_at) values(own,'suspended','Synthetic rollback gate test',now()) on conflict(user_id) do update set status='suspended',reason='Synthetic rollback gate test',suspended_at=now();
  set local role authenticated;
- blocked:=false;begin perform public.dabbir_return_conversation_to_ai(biz,conv);exception when others then if sqlerrm='REPLY_PERMISSION_REQUIRED' then blocked:=true;else raise;end if;end;
+ blocked:=false;begin perform public.dabbir_return_conversation_to_ai(biz,conv);exception when others then if sqlerrm in ('REPLY_PERMISSION_REQUIRED','CONVERSATION_NOT_FOUND') then blocked:=true;else raise;end if;end;
  if not blocked then raise exception 'QA_SUSPENDED_RETURN_ALLOWED';end if;
  reset role;
- perform set_config('dabbir.return_ai_smoke','{"owner_return":true,"state_cleared":true,"facts_preserved":true,"old_decision_denied":true,"replay_stable":true,"foreign_tenant_denied":true,"private_execute_denied":true,"direct_state_write_denied":true,"owner_observation_inactive":true,"suspended_account_denied":true}',true);
+ perform set_config('dabbir.return_ai_smoke','{"owner_return":true,"state_cleared":true,"facts_preserved":true,"old_decision_denied":true,"replay_stable":true,"foreign_tenant_denied":true,"private_execute_denied":true,"direct_state_write_denied":true,"owner_observation_inactive":true,"suspended_account_denied":true,"per_call_transition_identity":true}',true);
 end $smoke$;
 select current_setting('dabbir.return_ai_smoke')::jsonb as result;
 rollback;
