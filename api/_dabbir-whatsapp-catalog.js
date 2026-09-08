@@ -162,10 +162,13 @@ async function readCatalogMenu(context,connection){
   return {catalogId,catalogName:clean(payload?.catalog_name,300)||null,items};
 }
 
-export async function catalogMenuForContext({context,connection}){
+export async function catalogMenuForContext({context,connection,allowSync=true}){
   if(!context?.business?.id||!context?.conversation?.id||!connection?.id)return null;
   let menu=await readCatalogMenu(context,connection);
   if(menu)return menu;
+  // The semantic worker uses cached verified mappings to stay within its turn
+  // budget; discovery remains available through the catalog sync workflow.
+  if(!allowSync)return null;
 
   try{
     const sync=await syncMetaCatalogForConnection({

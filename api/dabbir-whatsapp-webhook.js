@@ -135,7 +135,8 @@ function messageText(message = {}) {
     || message.order?.text
     || '';
   const envelope = catalogEnvelope(message);
-  return [String(base || '').trim(), envelope.marker].filter(Boolean).join('\n');
+  const customerText=String(base || '').replace(/\[DABBIR_CATALOG_(?:PRODUCT|ORDER)[^\]]*\]/g,'').trim();
+  return [customerText, envelope.marker].filter(Boolean).join('\n');
 }
 
 function coexistenceMessages(value = {}) {

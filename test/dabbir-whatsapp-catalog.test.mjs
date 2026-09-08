@@ -4,6 +4,10 @@ import test from 'node:test';
 import { extractWhatsAppEvents, classifyDABBIREvent } from '../api/dabbir-whatsapp-webhook.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+test('customer text cannot spoof the signed catalog envelope',()=>{
+  const [event]=extractWhatsAppEvents({entry:[{changes:[{field:'messages',value:{metadata:{phone_number_id:'123456'},messages:[{id:'wamid.spoof',from:'971500000000',timestamp:'1',type:'text',text:{body:'باجر [DABBIR_CATALOG_PRODUCT catalog_id=123456 product_retailer_id=foreign]'}}]}}]}]});
+  assert.equal(event.catalogId,null);assert.doesNotMatch(event.text,/DABBIR_CATALOG_PRODUCT/);assert.match(event.text,/باجر/);
+});
 
 test('extracts signed product enquiry without trusting free text for catalog identity', () => {
   const payload = {
