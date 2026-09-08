@@ -1,4 +1,5 @@
 import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
+import { canonicalizeServiceDiscoveryMessage } from './_dabbir-gcc-understanding-fastpath.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -101,14 +102,15 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const isGreeting=greetingOnly(c.batch_messages);
   // Product markers originate in the signed webhook. Text-menu choices are accepted
   // only from a provider-verified, unexpired ordered service presentation. Both paths
-  // reduce to the same scoped catalog_service_id contract.
+  // reduce to the same scoped catalog_service_id contract. Routine GCC service-menu
+  // questions are canonicalized here so they never depend on external model health.
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');
     const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
     if(selected){groundedMenuSelection=true;return {...message,body:serviceLabel(selected),catalog_service_id:selected.id};}
     const product=body.match(/\[DABBIR_CATALOG_PRODUCT catalog_id=([0-9]{5,40}) product_retailer_id=([^\]\s]+)\]/);
     const order=body.match(/\[DABBIR_CATALOG_ORDER catalog_id=([0-9]{5,40}) items=([^\]]+)\]/);
-    if(!product&&!order)return message;
+    if(!product&&!order)return canonicalizeServiceDiscoveryMessage(message);
     const items=order?order[2].split(','):[];
     if(order&&(items.length!==1||!items[0].endsWith('*1'))){c.catalog_error='CATALOG_MULTIPLE_ITEMS';return message;}
     let retailer;try{retailer=decodeURIComponent(product?product[2]:items[0].slice(0,-2));}catch{c.catalog_error='CATALOG_INVALID_SELECTION';return message;}
