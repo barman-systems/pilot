@@ -39,6 +39,8 @@ begin
  blocked:=false;begin perform public.dabbir_semantic_assert_current_v2(batch,token,1);exception when others then if sqlerrm='SEMANTIC_SUPERSEDED' then blocked:=true;else raise;end if;end;
  if not blocked then raise exception 'QA_OLD_DECISION_STILL_AUTHORIZED';end if;
  if (select count(*) from public.dabbir_owner_decision_observations where business_id=biz)<>1 or exists(select 1 from public.dabbir_owner_policy_versions where business_id=biz) then raise exception 'QA_OWNER_OBSERVATION_FAILED';end if;
+ perform set_config('request.jwt.claim.role','authenticated',true);
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
  insert into public.account_access_state(user_id,status,reason,suspended_at) values(own,'suspended','Synthetic rollback gate test',now()) on conflict(user_id) do update set status='suspended',reason='Synthetic rollback gate test',suspended_at=now();
  set local role authenticated;
  blocked:=false;begin perform public.dabbir_return_conversation_to_ai(biz,conv);exception when others then if sqlerrm='REPLY_PERMISSION_REQUIRED' then blocked:=true;else raise;end if;end;
