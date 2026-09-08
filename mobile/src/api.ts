@@ -86,6 +86,14 @@ export async function createStore(accessToken: string, name: string, locale: 'ar
 }
 
 export async function deleteDabbirAccount(accessToken: string): Promise<any> {
+  try {
+    await post('/api/mobile/account-delete-preflight', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
+  } catch (error) {
+    if (String((error as Error)?.message || '') === 'WHATSAPP_BUSINESS_DISCONNECT_REQUIRED') {
+      throw new Error('قبل حذف حساب دبّر: افتح WhatsApp Business ← الإعدادات ← الحساب ← منصة الأعمال ← فصل الحساب. بعد اكتمال الفصل ارجع إلى دبّر واضغط حذف الحساب مرة أخرى. / Before deleting DABBIR: open WhatsApp Business → Settings → Account → Business Platform → Disconnect Account. After it completes, return to DABBIR and delete the account again.');
+    }
+    throw error;
+  }
   return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
 }
 
