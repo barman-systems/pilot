@@ -8,7 +8,6 @@ import {
 import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-connection.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ARABIC=/[\u0600-\u06ff]/;
 const PROVIDER_FAILURE=/^(?:gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|empty_ai_response)/i;
 const TERMINAL_SUCCESS=new Set(['PROVIDER_ACCEPTED','SENT','DELIVERED','READ']);
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
@@ -19,8 +18,8 @@ export function isWhatsAppAiProviderFailure(error){
   return PROVIDER_FAILURE.test(clean(error,240));
 }
 
-export function providerContinuityMessage(customerBody){
-  return ARABIC.test(String(customerBody||''))
+export function providerContinuityMessage(language='en'){
+  return clean(language,16).toLowerCase().startsWith('ar')
     ? 'صار خلل مؤقت في المعالجة. أرسل طلبك مرة ثانية وأنا أكمل معك.'
     : 'There was a temporary processing issue. Send your request again and I will continue with you.';
 }
@@ -47,7 +46,7 @@ function replayDelivery(reservation){
 }
 
 async function deliverContinuityMessage(result){
-  const body=providerContinuityMessage(result.customer_body);
+  const body=providerContinuityMessage(result.customer_language);
   const reservation=await reserveContinuityMessage(result,body);
   if(reservation.should_send!==true)return replayDelivery(reservation);
 
