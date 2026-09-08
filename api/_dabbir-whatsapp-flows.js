@@ -16,7 +16,7 @@ const safeUuid=v=>UUID.test(clean(v,80))?clean(v,80):null;
 // One terminal screen deliberately keeps phase-one scope to booking details only.
 // No payment, invoice, bank, tax, payroll or accounting field is collected.
 export const BOOKING_FLOW_JSON=JSON.stringify({
-  version:'7.3',
+  version:'5.0',
   screens:[{
     id:'BOOKING',title:'الحجز / Booking',terminal:true,
     data:{
