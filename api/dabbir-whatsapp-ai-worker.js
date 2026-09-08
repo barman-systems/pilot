@@ -14,9 +14,9 @@ export default async function handler(req,res){
     let result=await processWhatsAppDispatchWithServiceMenu(token);
     if(['RETRY','HUMAN_REQUIRED'].includes(result?.state)&&result?.error){
       const failover=await failoverWhatsAppAiProvider(token,result.error).catch(()=>({handled:false}));
-      if(failover?.handled===true)result={...result,state:'HUMAN_REQUIRED',provider_failover:true};
+      if(failover?.handled===true)result={...result,state:clean(failover.state,40)||result.state,provider_failover:true,provider_degraded:failover.degraded===true};
     }
-    console.info('dabbir_whatsapp_ai_dispatch',{claimed:result?.claimed===true,state:clean(result?.state,40)||'NOOP',provider_failover:result?.provider_failover===true});
+    console.info('dabbir_whatsapp_ai_dispatch',{claimed:result?.claimed===true,state:clean(result?.state,40)||'NOOP',provider_failover:result?.provider_failover===true,provider_degraded:result?.provider_degraded===true});
     return json(res,202,{ok:true,accepted:true});
   }catch(error){
     console.error('dabbir_whatsapp_ai_dispatch_failed',{error:clean(error?.code||error?.message||'AI_DISPATCH_FAILED',160)});
