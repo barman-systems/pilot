@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateDABBIRAiReply} from '../api/_ai-core.js';
-import {interpretSemanticMessage} from '../api/_dabbir-semantic-interpreter.js';
+import {interpretSemanticMessage, evaluateSemanticProbe} from '../api/_dabbir-semantic-interpreter.js';
 import {validSemanticContract} from '../api/_dabbir-semantic-contract.js';
 
 const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk_level:'LOW',service_name:null,knowledge_key:null,
@@ -77,4 +77,22 @@ test('a quoted service absent from the scoped catalog is rejected',async()=>{
   const result=await interpretSemanticMessage({message:'أبا VIP',context:{services:[{name:'Haircut'}]},env:{GROQ_API_KEY:'test'},
     fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
   assert.equal(result.proposal.serviceName,null);
+});
+
+for(const risk of ['LOW','MEDIUM'])test('live probe requires safe actual clarification for '+risk+' proposal',()=>{
+  const p={...proposal,riskLevel:risk,serviceName:null};
+  const result=evaluateSemanticProbe(p);
+  assert.equal(result.passed,true);assert.equal(result.policy_action,'CLARIFY');
+  assert.equal(Object.keys(result.checks).length,5);
+});
+
+test('live probe still rejects a provider proposal that forces human handoff',()=>{
+  const result=evaluateSemanticProbe({...proposal,riskLevel:'HIGH',serviceName:null});
+  assert.equal(result.passed,false);assert.equal(result.policy_action,'HANDOFF');
+  assert.equal(result.checks.operational_clarification,false);
+});
+
+test('live probe rejects low-confidence interpretation despite correctly shaped values',()=>{
+  const result=evaluateSemanticProbe({...proposal,confidence:.5,riskLevel:'LOW',serviceName:null});
+  assert.equal(result.passed,false);assert.equal(result.checks.booking_intent,false);
 });
