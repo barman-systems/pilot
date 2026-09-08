@@ -3,6 +3,7 @@ import { cronAuthMode } from './salon-reminders-cron.js';
 import { processWhatsAppRecoveryWithServiceMenu } from './_dabbir-whatsapp-service-menu.js';
 import { recoverWhatsAppAiProviderFailovers } from './_dabbir-whatsapp-ai-provider-failover.js';
 import { processWhatsAppVoiceRecovery } from './_dabbir-whatsapp-voice.js';
+import { processCoexistenceBootstrap } from './_whatsapp-coexistence.js';
 import { serviceRpc } from './_whatsapp-live-core.js';
 
 const clean=(v,max=160)=>String(v??'').trim().slice(0,max);
@@ -22,6 +23,12 @@ export default async function handler(req,res){
       voiceRecoveryError=clean(error?.code||error?.message||'VOICE_RECOVERY_FAILED');
       console.error('dabbir_whatsapp_voice_recovery_failed',{error:voiceRecoveryError});
     }
+    let coexistence={processed:0,requested:0,notApplicable:0,retry:0,results:[]},coexistenceError=null;
+    try{coexistence=await processCoexistenceBootstrap({limit:4});}
+    catch(error){
+      coexistenceError=clean(error?.code||error?.message||'COEXISTENCE_BOOTSTRAP_FAILED');
+      console.error('dabbir_whatsapp_coexistence_bootstrap_failed',{error:coexistenceError});
+    }
     const result=await processWhatsAppRecoveryWithServiceMenu({limit:12});
     const failover=await recoverWhatsAppAiProviderFailovers({limit:12});
     let followupCandidates=0,followupCaptureError=null;
@@ -34,11 +41,13 @@ export default async function handler(req,res){
     }
     console.info('dabbir_whatsapp_ai_recovery',{
       auth_mode:authMode,voice_processed:voice.processed,voice_recovery_ok:voiceRecoveryError===null,
+      coexistence_processed:coexistence.processed,coexistence_requested:coexistence.requested,coexistence_ok:coexistenceError===null,
       processed:result.processed,provider_failovers:failover.processed,
       followup_candidates:followupCandidates,followup_capture_ok:followupCaptureError===null,
     });
     return json(res,200,{
       ok:true,voice_processed:voice.processed,voice_recovery_ok:voiceRecoveryError===null,
+      coexistence_processed:coexistence.processed,coexistence_requested:coexistence.requested,coexistence_not_applicable:coexistence.notApplicable,coexistence_retry:coexistence.retry,coexistence_ok:coexistenceError===null,
       processed:result.processed,provider_failovers:failover.processed,
       followup_candidates:followupCandidates,followup_capture_ok:followupCaptureError===null,
     });
