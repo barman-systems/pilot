@@ -346,6 +346,33 @@ async function browserJourney() {
   await page.locator('.dabbir-memory-close').click();
   console.log('OWNER_KNOWLEDGE_BROWSER_PASS owner_correction=true catalog_grounded=true propose_inactive=true approve=true revoke=true rollback=true audit_events=4');
 
+  // Real owner API + shipped mobile UI, scoped to the disposable QA tenant.
+  const operationalBranches=await ownerSession.request('/api/activity-intelligence?business_id='+encodeURIComponent(businessId));
+  assert(operationalBranches.ok&&operationalBranches.json?.branches?.length,'ACTIVITY_BRANCHES_READ_FAILED');
+  const operationalBranch=operationalBranches.json.branches[0].id;
+  const readOperational=()=>ownerSession.request('/api/activity-intelligence?'+new URLSearchParams({business_id:businessId,branch_id:operationalBranch}));
+  await page.locator('#bottomNav [data-screen="more"]').click();
+  await page.locator('#screen-more [data-screen="settings"]').click();
+  const operationalForm=page.locator('#dabbirOperationalServices form');
+  await operationalForm.waitFor({state:'visible',timeout:20000});
+  await operationalForm.locator('[name="branch"]').selectOption(operationalBranch);
+  await operationalForm.locator('[name="service"] option[value="'+serviceId+'"]').waitFor({state:'attached',timeout:15000});
+  await operationalForm.locator('[name="service"]').selectOption(serviceId);
+  await operationalForm.locator('[name="activity"]').selectOption('consulting');
+  for(const mode of ['AT_BUSINESS','AT_CUSTOMER','MOBILE','REMOTE','PICKUP','DELIVERY'])await operationalForm.locator('[name="mode"][value="'+mode+'"]').setChecked(mode==='REMOTE');
+  await operationalForm.locator('button[type="submit"]').click();
+  await operationalForm.locator('[data-message]').filter({hasText:/تم حفظ متطلبات الخدمة|Service requirements saved/}).waitFor({timeout:15000});
+  const operationalSaved=await readOperational();
+  const operationalContract=operationalSaved.json?.profile?.services?.find(x=>x.service_id===serviceId);
+  assert(operationalSaved.ok&&operationalContract?.activity_type==='consulting'&&operationalContract.delivery_modes.join(',')==='REMOTE','ACTIVITY_OWNER_SAVE_READBACK_FAILED');
+  assert(!operationalContract.mode_requirements.REMOTE.required.includes('location'),'ACTIVITY_REMOTE_LOCATION_REQUIRED');
+  assert(operationalSaved.json.audit.some(x=>x.service_id===serviceId&&x.version===operationalContract.owner_version&&x.action==='SAVE'),'ACTIVITY_OWNER_AUDIT_MISSING');
+  await operationalForm.locator('[data-revoke]').click();
+  await operationalForm.locator('[data-message]').filter({hasText:/تم حفظ متطلبات الخدمة|Service requirements saved/}).waitFor({timeout:15000});
+  const operationalRestored=await readOperational();
+  assert(operationalRestored.json?.audit?.some(x=>x.service_id===serviceId&&x.action==='REVOKE'&&x.version>operationalContract.owner_version),'ACTIVITY_REVOKE_AUDIT_MISSING');
+  console.log('ACTIVITY_OWNER_BROWSER_PASS branch_scope=true service_config=true remote_no_location=true save_readback=true revoke=true audit=true');
+
   await page.locator('#bottomNav [data-screen="conversations"]').click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
   assert((await page.locator('#chatList').textContent())?.includes('AI Journey Customer'), 'BROWSER_CONVERSATION_MISSING');

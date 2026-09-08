@@ -113,3 +113,18 @@ SQL and history identity, production database rollback smoke, main/deployment/
 release-evidence SHA agreement, and production application journeys. Synthetic
 provider receipts are labelled fixtures and are never real WhatsApp evidence.
 Real WhatsApp testing requires an authenticated Meta/WhatsApp session.
+
+Applied production migration: `20260908155841_dabbir_activity_intelligence_v1.sql`.
+The new file was renamed to the identity issued by Supabase after application;
+its SQL was unchanged (MD5 `7bfc89e73fbaa841e3bd32d8a5fd0787`). No older
+applied migration was edited. Production rollback smoke passed on 2026-09-08:
+context, semantic load/commit/replay, availability, missing vehicle and inferred
+location rejection, GPS readback, booking idempotency, verified memory,
+reschedule, cancellation and newer-message rejection. Provider receipts in
+that SQL smoke are synthetic fixtures, not Meta delivery evidence.
+
+Supabase advisory deltas are intentional: two RLS-enabled tables deny direct
+client access without policies; two owner-authorized SECURITY DEFINER RPCs
+remain executable by authenticated users and enforce membership internally.
+Cross-tenant/anonymous denial is tested. These notices must not be described
+as an empty advisor report.

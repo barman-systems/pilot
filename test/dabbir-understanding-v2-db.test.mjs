@@ -14,7 +14,7 @@ function bookingState(){return understandConversation({context:context({batch_me
 async function commit(state=bookingState(),expected=0){const l=await load();state.activity_contract_version=l.activity_profile.services[0].contract_version;return rpc('dabbir_semantic_commit_v2',[batch,lock,expected,l.message_revision,state,{action:'CREATE_BOOKING'}]);}
 before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding/database.sql',import.meta.url),'utf8'));await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('./fixtures/understanding/activity-database.sql',import.meta.url),'utf8'));
- await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908150959_dabbir_activity_intelligence_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908155841_dabbir_activity_intelligence_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
