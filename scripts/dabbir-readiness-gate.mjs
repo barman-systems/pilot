@@ -70,6 +70,17 @@ export function evaluateReadiness({contract,evidence={},productionOrigin=''}){
   gates.push(gate('whatsapp_inbound',Number(wa.inbound_conversations)>0&&Number(wa.inbound_messages)>0?PASS:BLOCKED,'At least one non-simulated WhatsApp inbound conversation/message is required.',{inbound_conversations:Number(wa.inbound_conversations||0),inbound_messages:Number(wa.inbound_messages||0)}));
   gates.push(gate('whatsapp_reply',Number(wa.verified_replies)>0?PASS:BLOCKED,'At least one WhatsApp reply/action must have verified_external_result=true.',{verified_replies:Number(wa.verified_replies||0)}));
 
+  const feature=evidence.feature_gates||{};
+  const voiceNotes=String(feature.voice_notes||'').toUpperCase();
+  gates.push(gate(
+    'feature_voice_notes',
+    voiceNotes==='PASS'?PASS:voiceNotes?BLOCKED:INSUFFICIENT,
+    voiceNotes==='PASS'
+      ?'Voice Notes has exact-production external-path, fail-closed uncertainty, tenant-isolation and privileged-surface proof.'
+      :'Voice Notes must not inherit text-WhatsApp readiness; exact-production external voice inbound/outcome plus fail-closed uncertainty, tenant isolation and service-role-only proof are required.',
+    {verdict:voiceNotes||null},
+  ));
+
   const monitoring=evidence.monitoring||{};
   gates.push(gate('runtime_error_monitoring',monitoring.runtime_errors_checked===true?PASS:INSUFFICIENT,'Runtime error monitoring must be queried for the exact production artifact.',monitoring.runtime_errors||null));
   gates.push(gate('alerting',monitoring.alert_delivery_verified===true?PASS:INSUFFICIENT,'An actual alert delivery path must be verified; a dashboard alone is not alerting evidence.',monitoring.alert_delivery||null));
@@ -89,7 +100,7 @@ export function evaluateReadiness({contract,evidence={},productionOrigin=''}){
   }
 
   const blockers=gates.filter(row=>row.state!==PASS);
-  return {schema_version:'dabbir_bar12_readiness_v2',generated_at:new Date().toISOString(),release_stage:release.stage,release_ready:release.ready,verdict:blockers.length===0?'READY':'BLOCKED',blocker_count:blockers.length,gates};
+  return {schema_version:'dabbir_bar12_readiness_v3',generated_at:new Date().toISOString(),release_stage:release.stage,release_ready:release.ready,verdict:blockers.length===0?'READY':'BLOCKED',blocker_count:blockers.length,gates};
 }
 
 export function runGate({contractPath=CONTRACT_PATH,evidencePath=EVIDENCE_PATH,productionOrigin=process.env.PRODUCTION_ORIGIN||''}={}){
