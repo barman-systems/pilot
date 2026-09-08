@@ -106,7 +106,11 @@ export async function generateDABBIRAiReply(args={}){
       }catch{}
     }
     const started=Date.now();
-    const response=await upstreamFetch(url,nextOptions);
+    let response;
+    try{response=await upstreamFetch(url,nextOptions);}catch(error){
+      attempts.push({endpoint:endpoint===GATEWAY_ENDPOINT?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown',status:0,duration_ms:Date.now()-started,outcome:'NETWORK_ERROR'});
+      throw error;
+    }
     const attempt={endpoint:endpoint.includes('ai-gateway.vercel.sh')?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown',model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started};
     attempts.push(attempt);
     if(response?.ok){
@@ -120,7 +124,12 @@ export async function generateDABBIRAiReply(args={}){
   };
 
   const result=await generateCoreReply({...args,fetchImpl:meteredFetch});
-  if(!identity.businessId||!result?.ok)return result;
+  if(!result?.ok){
+    // Fixed categories and numeric statuses only: no upstream body, URL, IDs or credentials.
+    console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),configured_attempts:attempts.length});
+    return result;
+  }
+  if(!identity.businessId)return result;
 
   const usage=usageFromPayload(successfulPayload||{});
   const actualCostUsd=result?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
