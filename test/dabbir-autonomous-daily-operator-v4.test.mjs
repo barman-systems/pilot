@@ -181,6 +181,8 @@ test('free-first enhancement falls from Gemini 429 to Groq and never needs Gatew
   assert.equal(result.evidence.cost_mode, 'FREE_TIER_ONLY');
   assert.equal(result.evidence.attempts[0].status, 429);
   assert.equal(calls.length, 2);
+  const providerPayload = JSON.stringify(calls[1].body);
+  assert.doesNotMatch(providerPayload, /cv1|cv2|c1|c2|a1|a2/);
 });
 
 test('free providers can all fail without making the report incomplete', async () => {
@@ -208,7 +210,9 @@ test('paid AI cap remains enforced for other paid operator paths', async () => {
 test('budget claim still checks live Gateway spend for other serialized paid operations', async () => {
   let params = null;
   const result = await claimAiBudget({
-    businessId: '00000000-0000-4000-8000-000000000001', operationKey: 'operator.ai_planning:test', operationType: 'operator.ai_planning',
+    businessId: '00000000-0000-4000-8000-000000000001',
+    operationKey: 'operator.ai_planning:test',
+    operationType: 'operator.ai_planning',
     gatewayClient: { getSpendReport: async () => ({ results: [{ totalCost: 2 }] }) },
     rpc: async (name, value) => { assert.equal(name, 'dabbir_claim_ai_budget_v1'); params = value; return { allowed: true, reserve_microusd: value.p_reserve_microusd }; },
   });
@@ -216,6 +220,20 @@ test('budget claim still checks live Gateway spend for other serialized paid ope
   assert.equal(params.p_external_spent_microusd, 2000000);
   assert.equal(params.p_hard_limit_microusd, 81688223);
   assert.equal(params.p_autonomous, false);
+});
+
+test('budget remains fail-closed when Gateway spend truth is unavailable for paid paths', async () => {
+  let called = false;
+  const result = await claimAiBudget({
+    businessId: '00000000-0000-4000-8000-000000000001',
+    operationKey: 'operator.ai_planning:test',
+    operationType: 'operator.ai_planning',
+    gatewayClient: { getSpendReport: async () => { throw new Error('offline'); } },
+    rpc: async () => { called = true; },
+  });
+  assert.equal(result.allowed, false);
+  assert.equal(result.reason, 'GATEWAY_SPEND_UNAVAILABLE');
+  assert.equal(called, false);
 });
 
 test('database migration still serializes paid claims and protects the 300 AED ceiling', () => {
