@@ -4,13 +4,41 @@
 -- account_update/PARTNER_REMOVED evidence, erase the encrypted connection, and
 -- only then permit business/account deletion.
 
--- Offboarding is a real lifecycle state.  It is deliberately non-sendable.
+-- Offboarding is a real lifecycle state. It is deliberately non-sendable.
 alter table public.dabbir_whatsapp_connections
   drop constraint if exists dabbir_whatsapp_connections_status_check;
 
 alter table public.dabbir_whatsapp_connections
   add constraint dabbir_whatsapp_connections_status_check
   check (status in ('connected','verification_required','offboarding_pending','disconnected','error'));
+
+-- Fail closed for older app binaries that used the superseded local-delete flow.
+-- They used this exact marker immediately before attempting a remote webhook
+-- unsubscribe. Blocking the state transition here stops that code before it can
+-- contact Meta, so a stale client cannot silently sever webhook delivery and then
+-- delete the local credential without PARTNER_REMOVED evidence.
+create or replace function dabbir_private.block_legacy_whatsapp_account_offboarding()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, dabbir_private, pg_temp
+as $function$
+begin
+  if new.status='disconnected'
+     and new.last_error='ACCOUNT_DELETE_OFFBOARDING'
+  then
+    raise exception 'WHATSAPP_BUSINESS_DISCONNECT_REQUIRED';
+  end if;
+  return new;
+end;
+$function$;
+
+revoke all on function dabbir_private.block_legacy_whatsapp_account_offboarding() from public, anon, authenticated;
+
+drop trigger if exists dabbir_whatsapp_block_legacy_account_offboarding on public.dabbir_whatsapp_connections;
+create trigger dabbir_whatsapp_block_legacy_account_offboarding
+before update of status,last_error on public.dabbir_whatsapp_connections
+for each row execute function dabbir_private.block_legacy_whatsapp_account_offboarding();
 
 -- A WABA subscription/partner relationship is wider than one branch. Sharing one
 -- WABA across different DABBIR businesses could let one tenant's lifecycle event
@@ -104,7 +132,7 @@ revoke all on table dabbir_private.whatsapp_offboarding_receipts from public, an
 -- provider evidence that a Coexistence business disconnected DABBIR/Cloud API.
 -- Because the partner relationship is WABA-scoped, all local connections for the
 -- WABA are removed together. This also handles system-initiated partner removal
--- (for example primary-device inactivity) truthfully.
+-- truthfully.
 create or replace function public.dabbir_whatsapp_apply_account_update(
   p_waba_id text,
   p_event text,
