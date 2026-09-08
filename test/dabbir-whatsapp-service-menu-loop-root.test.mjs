@@ -1,4 +1,3 @@
-import {activityContext} from './fixtures/understanding/activity.mjs';
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +18,7 @@ const services=[
   {id:ids.carpet,business_id:ids.business,branch_id:ids.branch,name_ar:'غسيل سجاد',price:40},
   {id:ids.vip,business_id:ids.business,branch_id:ids.branch,name:'Vip',price:100},
 ];
-const baseContext=extra=>activityContext({
+const baseContext=extra=>({
   business:{id:ids.business,timezone:'Asia/Dubai',business_type:'cleaning',currency_code:'AED'},
   conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},
   customer:{id:ids.customer},services,workers:[],upcoming_appointments:[],history:[],knowledge:[],

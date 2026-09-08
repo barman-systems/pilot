@@ -7,14 +7,14 @@ const services=[
   {id:ids.service,name_ar:'تنظيف منزل',price:20},
   {id:'60000000-0000-4000-8000-000000000002',name_ar:'غسيل سجاد',price:40},
 ];
-function session({planner=async()=>({action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.97,riskLevel:'LOW'}),extra={}}={}) {
+function session({planner=async()=>{throw Object.assign(Error('unavailable'),{code:'AI_PLANNER_UNAVAILABLE'});},extra={}}={}) {
   let semantic={},version=0,pending=null,modelCalls=0,handoffs=0,executions=0;
   const replies=[],events=[],finishes=[];
   return {
     replies,events,finishes,get state(){return semantic;},get modelCalls(){return modelCalls;},get handoffs(){return handoffs;},get executions(){return executions;},
-    async turn(body,turnExtra={},attempt=1) {
+    async turn(body,turnExtra={}) {
       const c=context({services,...extra,...turnExtra,batch_messages:Array.isArray(body)?body.map(body=>({body})):[{body}],pending_state:pending});
-      return runUnderstandingTurn({claim:{batch_id:'batch-'+(version+1),lock_token:'lock',attempt_count:attempt},context:c,now:()=>now,
+      return runUnderstandingTurn({claim:{batch_id:'batch-'+(version+1),lock_token:'lock'},context:c,now:()=>now,
         rpc:async(name,args)=>{
           if(name==='dabbir_semantic_load_v2')return {semantic_state:semantic,version,message_revision:version+1};
           if(name==='dabbir_semantic_commit_v2'){semantic=structuredClone(args.p_state);events.push(args.p_metrics);return {version:++version,state:semantic};}
@@ -53,15 +53,14 @@ test('rapid greeting and catalog fragments are interpreted as one read-only sema
   const h=session();assert.equal((await h.turn(['السلام عليكم','شو الخدمات','اللي عندكم؟'])).action,'SERVICE_MENU');assert.equal(h.modelCalls,1);
 });
 for(const code of ['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']) {
-  test('provider failure retries once, then hands off without impersonating the customer: '+code,async()=>{
+  test('extraction failure clarifies without permanent human takeover: '+code,async()=>{
     const h=session({planner:async()=>{throw Object.assign(Error('sensitive provider payload must not persist'),{code});}});
-    assert.equal((await h.turn('Could you help me organize something suitable?')).action,'RETRY');
+    assert.equal((await h.turn('Could you help me organize something suitable?')).action,'CLARIFY');
     assert.equal(h.handoffs,0);assert.equal(h.executions,0);assert.equal(h.modelCalls,1);
-    assert.equal(h.finishes.at(-1),'RETRY');assert.equal(h.replies.length,0);assert.equal(h.events.length,0);
-    const second=await h.turn('Could you help me organize something suitable?',{},2);
-    assert.equal(second.action,'HANDOFF');assert.equal(second.customer_requested_human,false);
-    assert.equal(h.handoffs,1);assert.equal(h.finishes.at(-1),'HUMAN_REQUIRED');assert.equal(h.executions,0);
-    assert.doesNotMatch(JSON.stringify(h.state),/sensitive provider payload/);
+    assert.equal(h.finishes.at(-1),'PROCESSED');assert.equal(h.events[0].planner_failure_code,code);
+    assert.equal(h.events[0].tool_selection,'PLANNER_RECOVERY_CLARIFICATION');
+    assert.ok(h.state.operational_confidence<.9);assert.doesNotMatch(JSON.stringify(h.state),/sensitive provider payload/);
+    assert.equal((await h.turn('شو الخدمات اللي عندكم؟')).action,'SERVICE_MENU');assert.equal(h.handoffs,0);assert.equal(h.modelCalls,2);
   });
 }
 test('unexpected internal failure is not hidden by extraction recovery',async()=>{
@@ -106,12 +105,12 @@ test('foreign-tenant and foreign-branch catalog rows cannot appear in a reply',a
 test('a request for a human retains precedence over service discovery',async()=>{
   const h=session();assert.equal((await h.turn('ابا اكلم المدير عن الخدمات')).action,'HANDOFF');assert.equal(h.modelCalls,0);assert.equal(h.replies.length,0);
 });
-test('provider recovery does not send or mutate an uncommitted interpretation',async()=>{
+test('extraction recovery does not bypass stale decision verification',async()=>{
   let delivered=false,committed=false;
-  const result=await runUnderstandingTurn({claim:{batch_id:'b',lock_token:'l',attempt_count:1},context:context({batch_messages:[{body:'Please help me with something suitable'}]}),now:()=>now,
-    rpc:async(name)=>{if(name==='dabbir_semantic_load_v2')return {version:0,message_revision:1};if(name==='dabbir_semantic_commit_v2'){committed=true;return {version:1};}throw Error('UNEXPECTED_RPC');},
+  await assert.rejects(runUnderstandingTurn({claim:{batch_id:'b',lock_token:'l'},context:context({batch_messages:[{body:'Please help me with something suitable'}]}),now:()=>now,
+    rpc:async(name)=>{if(name==='dabbir_semantic_load_v2')return {version:0,message_revision:1};if(name==='dabbir_semantic_commit_v2'){committed=true;return {version:1};}if(name==='dabbir_semantic_assert_current_v2')throw Error('SEMANTIC_SUPERSEDED');return true;},
     planner:async()=>{throw Object.assign(Error('unavailable'),{code:'AI_PLANNER_UNAVAILABLE'});},
     deliver:async()=>{delivered=true;},finish:async()=>{},handoff:async()=>{},
-  });
-  assert.equal(result.action,'RETRY');assert.equal(committed,false);assert.equal(delivered,false);
+  }),/SEMANTIC_SUPERSEDED/);
+  assert.equal(committed,true);assert.equal(delivered,false);
 });

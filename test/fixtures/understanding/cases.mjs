@@ -1,14 +1,13 @@
-import {activityContext} from './activity.mjs';
 export const now=new Date('2026-09-08T09:00:00Z');
 export const ids={business:'20000000-0000-4000-8000-000000000001',other:'20000000-0000-4000-8000-000000000002',conversation:'30000000-0000-4000-8000-000000000001',customer:'40000000-0000-4000-8000-000000000001',branch:'50000000-0000-4000-8000-000000000001',service:'60000000-0000-4000-8000-000000000001',worker:'70000000-0000-4000-8000-000000000001'};
 export const slots=[17,18,19].map(h=>({starts_at:`2026-09-09T${String(h-4).padStart(2,'0')}:00:00Z`,service_id:ids.service,worker_id:ids.worker,timezone:'Asia/Dubai'}));
 // This is the domain-neutral Understanding V2 golden fixture. Vertical requirements
 // such as car-wash vehicle/location are covered by dedicated vertical regression tests.
-export function context(extra={}){return activityContext({business:{id:ids.business,timezone:'Asia/Dubai',business_type:'services',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[{id:ids.service,name_ar:'غسيل كامل',name_en:'Full wash',price:50}],workers:[{id:ids.worker,display_name:'سالم'}],...extra});}
-export const offered={pending_action:'choose_slot',payload:{activity_contract_version:'test-v1',mode:'booking',slots,presented:true,provider_message_id:'verified-offer'},expires_at:'2026-09-08T09:15:00Z'};
+export function context(extra={}){return {business:{id:ids.business,timezone:'Asia/Dubai',business_type:'services',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[{id:ids.service,name_ar:'غسيل كامل',name_en:'Full wash',price:50}],workers:[{id:ids.worker,display_name:'سالم'}],...extra};}
+export const offered={pending_action:'choose_slot',payload:{mode:'booking',slots,presented:true,provider_message_id:'verified-offer'},expires_at:'2026-09-08T09:15:00Z'};
 export const appointments=[1,2].map(i=>({id:`80000000-0000-4000-8000-00000000000${i}`,business_id:ids.business,branch_id:ids.branch,starts_at:`2026-09-09T${i+10}:00:00Z`,service_id:ids.service,worker_id:ids.worker,status:'confirmed'}));
 export const offeredAppointments={pending_action:'choose_appointment',payload:{appointments,presented:true,provider_message_id:'verified-offer'},expires_at:'2026-09-08T09:15:00Z'};
-export const memory={id:'a0000000-0000-4000-8000-000000000001',branch_id:ids.branch,business_id:ids.business,customer_id:ids.customer,memory_key:'last_verified_service',value:{id:ids.service},source:'DATABASE_FACT',status:'verified',confidence:1,last_confirmed_at:'2026-09-01T10:00:00Z',expires_at:'2026-12-01T10:00:00Z',version:1};
+export const memory={business_id:ids.business,customer_id:ids.customer,memory_key:'last_verified_service',value:{id:ids.service},source:'DATABASE_FACT',status:'verified',confidence:1,last_confirmed_at:'2026-09-01T10:00:00Z',expires_at:'2026-12-01T10:00:00Z',version:1};
 const cases=[];
 const add=(id,turns,expected,extra={},tags=[])=>cases.push({id,turns,expected,extra,tags});
 for(const word of ['ابا','أبا','أبي','ابي','أبغي','ابغي','اريد','احجز'])add(`book-${word}`,[`${word} غسيل باجر`],{intent:'BOOKING',service:ids.service,date:'2026-09-09',missing:['time'],action:'CLARIFY'}, {},['booking','gcc']);

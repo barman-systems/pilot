@@ -1,4 +1,3 @@
-import {activityContext} from './fixtures/understanding/activity.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runUnderstandingTurn, SEMANTIC_SESSION_IDLE_MS } from '../api/_dabbir-understanding-orchestrator.js';
@@ -34,11 +33,11 @@ function previous(updatedAt='2026-09-08T09:00:00Z'){
 }
 function harness({text,semantic=previous(),pending=stalePresentation,at=turnAt}={}){
   const calls=[],replies=[];let committed=null,plannerCalls=0;
-  const context=activityContext({
+  const context={
     business:{id:ids.business,timezone:'Asia/Dubai',business_type:'services',currency_code:'AED'},
     conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services,workers:[],
     pending_state:pending,batch_messages:[{body:text,created_at:at.toISOString()}],history:[],knowledge:[],
-  });
+  };
   const claim={batch_id:'70000000-0000-4000-8000-000000000001',lock_token:'80000000-0000-4000-8000-000000000001',attempt_count:1};
   const rpc=async(name,args)=>{
     calls.push({name,args});

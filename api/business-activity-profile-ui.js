@@ -1,4 +1,3 @@
-import {activityIntelligenceClient} from './_dabbir-activity-intelligence-ui.js';
 const css=String.raw`
 .dap-card{margin-top:12px;border:1px solid #30363d;background:linear-gradient(180deg,#15191d,#101214);border-radius:16px;overflow:hidden}.dap-head{padding:15px 16px 13px;border-bottom:1px solid #292e34;background:#15181b}.dap-head-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.dap-head h2{font-size:14px;margin:0;color:#fff}.dap-head p{font-size:9px;line-height:1.7;color:var(--muted);margin:5px 0 0}.dap-badge{display:inline-flex;align-items:center;border:1px solid #42502f;background:#1b2415;color:var(--accent);border-radius:999px;padding:5px 8px;font-size:8px;font-weight:900;white-space:nowrap}.dap-form{padding:13px}.dap-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dap-field{display:flex;flex-direction:column;gap:6px;min-width:0}.dap-field.wide{grid-column:1/-1}.dap-field label{font-size:9px;font-weight:800;color:#c5cbd1}.dap-field textarea{width:100%;min-height:84px;border:1px solid #30363d;background:#181b1f;color:#fff;border-radius:12px;padding:10px 12px;resize:vertical;line-height:1.55;font:inherit}.dap-field textarea:focus{outline:none;border-color:#687c37;box-shadow:0 0 0 3px #d7ff5f12}.dap-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px}.dap-msg{font-size:9px;color:var(--muted);min-height:18px}.dap-save{min-width:150px}.dk-field.dabbir-activity-hidden{display:none!important}
 @media(max-width:700px){.dap-card{margin-top:9px;border-radius:14px}.dap-head{padding:13px}.dap-head-row{gap:8px}.dap-head h2{font-size:13px}.dap-head p{font-size:9px}.dap-badge{font-size:7px}.dap-form{padding:10px}.dap-grid{grid-template-columns:1fr;gap:9px}.dap-field.wide{grid-column:auto}.dap-field textarea{font-size:16px;min-height:74px}.dap-actions{display:grid;grid-template-columns:1fr;gap:7px}.dap-save{width:100%;min-height:48px}.dap-msg{order:2;text-align:center}}
@@ -146,5 +145,5 @@ export default function handler(req,res){
   res.setHeader('content-type','application/javascript; charset=utf-8');
   res.setHeader('cache-control','public, max-age=300, s-maxage=300');
   res.setHeader('x-dabbir-business-activity-profile','v1');
-  return res.status(200).send(client+'\n'+activityIntelligenceClient);
+  return res.status(200).send(client);
 }
