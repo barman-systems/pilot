@@ -45,6 +45,7 @@ jobs:
           node --test
           test/dabbir-security-gate.test.mjs
           test/dabbir-bar16-privacy-recovery-contract.test.mjs
+          test/dabbir-storage-tenant-isolation-contract.test.mjs
           test/dabbir-whatsapp-ai-closed-loop-hardening.test.mjs
           test/dabbir-whatsapp-multibranch-outbound-safety.test.mjs
           test/dabbir-whatsapp-voice-notes-ai-v1.test.mjs
