@@ -65,6 +65,24 @@ export async function serviceRpc(name, params = {}, options = {}) {
   );
 }
 
+export async function assertWhatsAppConnectionSendable({ businessId, connectionId }) {
+  if (!businessId || !connectionId) {
+    const error = new Error('WHATSAPP_SENDABLE_CONTEXT_REQUIRED');
+    error.status = 409;
+    throw error;
+  }
+  const allowed = await serviceRpc('dabbir_whatsapp_assert_connection_sendable', {
+    p_business_id: String(businessId),
+    p_connection_id: String(connectionId),
+  });
+  if (allowed !== true) {
+    const error = new Error('WHATSAPP_CONNECTION_NOT_SENDABLE');
+    error.status = 409;
+    throw error;
+  }
+  return true;
+}
+
 function oneRow(payload) {
   return Array.isArray(payload) ? payload[0] || null : payload || null;
 }
@@ -182,6 +200,7 @@ export async function sendMetaText({ connection, businessId, recipient, body }) 
     error.status = 503;
     throw error;
   }
+  await assertWhatsAppConnectionSendable({ businessId, connectionId: connection?.id });
   const platform = applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
   if (!platform.appSecret || !platform.encryptionSecret) {
     const error = new Error('WHATSAPP_PLATFORM_SECRET_NOT_CONFIGURED');
@@ -249,9 +268,10 @@ export async function sendMetaText({ connection, businessId, recipient, body }) 
 }
 
 export async function sendMetaTemplate({ connection, businessId, recipient, templateName, language = 'ar', parameters = [] }) {
-  // The caller may load the encrypted connection through the local service key
-  // or through the OIDC-authenticated Supabase worker. Sending only needs the
-  // explicit tenant-scoped connection plus the platform decryption secret.
+  // Re-check the live database immediately before opening the credential. This
+  // prevents a stale worker that reserved before account offboarding from sending
+  // after the connection has been frozen.
+  await assertWhatsAppConnectionSendable({ businessId, connectionId: connection?.id });
   const platform = applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
   if (!platform.appSecret || !platform.encryptionSecret) {
     const error = new Error('WHATSAPP_PLATFORM_SECRET_NOT_CONFIGURED');
