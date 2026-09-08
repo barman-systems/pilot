@@ -30,7 +30,7 @@ export const DAILY_AGENT_ROLES = Object.freeze({
 
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const DIRECT_TIMEOUT_MS = 6500;
+const DIRECT_TIMEOUT_MS = 3500;
 const clean = (value, max = 1000) => String(value ?? '').trim().replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max);
 const amount = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const roundMoney = value => Math.round((amount(value) + Number.EPSILON) * 100) / 100;
@@ -364,9 +364,24 @@ function safeAiContext(report) {
   return {
     report_day: report.report_day,
     currency: report.currency,
-    booking_funnel: report.booking_funnel,
-    appointment_operations: report.appointment_operations,
-    customer_operations: report.customer_operations,
+    booking_funnel: {
+      counts: report.booking_funnel.counts,
+      today: report.booking_funnel.today,
+      conversion: report.booking_funnel.conversion,
+      attributed_value_amount: report.booking_funnel.attributed_value_amount,
+      currency: report.booking_funnel.currency,
+    },
+    appointment_operations: {
+      counts_31d: report.appointment_operations.counts_31d,
+      today: report.appointment_operations.today,
+      upcoming_24h: report.appointment_operations.upcoming_24h,
+      needs_confirmation_24h: report.appointment_operations.needs_confirmation_24h,
+    },
+    customer_operations: {
+      conversations_31d: report.customer_operations.conversations_31d,
+      open_conversations: report.customer_operations.open_conversations,
+      stale_open_over_24h: report.customer_operations.stale_open_over_24h,
+    },
     finance: report.finance_operations.today,
     margin_coverage: report.finance_operations.margin_coverage,
     stock_counts: { low: report.sales_inventory.low_stock.length, stagnant: report.sales_inventory.stagnant_products.length },
@@ -411,13 +426,13 @@ async function callFreeProvider(provider, report, fetchImpl = fetch) {
   ].join('\n');
   const messages = [{ role: 'system', content: system }, { role: 'user', content: context }];
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= 1; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DIRECT_TIMEOUT_MS);
     try {
       const body = {
         model: provider.model,
-        messages: attempt === 1 ? messages : [...messages, { role: 'user', content: 'Return the same answer again as strict valid JSON only. Do not use markdown fences.' }],
+        messages,
         temperature: 0,
         max_tokens: 520,
         stream: false,
@@ -437,7 +452,7 @@ async function callFreeProvider(provider, report, fetchImpl = fetch) {
       if (!response.ok && [401, 403, 404].includes(Number(response.status))) return { ok: false, error: `${provider.provider}_http_${response.status}`, status: response.status, terminal: true };
       if (!response.ok && Number(response.status) === 429) return { ok: false, error: `${provider.provider}_http_429`, status: 429, terminal: false };
     } catch (error) {
-      if (attempt === 2) return { ok: false, error: error?.name === 'AbortError' ? `${provider.provider}_timeout` : `${provider.provider}_network_error`, terminal: false };
+      return { ok: false, error: error?.name === 'AbortError' ? `${provider.provider}_timeout` : `${provider.provider}_network_error`, terminal: false };
     } finally {
       clearTimeout(timer);
     }
@@ -449,7 +464,7 @@ export async function enhanceSummaryFreeFirst(report, { env = process.env, fetch
   const attempts = [];
   for (const provider of providerCandidates(env)) {
     const result = await callFreeProvider(provider, report, fetchImpl);
-    attempts.push({ provider: provider.provider, model: provider.model, ok: result.ok === true, status: result.status || null, error: result.error || null, attempt_count: result.attempt || 2 });
+    attempts.push({ provider: provider.provider, model: provider.model, ok: result.ok === true, status: result.status || null, error: result.error || null, attempt_count: result.attempt || 1 });
     if (result.ok) {
       return {
         ok: true,
