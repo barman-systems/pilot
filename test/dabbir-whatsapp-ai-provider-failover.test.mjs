@@ -8,6 +8,7 @@ const worker=fs.readFileSync(new URL('../api/dabbir-whatsapp-ai-worker.js',impor
 const cron=fs.readFileSync(new URL('../api/dabbir-whatsapp-ai-cron.js',import.meta.url),'utf8');
 const original=fs.readFileSync(new URL('../supabase/migrations/20260907081000_dabbir_whatsapp_ai_provider_failover_v1.sql',import.meta.url),'utf8');
 const repair=fs.readFileSync(new URL('../supabase/migrations/20260908083500_dabbir_whatsapp_ai_provider_continuity_truth_v1.sql',import.meta.url),'utf8');
+const safety=fs.readFileSync(new URL('../supabase/migrations/20260908084600_dabbir_whatsapp_ai_provider_continuity_safety_v2.sql',import.meta.url),'utf8');
 
 test('all supported AI provider and planner failures remain classified for bounded continuity handling',()=>{
   for(const code of ['gateway_http_404','gateway_timeout','gemini_http_429','groq_network_error','cloudflare_timeout','AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','empty_ai_response']){
@@ -17,13 +18,15 @@ test('all supported AI provider and planner failures remain classified for bound
   assert.equal(isWhatsAppAiProviderFailure('META_WHATSAPP_SEND_FAILED'),false);
 });
 
-test('provider outage message is truthful and does not claim a human handoff',()=>{
-  const ar=providerContinuityMessage('شو عندكم');
-  const en=providerContinuityMessage('what do you have');
+test('provider outage message is truthful, language-only and does not claim a human handoff',()=>{
+  const ar=providerContinuityMessage('ar');
+  const en=providerContinuityMessage('en');
   assert.match(ar,/خلل مؤقت/);
   assert.match(en,/temporary processing issue/i);
   assert.doesNotMatch(ar,/حوّلت|الفريق|موظف|المدير/);
   assert.doesNotMatch(en,/team|human|agent|manager/i);
+  assert.match(helper,/result\.customer_language/);
+  assert.doesNotMatch(helper,/result\.customer_body/);
   assert.match(helper,/dabbir_whatsapp_ai_provider_degraded_complete/);
   assert.match(helper,/dabbir_whatsapp_ai_provider_degraded_handoff/);
 });
@@ -36,11 +39,12 @@ test('nonterminal reservation replay is never reported as delivered',()=>{
   assert.doesNotMatch(helper,/should_send!==true\)\{\s*return \{delivered:true,deduplicated:true/);
 });
 
-test('fast dispatch preserves the continuity result instead of forcing HUMAN_REQUIRED',()=>{
+test('fast dispatch preserves retry continuity and never reclaims HUMAN_REQUIRED',()=>{
   const processPos=worker.indexOf('processWhatsAppDispatchWithServiceMenu');
   const failoverPos=worker.indexOf('failoverWhatsAppAiProvider(token,result.error)');
   assert.ok(processPos>=0&&failoverPos>processPos);
-  assert.match(worker,/\['RETRY','HUMAN_REQUIRED'\]\.includes\(result\?\.state\)/);
+  assert.match(worker,/result\?\.state==='RETRY'/);
+  assert.doesNotMatch(worker,/\['RETRY','HUMAN_REQUIRED'\]\.includes/);
   assert.match(worker,/state:clean\(failover\.state,40\)\|\|result\.state/);
   assert.doesNotMatch(worker,/state:'HUMAN_REQUIRED',provider_failover:true/);
 });
@@ -68,9 +72,26 @@ test('database continuity is service-role-only, stale-turn safe, and closes only
   assert.match(repair,/revoke all on function public\.dabbir_whatsapp_ai_provider_degraded_handoff\(uuid,text\) from public,anon,authenticated/i);
 });
 
-test('generic handoff metadata distinguishes an actual customer request from a system escalation',()=>{
+test('provider continuity cannot emit after ownership moves to a human and candidates are RETRY-only',()=>{
+  assert.match(safety,/v_conversation\.state in \('human_active','action_required','closed'\)/);
+  assert.match(safety,/h\.state in \('QUEUED','ASSIGNED','HUMAN_ACTIVE'\)/);
+  assert.match(safety,/and b\.state='RETRY'/);
+  assert.doesNotMatch(safety,/b\.state='HUMAN_REQUIRED'/);
+  assert.match(safety,/return jsonb_build_object\('ok',true,'handled',false,'state','HUMAN_REQUIRED'\)/);
+});
+
+test('provider continuity RPC returns only language classification, not raw customer text',()=>{
+  const responseSection=safety.match(/Return only the language needed[\s\S]*?end;\n\$function\$/)?.[0]||'';
+  assert.match(responseSection,/'customer_language',v_customer_language/);
+  assert.doesNotMatch(responseSection,/'customer_body'/);
+});
+
+test('generic handoff metadata distinguishes an actual customer request from system escalation and repairs history',()=>{
   assert.match(repair,/v_customer_requested/);
   assert.match(repair,/CUSTOMER_REQUESTED_HUMAN/);
   assert.match(repair,/'customer_requested_human',v_customer_requested/);
   assert.doesNotMatch(repair,/'customer_requested_human',true/);
+  assert.match(safety,/update public\.dabbir_handoffs h/);
+  assert.match(safety,/'customer_requested_human'/);
+  assert.match(safety,/where coalesce\(h\.metadata->>'source',''\)='dabbir_whatsapp_ai'/);
 });
