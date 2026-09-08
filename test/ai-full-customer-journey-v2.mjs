@@ -368,6 +368,7 @@ async function browserJourney() {
   assert(!operationalContract.mode_requirements.REMOTE.required.includes('location'),'ACTIVITY_REMOTE_LOCATION_REQUIRED');
   assert(operationalSaved.json.audit.some(x=>x.service_id===serviceId&&x.version===operationalContract.owner_version&&x.action==='SAVE'),'ACTIVITY_OWNER_AUDIT_MISSING');
   await operationalForm.locator('[data-revoke]').click();
+  await operationalForm.locator('[name="restore"] option[value="'+(operationalContract.owner_version+1)+'"]').waitFor({state:'attached',timeout:15000});
   await operationalForm.locator('[data-message]').filter({hasText:/تم حفظ متطلبات الخدمة|Service requirements saved/}).waitFor({timeout:15000});
   const operationalRestored=await readOperational();
   assert(operationalRestored.json?.audit?.some(x=>x.service_id===serviceId&&x.action==='REVOKE'&&x.version>operationalContract.owner_version),'ACTIVITY_REVOKE_AUDIT_MISSING');
