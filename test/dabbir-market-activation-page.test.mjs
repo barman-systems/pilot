@@ -7,7 +7,7 @@ const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.
 
 test('login and signup remain available without the retired public demo', () => {
   assert.doesNotMatch(shell, /demoFirst|preSignupValue|href="\/try"/);
-  const redirect = fs.readFileSync(new URL('../try.html', import.meta.url), 'utf8');
+  const redirect = fs.readFileSync(new URL('../public/try.html', import.meta.url), 'utf8');
   assert.doesNotMatch(redirect, /demoForm|demoMessage|runDemo|fetch\(/);
   assert.ok(redirect.includes('http-equiv="refresh" content="0;url=/"'));
   assert.ok(redirect.includes("window.location.replace('/');"));
