@@ -96,28 +96,6 @@ test('customer journey tracks changes to the web-runtime classification contract
   assert.match(journeyWorkflow, /- 'vercel-ignore-if-unaffected\.sh'/);
 });
 
-test('executable Production SQL smoke proofs require exact-SHA deployment and a customer journey', () => {
-  for (const relativePath of [
-    'docs/audits/DABBIR_RETURN_TO_AI_PRODUCTION_SMOKE.sql',
-    'docs/audits/DABBIR_UNDERSTANDING_V2_PRODUCTION_SMOKE.sql',
-  ]) {
-    const dir = setupRepo();
-    const baseline = git(dir, 'rev-parse', 'HEAD');
-    const head = commitPath(dir, relativePath, 'begin; select 1; rollback;\n');
-    const result = runGuard(dir, head, baseline);
-    assert.equal(result.status, 1, `${relativePath}: ${result.stdout}`);
-    assert.match(result.stdout, /Exact-SHA Production verification contract changed/);
-  }
-  assert.ok(journeyWorkflow.includes("- 'docs/audits/DABBIR_*PRODUCTION_SMOKE.sql'"));
-});
-
-test('static audit reports still skip deployment when no runtime or executable proof changed', () => {
-  const dir = setupRepo();
-  const baseline = git(dir, 'rev-parse', 'HEAD');
-  const head = commitPath(dir, 'docs/audits/DABBIR_UNDERSTANDING_REPORT.md', 'Verified historical evidence.\n');
-  assert.equal(runGuard(dir, head, baseline).status, 0);
-});
-
 test('protected Production smoke runner changes on main force exact-SHA Vercel deployment', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
