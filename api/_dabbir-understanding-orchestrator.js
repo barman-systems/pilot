@@ -3,12 +3,11 @@ import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
 const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
-export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
-  tool_selection:d.reasonCode,model_calls:s.model_calls||0,session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
+  tool_selection:d.reasonCode,model_calls:s.model_calls||0});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
 function exactServiceByText(c,raw,allowedIds=null){
@@ -48,46 +47,6 @@ function previousForGroundedService(previous,grounded){
   if(time?.status==='unresolved'&&time?.source==='CUSTOMER_STATED'&&Number(time?.confidence)<.9&&time?.part==='am_pm')delete next.entities.time;
   return next;
 }
-function pendingStateLive(c,at){
-  const pending=c?.pending_state;
-  return !!(pending?.pending_action&&pending.pending_action!=='none'&&pending.expires_at&&Date.parse(pending.expires_at)>at.getTime());
-}
-function sameSemanticScope(previous,c){
-  const scope=previous?.scope;
-  return !!(scope&&previous?.version===2&&scope.business_id===c.business?.id&&scope.conversation_id===c.conversation?.id&&scope.customer_id===c.customer?.id&&scope.branch_id===c.conversation?.branch_id);
-}
-function sessionPrevious(previous,c,at){
-  if(!sameSemanticScope(previous,c))return {previous,reset:false};
-  const updated=Date.parse(previous?.updated_at||previous?.created_at||'');
-  const expired=previous?.expires_at&&Date.parse(previous.expires_at)<=at.getTime();
-  const idle=!Number.isFinite(updated)||at.getTime()-updated>SEMANTIC_SESSION_IDLE_MS;
-  if((expired||idle)&&!pendingStateLive(c,at))return {previous:null,reset:true};
-  return {previous,reset:false};
-}
-function greetingOnly(messages){
-  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
-  return /^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?|مرحبا(?: بك)?|هلا(?: والله)?|hello|hi|hey|good morning|good evening)$/.test(text);
-}
-function orphanChoiceOnly(messages){
-  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
-  return /^(?:[123]|الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|the first|the second|the third)$/.test(text);
-}
-function greetingDecision(state,sessionReset){
-  state.sub_intent='GREETING';
-  state.missing_fields=[];state.unresolved_references=[];
-  state.overall_confidence=1;state.semantic_confidence=1;
-  state.operational_confidence=Math.min(1,state.transcription_confidence==null?1:Number(state.transcription_confidence)||0);
-  if(sessionReset){state.session_reset=true;state.goal='UNKNOWN';state.intent='SUPPORT';}
-  const ar=state.language==='ar';
-  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply:ar?'وعليكم السلام، حياك. كيف أقدر أساعدك؟':'Hello. How can I help you?'};
-}
-function staleChoiceDecision(state){
-  delete state.entities?.time;delete state.entities?.slot;
-  state.goal='UNKNOWN';state.intent='SUPPORT';state.sub_intent='STALE_OPTION_REFERENCE';state.pending_action=null;
-  state.missing_fields=[];state.unresolved_references=[];state.overall_confidence=1;state.semantic_confidence=1;state.operational_confidence=1;state.session_reset=true;
-  const ar=state.language==='ar';
-  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:ar?'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.':'The previous list has expired. Tell me what you need or ask for the services again.'};
-}
 
 // One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
 // Adapter injection makes provider/retry/concurrency tests exercise the real runtime path.
@@ -96,9 +55,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   const c={...context,...load},turnNow=now();
-  const session=sessionPrevious(load.semantic_state,c,turnNow);
-  let semanticPrevious=session.previous,groundedMenuSelection=false;
-  const isGreeting=greetingOnly(c.batch_messages);
+  let semanticPrevious=load.semantic_state,groundedMenuSelection=false;
   // Product markers originate in the signed webhook. Text-menu choices are accepted
   // only from a provider-verified, unexpired ordered service presentation. Both paths
   // reduce to the same scoped catalog_service_id contract.
@@ -119,11 +76,6 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   }));
   semanticPrevious=previousForGroundedService(semanticPrevious,groundedMenuSelection);
   let {state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow});
-  const newScope=!sameSemanticScope(load.semantic_state,c);
-  const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
-  if(session.reset)state.session_reset=true;else delete state.session_reset;
-  if(orphanChoice)decision=staleChoiceDecision(state);
-  else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   // A model is needed only when deterministic evidence does not resolve the request.
   // It receives bounded, de-identified context; its result must pass the same reducer.
@@ -136,15 +88,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
     p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
-  if(committed.replay){
-    state=committed.state;decision={...decision,action:state.pending_action||decision.action};
-    if(orphanChoice)decision=staleChoiceDecision(state);else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
-  }
+  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};}
   const version=committed.version,lang=state.language;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
   const send=async(text,purpose)=>{budget();await assertCurrent();return deliver({...claim,semantic_version:version},c,text,purpose);};
-  if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,
     p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,
     p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
