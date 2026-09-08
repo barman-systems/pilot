@@ -72,6 +72,18 @@ test('return boundary: low-risk owner observation remains inactive and idempoten
 test('return boundary: human replies and sensitive reasons do not produce learned observations',async()=>{
  for(const sensitive of [true,false]){await reset();await q("update dabbir_handoffs set route_class='OWNER_DECISION',priority=30,reason=$1",[sensitive?'payment.approve':'routine_followup']);if(!sensitive)await q("insert into dabbir_messages values($1,$2,'human',now()+interval '1 second')",[b,c]);await login(u);await resume();await db.exec('reset role');assert.equal((await q('select count(*)::int n from dabbir_owner_decision_observations')).rows[0].n,0)}
 });
+test('return boundary: two control cycles in one transaction have distinct transition timestamps',async()=>{
+ await reset();await db.exec('begin');
+ try{
+  await login(u);await resume();await db.exec('reset role');
+  await q("insert into dabbir_handoffs(id,business_id,conversation_id,state,route_class,reason,priority,created_at,updated_at) values(gen_random_uuid(),$1,$2,'HUMAN_ACTIVE','OWNER_DECISION','routine_followup',30,now(),now())",[b,c]);
+  await q("update dabbir_conversations set state='human_active' where id=$1",[c]);
+  await login(u);await resume();await db.exec('reset role');
+  assert.equal((await q("select count(distinct returned_to_ai_at)::int n from dabbir_handoffs where state='RETURNED_TO_AI'")).rows[0].n,2);
+  assert.equal((await q('select count(*)::int n from dabbir_owner_decision_observations')).rows[0].n,1);
+  assert.equal((await q('select count(*)::int n from dabbir_owner_policy_versions')).rows[0].n,0);
+ }finally{await db.exec('reset role;rollback')}
+});
 test('final return function uses per-call wall-clock identity instead of transaction-start now()',()=>{
  const sql=fs.readFileSync('supabase/migrations/20260908064658_dabbir_return_to_ai_state_boundary_v4.sql','utf8');
  assert.match(sql,/v_now timestamptz:=clock_timestamp\(\)/);

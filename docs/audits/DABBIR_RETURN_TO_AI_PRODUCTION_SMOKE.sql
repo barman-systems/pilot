@@ -1,7 +1,7 @@
 -- Controlled database smoke only. No provider send; every fixture is rolled back.
 begin;
 do $smoke$
-declare biz uuid:=gen_random_uuid(); own uuid:=gen_random_uuid(); br uuid:=gen_random_uuid(); cust uuid:=gen_random_uuid(); conv uuid:=gen_random_uuid(); msg uuid:=gen_random_uuid(); batch uuid:=gen_random_uuid(); token uuid:=gen_random_uuid(); blocked boolean; result jsonb;
+declare biz uuid:=gen_random_uuid(); own uuid:=gen_random_uuid(); br uuid:=gen_random_uuid(); cust uuid:=gen_random_uuid(); conv uuid:=gen_random_uuid(); msg uuid:=gen_random_uuid(); batch uuid:=gen_random_uuid(); token uuid:=gen_random_uuid(); blocked boolean; result jsonb; first_return timestamptz;
 begin
  insert into auth.users(id,email) values(own,'qa-return-ai-'||own||'@example.invalid');
  insert into public.dabbir_businesses(id,slug,name,business_type,demo_mode) values(biz,'qa-return-ai-'||biz,'Return to AI rollback QA','car_wash',true);
@@ -24,7 +24,9 @@ begin
  set local role authenticated;
  result:=public.dabbir_return_conversation_to_ai(biz,conv);
  if result->>'state'<>'waiting_customer' then raise exception 'QA_RETURN_FAILED'; end if;
+ select updated_at into first_return from public.dabbir_conversations where business_id=biz and id=conv;
  perform public.dabbir_return_conversation_to_ai(biz,conv);
+ if (select updated_at from public.dabbir_conversations where business_id=biz and id=conv)<=first_return then raise exception 'QA_PER_CALL_TRANSITION_IDENTITY_FAILED';end if;
  blocked:=false;begin update public.dabbir_ai_conversation_state set pending_action='none' where business_id=biz;exception when insufficient_privilege then blocked:=true;end;
  if not blocked then raise exception 'QA_DIRECT_STATE_WRITE_ALLOWED';end if;
  blocked:=false;begin perform dabbir_private.conversation_return_to_ai_v3();exception when insufficient_privilege then blocked:=true;end;
