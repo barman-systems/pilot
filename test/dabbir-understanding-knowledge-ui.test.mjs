@@ -53,6 +53,11 @@ test('duplicate submit sends one request; completion after business switch canno
   await ui.refresh();ui.open();ui.input('alias').value='VIP';ui.input('service').value='service-A';const form=ui.form();const first=form.onsubmit({preventDefault(){}});await form.onsubmit({preventDefault(){}});assert.equal(writes.length,1);ui.workspace.business.id='B';await ui.refresh();finish(response({}));await first;assert.equal(ui.form(),undefined);assert.equal(ui.notices.length,0);
 });
 test('failed knowledge read gives retry, not an empty success or actionable form',async()=>{let fail=true;const ui=harness(async url=>{if(url.includes('understanding')&&fail)throw new Error('network');return response(url.includes('understanding')?payload:{})});await ui.refresh();ui.open();assert.match(ui.text(),/Could not load/);assert.equal(ui.form(),undefined);fail=false;await ui.button('Retry').onclick();assert.ok(ui.form())});
+test('failed policy read remains visibly unavailable while service meanings stay usable',async()=>{
+ let fail=true;const ui=harness(async url=>{if(url.includes('owner-decision-memory')&&fail)throw new Error('network');return response(url.includes('understanding')?payload:{})});
+ await ui.refresh();ui.open();assert.match(ui.text(),/Could not load owner policies/);assert.doesNotMatch(ui.text(),/No new suggestions right now/);assert.ok(ui.form());
+ fail=false;await ui.button('Retry policies').onclick();assert.doesNotMatch(ui.text(),/Could not load owner policies/);assert.match(ui.text(),/No new suggestions right now/);
+});
 test('owner role removed closes knowledge and discards in-flight data',async()=>{const ui=harness(async url=>response(url.includes('understanding')?payload:{}));await ui.refresh();ui.open();ui.workspace.membership.role='employee';await ui.refresh();assert.equal(ui.form(),undefined);assert.equal(ui.button('DABBIR Policies'),undefined)});
 test('untrusted alias remains text and cannot create markup',async()=>{const ui=harness(async url=>response(url.includes('understanding')?{...payload,proposals:[{id:'p',entity_type:'service',alias:'<img src=x onerror=alert(1)>',target_id:'service-A',status:'PROPOSED',version:1}]}:{}));await ui.refresh();ui.open();assert.match(ui.text(),/<img src=x/);assert.equal(ui.nodes().some(n=>n.tag==='img'),false);assert.ok(ui.nodes().every(n=>!n.innerHTML))});
 
