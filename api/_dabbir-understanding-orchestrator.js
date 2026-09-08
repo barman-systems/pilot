@@ -115,7 +115,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');
     const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
-    if(selected){groundedMenuSelection=true;return {...message,body:serviceLabel(selected),catalog_service_id:selected.id};}
+    if(selected){groundedMenuSelection=true;return {...message,language_body:body,body:serviceLabel(selected),catalog_service_id:selected.id};}
     const product=body.match(/\[DABBIR_CATALOG_PRODUCT catalog_id=([0-9]{5,40}) product_retailer_id=([^\]\s]+)\]/);
     const order=body.match(/\[DABBIR_CATALOG_ORDER catalog_id=([0-9]{5,40}) items=([^\]]+)\]/);
     if(!product&&!order)return message;
@@ -166,6 +166,9 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
   const send=async(text,purpose)=>{budget();await assertCurrent();return deliver({...claim,semantic_version:version},c,text,purpose);};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
+  // A verified service choice is single-use. Retire the menu before the next customer
+  // turn so a later bare number cannot be reinterpreted as the old service choice.
+  if(groundedMenuSelection&&c.pending_state?.pending_action==='choose_service')await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,
     p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,
     p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
