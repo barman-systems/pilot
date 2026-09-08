@@ -12,7 +12,7 @@ const flowSource=fs.readFileSync('api/_dabbir-whatsapp-flows.js','utf8');
 test('booking Flow is terminal, booking-only and contains no financial fields',()=>{
   assert.match(BOOKING_FLOW_SCHEMA_HASH,/^[0-9a-f]{64}$/);
   const flow=JSON.parse(BOOKING_FLOW_JSON);
-  assert.equal(flow.version,'5.0');
+  assert.equal(flow.version,'7.3');
   assert.equal(flow.screens.length,1);
   assert.equal(flow.screens[0].id,'BOOKING');
   assert.equal(flow.screens[0].terminal,true);
