@@ -20,6 +20,7 @@
     "/api/dabbir-owner-away-task-ui",
     "/api/home-service-ui",
     "/api/business-profile-ui",
+    "/api/customer-name-ui",
     "/api/dabbir-billing-ui",
     "/api/platform-customers-ui",
     "/api/platform-customer-support-ui",
