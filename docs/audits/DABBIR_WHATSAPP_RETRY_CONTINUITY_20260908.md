@@ -47,3 +47,7 @@ recognition findings in calendar-connections, calendar-sync,
 platform-customer-support and platform-customers. The required CI security gate
 uses changed endpoints plus full-repository secret/client/security invariants;
 its result is recorded separately from that broader baseline scan.
+
+Applied migration: `20260908173803_dabbir_provider_retry_checkpoint_v1.sql`.
+Repository and production history SQL MD5: `7c74d1bade79f10da288de1d7a13b73e`.
+Local suite: 2149 PASS. Required change security and DB discipline gates PASS.
