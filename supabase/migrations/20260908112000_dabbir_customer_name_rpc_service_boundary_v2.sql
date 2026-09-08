@@ -1,5 +1,5 @@
 -- DABBIR customer naming v2
--- Close the exposed authenticated SECURITY DEFINER surface. The web API verifies the
+-- Close the exposed authenticated privileged RPC surface. The web API verifies the
 -- signed-in owner/admin and then calls this service-role-only RPC with the exact actor id.
 
 drop function if exists public.dabbir_customer_update_display_name(uuid,uuid,text);
