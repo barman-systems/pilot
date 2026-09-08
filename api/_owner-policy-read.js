@@ -19,13 +19,13 @@ export async function readOwnerPolicyRows(request, source, {
       const payload = await response.json().catch(() => null);
       if (response.ok && Array.isArray(payload)) return payload;
       code = AUTH_CODES.has(payload?.message) ? payload.message : SAFE_CODES.has(payload?.code) ? payload.code : response.ok ? 'INVALID_RESPONSE' : 'UPSTREAM_REJECTED';
-      retryable = TRANSIENT_STATUS.has(upstreamStatus) || TRANSIENT_CODES.has(code);
+      retryable = !AUTH_CODES.has(code) && !['42501', 'PGRST301', 'PGRST302'].includes(code) && (TRANSIENT_STATUS.has(upstreamStatus) || TRANSIENT_CODES.has(code));
     } catch (error) {
       retryable = error instanceof TypeError || ['AbortError', 'TimeoutError'].includes(error?.name);
       code = retryable ? 'NETWORK_FAILURE' : 'READ_FAILED';
     }
     if (retryable && attempt === 1) { await wait(150); continue; }
-    const status = upstreamStatus === 401 || code === 'AUTH_REQUIRED' ? 401 : upstreamStatus === 403 || code === '42501' || AUTH_CODES.has(code) ? 403 : retryable ? 503 : 502;
+    const status = upstreamStatus === 401 || ['AUTH_REQUIRED', 'PGRST301', 'PGRST302'].includes(code) ? 401 : upstreamStatus === 403 || code === '42501' || AUTH_CODES.has(code) ? 403 : retryable ? 503 : 502;
     log('dabbir_owner_policy_read_failed', { source, upstream_status: upstreamStatus, status, code, attempt });
     throw Object.assign(new Error('OWNER_POLICY_READ_UNAVAILABLE'), { status });
   }

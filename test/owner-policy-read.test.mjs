@@ -35,3 +35,8 @@ test('owner revoked between membership lookup and database read remains a termin
  await assert.rejects(()=>readOwnerPolicyRows(()=>{calls++;return response({code:'P0001',message:'OWNER_REQUIRED'},400)},'candidates',{log:()=>{}}),{status:403});
  assert.equal(calls,1);
 });
+test('an explicit owner denial is never retried even when a gateway mislabels its HTTP status',async()=>{
+ let calls=0;
+ await assert.rejects(()=>readOwnerPolicyRows(()=>{calls++;return response({code:'P0001',message:'OWNER_REQUIRED'},503)},'candidates',{log:()=>{},wait:async()=>assert.fail('authorization denial retried')}),{status:403});
+ assert.equal(calls,1);
+});
