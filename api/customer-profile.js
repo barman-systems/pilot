@@ -7,8 +7,8 @@ import {
   readJsonBody,
   requireSameOrigin,
   supabaseRest,
-  supabaseRpc,
 } from './_auth-core.js';
+import { serviceRpc } from './_whatsapp-live-core.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
@@ -56,15 +56,17 @@ export default async function handler(req,res){
     if(!businessId||!customerId)return json(res,400,{ok:false,error:'CUSTOMER_CONTEXT_REQUIRED'});
     const member=membershipFor(ctx,businessId);
     if(!member||!canEdit(member))return json(res,403,{ok:false,error:'CUSTOMER_NAME_OWNER_REQUIRED'});
+    const actorUserId=safeId(ctx.user?.id);
+    if(!actorUserId)return json(res,401,{ok:false,error:'AUTH_ACTOR_INVALID'});
     const name=cleanName(body?.display_name);
     if(!name||name.length>120)return json(res,400,{ok:false,error:'CUSTOMER_NAME_INVALID'});
-    const customer=await payload(await supabaseRpc('dabbir_customer_update_display_name',ctx.token,{
-      p_business_id:businessId,p_customer_id:customerId,p_display_name:name,
-    }),'CUSTOMER_NAME_UPDATE_FAILED');
+    const customer=await serviceRpc('dabbir_customer_update_display_name',{
+      p_actor_user_id:actorUserId,p_business_id:businessId,p_customer_id:customerId,p_display_name:name,
+    });
     if(!customer?.id||customer.id!==customerId||customer.business_id!==businessId||customer.display_name!==name){
       return json(res,502,{ok:false,error:'CUSTOMER_NAME_UPDATE_UNVERIFIED'});
     }
-    return json(res,200,{ok:true,customer,truth:{state:'VERIFIED',source:'DATABASE_RPC_READBACK',entity:'customer',entity_id:customer.id,verified_at:new Date().toISOString()}});
+    return json(res,200,{ok:true,customer,truth:{state:'VERIFIED',source:'DATABASE_SERVICE_RPC_READBACK',entity:'customer',entity_id:customer.id,verified_at:new Date().toISOString()}});
   }catch(error){
     const status=[400,401,403,404,409].includes(Number(error?.status))?Number(error.status):500;
     return json(res,status,{ok:false,error:String(error?.message||'CUSTOMER_PROFILE_FAILED').slice(0,160)});
