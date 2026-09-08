@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
 import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
+import { persistSignedVoiceInbound } from './_dabbir-whatsapp-voice.js';
 
 export const config = {
   api: {
@@ -125,6 +126,9 @@ export function extractWhatsAppEvents(payload = {}) {
             timestamp: message.timestamp || null,
             messageType: message.type || null,
             text: String(messageText(message) || '').slice(0, 4000),
+            mediaId: message.audio?.id || null,
+            mediaMimeType: message.audio?.mime_type || null,
+            voice: message.audio?.voice === true,
             phoneNumberId,
             displayPhoneNumber,
           });
@@ -234,6 +238,7 @@ export default async function handler(req, res) {
   const events = extractWhatsAppEvents(payload);
   const routed = events.map((event) => ({ ...event, ...classifyDABBIREvent(event, project) }));
   const messageCount = routed.filter(e => e.type === 'message').length;
+  const voiceMessageCount = routed.filter(e => e.type === 'message' && e.messageType === 'audio' && e.mediaId).length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const coexistenceCount = routed.filter(e => ['app_message_echo', 'history_message', 'app_state_sync', 'coexistence_sync'].includes(e.type)).length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
@@ -247,7 +252,9 @@ export default async function handler(req, res) {
     for (const event of routed) {
       if (event.type === 'message') {
         try {
-          const result = await persistSignedInbound(event);
+          const result = event.messageType === 'audio' && event.mediaId
+            ? await persistSignedVoiceInbound(event)
+            : await persistSignedInbound(event);
           if (result.persisted) persistedMessages += 1;
           if (result.duplicate) duplicateMessages += 1;
         } catch (error) {
@@ -274,6 +281,7 @@ export default async function handler(req, res) {
       failure_class: missingService ? 'CONFIGURATION' : 'DATABASE',
       event_count: routed.length,
       message_count: messageCount,
+      voice_message_count: voiceMessageCount,
       status_count: statusCount,
       coexistence_event_count: coexistenceCount,
     });
@@ -302,6 +310,7 @@ export default async function handler(req, res) {
     project,
     event_count: routed.length,
     message_count: messageCount,
+    voice_message_count: voiceMessageCount,
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
@@ -322,6 +331,7 @@ export default async function handler(req, res) {
     signature_verified: true,
     event_count: routed.length,
     message_count: messageCount,
+    voice_message_count: voiceMessageCount,
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
