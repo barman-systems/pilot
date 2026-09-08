@@ -3,15 +3,20 @@ import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
 const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
+const SEMANTIC_INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
 export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
-  tool_selection:d.reasonCode,model_calls:s.model_calls||0,planner_failure_code:s.planner_failure_code||null,session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
+  tool_selection:d.reasonCode,model_calls:s.model_calls||0,planner_failure_code:s.planner_failure_code||null,
+  semantic_interpreter:s.semantic_interpreter||'deterministic',semantic_override:s.semantic_ai_override?.to||null,
+  session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
+const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
+const scopedWorkers=c=>arr(c?.workers).filter(w=>(!w?.business_id||w.business_id===c.business?.id)&&(!w?.branch_id||w.branch_id===c.conversation?.branch_id));
 function exactServiceByText(c,raw,allowedIds=null){
   const wanted=normalizeSemanticText(raw);if(!wanted)return null;
   const allowed=allowedIds?new Set(allowedIds):null;
@@ -73,6 +78,11 @@ function orphanChoiceOnly(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
   return /^(?:[123]|الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|the first|the second|the third)$/.test(text);
 }
+function naturalLanguageTurn(messages){
+  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.language_body??x?.body||'')).filter(Boolean).join(' '));
+  if(!text||orphanChoiceOnly(messages))return false;
+  return text.length>=2;
+}
 function greetingDecision(state,sessionReset){
   state.sub_intent='GREETING';
   state.missing_fields=[];state.unresolved_references=[];
@@ -89,7 +99,6 @@ function staleChoiceDecision(state){
   const ar=state.language==='ar';
   return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:ar?'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.':'The previous list has expired. Tell me what you need or ask for the services again.'};
 }
-
 function plannerRecoveryDecision(state,code){
   state.model_calls=1;state.planner_failure_code=code;
   state.pending_action='CLARIFY';state.clarification_entity='request';
@@ -98,9 +107,48 @@ function plannerRecoveryDecision(state,code){
   return {action:'CLARIFY',intent:state.intent,confidence:.35,riskLevel:'LOW',missingFields:[],reasonCode:'PLANNER_RECOVERY_CLARIFICATION',
     reply:state.language==='ar'?'تقصد الاستفسار عن الخدمات والأسعار، أو تبا تحجز؟':'Are you asking about services and prices, or would you like to book?'};
 }
+function safePlannerHistory(c){
+  return arr(c?.history).map(item=>{
+    const sender=String(item?.sender_type||'').toLowerCase();
+    const body=String(item?.body||'').trim().slice(0,600);
+    if(!body||!['customer','ai','human'].includes(sender))return null;
+    return {sender_type:sender,body,created_at:item?.created_at||null};
+  }).filter(Boolean).slice(-8);
+}
+function aiFirstPlannerContext(c,state){
+  const base=semanticPlannerContext(c,state),services=scopedServices(c),workers=scopedWorkers(c);
+  const serviceName=id=>serviceLabel(services.find(x=>x.id===id));
+  const workerName=id=>workerLabel(workers.find(x=>x.id===id));
+  const pending=c?.pending_state||{},payload=pending?.payload||{};
+  return {...base,
+    current_messages:arr(c?.batch_messages).slice(-4).map(x=>String(x?.language_body??x?.body||'').trim().slice(0,700)).filter(Boolean),
+    recent_conversation:safePlannerHistory(c),
+    upcoming_appointments:arr(c?.upcoming_appointments).slice(0,6).map((a,index)=>({index:index+1,starts_at:a?.starts_at||null,status:a?.status||null,service:serviceName(a?.service_id)||null,worker:workerName(a?.worker_id)||null})),
+    pending:{action:pending?.pending_action||'none',mode:payload?.mode||null,presented:payload?.presented===true,expires_at:pending?.expires_at||null,slot_count:arr(payload?.slots).length,service_count:arr(payload?.services).length,appointment_count:arr(payload?.appointments).length},
+    verified_memory_keys:[...new Set(arr(c?.verified_memory).filter(m=>m?.status==='verified').map(m=>String(m?.memory_key||'').slice(0,80)).filter(Boolean))].slice(0,12),
+  };
+}
+function normalizedProposalIntent(proposal){
+  const intent=String(proposal?.intent||'').toUpperCase();
+  return SEMANTIC_INTENTS.has(intent)?intent:null;
+}
+function proposalConflicts(state,proposal){
+  const intent=normalizedProposalIntent(proposal),confidence=Number(proposal?.confidence)||0;
+  return !!(intent&&confidence>=.86&&intent!==state.intent);
+}
+function proposalOverrideBase(state,previous,proposal){
+  const next=structuredClone(state),to=normalizedProposalIntent(proposal);
+  next.revision=previous?.revision||0;
+  next.goal='UNKNOWN';next.intent='SUPPORT';next.sub_intent=null;next.pending_action=null;next.missing_fields=[];
+  // Keep only safety/grounding ambiguity produced independently of the deterministic intent classifier.
+  next.unresolved_references=arr(next.unresolved_references).filter(ref=>['branch','voice_transcript','multiple_options','slot_confirmation'].includes(ref));
+  if(['BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(to))next.intent_confirmed=false;else delete next.intent_confirmed;
+  next.semantic_ai_override={from:state.intent,to,confidence:Number(proposal?.confidence)||0};
+  return next;
+}
 
-// One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
-// Adapter injection makes provider/retry/concurrency tests exercise the real runtime path.
+// One bounded orchestrator owns Understanding -> Semantic AI -> Policy -> Tool -> Verification.
+// The model interprets natural language; only database-grounded facts and existing mutation gates can execute.
 export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,planner,now=()=>new Date()}) {
   const started=Date.now();let steps=0;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
@@ -131,29 +179,36 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   let {state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow});
   const newScope=!sameSemanticScope(load.semantic_state,c);
   const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
-  if(session.reset)state.session_reset=true;else delete state.session_reset;
-  // A convenience reply cannot override takeover, tenant, stale-message or voice gates.
+  state.model_calls=0;state.semantic_interpreter='deterministic';delete state.planner_failure_code;delete state.semantic_ai_override;
+  if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
+  // Safety and provider-verified shortcuts remain deterministic and never wait for a model.
   const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
   if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);
   else if(shortcutAllowed&&isGreeting)decision=greetingDecision(state,session.reset||newScope);
-  state.model_calls=0;delete state.planner_failure_code;
-  if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
-  // A model is needed only when deterministic evidence does not resolve the request.
-  // It receives bounded, de-identified context; its result must pass the same reducer.
-  if(decision.reasonCode==='NO_OPERATIONAL_AUTHORITY' && planner && arr(c.batch_messages).some(x=>String(x.body||'').length>12)) {
+  const deterministic={state:structuredClone(state),decision:{...decision}};
+  const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&naturalLanguageTurn(c.batch_messages));
+  if(shouldInterpret){
     budget();
     let proposal,plannerFailure;
-    try{proposal=await planner(c,semanticPlannerContext(c,state));}
+    try{proposal=await planner(c,aiFirstPlannerContext(c,state));}
     catch(error){
       if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;
       plannerFailure=error.code;
     }
-    if(plannerFailure)decision=plannerRecoveryDecision(state,plannerFailure);
-    else {
-      ({state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow,proposal}));
-      state.model_calls=1;delete state.planner_failure_code;
+    if(plannerFailure){
+      state=deterministic.state;decision=deterministic.decision;state.model_calls=1;state.planner_failure_code=plannerFailure;
+      // If deterministic understanding had no useful interpretation, preserve the existing safe clarification fallback.
+      if(decision.reasonCode==='NO_OPERATIONAL_AUTHORITY')decision=plannerRecoveryDecision(state,plannerFailure);
+    }else{
+      const conflict=proposalConflicts(state,proposal);
+      const providerContext=conflict?{...c,batch_messages:[]}:c;
+      const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
+      ({state,decision}=understandConversation({context:providerContext,previous:providerPrevious,now:turnNow,proposal}));
+      state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;
+      if(conflict&&!state.semantic_ai_override)state.semantic_ai_override={from:deterministic.state.intent,to:normalizedProposalIntent(proposal),confidence:Number(proposal?.confidence)||0};
     }
   }
+  if(session.reset)state.session_reset=true;else delete state.session_reset;
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
     p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
