@@ -35,8 +35,8 @@ test('owner UI exposes customer name edit without growing the frozen shell bundl
   assert.ok(!bundles.deferred.includes('/api/customer-name-ui'));
   assert.match(loader,/src:'\/api\/customer-name-ui\?v=20260908-1'/);
   assert.match(loader,/ready:'__dabbirCustomerNameEditor'/);
-  assert.match(ui,/data\.customerNameEdit=customer\.id/);
-  assert.match(ui,/id='dabbirChatCustomerEdit'/);
+  assert.match(ui,/button\.dataset\.customerNameEdit=customer\.id/);
+  assert.match(ui,/button\.id='dabbirChatCustomerEdit'/);
   assert.match(ui,/\/api\/customer-profile/);
   assert.match(ui,/display_name:name/);
 });
