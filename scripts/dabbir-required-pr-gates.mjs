@@ -5,6 +5,8 @@ const DEFAULT_TIMEOUT_MS=45*60_000;
 
 const clean=value=>String(value??'').trim();
 
+export const ALWAYS_REQUIRED_PR_WORKFLOWS=Object.freeze(['DABBIR Security Gate']);
+
 export function classifyChangedPaths(paths=[]){
   let mobileCi=false;
   let maestro=false;
@@ -98,13 +100,9 @@ export async function run({env=process.env}={}){
 
   const paths=await pullRequestFiles({repository,number:prNumber,token});
   const classification=classifyChangedPaths(paths);
-  const required=[];
+  const required=[...ALWAYS_REQUIRED_PR_WORKFLOWS];
   if(classification.mobileCi)required.push('DABBIR Mobile CI');
   if(classification.maestro)required.push('DABBIR iOS Maestro Smoke');
-  if(required.length===0){
-    console.log(`DABBIR_REQUIRED_PR_GATES_PASS sha=${headSha} required=none`);
-    return {required,paths};
-  }
 
   const pollMs=Math.max(1_000,Number(env.DABBIR_GATE_POLL_MS||DEFAULT_POLL_MS));
   const timeoutMs=Math.max(60_000,Number(env.DABBIR_GATE_TIMEOUT_MS||DEFAULT_TIMEOUT_MS));
