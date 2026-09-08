@@ -18,6 +18,12 @@ function groundedServiceName(x,message,context) {
   return name;
 }
 
+// Provider risk is descriptive output only. It can never raise or lower DABBIR's
+// authority. The semantic engine independently recompiles mutation risk after
+// tenant, intent, facts, policy and tool grounding; deterministic safety and an
+// explicit human request can still hand off before any provider proposal is used.
+function groundedProposalRisk(){return 'LOW'}
+
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -32,8 +38,8 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
   const x=JSON.parse(result.reply);
-  const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
+  const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:groundedProposalRisk(),
+    modelRiskLevel:x.risk_level,serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   return {proposal,provider:result.provider,model:result.model};
 }
@@ -50,5 +56,5 @@ export async function probeSemanticInterpreter() {
     && has('date','2026-09-09') && has('time','09:00');
   return {ok:passed,state:passed?'SUCCESS':'PROVIDER_ERROR',error:passed?null:'SEMANTIC_PROBE_FAILED',
     provider:result.provider,model:result.model,semantic_probe:true,case_id:'gcc_availability_tomorrow_morning',
-    checks:{booking_intent:p.intent==='BOOKING',date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null}};
+    checks:{booking_intent:p.intent==='BOOKING',risk_low:p.riskLevel==='LOW',date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null}};
 }
