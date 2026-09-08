@@ -4,13 +4,13 @@ import vm from 'node:vm';
 import handler from '../api/dabbir-owner-decision-memory-ui.js';
 const response=payload=>({ok:true,json:async()=>({ok:true,...payload})});
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
-function harness(fetch,lang='en'){
+function harness(fetch,lang='en',lateDashboard=false){
   let script,observer;
   handler({method:'GET'},{setHeader(){},end(s){script=s}});
   const all=[];
   class Element{
     constructor(tag){this.tag=tag;this.children=[];this.dataset={};this.attrs={};this.value='';this.classList={toggle(){}};all.push(this)}
-    append(...nodes){for(const n of nodes){n.parentNode=this;this.children.push(n)}}
+    append(...nodes){for(const n of nodes){n.remove();n.parentNode=this;this.children.push(n)}}
     appendChild(n){this.append(n)}
     remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(n=>n!==this);this.parentNode=null}
     setAttribute(k,v){this.attrs[k]=v}
@@ -20,15 +20,15 @@ function harness(fetch,lang='en'){
     querySelector(){return null}
     querySelectorAll(){return this.children.flatMap(n=>[n,...n.querySelectorAll()]).filter(n=>['button','input','select'].includes(n.tag))}
   }
-  const document={createElement:t=>new Element(t),querySelector(selector){if(selector==='#dabbirActionCenter .dac-head')return host;return all.find(n=>n.id===selector.slice(1)&&n.connected)||null},querySelectorAll(){return all.filter(n=>n.connected&&['button','input','select'].includes(n.tag))}};
+  const document={createElement:t=>new Element(t),querySelector(selector){if(selector==='#dabbirActionCenter .dac-head')return lateDashboard?null:host;if(selector==='#screen-automations .hero'||selector==='#screen-automations')return autoHost;return all.find(n=>n.id===selector.slice(1)&&n.connected)||null},querySelectorAll(){return all.filter(n=>n.connected&&['button','input','select'].includes(n.tag))}};
   document.documentElement=new Element('html');document.documentElement.lang=lang;
   document.head=new Element('head');document.body=new Element('body');document.documentElement.append(document.head,document.body);
-  const host=new Element('div');document.body.append(host);
+  const host=new Element('div'),autoHost=new Element('div');document.body.append(host,autoHost);
   const workspace={business:{id:'A'},membership:{role:'owner'}};
   const window={fetch};const notices=[];
   vm.runInNewContext(script,{window,workspace,document,MutationObserver:class{constructor(fn){observer=fn}observe(){}},setTimeout(){},requestAnimationFrame(fn){queueMicrotask(fn);return 1},toast:s=>notices.push(s),encodeURIComponent,Date,Promise});
   const nodes=()=>all.filter(n=>n.connected);
-  return {workspace,notices,refresh:()=>window.__dabbirOwnerDecisionMemory.refresh(),observe:()=>observer(),button:s=>nodes().find(n=>n.tag==='button'&&n.textContent===s),nodes,open:()=>document.querySelector('#dabbirMemoryButton').onclick(),form:()=>nodes().find(n=>n.tag==='form'),input:name=>nodes().find(n=>n.name===name),text:()=>nodes().map(n=>n.textContent||'').join('|')};
+  return {workspace,notices,host,autoHost,mountDashboard(){lateDashboard=false;observer()},refresh:()=>window.__dabbirOwnerDecisionMemory.refresh(),observe:()=>observer(),button:s=>nodes().find(n=>n.tag==='button'&&n.textContent===s),nodes,open:()=>document.querySelector('#dabbirMemoryButton').onclick(),form:()=>nodes().find(n=>n.tag==='form'),input:name=>nodes().find(n=>n.name===name),text:()=>nodes().map(n=>n.textContent||'').join('|')};
 }
 const payload={services:[{id:'service-A',name:'Gold wash',active:true}],proposals:[],audit:[]};
 for(const lang of ['ar','en'])test(lang+': owner must save then explicitly approve; revoke and restore read back new versions',async()=>{
@@ -66,4 +66,12 @@ test('the shipped deferred bundle mounts owner knowledge, beyond the historical 
   assert.match(bundle,/owner-decision-memory-ui-v2/);
   assert.match(bundle,/معاني الخدمات/);
   assert.match(bundle,/\/api\/understanding-knowledge/);
+});
+
+
+test('a control mounted in hidden automations moves to the dashboard once its host arrives',async()=>{
+  const ui=harness(async url=>response(url.includes('understanding')?payload:{}),'en',true);
+  await ui.refresh();const button=ui.button('DABBIR Policies');assert.equal(button.parentNode,ui.autoHost);
+  ui.mountDashboard();await flush();assert.equal(ui.button('DABBIR Policies'),button);assert.equal(button.parentNode,ui.host);
+  ui.observe();await flush();assert.equal(ui.host.children.filter(n=>n===button).length,1);
 });

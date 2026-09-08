@@ -4103,6 +4103,9 @@
     const host=actionHead||autoHero;if(!host)return;
     let button=document.querySelector('#dabbirMemoryButton');
     if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',openDialog);const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
+    // The automation screen exists before the asynchronous dashboard mounts.
+    // Move the existing control when its authoritative visible host arrives.
+    if(button.parentNode!==host)host.append(button);
     const x=copy();
     const pending=state.candidates.length+state.proposals.filter(p=>p.status==='PROPOSED').length;
     const hasCandidate=pending>0;
