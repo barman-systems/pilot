@@ -230,7 +230,7 @@ const client=String.raw`
     panel.querySelector('#dacMoreWrap').hidden=true;
   }
 
-  async function loadActionCenter(force=false,recoveredStaleBranch=false){
+  async function loadActionCenter(force=false){
     const w=workspaceNow();
     const businessId=w?.business?.id;
     const key=scopeKey();
@@ -255,11 +255,6 @@ const client=String.raw`
       const params=new URLSearchParams({business_id:businessId,branch_id:scope.mode==='selected'?scope.branch_id:'all'});
       const response=await fetch('/api/owner-action-center?'+params.toString(),{credentials:'same-origin',headers:{accept:'application/json','x-dabbir-client':'web'},cache:'no-store'});
       const data=await response.json().catch(()=>null);
-      if(response.status===404&&data?.error==='BRANCH_NOT_FOUND'&&!recoveredStaleBranch&&typeof window.dabbirBranchContext?.refresh==='function'){
-        await window.dabbirBranchContext.refresh();
-        if(generation!==requestGeneration)return;
-        return loadActionCenter(true,true);
-      }
       if(generation!==requestGeneration||scopeKey()!==key)return;
       if(!response.ok||!data?.ok||!Array.isArray(data.items))throw new Error(data?.error||('ACTION_CENTER_'+response.status));
       if(data.business_id!==businessId||!scopeMatches(data))throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');

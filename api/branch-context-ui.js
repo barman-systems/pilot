@@ -172,11 +172,11 @@ const script=String.raw`(()=>{
     box.dataset.state='ready';
   }
 
-  async function sync(force=false){
+  async function sync(){
     patchFetch();patchApi();
     const id=businessId();
     if(!id){activeBusiness=null;context=null;render();return}
-    if(id!==activeBusiness||force){
+    if(id!==activeBusiness){
       activeBusiness=id;context=null;render();
       try{await loadContext(id);render()}catch{const box=ensureUi();if(box){box.dataset.state='error';box.querySelector('small').textContent=copy().error}}
     }else render();
@@ -185,7 +185,7 @@ const script=String.raw`(()=>{
   window.dabbirBranchContext={
     scope:()=>{const id=businessId();const value=currentScope(id);return {business_id:id,mode:value==='all'?'all':'selected',branch_id:value==='all'?null:value}},
     query(url){const id=businessId(),value=currentScope(id);if(!id||!value||value==='all')return url;const u=new URL(url,location.origin);u.searchParams.set('branch_id',value);return u.pathname+u.search},
-    refresh:()=>sync(true),
+    refresh:sync,
   };
 
   let ticks=0;const timer=setInterval(()=>{sync();ticks++;if(ticks>120&&apiPatched&&fetchPatched&&businessId())clearInterval(timer)},250);
