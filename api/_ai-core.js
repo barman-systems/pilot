@@ -1,3 +1,4 @@
+import { SEMANTIC_SYSTEM_PROMPT, validSemanticContract } from './_dabbir-semantic-contract.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -170,14 +171,14 @@ function normalizeHistory(history = []) {
   });
 }
 
-function finalizeReply({ reply, input, language, config, authMode, model }) {
+function finalizeReply({ reply, input, language, config, authMode, model, semantic = false }) {
   const resolvedAuthMode = authMode || config.auth_mode;
   const resolvedModel = model || config.model;
-  const cleanedReply = replaceLegacyIdentity(String(reply || '').trim());
+  const cleanedReply = semantic ? String(reply || '').trim() : replaceLegacyIdentity(String(reply || '').trim());
   if (!cleanedReply) {
     return { ok: false, state: 'PROVIDER_ERROR', error: 'empty_ai_response', provider: config.provider, model: resolvedModel, auth_mode: resolvedAuthMode, cost_mode: config.cost_mode };
   }
-  if (containsUnverifiedBusinessContact(cleanedReply)) {
+  if (!semantic && containsUnverifiedBusinessContact(cleanedReply)) {
     return {
       ok: true,
       state: 'SUCCESS',
@@ -203,7 +204,7 @@ function finalizeReply({ reply, input, language, config, authMode, model }) {
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -215,18 +216,25 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         model,
         messages,
         temperature: 0.15,
-        max_tokens: 320,
+        max_tokens: semantic ? 1600 : 320,
+        ...(semantic ? { response_format: { type: 'json_object' }, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
         stream: false,
       }),
     });
     const payload = await response.json().catch(() => ({}));
+    if (semantic && response.ok && (payload?.choices?.[0]?.finish_reason === 'length' || !validSemanticContract(payload?.choices?.[0]?.message?.content))) {
+      console.warn('dabbir_semantic_contract_rejected', { reason: payload?.choices?.[0]?.finish_reason === 'length' ? 'TRUNCATED' : 'INVALID_JSON_CONTRACT' });
+      // A transport success is not an interpretation success. Try the next
+      // configured provider within the existing shared attempt/deadline budget.
+      return { response: { ok: false, status: 502 }, payload: {} };
+    }
     return { response, payload };
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl }) {
+async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl, semantic = false }) {
   const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
   const deadline = Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
@@ -244,7 +252,7 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
         model,
         messages,
         fetchImpl,
-        timeoutMs,
+        timeoutMs, semantic,
       });
       const servedModel = String(payload?.model || model);
       if (response.ok) return { ok: true, payload, model: servedModel };
@@ -262,7 +270,7 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
   return { ok: false, ...last };
 }
 
-export async function generateDABBIRAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter } = {}) {
+export async function generateDABBIRAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter, semantic = false } = {}) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) return { ok: false, state: 'REJECTED', error: 'unsupported_project' };
 
@@ -276,7 +284,8 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   const cloudflareAccountId = String(env.CLOUDFLARE_ACCOUNT_ID || '');
   const cloudflareReady = Boolean(cloudflareToken && cloudflareAccountId);
   const messages = [
-    { role: 'system', content: systemPrompt(normalizedProject, language, businessContext) },
+    { role: 'system', content: semantic ? SEMANTIC_SYSTEM_PROMPT : systemPrompt(normalizedProject, language, businessContext) },
+    ...(semantic ? [{role:'user',content:'CONTEXT DATA: '+String(businessContext).slice(0,16000)}] : []),
     ...normalizeHistory(history),
     { role: 'user', content: input },
   ];
@@ -289,14 +298,14 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         model: config.model,
         messages,
         fetchImpl,
-        timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS,
+        timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic,
       });
       if (response.ok) {
         return finalizeReply({
           reply: String(payload?.choices?.[0]?.message?.content || '').trim(),
           input,
           language,
-          config,
+          config, semantic,
           model: String(payload?.model || config.model),
         });
       }
@@ -311,7 +320,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
           history,
           env: fallbackEnv,
           fetchImpl,
-          oidcGetter,
+          oidcGetter, semantic,
         });
       }
 
@@ -335,7 +344,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
           history,
           env: fallbackEnv,
           fetchImpl,
-          oidcGetter,
+          oidcGetter, semantic,
         });
       }
 
@@ -353,17 +362,17 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
   if (groqKey) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS });
-      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
+      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
       if (cloudflareReady || env.VERCEL_ENV) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
       if (cloudflareReady || env.VERCEL_ENV) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     }
@@ -371,17 +380,17 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
   if (cloudflareReady) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS });
-      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, model: String(payload?.model || config.model) });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
+      if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
       if (env.VERCEL_ENV) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `cloudflare_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
       if (env.VERCEL_ENV) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter });
+        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'cloudflare_timeout' : 'cloudflare_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     }
@@ -390,7 +399,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   if (env.VERCEL_ENV) {
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
-    const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl });
+    const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl, semantic });
     if (!result.ok) {
       return {
         ok: false,
@@ -402,7 +411,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         cost_mode: config.cost_mode,
       };
     }
-    return finalizeReply({ reply: String(result.payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, authMode: gatewayAuth.auth_mode, model: result.model });
+    return finalizeReply({ reply: String(result.payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, authMode: gatewayAuth.auth_mode, model: result.model });
   }
 
   return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };

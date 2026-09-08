@@ -77,3 +77,16 @@ test('explicit booking negation is deterministic authority and cannot be reinter
   assert.equal(result.action,'CLARIFY');assert.equal(h.plannerCalls,0);assert.equal(h.executions,0);assert.equal(h.committed.intent,'SUPPORT');
   assert.match(h.replies[0],/ما حجزت|not booked/i);
 });
+
+test('availability intent correction retains exact current-message evidence without booking',async()=>{
+  const h=harness({text:'فاضين بكره 9 الصبح',planner:()=>({action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,riskLevel:'LOW',serviceName:null,
+    entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},{entity:'time',value:'09:00',evidence:'9 الصبح',confidence:.99,correction:false}]})});
+  const result=await h.run();
+  assert.equal(result.action,'CLARIFY');assert.equal(h.executions,0);
+  assert.equal(h.committed.intent,'BOOKING');
+  assert.equal(h.committed.entities.date.value,'2026-09-09');
+  assert.equal(h.committed.entities.time.value,'09:00');
+  assert.equal(h.committed.entities.time.source,'CUSTOMER_STATED');
+  assert.ok(h.committed.missing_fields.includes('service'));
+  assert.equal(h.calls.some(c=>c.name==='dabbir_whatsapp_ai_check_availability'),false);
+});
