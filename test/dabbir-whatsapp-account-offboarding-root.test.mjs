@@ -34,8 +34,8 @@ test('account deletion preflights blockers before making Meta changes',()=>{
   assert.match(migration,/dabbir_account_delete_preflight/);
   assert.match(migration,/ACCOUNT_DELETE_BLOCKED_BY_LEGAL_HOLD/);
   assert.match(migration,/PLATFORM_ADMIN_ACCOUNT_REQUIRES_HANDOFF/);
-  before(accountDelete,"supabaseRpc('dabbir_account_delete_preflight'","offboardWhatsApp(token,businessIds)",'preflight order');
-  before(accountDelete,'offboardWhatsApp(token,businessIds)',"supabaseRpc('dabbir_delete_current_user_account'",'offboarding order');
+  before(accountDelete,"const preflightResponse=await supabaseRpc('dabbir_account_delete_preflight'",'whatsapp=await offboardWhatsApp(token,businessIds)','preflight order');
+  before(accountDelete,'whatsapp=await offboardWhatsApp(token,businessIds)',"const response=await supabaseRpc('dabbir_delete_current_user_account'",'offboarding order');
 });
 
 test('account deletion freezes outbound before remote Meta unsubscribe',()=>{
