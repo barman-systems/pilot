@@ -11,8 +11,10 @@ async function reset(){await db.exec('reset role');await db.query("select set_co
  await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,provider_message_id,state) values($1,$2,'verified-offer','SENT')",[ids.business,ids.conversation]);
 }
 function bookingState(){return understandConversation({context:context({batch_messages:[{body:'الثاني'}],pending_state:offered}),now:evalNow}).state;}
-async function commit(state=bookingState(),expected=0){const l=await load();return rpc('dabbir_semantic_commit_v2',[batch,lock,expected,l.message_revision,state,{action:'CREATE_BOOKING'}]);}
+async function commit(state=bookingState(),expected=0){const l=await load();state.activity_contract_version=l.activity_profile.services[0].contract_version;return rpc('dabbir_semantic_commit_v2',[batch,lock,expected,l.message_revision,state,{action:'CREATE_BOOKING'}]);}
 before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding/database.sql',import.meta.url),'utf8'));await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('./fixtures/understanding/activity-database.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908150959_dabbir_activity_intelligence_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -21,6 +23,7 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.query('insert into dabbir_conversations(id,business_id,customer_id,branch_id) values($1,$2,$3,$4)',[ids.conversation,ids.business,ids.customer,ids.branch]);
  await db.query('insert into dabbir_services(id,business_id) values($1,$2)',[ids.service,ids.business]);
  await db.query('insert into dabbir_workers(id,business_id) values($1,$2)',[ids.worker,ids.business]);
+ await db.query('insert into dabbir_branch_services(business_id,branch_id,service_id) values($1,$2,$3)',[ids.business,ids.branch,ids.service]);
 });after(()=>db.close());
 test('database: semantic state persists once per batch with audited provenance',async()=>{await reset();const s=bookingState();const c=await commit(s);assert.equal(c.version,1);const again=await commit(s);assert.equal(again.replay,true);assert.equal((await load()).version,1);assert.equal((await db.query('select count(*) n from dabbir_ai_understanding_events')).rows[0].n,1);});
 test('database: cross-tenant state and mismatched customer are rejected',async()=>{await reset();const s=bookingState();s.scope.business_id=ids.other;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);s.scope.business_id=ids.business;s.scope.customer_id=owner;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);});
@@ -36,3 +39,94 @@ test('database: PUBLIC and anonymous roles cannot execute V2 operational RPCs',a
 test('database: owner proposal is inactive until explicit approval, then revoke and rollback are audited',async()=>{await reset();await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)",[owner]);await db.exec('set role authenticated');const p=await rpc('dabbir_knowledge_propose_v2',[ids.business,ids.conversation,null,'service','VIP',ids.service]);assert.equal(p.active,false);const approved=await rpc('dabbir_knowledge_review_v2',[ids.business,p.id,'approve']);assert.equal(approved.active,true);await rpc('dabbir_knowledge_review_v2',[ids.business,p.id,'revoke']);const rolled=await rpc('dabbir_knowledge_review_v2',[ids.business,p.id,'rollback']);assert.equal(rolled.active,true);assert.ok(rolled.version>approved.version);const audit=await db.query('select event_type from dabbir_ai_understanding_events where proposal_id=$1',[p.id]);assert.deepEqual(new Set(audit.rows.map(r=>r.event_type)),new Set(['PROPOSED','OWNER_APPROVED','REVOKED','ROLLBACK']));await db.exec('reset role');});
 test('database: cross-tenant owner cannot read proposals or approve another tenant',async()=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)",[otherOwner]);await db.exec('set role authenticated');assert.equal((await db.query('select * from dabbir_ai_knowledge_proposals where business_id=$1',[ids.business])).rows.length,0);await assert.rejects(rpc('dabbir_knowledge_review_v2',[ids.business,message,'approve']),/OWNER_REQUIRED/);await assert.rejects(rpc('dabbir_knowledge_propose_v2',[ids.other,null,null,'service','VIP',ids.service]),/KNOWLEDGE_TARGET_SCOPE_INVALID/);await db.exec('reset role');});
 test('database: anonymous role cannot read proposal or event tables',async()=>{await db.exec('set role anon');await assert.rejects(db.query('select * from dabbir_ai_knowledge_proposals'),/permission denied/);await assert.rejects(db.query('select * from dabbir_ai_understanding_events'),/permission denied/);await db.exec('reset role');});
+
+async function configureActivity(config={},action='SAVE',restore=null){
+ await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)",[owner]);
+ await db.exec('set role authenticated');
+ const rows=await db.query('select coalesce(max(version),0)::int version from dabbir_activity_service_versions where business_id=$1 and branch_id=$2 and service_id=$3',[ids.business,ids.branch,ids.service]);
+ const r=await rpc('dabbir_activity_service_configure_v1',[ids.business,ids.branch,ids.service,rows.rows[0].version,config,action,restore]);
+ await db.exec('reset role');await db.query("select set_config('request.jwt.claim.role','service_role',false)");return r;
+}
+async function activityBooking(config={},facts={},modify=null){
+ await reset();await configureActivity(config);
+ const l=await load(),c=context({activity_profile:l.activity_profile,verified_memory:l.verified_memory,location_receipts:l.location_receipts,batch_messages:[{body:'الثاني'}],pending_state:{...offered,payload:{...offered.payload,activity_contract_version:l.activity_profile.services[0].contract_version}}});
+ let state=understandConversation({context:c,now:evalNow}).state;
+ state.entities={...state.entities,...facts};
+ // In these database fault-injection tests the adversarial caller may lie about
+ // completeness; the actual SQL must independently recompute every requirement.
+ state.delivery_mode=config.delivery_modes?.[0]||'AT_BUSINESS';
+ state.entities.delivery_mode={value:state.delivery_mode,source:'DATABASE_FACT',status:'active',confidence:1,service_id:ids.service};
+ state.activity_contract_version=l.activity_profile.services[0].contract_version;
+ state.pending_action='CREATE_BOOKING';state.operational_confidence=1;state.missing_fields=[];state.unresolved_references=[];
+ if(modify)modify(state);
+ await commit(state);await rpc('dabbir_semantic_set_pending_v2',[batch,lock,1,'choose_slot',offered.payload]);
+ return state;
+}
+const validVehicle={value:'station',source:'CUSTOMER_STATED',status:'active',confidence:1};
+const validLocation={value:{lat:24.453884,lng:54.377343,label:'test'},source:'PROVIDER_VERIFIED',status:'active',confidence:1,receipt_id:message};
+const executeActivity=()=>rpc('dabbir_semantic_execute_v2',[batch,lock,1,'CREATE_BOOKING']);
+const receipt=()=>db.query('insert into dabbir_whatsapp_location_receipts(message_id,business_id,conversation_id,latitude,longitude) values($1,$2,$3,$4,$5)',[message,ids.business,ids.conversation,validLocation.value.lat,validLocation.value.lng]);
+
+test('activity SQL: defaults, service overrides, revocation and rollback have distinct audited versions',async()=>{
+ await reset();const configured=await configureActivity({activity_type:'car_wash',delivery_modes:['AT_BUSINESS']});
+ assert.equal(configured.contract.activity_type,'car_wash');assert.deepEqual(configured.contract.mode_requirements.AT_BUSINESS.required,[]);
+ const revoked=await configureActivity({},'REVOKE');assert.equal(revoked.contract.activity_type,'services');
+ const rolled=await configureActivity({},'ROLLBACK',configured.version);assert.equal(rolled.contract.activity_type,'car_wash');assert.ok(rolled.version>revoked.version);
+ const rows=(await db.query('select action from dabbir_activity_service_versions order by version')).rows;assert.ok(rows.some(r=>r.action==='REVOKE'));assert.ok(rows.some(r=>r.action==='ROLLBACK'));
+});
+test('activity SQL: owner cannot disable platform safety or save unknown requirements',async()=>{
+ for(const config of [{optional_entities:['location']},{required_entities:['diagnosis']},{delivery_modes:['HYBRID']},{disable_tenant_check:true},{service_area:{type:'CIRCLE',center:{lat:91,lng:54},radius_km:5}}])await assert.rejects(configureActivity(config),/ACTIVITY_/);
+ await db.exec('reset role');
+});
+test('activity SQL: owner configuration uses compare-and-swap and cannot rewrite audit rows',async()=>{
+ await configureActivity({delivery_modes:['REMOTE']});await db.query("select set_config('request.jwt.claim.role','authenticated',false)");await db.exec('set role authenticated');
+ await assert.rejects(rpc('dabbir_activity_service_configure_v1',[ids.business,ids.branch,ids.service,0,{},'SAVE',null]),/VERSION_CONFLICT/);
+ await assert.rejects(db.query('update dabbir_activity_service_versions set config=$1',[{}]),/permission denied/);await db.exec('reset role');
+});
+test('activity SQL: foreign owner and anonymous role cannot read or mutate another branch profile',async()=>{
+ await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)",[otherOwner]);await db.exec('set role authenticated');
+ assert.equal((await db.query('select * from dabbir_activity_service_versions where business_id=$1',[ids.business])).rows.length,0);
+ await assert.rejects(rpc('dabbir_activity_profile_v1',[ids.business,ids.branch]),/OWNER_REQUIRED/);
+ await assert.rejects(rpc('dabbir_activity_service_configure_v1',[ids.business,ids.branch,ids.service,0,{},'SAVE',null]),/OWNER_REQUIRED/);
+ await db.exec('reset role');await db.exec('set role anon');await assert.rejects(db.query('select * from dabbir_whatsapp_location_receipts'),/permission denied/);await db.exec('reset role');
+});
+for(const type of ['car_wash','salon','consulting','clinic'])test('activity SQL: '+type+' at branch or remote creates without customer location',async()=>{
+ await activityBooking({activity_type:type,delivery_modes:[type==='consulting'?'REMOTE':'AT_BUSINESS']});
+ const r=await executeActivity();assert.equal(r.verified,true);
+ const row=(await db.query('select service_latitude,activity_intelligence from dabbir_appointments where id=$1',[r.appointment_id])).rows[0];assert.equal(row.service_latitude,null);assert.equal(row.activity_intelligence.activity_type,type);
+});
+test('activity SQL: MOBILE rejects missing vehicle even if JS claims no fields are missing',async()=>{
+ await activityBooking({activity_type:'car_wash',delivery_modes:['MOBILE']},{location:validLocation});await receipt();await assert.rejects(executeActivity(),/ACTIVITY_REQUIRED_FACT_UNVERIFIED:vehicle/);assert.equal((await db.query('select count(*)::int n from dabbir_appointments')).rows[0].n,0);
+});
+test('activity SQL: MOBILE rejects a typed, forged or inferred location',async()=>{
+ for(const location of [{...validLocation,receipt_id:null},{...validLocation,source:'AI_INFERENCE'},{...validLocation,value:{lat:91,lng:54}}]){
+  await activityBooking({activity_type:'car_wash',delivery_modes:['MOBILE']},{vehicle:validVehicle,location});await receipt();await assert.rejects(executeActivity(),/ACTIVITY_(REQUIRED_FACT_UNVERIFIED|LOCATION)/);
+ }
+});
+test('activity SQL: verified GPS persists atomically with booking and safe structured memory',async()=>{
+ await activityBooking({activity_type:'car_wash',delivery_modes:['MOBILE']},{vehicle:validVehicle,location:validLocation});await receipt();const r=await executeActivity();
+ const row=(await db.query('select service_latitude,service_longitude,location_type,activity_intelligence from dabbir_appointments where id=$1',[r.appointment_id])).rows[0];
+ assert.equal(row.service_latitude,validLocation.value.lat);assert.equal(row.service_longitude,validLocation.value.lng);assert.equal(row.location_type,'customer');assert.equal(row.activity_intelligence.vehicle,'station');
+ const m=(await load()).verified_memory.find(x=>x.memory_key==='last_verified_location');assert.equal(m.branch_id,ids.branch);assert.equal(m.value.value.lat,validLocation.value.lat);assert.ok(m.id);assert.ok(m.expires_at);
+});
+test('activity SQL: HOME CLEANING rejects missing property details and never inherits vehicle requirements',async()=>{
+ await activityBooking({activity_type:'home_cleaning',delivery_modes:['AT_CUSTOMER']},{location:validLocation});await receipt();await assert.rejects(executeActivity(),/ACTIVITY_REQUIRED_FACT_UNVERIFIED:property_details/);
+ await activityBooking({activity_type:'home_cleaning',delivery_modes:['AT_CUSTOMER']},{location:validLocation,property_details:{value:'فيلا 3 غرف',status:'active',source:'CUSTOMER_STATED',confidence:1}});await receipt();assert.equal((await executeActivity()).verified,true);
+});
+test('activity SQL: a revoked or changed service config invalidates the earlier semantic decision',async()=>{
+ await activityBooking({delivery_modes:['AT_BUSINESS']});await configureActivity({delivery_modes:['REMOTE']});await assert.rejects(executeActivity(),/ACTIVITY_CONTRACT_STALE/);
+});
+test('activity SQL: outside service area and owner approval prevent mutations',async()=>{
+ await activityBooking({activity_type:'car_wash',delivery_modes:['MOBILE'],service_area:{type:'CIRCLE',center:{lat:25.2,lng:55.3},radius_km:5}},{vehicle:validVehicle,location:validLocation});await receipt();await assert.rejects(executeActivity(),/ACTIVITY_OUTSIDE_SERVICE_AREA/);
+ await activityBooking({delivery_modes:['AT_BUSINESS'],owner_approval:true});await assert.rejects(executeActivity(),/ACTIVITY_OWNER_APPROVAL_REQUIRED/);
+});
+test('activity SQL: old or foreign memory cannot silently authorize a location',async()=>{
+ await activityBooking({activity_type:'car_wash',delivery_modes:['MOBILE']},{vehicle:validVehicle,location:{...validLocation,source:'CUSTOMER_MEMORY',memory_id:'a0000000-0000-4000-8000-000000000001',memory_version:1}});await assert.rejects(executeActivity(),/ACTIVITY_MEMORY_STALE/);
+});
+test('activity SQL: direct WhatsApp insert without current semantic authority fails at the table',async()=>{
+ await reset();await assert.rejects(db.query('insert into dabbir_appointments(business_id,branch_id,customer_id,service_id,starts_at)values($1,$2,$3,$4,now())',[ids.business,ids.branch,ids.customer,ids.service]),/ACTIVITY_GROUNDED_CONTEXT_REQUIRED/);
+});
+test('activity SQL: provider presentation receipt and branch catalog remain final DB requirements',async()=>{
+ await activityBooking({delivery_modes:['AT_BUSINESS']});await db.exec('delete from dabbir_whatsapp_outbound_reservations');await assert.rejects(executeActivity(),/ACTIVITY_SLOT_UNVERIFIED/);
+ await activityBooking({delivery_modes:['AT_BUSINESS']});await db.exec('update dabbir_branch_services set active=false');await assert.rejects(executeActivity(),/ACTIVITY_SERVICE_SCOPE_INVALID/);await db.exec('update dabbir_branch_services set active=true');
+});

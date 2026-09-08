@@ -1,3 +1,4 @@
+import {activityContext} from './fixtures/understanding/activity.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -13,13 +14,13 @@ const ids={
 const now=new Date('2026-09-08T12:00:00Z');
 const services=[{id:ids.service,business_id:ids.business,branch_id:ids.branch,name:'Vip',name_ar:'Vip',name_en:'VIP',price:100,duration_minutes:60}];
 function context(extra={}){
-  return {
+  return activityContext({
     business:{id:ids.business,business_type:'car_wash',timezone:'Asia/Dubai',currency_code:'AED'},
     conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},
     customer:{id:ids.customer},services,workers:[],branches:[],approved_aliases:[],verified_memory:[],knowledge:[],
     batch_messages:[],pending_state:null,
     ...extra,
-  };
+  });
 }
 function turn(body,previous=null,extra={}){
   return understandConversation({context:context({...extra,batch_messages:[{body}]}),previous,now}).state;
@@ -39,20 +40,20 @@ test('car wash cannot reach availability until vehicle and location are grounded
   const second=understandConversation({context:context({batch_messages:[{body:'صالون'}]}),previous:first.state,now});
   assert.equal(second.state.entities.vehicle.value,'saloon');
   assert.deepEqual(second.state.missing_fields,['location']);
-  assert.equal(second.decision.reply,'أرسل موقع السيارة من خيار «الموقع» في واتساب.');
+  assert.equal(second.decision.reply,'أرسل موقع الخدمة من خيار «الموقع» في واتساب.');
 
-  const third=understandConversation({context:context({batch_messages:[{body:'📍 موقع واتساب: 24.453884, 54.377343 — أبوظبي'}]}),previous:second.state,now});
+  const third=understandConversation({context:context({batch_messages:[{id:'pin-1',body:'📍 موقع واتساب: 24.453884, 54.377343 — أبوظبي'}],location_receipts:[{message_id:'pin-1',business_id:ids.business,conversation_id:ids.conversation,value:{lat:24.453884,lng:54.377343,label:'أبوظبي'}}]}),previous:second.state,now});
   assert.deepEqual(third.state.entities.location.value,{lat:24.453884,lng:54.377343,label:'أبوظبي'});
-  assert.equal(third.state.entities.location.source,'CUSTOMER_STATED');
+  assert.equal(third.state.entities.location.source,'PROVIDER_VERIFIED');
   assert.equal(third.decision.action,'CHECK_AVAILABILITY');
 });
 
 test('verified slot can create a car-wash booking only after domain facts are present',()=>{
   const one=turn('ابا احجز Vip اليوم الساعة 5 مساء');
   const two=turn('ستيشن',one);
-  const three=turn('📍 موقع واتساب: 24.453884, 54.377343 — السيارة',two);
+  const three=understandConversation({context:context({batch_messages:[{id:'pin-2',body:'موقع السيارة'}],location_receipts:[{message_id:'pin-2',business_id:ids.business,conversation_id:ids.conversation,value:{lat:24.453884,lng:54.377343,label:'السيارة'}}]}),previous:two,now}).state;
   const slot={starts_at:'2026-09-08T13:30:00.000Z',service_id:ids.service,worker_id:null};
-  const pending={pending_action:'choose_slot',payload:{mode:'booking',presented:true,provider_message_id:'wamid.slot',slots:[slot]},expires_at:'2026-09-08T12:15:00.000Z'};
+  const pending={pending_action:'choose_slot',payload:{activity_contract_version:'test-v1',mode:'booking',presented:true,provider_message_id:'wamid.slot',slots:[slot]},expires_at:'2026-09-08T12:15:00.000Z'};
   const final=understandConversation({context:context({batch_messages:[{body:'1'}],pending_state:pending}),previous:three,now});
   assert.equal(final.state.entities.vehicle.value,'station');
   assert.equal(final.state.entities.location.value.lat,24.453884);

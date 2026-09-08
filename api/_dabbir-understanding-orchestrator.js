@@ -147,7 +147,8 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const started=Date.now();let steps=0;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
-  const c={...context,...load},turnNow=now();const session=sessionPrevious(load.semantic_state,c,turnNow);
+  const c={...context,...load},turnNow=now();
+  if(c.activity_profile)c.activity_profile={...c.activity_profile,verified_memory:arr(c.verified_memory)};const session=sessionPrevious(load.semantic_state,c,turnNow);
   let semanticPrevious=session.previous,groundedMenuSelection=false;const isGreeting=greetingOnly(c.batch_messages);
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
@@ -174,8 +175,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     budget();let proposal,plannerFailure;
     try{proposal=await planner(c,aiFirstPlannerContext(c,state));}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
     if(plannerFailure){
-      state=deterministic.state;decision=deterministic.decision;state.model_calls=1;state.planner_failure_code=plannerFailure;
-      if(decision.reasonCode==='NO_OPERATIONAL_AUTHORITY')decision=plannerRecoveryDecision(state,plannerFailure);
+      if(Number(claim.attempt_count||1)<2){await finish(claim,'RETRY',plannerFailure);return {state:'RETRY',action:'RETRY',error:plannerFailure};}
+      await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
+      await handoff(c,'AI_PROVIDER_FAILED_TWICE','AI interpretation failed twice','SUPPORT');
+      await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
+      return {state:'HUMAN_REQUIRED',action:'HANDOFF',customer_requested_human:false};
     }else{
       const conflict=proposalConflicts(state,proposal);const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
@@ -206,7 +210,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     budget();await assertCurrent();const appt=arr(c.upcoming_appointments).find(x=>x.id===val(state,'appointment'));
     const av=await rpc('dabbir_whatsapp_ai_check_availability',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_service_id:appt?.service_id||val(state,'service'),p_worker_id:appt?.worker_id||val(state,'worker')||null,p_requested_local:`${val(state,'date')}T${val(state,'time')}:00`});
     const slots=arr(av?.slots).slice(0,3);if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots');}
-    else{const payload={mode:state.intent==='RESCHEDULE_BOOKING'?'reschedule':'booking',...(appt?{appointment_id:appt.id}:{}),slots,presented:false};await setPending('choose_slot',payload);const sent=await send(slotsText(slots,lang),'availability');if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_slot',{...payload,presented:true,provider_message_id:sent.providerMessageId});}
+    else{const payload={activity_contract_version:state.activity_contract_version,mode:state.intent==='RESCHEDULE_BOOKING'?'reschedule':'booking',...(appt?{appointment_id:appt.id}:{}),slots,presented:false};await setPending('choose_slot',payload);const sent=await send(slotsText(slots,lang),'availability');if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_slot',{...payload,presented:true,provider_message_id:sent.providerMessageId});}
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
   }
   if(decision.action==='CLARIFY'&&(state.missing_fields.includes('appointment')||state.unresolved_references.includes('appointment'))){

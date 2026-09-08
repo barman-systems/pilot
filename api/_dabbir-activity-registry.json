@@ -1,0 +1,1683 @@
+{
+  "version": 1,
+  "platform": {
+    "required": [
+      "service",
+      "branch",
+      "delivery_mode"
+    ],
+    "location_modes": [
+      "MOBILE",
+      "AT_CUSTOMER",
+      "PICKUP",
+      "DELIVERY"
+    ],
+    "collection_priority": [
+      "service",
+      "delivery_mode",
+      "vehicle",
+      "location",
+      "property_details",
+      "branch",
+      "date",
+      "time",
+      "worker",
+      "slot"
+    ],
+    "entity_definitions": {
+      "service": {
+        "type": "CATALOG_REFERENCE",
+        "priority": 10
+      },
+      "delivery_mode": {
+        "type": "ENUM",
+        "priority": 20
+      },
+      "vehicle": {
+        "type": "ENUM",
+        "values": [
+          "saloon",
+          "station"
+        ],
+        "priority": 30,
+        "question_ar": "السيارة صالون ولا ستيشن/SUV؟",
+        "question_en": "Is the vehicle a saloon/sedan or a station/SUV?"
+      },
+      "location": {
+        "type": "VERIFIED_GPS",
+        "priority": 40,
+        "question_ar": "أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "question_en": "Please send the service location using WhatsApp Location."
+      },
+      "property_details": {
+        "type": "TEXT",
+        "priority": 45,
+        "question_ar": "ما نوع العقار وحجمه؟",
+        "question_en": "What is the property type and size?"
+      },
+      "branch": {
+        "type": "SCOPED_REFERENCE",
+        "priority": 50
+      },
+      "date": {
+        "type": "DATE",
+        "priority": 60
+      },
+      "time": {
+        "type": "TIME",
+        "priority": 70
+      },
+      "worker": {
+        "type": "SCOPED_REFERENCE",
+        "priority": 80
+      },
+      "slot": {
+        "type": "VERIFIED_SLOT",
+        "priority": 90
+      }
+    },
+    "automatic_booking": true,
+    "owner_approval": false,
+    "booking_model": "APPOINTMENT",
+    "capacity_model": "EXISTING_BOOKING_ENGINE",
+    "pricing_model": "DATABASE_SERVICE_PRICE",
+    "verification_rules": [
+      "SCOPED_CATALOG",
+      "FRESH_SLOT",
+      "CUSTOMER_CONFIRMATION",
+      "DATABASE_READBACK"
+    ]
+  },
+  "activities": {
+    "services": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "car_wash": {
+      "version": 1,
+      "default_delivery_modes": [
+        "MOBILE"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [
+            "vehicle"
+          ],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "salon": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "home_cleaning": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_CUSTOMER"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [
+            "property_details"
+          ],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "clinic": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "ADMINISTRATIVE_ONLY",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "maintenance": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_CUSTOMER"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "delivery": {
+      "version": 1,
+      "default_delivery_modes": [
+        "DELIVERY"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "consulting": {
+      "version": 1,
+      "default_delivery_modes": [
+        "REMOTE"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "repair_shop": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "pet_grooming": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "barber": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "spa": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "laundry": {
+      "version": 1,
+      "default_delivery_modes": [
+        "PICKUP"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "tutoring": {
+      "version": 1,
+      "default_delivery_modes": [
+        "REMOTE"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "photography": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_CUSTOMER"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "mobile_services": {
+      "version": 1,
+      "default_delivery_modes": [
+        "MOBILE"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    },
+    "other": {
+      "version": 1,
+      "default_delivery_modes": [
+        "AT_BUSINESS"
+      ],
+      "supported_delivery_modes": [
+        "AT_BUSINESS",
+        "AT_CUSTOMER",
+        "MOBILE",
+        "REMOTE",
+        "PICKUP",
+        "DELIVERY",
+        "HYBRID"
+      ],
+      "mode_requirements": {
+        "AT_BUSINESS": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "AT_CUSTOMER": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "MOBILE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "REMOTE": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "PICKUP": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "DELIVERY": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        },
+        "HYBRID": {
+          "required": [],
+          "optional": [
+            "worker"
+          ]
+        }
+      },
+      "supported_actions": [
+        "SERVICE_MENU",
+        "PRICING",
+        "CHECK_AVAILABILITY",
+        "CREATE_BOOKING",
+        "CANCEL_BOOKING",
+        "RESCHEDULE_BOOKING",
+        "HANDOFF"
+      ],
+      "operating_model": "APPOINTMENT",
+      "supported_entities": [
+        "service",
+        "delivery_mode",
+        "vehicle",
+        "location",
+        "property_details",
+        "branch",
+        "date",
+        "time",
+        "worker",
+        "slot"
+      ],
+      "default_risk_rules": {
+        "diagnosis_allowed": false,
+        "inference_mutation_allowed": false
+      },
+      "verification_requirements": [
+        "branch_scope",
+        "current_semantic_version",
+        "provider_presented_slot",
+        "customer_confirmation",
+        "appointment_readback"
+      ]
+    }
+  }
+}

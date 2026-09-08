@@ -1,3 +1,4 @@
+import {activityContext} from './fixtures/understanding/activity.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runUnderstandingTurn } from '../api/_dabbir-understanding-orchestrator.js';
@@ -6,7 +7,7 @@ const ids={business:'20000000-0000-4000-8000-000000000001',conversation:'3000000
 const now=new Date('2026-09-08T13:00:00Z');
 const service={id:ids.service,business_id:ids.business,branch_id:ids.branch,name_ar:'غسيل كامل',name_en:'Full wash',price:50,duration_minutes:45};
 function context(text,{history=[],upcoming=[],verified_memory=[]}={}){
-  return {business:{id:ids.business,timezone:'Asia/Dubai',business_type:'car_wash',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[service],workers:[],branches:[{id:ids.branch,name:'الفرع الرئيسي'}],knowledge:[],approved_aliases:[],verified_memory,upcoming_appointments:upcoming,pending_state:null,batch_messages:[{body:text,created_at:now.toISOString()}],history};
+  return activityContext({business:{id:ids.business,timezone:'Asia/Dubai',business_type:'car_wash',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[service],workers:[],branches:[{id:ids.branch,name:'الفرع الرئيسي'}],knowledge:[],approved_aliases:[],verified_memory,upcoming_appointments:upcoming,pending_state:null,batch_messages:[{body:text,created_at:now.toISOString()}],history});
 }
 function harness({text,planner,extra={}}){
   let committed=null,executions=0,plannerCalls=0,plannerContext=null;const replies=[],calls=[];
@@ -39,11 +40,11 @@ test('AI semantic interpretation can correct a deterministic GCC false-positive 
   assert.equal(h.committed.intent,'SERVICE_DISCOVERY');assert.ok(!h.committed.missing_fields.includes('appointment'));
 });
 
-test('recoverable model outage falls back to deterministic grounded behavior instead of degrading a known request',async()=>{
+test('provider outage retries the durable batch without a reply or mutation',async()=>{
   const h=harness({text:'شو خدماتكم',planner:()=>{throw Object.assign(new Error('offline'),{code:'AI_PLANNER_UNAVAILABLE'});}});
   const result=await h.run();
-  assert.equal(result.action,'SERVICE_MENU');assert.equal(h.plannerCalls,1);assert.equal(h.executions,0);
-  assert.equal(h.committed.intent,'SERVICE_DISCOVERY');assert.equal(h.committed.planner_failure_code,'AI_PLANNER_UNAVAILABLE');assert.equal(h.committed.model_calls,1);
+  assert.equal(result.action,'RETRY');assert.equal(h.plannerCalls,1);assert.equal(h.executions,0);
+  assert.equal(h.committed,null);assert.equal(h.replies.length,0);
 });
 
 test('AI-first planner receives bounded conversation context without tenant or entity ids',async()=>{

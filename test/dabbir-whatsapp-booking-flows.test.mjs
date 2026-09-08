@@ -18,7 +18,7 @@ test('booking Flow is terminal, booking-only and contains no financial fields',(
   assert.equal(flow.screens[0].terminal,true);
   const serialized=JSON.stringify(flow);
   assert.match(serialized,/service_id/);
-  assert.match(serialized,/location/);
+  assert.doesNotMatch(serialized,/"name":"location"/);
   assert.match(serialized,/preferred_date/);
   assert.match(serialized,/preferred_time/);
   assert.doesNotMatch(serialized,/payment|invoice|card|bank|tax|payroll|accounting/i);
@@ -106,4 +106,9 @@ test('signed webhook consumes nfm replies first and removes them from the intern
   assert.match(webhook,/filter\(message=>message\?\.interactive\?\.type!=='nfm_reply'\)/);
   assert.match(webhook,/createHmac\('sha256',secret\)/);
   assert.doesNotMatch(webhook,/DABBIR_BOOKING_FLOW_RECEIVED/);
+});
+
+test('activity-aware Flow defers location to the operational resolver',()=>{
+ const reply=parseBookingFlowReply({interactive:{type:'nfm_reply',nfm_reply:{response_json:JSON.stringify({flow_token:'0123456789abcdef0123456789abcdef',dabbir_kind:'booking_v1',service_id:'11111111-1111-4111-8111-111111111111',preferred_date:'2026-09-09',preferred_time:'10:00'})}}});
+ assert.equal(reply.valid,true);assert.equal(reply.location,'');
 });
