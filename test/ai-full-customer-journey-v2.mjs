@@ -263,6 +263,8 @@ async function verifyTotp(session, factorId, secret) {
 
 async function browserJourney() {
   assert(mfaSecret, 'BROWSER_MFA_SECRET_REQUIRED');
+  const policyMemory=await ownerSession.request('/api/owner-decision-memory?business_id='+encodeURIComponent(businessId));
+  assert(policyMemory.ok&&policyMemory.json?.ok,'OWNER_POLICY_READ_FAILED:'+String(policyMemory.json?.error||policyMemory.status));
   const service = await ownerSession.request('/api/owner-operations', {
     method: 'POST', body: {business_id: businessId, action: 'create_service', name: 'QA Gold Wash', duration_minutes: 30},
   });
