@@ -68,6 +68,10 @@ function greetingOnly(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
   return /^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?|مرحبا(?: بك)?|هلا(?: والله)?|hello|hi|hey|good morning|good evening)$/.test(text);
 }
+function orphanChoiceOnly(messages){
+  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
+  return /^(?:[123]|الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|the first|the second|the third)$/.test(text);
+}
 function greetingDecision(state,sessionReset){
   state.sub_intent='GREETING';
   state.missing_fields=[];state.unresolved_references=[];
@@ -76,6 +80,13 @@ function greetingDecision(state,sessionReset){
   if(sessionReset){state.session_reset=true;state.goal='UNKNOWN';state.intent='SUPPORT';}
   const ar=state.language==='ar';
   return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply:ar?'وعليكم السلام، حياك. كيف أقدر أساعدك؟':'Hello. How can I help you?'};
+}
+function staleChoiceDecision(state){
+  delete state.entities?.time;delete state.entities?.slot;
+  state.goal='UNKNOWN';state.intent='SUPPORT';state.sub_intent='STALE_OPTION_REFERENCE';state.pending_action=null;
+  state.missing_fields=[];state.unresolved_references=[];state.overall_confidence=1;state.semantic_confidence=1;state.operational_confidence=1;state.session_reset=true;
+  const ar=state.language==='ar';
+  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:ar?'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.':'The previous list has expired. Tell me what you need or ask for the services again.'};
 }
 
 // One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
@@ -108,8 +119,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   }));
   semanticPrevious=previousForGroundedService(semanticPrevious,groundedMenuSelection);
   let {state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow});
+  const newScope=!sameSemanticScope(load.semantic_state,c);
+  const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
   if(session.reset)state.session_reset=true;else delete state.session_reset;
-  if(isGreeting)decision=greetingDecision(state,session.reset||!sameSemanticScope(load.semantic_state,c));
+  if(orphanChoice)decision=staleChoiceDecision(state);
+  else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   // A model is needed only when deterministic evidence does not resolve the request.
   // It receives bounded, de-identified context; its result must pass the same reducer.
@@ -122,7 +136,10 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
     p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
-  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};}
+  if(committed.replay){
+    state=committed.state;decision={...decision,action:state.pending_action||decision.action};
+    if(orphanChoice)decision=staleChoiceDecision(state);else if(isGreeting)decision=greetingDecision(state,session.reset||newScope);
+  }
   const version=committed.version,lang=state.language;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
