@@ -30,6 +30,10 @@ try{
    try{
     await page.goto(origin+'/?lang='+language);await page.locator('#dabbirActionCenter #dabbirMemoryButton').click();
     await page.locator('input[name="alias"]').fill('VIP');await page.locator('select[name="service"]').selectOption('qa-service');
+    // The live English journey exposed a refresh between filling and submitting.
+    // Exercise that transition in both engines and languages with native inputs.
+    await page.evaluate(()=>window.__dabbirOwnerDecisionMemory.refresh());
+    if(await page.locator('input[name="alias"]').inputValue()!=='VIP'||await page.locator('select[name="service"]').inputValue()!=='qa-service')throw Error('KNOWLEDGE_DRAFT_LOST_ON_REFRESH');
     await page.locator('form button[type="submit"]').click();
     const card=page.locator('[data-knowledge="v2"] article').filter({hasText:'VIP'});
     await card.getByRole('button',{name:/اعتماد المعنى|^Approve meaning$/}).click();

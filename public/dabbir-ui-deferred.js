@@ -4194,7 +4194,7 @@
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
   const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent="\n.dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}\n.dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}\n.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}\n.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}\n.dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}\n.dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}\n.dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}\n.dabbir-memory-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.dabbir-memory-actions button{min-height:36px;border-radius:10px;padding:7px 10px;font-size:9px;font-weight:900}\n.dabbir-memory-approve{border:1px solid #6c63d8;background:#262047;color:#e2ddff}.dabbir-memory-pause{border:1px solid #5e5637;background:#242117;color:#ffe4a1}.dabbir-memory-revoke{border:1px solid #64373c;background:#29191c;color:#ffb9bd}\n.dabbir-memory-field{display:block;margin-top:12px;font-size:12px;color:#d8dde6}.dabbir-memory-field input,.dabbir-memory-field select{display:block;box-sizing:border-box;width:100%;margin-top:6px;min-height:44px;padding:10px;border-radius:10px;border:1px solid #465064;background:#181c23;color:#f3f4f6;font-size:16px}[data-knowledge=\"v2\"] .dabbir-memory-card b{font-size:14px}[data-knowledge=\"v2\"] .dabbir-memory-card p{font-size:12px}[data-knowledge=\"v2\"] .dabbir-memory-card small{font-size:11px}[data-knowledge=\"v2\"] button{min-height:44px;font-size:13px}[data-knowledge=\"v2\"] .dabbir-memory-empty{font-size:12px}.dabbir-memory-status{font-size:12px;color:#bdc7d9;line-height:1.7}.dabbir-memory-actions button:disabled{opacity:.55;cursor:wait}.dabbir-memory-close{width:100%;min-height:42px;margin-top:12px;border:0;background:transparent;color:#9fa8b6;font-weight:800}.dabbir-memory-empty{padding:13px;margin-top:10px;border:1px dashed #343b49;border-radius:13px;color:#929ba8;font-size:10px}.dabbir-memory-section{margin-top:14px;font-size:11px;color:#e8ebf1}\n@media(max-width:700px){.dabbir-memory-overlay{align-items:flex-end;padding:10px}.dabbir-memory-dialog{border-radius:20px 20px 14px 14px;max-height:88vh}.dabbir-memory-btn{min-height:40px}.dabbir-memory-actions button{flex:1}}\n";document.head.appendChild(style);
   const nativeFetch=window.fetch.bind(window);
-  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],loading:false,business:id,knowledgeError:false});
+  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:''},loading:false,business:id,knowledgeError:false});
   let state=emptyState(null),generation=0,returnFocus=null;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
@@ -4225,6 +4225,7 @@
     const id=syncScope();if(!id||state.loading)return;
     if(!force&&state.loaded)return renderButton();
     state.loading=true;const epoch=generation;
+    document.querySelectorAll('#dabbirMemoryOverlay button,#dabbirMemoryOverlay input,#dabbirMemoryOverlay select').forEach(el=>el.disabled=true);
     const get=async path=>{
       const response=await nativeFetch(path+'?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
       const payload=await response.json().catch(()=>null);
@@ -4234,7 +4235,7 @@
     const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
     if(!current(id,epoch))return;
     const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
-    state={...emptyState(id),candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',loaded:true};
+    state={...emptyState(id),draft:state.draft,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',loaded:true};
     renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
   }
   function renderButton(){
@@ -4311,11 +4312,12 @@
     if(active.length){
       const form=document.createElement('form');form.dataset.knowledgeForm='v2';
       const aliasLabel=document.createElement('label');aliasLabel.className='dabbir-memory-field';aliasLabel.textContent=k.alias;
-      const alias=document.createElement('input');alias.name='alias';alias.maxLength=80;alias.required=true;alias.autocomplete='off';aliasLabel.append(alias);
+      const alias=document.createElement('input');alias.name='alias';alias.maxLength=80;alias.required=true;alias.autocomplete='off';alias.value=state.draft.alias;alias.oninput=()=>{if(current(scope,epoch))state.draft.alias=alias.value};aliasLabel.append(alias);
       const serviceLabel=document.createElement('label');serviceLabel.className='dabbir-memory-field';serviceLabel.textContent=k.service;
       const service=document.createElement('select');service.name='service';service.required=true;
       const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=k.choose;service.append(placeholder);
       active.forEach(item=>{const option=document.createElement('option');option.value=item.id;option.textContent=item.name;service.append(option)});serviceLabel.append(service);
+      service.value=active.some(item=>item.id===state.draft.target_id)?state.draft.target_id:'';service.onchange=()=>{if(current(scope,epoch))state.draft.target_id=service.value};
       const submit=document.createElement('button');submit.type='submit';submit.className='dabbir-memory-approve';submit.textContent=k.propose;
       const actions=document.createElement('div');actions.className='dabbir-memory-actions';actions.append(submit);form.append(aliasLabel,serviceLabel,actions);
       form.onsubmit=event=>{event.preventDefault();if(!current(scope,epoch)||!alias.value.trim()||!active.some(s=>s.id===service.value))return;return mutate('propose',{entity_type:'service',alias:alias.value.trim(),target_id:service.value},'/api/understanding-knowledge',scope,epoch)};
@@ -4346,6 +4348,7 @@
       const response=await nativeFetch(path,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json','x-dabbir-client':'web'},body:JSON.stringify({business_id:id,action,...extra})});
       const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error('OWNER_POLICY_UPDATE_FAILED');
       if(!current(id,epoch))return;
+      if(path==='/api/understanding-knowledge'&&action==='propose')state.draft={alias:'',target_id:''};
       state.loading=false;await load(true);if(!current(id,epoch))return;
       notify(path==='/api/understanding-knowledge'?(action==='propose'?k.saved:k.updated):copy().saved);
     }catch{if(!current(id,epoch))return;state.loading=false;await load(true);if(current(id,epoch))notify(k.failed)}
@@ -4360,7 +4363,7 @@
     observerFrame=typeof requestAnimationFrame==='function'?requestAnimationFrame(run):setTimeout(run,0);
   }
   const observer=new MutationObserver(scheduleObservedSync);observer.observe(document.documentElement,{subtree:true,childList:true});
-  setTimeout(()=>load(true),700);window.__dabbirOwnerDecisionMemory={refresh:()=>load(true),version:'owner-decision-memory-ui-v2'};
+  setTimeout(()=>load(false),700);window.__dabbirOwnerDecisionMemory={refresh:()=>load(true),version:'owner-decision-memory-ui-v2'};
 })();
 
 
