@@ -351,6 +351,12 @@ async function browserJourney() {
   assert(operationalBranches.ok&&operationalBranches.json?.branches?.length,'ACTIVITY_BRANCHES_READ_FAILED');
   const operationalBranch=operationalBranches.json.branches[0].id;
   const readOperational=()=>ownerSession.request('/api/activity-intelligence?'+new URLSearchParams({business_id:businessId,branch_id:operationalBranch}));
+  const supportNavigationClear=await page.evaluate(()=>{
+    const support=document.querySelector('#dshFab')?.getBoundingClientRect();
+    const navigation=document.querySelector('#bottomNav')?.getBoundingClientRect();
+    return !!support&&!!navigation&&support.bottom<=navigation.top;
+  });
+  assert(supportNavigationClear,'SUPPORT_BUTTON_OVERLAPS_MOBILE_NAVIGATION');
   await page.locator('#bottomNav [data-screen="more"]').click();
   await page.locator('#screen-more [data-screen="settings"]').click();
   const operationalForm=page.locator('#dabbirOperationalServices form');
