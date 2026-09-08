@@ -10,6 +10,7 @@ const canonicalWorkflow=read('.github/workflows/dabbir-ai-customer-journey.yml')
 const broker=read('supabase/functions/barman-qa-suite-runner/index.ts');
 const deploymentClassifier=read('vercel-ignore-if-unaffected.sh');
 const shell=read('index.html');
+const supportUi=read('api/customer-support-ui.js');
 
 test('iPad WebKit journey runs inside the already-authorized canonical customer journey identity',()=>{
   assert.equal(fs.existsSync(pathUrl('.github/workflows/dabbir-ipad-webkit-production.yml')),false,'standalone privileged iPad workflow must be retired');
@@ -99,4 +100,10 @@ test('canonical iPad-bearing wrapper and its contract force an exact-SHA Product
   }
   assert.doesNotMatch(deploymentClassifier,/\.github\/workflows\/dabbir-ipad-webkit-production\.yml/);
   assert.doesNotMatch(deploymentClassifier,/test\/run-ai-full-customer-journey-ipad\.mjs/);
+});
+
+
+test('mobile support FAB clears the fixed bottom navigation and safe area',()=>{
+  assert.match(supportUi,/@media\(max-width:700px\)\{\.dshFab\{bottom:calc\(78px \+ env\(safe-area-inset-bottom\)\)\}\}/);
+  assert.match(shell,/@media\(max-width:700px\)[\s\S]*?\.bottomNav\{position:fixed;display:grid;/);
 });
