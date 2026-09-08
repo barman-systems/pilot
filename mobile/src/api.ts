@@ -86,7 +86,15 @@ export async function createStore(accessToken: string, name: string, locale: 'ar
 }
 
 export async function deleteDabbirAccount(accessToken: string): Promise<any> {
-  return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
+  try {
+    return await post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
+  } catch (error) {
+    const code = String((error as Error)?.message || '');
+    if (code === 'WHATSAPP_ACCOUNT_OFFBOARDING_FAILED' || code === 'WHATSAPP_BUSINESS_DISCONNECT_REQUIRED') {
+      throw new Error('افتح WhatsApp Business ← الإعدادات ← الحساب ← منصة الأعمال، ثم اختر «فصل الحساب». بعد اكتمال الفصل ارجع إلى دبّر واضغط حذف الحساب مرة أخرى. / Open WhatsApp Business → Settings → Account → Business Platform → Disconnect Account, then return to DABBIR and delete the account again.');
+    }
+    throw error;
+  }
 }
 
 export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
