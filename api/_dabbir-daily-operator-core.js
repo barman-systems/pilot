@@ -618,6 +618,7 @@ export async function runDailyBusinessReview({
     policy: { action_key: policy?.action_key || DAILY_OPERATOR_POLICY, risk_class: policy?.risk_class || 'LOW', auto_execute: policy?.auto_execute === true },
     model: modelEvidence,
     completeness: report.completeness,
+    failure_reason: verified ? null : 'REPORT_COMPLETENESS_GATE_FAILED',
     duration_ms: Date.now() - started,
     external_side_effects: false,
     money_movement: false,
@@ -626,7 +627,7 @@ export async function runDailyBusinessReview({
 
   await recordDailyAiUsage(key, business.id, operationKey, modelEvidence, restClient);
   const outcome = verified ? 'VERIFIED_SUCCESS' : 'PARTIAL';
-  const persisted = await persistReport(key, business.id, operationKey, report, metadata, restClient, outcome, verified ? null : 'REPORT_COMPLETENESS_GATE_FAILED');
+  const persisted = await persistReport(key, business.id, operationKey, report, metadata, restClient, outcome, verified ? null : 'DATA');
 
   return {
     ok: verified,
