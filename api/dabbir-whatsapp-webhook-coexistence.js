@@ -21,11 +21,10 @@ function terminalFlowError(error){
 function canonicalizeFlowForBase(payload,secret){
   let changed=false;
   for(const entry of payload.entry||[])for(const change of entry.changes||[]){
-    if(change?.field!=='messages')continue;
-    for(const message of change?.value?.messages||[]){
-      if(message?.interactive?.type!=='nfm_reply')continue;
-      message.type='text';message.text={body:'[DABBIR_BOOKING_FLOW_RECEIVED]'};delete message.interactive;changed=true;
-    }
+    if(change?.field!=='messages'||!Array.isArray(change?.value?.messages))continue;
+    const before=change.value.messages.length;
+    change.value.messages=change.value.messages.filter(message=>message?.interactive?.type!=='nfm_reply');
+    if(change.value.messages.length!==before)changed=true;
   }
   if(!changed)return null;
   const raw=Buffer.from(JSON.stringify(payload));
@@ -80,11 +79,10 @@ export default async function handler(req,res){
     return res.status(Number(error?.status||502)).setHeader('cache-control','no-store').json({ok:false,service:'dabbir-whatsapp-webhook',state:'WHATSAPP_EXTENSION_PERSISTENCE_FAILED',retryable:true});
   }
 
-  // The outer gate already verified Meta's original signature. Replace only the
-  // nfm_reply shape with a harmless text marker and re-sign that internal copy so
-  // the existing canonical handler can perform its normal duplicate/status logic.
-  // A valid Flow reply was persisted above with the same Meta message id, so the
-  // canonical handler observes a duplicate and cannot enqueue a second AI turn.
+  // The outer gate verified Meta's original signature. Flow replies have already
+  // been consumed (or rejected terminally) above, so remove them from the internal
+  // copy before the canonical webhook path handles unrelated messages/statuses.
+  // Re-sign only this server-created copy; no external signature is ever bypassed.
   const canonical=canonicalizeFlowForBase(payload,secret);
   if(canonical){req.rawBody=canonical.raw;req.headers['x-hub-signature-256']=canonical.signature;}
 
