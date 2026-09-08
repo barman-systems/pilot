@@ -2,6 +2,7 @@
 import http from 'node:http';
 import {ownerFixture,ID} from './owner-broker.mjs';
 import {createFixtureServer} from './product-experience-server.mjs';
+import {activationBookingHandler} from './activation-booking-server.mjs';
 const productFixture=createFixtureServer();
 const productFixturePaths=new Set(['/surface','/fixture/owner-first.js','/fixture/action-center.js','/dabbir-app-icon.png','/api/owner-action-center','/api/dabbir-runtime-fast']);
 process.env.DABBIR_OWNER_BROKER_URL='https://owner-broker.test';
@@ -11,6 +12,11 @@ const routes=new Map(await Promise.all(['owner-dashboard-gateway','owner-dashboa
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://terminal.local:4173');
+  if(await activationBookingHandler(req,res))return;
+  if(url.pathname==='/activation-qa'){
+    res.setHeader('content-type','text/html; charset=utf-8');
+    return res.end('<!doctype html><html lang="ar" dir="rtl"><meta name="viewport" content="width=device-width"><title>DABBIR first booking QA</title><style>body{background:#07111f;color:white;font:16px system-ui;margin:16px}.wrap{overflow-x:auto}iframe{display:block;border:1px solid #8194ae;margin:12px 0;height:1180px}</style><h1>أول موعد — اختبار محلي ببيانات صناعية</h1><h2>390 RTL</h2><div class="wrap"><iframe title="Activation phone Arabic" width="390" src="/activation-booking?lang=ar&scenario=whatsapp-unavailable"></iframe></div><h2>1280 LTR</h2><div class="wrap"><iframe title="Activation desktop English" width="1280" src="/activation-booking?lang=en&scenario=lost-response"></iframe></div></html>');
+  }
   if(url.pathname==='/product-qa'||url.pathname==='/product-qa/'||productFixturePaths.has(url.pathname)){
     if(url.pathname==='/product-qa'||url.pathname==='/product-qa/')req.url='/'+url.search;
     productFixture.emit('request',req,res);

@@ -8,6 +8,8 @@ const {default:handler}=await import('../api/owner-action-center.js');
 const BUSINESS='10000000-0000-4000-8000-000000000001';
 const OTHER='10000000-0000-4000-8000-000000000002';
 const USER='40000000-0000-4000-8000-000000000001';
+const BRANCH='50000000-0000-4000-8000-000000000001';
+const SECOND='50000000-0000-4000-8000-000000000002';
 const NOW=Date.parse('2026-09-08T08:00:00.000Z');
 const iso=delta=>new Date(NOW+delta).toISOString();
 const response=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json',...headers}});
@@ -22,13 +24,14 @@ function matches(value,expression){
   if(op==='eq')return String(value)===expected;
   if(op==='gte')return value!=null&&String(value)>=expected;
   if(op==='lte')return value!=null&&String(value)<=expected;
+  if(op==='lt')return value!=null&&String(value)<expected;
   throw new Error('Unsupported fixture filter: '+expression);
 }
 function queryRows(rows,url){
   let result=rows.slice();
   for(const [key,expression] of url.searchParams){
     if(['select','order','limit'].includes(key))continue;
-    result=result.filter(row=>matches(row[key],expression));
+    result=result.filter(row=>matches(key.split('.').reduce((value,part)=>value?.[part],row),expression));
   }
   const order=String(url.searchParams.get('order')||'').split(',').filter(Boolean);
   result.sort((a,b)=>{
@@ -37,14 +40,15 @@ function queryRows(rows,url){
   });
   return result.slice(0,Number(url.searchParams.get('limit')||result.length));
 }
-function fixture(t,{tables={},failure,malformed,outcomesCountMissing=false}={}){
+function fixture(t,{tables={},failure,malformed,outcomesCountMissing=false,role='owner'}={}){
+  tables={dabbir_business_branches:[BRANCH,SECOND].map(id=>({id,business_id:BUSINESS,status:'active',is_primary:id===BRANCH})),...tables};
   const calls=[];
   t.mock.method(Date,'now',()=>NOW);
   t.mock.method(globalThis,'fetch',async(input,options={})=>{
     const url=new URL(input),table=url.pathname.split('/').at(-1);
     calls.push({url,options});
     if(url.pathname==='/auth/v1/user')return response({id:USER});
-    if(table==='dabbir_memberships')return response([{business_id:BUSINESS,role:'owner',status:'active',permissions:[]}]);
+    if(table==='dabbir_memberships')return response([{business_id:BUSINESS,role,status:'active',permissions:[]}]);
     if(table==='account_access_state')return response([{status:'active'}]);
     assert.equal(options.headers.get('authorization'),'Bearer fixture-session');
     assert.equal(options.method||'GET','GET');
@@ -52,7 +56,9 @@ function fixture(t,{tables={},failure,malformed,outcomesCountMissing=false}={}){
     if(table==='dabbir_businesses')return response([{id:BUSINESS,country_code:'AE',currency_code:'AED',timezone:'Asia/Dubai'}]);
     if(table===failure)return response({message:'private upstream diagnostic'},503);
     if(table===malformed)return response(null);
-    const rows=queryRows(tables[table]||[],url);
+    let source=tables[table]||[];
+    if(url.searchParams.get('select')?.includes('conversation:'))source=source.map(row=>({...row,conversation:(tables.dabbir_conversations||[]).find(conversation=>conversation.id===row.conversation_id)}));
+    const rows=queryRows(source,url);
     if(options.headers.get('prefer')==='count=exact'&&!outcomesCountMissing){
       const unlimited=new URL(url);unlimited.searchParams.delete('limit');
       const total=queryRows(tables[table]||[],unlimited).length;
@@ -62,18 +68,18 @@ function fixture(t,{tables={},failure,malformed,outcomesCountMissing=false}={}){
   });
   return calls;
 }
-async function invoke({businessId=BUSINESS,authorized=true}={}){
-  const req={method:'GET',url:'/?business_id='+businessId,headers:{cookie:authorized?'__Host-dabbir_access=fixture-session':''}};
+async function invoke({businessId=BUSINESS,authorized=true,branchId}={}){
+  const req={method:'GET',url:'/?business_id='+businessId+(branchId===undefined?'':'&branch_id='+encodeURIComponent(branchId)),headers:{cookie:authorized?'__Host-dabbir_access=fixture-session':''}};
   const res={statusCode:200,headers:{},setHeader(name,value){this.headers[name]=value},end(body){this.body=JSON.parse(body)}};
   await handler(req,res);return res;
 }
-const row=(id,extra={})=>({id,business_id:BUSINESS,...extra});
+const row=(id,extra={})=>({id,business_id:BUSINESS,branch_id:BRANCH,...extra});
 const many=make=>Array.from({length:110},(_,i)=>make(i));
 
 test('historical and simulated rows cannot hide current appointments, follow-ups, handoffs, conversations or orders',async t=>{
   const calls=fixture(t,{tables:{
     dabbir_appointments:[
-      ...many(i=>row('old-'+i,{status:'confirmed',simulated:false,starts_at:iso(-86400000-i*60000)})),
+      ...many(i=>row('old-'+i,{status:'completed',simulated:false,starts_at:iso(-86400000-i*60000)})),
       ...many(i=>row('completed-'+i,{status:'completed',simulated:false,starts_at:iso(1000+i)})),
       ...many(i=>row('demo-'+i,{status:'confirmed',simulated:true,starts_at:iso(2000+i)})),
       row('live-appointment',{status:'confirmed',simulated:false,starts_at:iso(3600000)}),
@@ -193,7 +199,7 @@ test('unfinished appointments earlier today need review without reviving termina
   const res=await invoke();
   assert.equal(res.statusCode,200);
   assert.equal(res.body.status,'needs_attention');
-  assert.deepEqual(res.body.items.map(item=>item.id).sort(),['appointment:ongoing','appointment:unfinished','appointment:waiting']);
+  assert.deepEqual(res.body.items.map(item=>item.id).sort(),['appointment:old-unresolved','appointment:ongoing','appointment:unfinished','appointment:waiting']);
   assert.equal(res.body.items.find(item=>item.entity_id==='waiting').severity,'critical');
   assert.equal(res.body.items.find(item=>item.entity_id==='unfinished').severity,'critical');
   assert.equal(res.body.items.find(item=>item.entity_id==='ongoing').severity,'info');
@@ -211,4 +217,81 @@ test('invalid business IDs cannot fall back to the first accessible business',as
     assert.equal(res.body.error,'INVALID_BUSINESS_ID');
   }
   assert.equal(calls.some(call=>call.url.pathname.endsWith('/dabbir_businesses')),false);
+});
+
+test('selected branch filters operational work and related follow-ups before LIMIT',async t=>{
+  const conversations=[...many(i=>row('other-'+i,{branch_id:SECOND,state:'action_required',updated_at:iso(i)})),row('mine',{state:'action_required',updated_at:iso(-1000)})];
+  const calls=fixture(t,{tables:{
+    dabbir_conversations:conversations,
+    dabbir_handoffs:conversations.map(c=>row('h-'+c.id,{conversation_id:c.id,state:'HUMAN_ACTIVE',updated_at:c.updated_at})),
+    dabbir_followups:conversations.map(c=>row('f-'+c.id,{conversation_id:c.id,status:'PENDING',due_at:iso(-1000)})),
+    dabbir_appointments:[row('mine',{status:'confirmed',starts_at:iso(3600000)}),row('other',{branch_id:SECOND,status:'confirmed',starts_at:iso(3600000)})],
+    dabbir_orders:[BRANCH,SECOND].map(branch_id=>row(branch_id,{branch_id,status:'draft',simulated:false,total_amount:20,currency_code:'AED',created_at:iso(0)})),
+  }});
+  const res=await invoke({branchId:BRANCH});
+  assert.equal(res.statusCode,200);
+  assert.deepEqual(res.body.branch_scope,{mode:'selected',branch_id:BRANCH});
+  assert.deepEqual(res.body.items.map(item=>item.id).sort(),['appointment:mine','conversation:mine','followup:f-mine','handoff:h-mine','order:'+BRANCH].sort());
+  const related=calls.filter(call=>/dabbir_(followups|handoffs)$/.test(call.url.pathname));
+  assert.equal(related.length,2);
+  assert.ok(related.every(call=>call.url.searchParams.get('select').includes('!inner(')));
+  assert.ok(related.every(call=>call.url.searchParams.get('conversation.business_id')==='eq.'+BUSINESS));
+});
+
+test('invalid or inaccessible branch fails before operational reads',async t=>{
+  const calls=fixture(t);
+  assert.equal((await invoke({branchId:'invalid'})).statusCode,400);
+  assert.equal((await invoke({branchId:'50000000-0000-4000-8000-000000000099'})).statusCode,404);
+  assert.equal(calls.some(call=>call.url.pathname.endsWith('/dabbir_appointments')),false);
+});
+
+test('restricted employee cannot request all branches or another assignment',async t=>{
+  const calls=fixture(t,{role:'employee',tables:{dabbir_membership_branches:[row('assignment',{user_id:USER,branch_id:BRANCH})]}});
+  assert.equal((await invoke({branchId:'all'})).statusCode,403);
+  assert.equal((await invoke({branchId:SECOND})).statusCode,403);
+  assert.equal(calls.some(call=>call.url.pathname.endsWith('/dabbir_appointments')),false);
+  const allowed=await invoke({branchId:BRANCH});
+  assert.equal(allowed.statusCode,200);
+  assert.equal(allowed.body.branch_scope.branch_id,BRANCH);
+});
+
+test('old unresolved work remains reviewable without hiding the current day',async t=>{
+  fixture(t,{tables:{dabbir_appointments:[
+    ...many(i=>row('old-'+i,{status:'in_progress',starts_at:iso(-86400000-i*60000),ends_at:null})),
+    row('today',{status:'confirmed',starts_at:iso(-3600000),ends_at:iso(-1800000)}),
+    row('next',{status:'confirmed',starts_at:iso(3600000)}),
+  ]}});
+  const res=await invoke();
+  assert.equal(res.statusCode,200);
+  assert.deepEqual(res.body.items.slice(0,2).map(item=>item.entity_id),['today','next']);
+  const old=res.body.items.find(item=>item.entity_id==='old-0');
+  assert.equal(old.severity,'critical');
+  assert.equal(old.lifecycle_scope,'review');
+  assert.doesNotMatch(old.title_ar,/خدمة جارية/);
+  assert.equal(res.body.truth.source_limits_reached,true);
+  assert.match(res.body.brief.ar,/سجلات إضافية/);
+});
+
+test('inventory is matched to products rather than an unrelated truncated page; missing is unknown',async t=>{
+  const productId=i=>'60000000-0000-4000-8000-'+String(i).padStart(12,'0');
+  const products=Array.from({length:52},(_,i)=>row(productId(i+1),{active:true,name:'Product '+i}));
+  const calls=fixture(t,{tables:{
+    dabbir_products:products,
+    dabbir_inventory:[...Array.from({length:250},(_,i)=>row('irrelevant-'+i,{product_id:productId(i+1000),quantity:0,reserved:0})),...products.slice(0,-1).map(p=>row(p.id,{product_id:p.id,quantity:30,reserved:0}))],
+    dabbir_channels:[row('channel',{channel_type:'whatsapp',status:'disconnected'})],
+  }});
+  const res=await invoke({branchId:BRANCH});
+  assert.equal(res.statusCode,200);
+  const stock=res.body.items.filter(item=>item.type==='inventory');
+  assert.equal(stock.length,1);
+  assert.equal(stock[0].entity_id,productId(52));
+  assert.equal(stock[0].severity,'warning');
+  assert.match(stock[0].detail_ar,/غير معلوم/);
+  assert.doesNotMatch(stock[0].title_ar,/نفد/);
+  assert.equal(stock[0].scope,'business');
+  assert.equal(res.body.items.find(item=>item.type==='channel').scope,'business');
+  assert.equal(res.body.handled.scope,'business');
+  const reads=calls.filter(call=>call.url.pathname.endsWith('/dabbir_inventory'));
+  assert.equal(reads.length,2);
+  assert.ok(reads.every(call=>call.url.searchParams.get('product_id').startsWith('in.(')));
 });

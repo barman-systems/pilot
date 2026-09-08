@@ -1,4 +1,6 @@
 import { singleQueryValue } from './_request-query.js';
+import { branchFilter, resolveBranchScope } from './_branch-scope.js';
+import { bookingLifecycle } from './_booking-lifecycle.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -86,6 +88,9 @@ function addItem(items,item){
     target:item.target||'dashboard',
     entity_id:item.entity_id||null,
     due_at:item.due_at||null,
+    scope:item.scope||'branch',
+    ...(item.lifecycle_scope?{lifecycle_scope:item.lifecycle_scope}:{}),
+    ...(Number.isFinite(item.stock_available)?{stock_available:item.stock_available}:{}),
   });
 }
 
@@ -102,12 +107,27 @@ export default async function handler(req,res){
   if(!context)return;
 
   try{
+    const query=new URL(String(req?.url||'/'),'https://dabbir.invalid').searchParams;
+    if(query.getAll('business_id').length>1)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});
+    if(query.getAll('branch_id').length>1)return json(res,400,{ok:false,error:'INVALID_BRANCH_ID'});
     const requestedValue=singleQueryValue(req,'business_id');
     const requested=safeId(requestedValue);
     if(requestedValue!=null&&!requested)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});
     const membership=membershipFor(context.memberships,requested);
     if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
     const businessId=membership.business_id;
+    const scope=await resolveBranchScope({
+      businessId,membership,userId:context.user.id,
+      requestedBranch:singleQueryValue(req,'branch_id'),
+      fetchRows:(path,label)=>rest(context.token,path,label),
+    });
+    const scoped=branchFilter(scope);
+    // These records inherit their branch from the conversation. Filter at the
+    // database before LIMIT, rather than dropping other branches after paging.
+    const conversationJoin=scope.mode==='selected';
+    const handoffRelation=conversationJoin?',conversation:dabbir_conversations!dabbir_handoffs_business_conversation_fk!inner(branch_id,business_id)':'';
+    const followupRelation=conversationJoin?',conversation:dabbir_conversations!dabbir_followups_conversation_id_fkey!inner(branch_id,business_id)':'';
+    const relatedScope=conversationJoin?branchFilter(scope,'conversation.branch_id')+`&conversation.business_id=eq.${businessId}`:'';
 
     const businessRows=await rest(
       context.token,
@@ -131,20 +151,33 @@ export default async function handler(req,res){
     ).then(({rows,total})=>({available:true,rows,total}))
       .catch(error=>({available:false,rows:[],status:Number(error?.status||0)||null}));
 
-    const [conversations,handoffs,followups,appointments,products,inventory,orders,channels,customers,handledResult]=await Promise.all([
+    // Inventory writes currently maintain the business balance. Read the exact
+    // products' balances, rather than joining two unrelated first pages or
+    // presenting the unmaintained branch snapshot as live stock.
+    const stockLookup=rest(context.token,`dabbir_products?select=id,name,sku,active&business_id=eq.${businessId}&active=eq.true&order=id.asc&limit=200`,'PRODUCTS_LOOKUP_FAILED').then(async products=>{
+      const ids=products.map(row=>safeId(row.id));
+      if(ids.some(id=>!id))throw Object.assign(new Error('PRODUCTS_LOOKUP_FAILED'),{status:502});
+      const pages=[];
+      for(let start=0;start<ids.length;start+=50){
+        pages.push(rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&product_id=in.(${ids.slice(start,start+50).join(',')})&order=product_id.asc&limit=50`,'INVENTORY_LOOKUP_FAILED'));
+      }
+      return {products,inventory:(await Promise.all(pages)).flat()};
+    });
+    const [conversations,handoffs,followups,todayAppointments,olderAppointments,stockResult,orders,channels,customers,handledResult]=await Promise.all([
       // Filter actionable rows BEFORE bounding the reads. Historical successes
       // must not fill the first page and hide today's work from an active owner.
-      rest(context.token,`dabbir_conversations?select=id,customer_id,state,channel_type,updated_at&business_id=eq.${businessId}&state=eq.action_required&order=updated_at.desc,id.asc&limit=100`,'CONVERSATIONS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_handoffs?select=id,conversation_id,customer_id,state,priority,reason,summary,assigned_user_id,created_at,updated_at&business_id=eq.${businessId}&state=${terminalFilter}&order=updated_at.desc,id.asc&limit=100`,'HANDOFFS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_followups?select=id,conversation_id,customer_id,status,reason,due_at,recommended_message,blocked_reason,send_count,max_sends&business_id=eq.${businessId}&status=${terminalFilter}&due_at=lte.${in24hIso}&order=due_at.asc,id.asc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}&status=${appointmentTerminalFilter}&simulated=not.is.true&starts_at=gte.${dayStart}&starts_at=lte.${in24hIso}&order=starts_at.asc,id.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_products?select=id,name,sku,active&business_id=eq.${businessId}&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&limit=200`,'INVENTORY_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_amount,currency_code,simulated,created_at&business_id=eq.${businessId}&status=in.(draft,reserved)&simulated=eq.false&order=created_at.desc,id.asc&limit=100`,'ORDERS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_conversations?select=id,customer_id,state,channel_type,updated_at&business_id=eq.${businessId}${scoped}&state=eq.action_required&order=updated_at.desc,id.asc&limit=100`,'CONVERSATIONS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_handoffs?select=id,conversation_id,customer_id,state,priority,reason,summary,assigned_user_id,created_at,updated_at${handoffRelation}&business_id=eq.${businessId}${relatedScope}&state=${terminalFilter}&order=updated_at.desc,id.asc&limit=100`,'HANDOFFS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_followups?select=id,conversation_id,customer_id,status,reason,due_at,recommended_message,blocked_reason,send_count,max_sends${followupRelation}&business_id=eq.${businessId}${relatedScope}&status=${terminalFilter}&due_at=lte.${in24hIso}&order=due_at.asc,id.asc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}${scoped}&status=${appointmentTerminalFilter}&simulated=not.is.true&starts_at=gte.${dayStart}&starts_at=lte.${in24hIso}&order=starts_at.asc,id.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}${scoped}&status=${appointmentTerminalFilter}&simulated=not.is.true&starts_at=lt.${dayStart}&order=starts_at.desc,id.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
+      stockLookup,
+      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_amount,currency_code,simulated,created_at&business_id=eq.${businessId}${scoped}&status=in.(draft,reserved)&simulated=eq.false&order=created_at.desc,id.asc&limit=100`,'ORDERS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=50`,'CHANNELS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
       handledLookup,
     ]);
+    const {products,inventory}=stockResult;
 
     const customerName=new Map((customers||[]).map(row=>[row.id,row.display_name||null]));
     const stockByProduct=new Map((inventory||[]).map(row=>[row.product_id,row]));
@@ -172,35 +205,40 @@ export default async function handler(req,res){
       addItem(items,{id:`followup:${followup.id}`,type:'followup',priority:overdue?92:74,severity:overdue?'critical':'warning',title_ar:overdue?`متابعة متأخرة: ${name}`:`متابعة اليوم: ${name}`,title_en:overdue?`Overdue follow-up: ${name}`:`Follow-up today: ${name}`,detail_ar:followup.blocked_reason?`محظورة: ${followup.blocked_reason}`:(followup.recommended_message||followup.reason||'متابعة مستحقة.'),detail_en:followup.blocked_reason?`Blocked: ${followup.blocked_reason}`:(followup.recommended_message||followup.reason||'Follow-up is due.'),target:'tasks',entity_id:followup.conversation_id,due_at:followup.due_at});
     }
 
-    for(const appointment of appointments||[]){
+    for(const appointment of [...todayAppointments,...olderAppointments]){
       const status=String(appointment.status||'').toLowerCase();
       if(appointment.simulated===true||appointmentTerminalStates.includes(status))continue;
       const starts=appointment.starts_at?Date.parse(appointment.starts_at):NaN;
-      if(!Number.isFinite(starts)||starts<Date.parse(dayStart)||starts>in24h)continue;
+      if(!Number.isFinite(starts)||starts>in24h)continue;
       const soon=starts<=in2h;
       const started=starts<now;
-      const ends=appointment.ends_at?Date.parse(appointment.ends_at):NaN;
-      const ongoing=started&&status==='in_progress'&&(!Number.isFinite(ends)||ends>now);
+      const lifecycleScope=bookingLifecycle.classify(appointment,business,now);
+      const older=starts<Date.parse(dayStart);
+      const ongoing=started&&status==='in_progress'&&lifecycleScope==='current';
       const needsReview=started&&!ongoing;
       const name=customerName.get(appointment.customer_id)||'عميل';
       addItem(items,{
         id:`appointment:${appointment.id}`,type:'appointment',
-        priority:needsReview?88:ongoing?58:soon?78:58,
+        priority:needsReview?(older?76:88):ongoing?58:soon?78:58,
         severity:needsReview?'critical':ongoing?'info':soon?'warning':'info',
-        title_ar:needsReview?`راجع حالة موعد اليوم: ${name}`:ongoing?`خدمة جارية: ${name}`:soon?`موعد قريب جدًا: ${name}`:`موعد خلال 24 ساعة: ${name}`,
-        title_en:needsReview?`Review today's appointment: ${name}`:ongoing?`Service in progress: ${name}`:soon?`Appointment soon: ${name}`:`Appointment within 24 hours: ${name}`,
+        title_ar:needsReview?`راجع حالة موعد سابق: ${name}`:ongoing?`خدمة جارية: ${name}`:soon?`موعد قريب جدًا: ${name}`:`موعد خلال 24 ساعة: ${name}`,
+        title_en:needsReview?`Review an unfinished appointment: ${name}`:ongoing?`Service in progress: ${name}`:soon?`Appointment soon: ${name}`:`Appointment within 24 hours: ${name}`,
         detail_ar:needsReview?'مر وقت الموعد دون تسجيل نتيجة نهائية. راجع حالته؛ مرور الوقت لا يعني إكمال الخدمة.':ongoing?'الحالة المسجلة: الخدمة قيد التنفيذ.':'راجع الموعد وتأكد من جاهزية النشاط.',
         detail_en:needsReview?'The scheduled time has passed without a final outcome. Review the status; elapsed time does not prove completion.':ongoing?'Recorded status: service in progress.':'Review the appointment and make sure the business is ready.',
-        target:'appointments',entity_id:appointment.id,due_at:appointment.starts_at,
+        target:'appointments',entity_id:appointment.id,due_at:appointment.starts_at,lifecycle_scope:lifecycleScope,
       });
     }
 
     for(const product of products||[]){
       if(product.active===false)continue;
-      const stock=stockByProduct.get(product.id)||{quantity:0,reserved:0};
+      const stock=stockByProduct.get(product.id);
+      if(!stock){
+        addItem(items,{id:`stock:${product.id}`,type:'inventory',scope:'business',priority:64,severity:'warning',title_ar:`تحقق من رصيد المخزون: ${product.name}`,title_en:`Check stock balance: ${product.name}`,detail_ar:'لا يوجد رصيد مسجل لهذا المنتج. افتح المخزون لمراجعته؛ الرصيد غير معلوم.',detail_en:'This product has no recorded stock balance. Open inventory to review it; the balance is unknown.',target:'operations',entity_id:product.id});
+        continue;
+      }
       const available=Math.max(0,number(stock.quantity)-number(stock.reserved));
       if(available>5)continue;
-      addItem(items,{id:`stock:${product.id}`,type:'inventory',priority:available===0?86:64,severity:available===0?'critical':'warning',title_ar:available===0?`نفد المخزون: ${product.name}`:`مخزون منخفض: ${product.name}`,title_en:available===0?`Out of stock: ${product.name}`:`Low stock: ${product.name}`,detail_ar:`المتاح حاليًا ${available} من ${number(stock.quantity)}.`,detail_en:`Available now: ${available} of ${number(stock.quantity)}.`,target:'operations',entity_id:product.id,due_at:stock.updated_at||null});
+      addItem(items,{id:`stock:${product.id}`,type:'inventory',scope:'business',stock_available:available,priority:available===0?86:64,severity:available===0?'critical':'warning',title_ar:available===0?`نفد المخزون: ${product.name}`:`مخزون منخفض: ${product.name}`,title_en:available===0?`Out of stock: ${product.name}`:`Low stock: ${product.name}`,detail_ar:`المتاح حاليًا ${available} من ${number(stock.quantity)}.`,detail_en:`Available now: ${available} of ${number(stock.quantity)}.`,target:'operations',entity_id:product.id,due_at:stock.updated_at||null});
     }
 
     for(const order of orders||[]){
@@ -218,7 +256,7 @@ export default async function handler(req,res){
     for(const channel of channels||[]){
       const status=String(channel.status||'').toLowerCase();
       if(liveStates.has(status))continue;
-      addItem(items,{id:`channel:${channel.id}`,type:'channel',priority:38,severity:'info',title_ar:`تحقق من قناة ${channel.channel_type}`,title_en:`Verify ${channel.channel_type} channel`,detail_ar:`الحالة الحالية: ${channel.status||'غير معروفة'}. القناة ليست مثبتة كتشغيل حي بعد.`,detail_en:`Current status: ${channel.status||'unknown'}. The channel is not yet proven live.`,target:'integrations',entity_id:channel.id,due_at:channel.updated_at});
+      addItem(items,{id:`channel:${channel.id}`,type:'channel',scope:'business',priority:38,severity:'info',title_ar:`تحقق من قناة ${channel.channel_type}`,title_en:`Verify ${channel.channel_type} channel`,detail_ar:`الحالة الحالية: ${channel.status||'غير معروفة'}. القناة ليست مثبتة كتشغيل حي بعد.`,detail_en:`Current status: ${channel.status||'unknown'}. The channel is not yet proven live.`,target:'integrations',entity_id:channel.id,due_at:channel.updated_at});
     }
 
     items.sort((a,b)=>b.priority-a.priority||String(a.due_at||'').localeCompare(String(b.due_at||'')));
@@ -231,26 +269,28 @@ export default async function handler(req,res){
       return {operation_type:row.operation_type,title_ar:label.ar,title_en:label.en,completed_at:row.completed_at};
     });
     const handledCount=handledResult.available?handledResult.total:null;
-    const handledPrefixAr=handledResult.available&&handledCount>0?`دَبِّر أنجز ${handledCount} إجراءً موثقًا تلقائيًا اليوم. `:'';
-    const handledPrefixEn=handledResult.available&&handledCount>0?`DABBIR completed ${handledCount} verified autonomous ${handledCount===1?'action':'actions'} today. `:'';
-    const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.');
-    const briefEn=handledPrefixEn+(top.length?`What needs your attention now: ${top.map(item=>item.title_en).join(', ')}.`:'No critical or due items in the next 24 hours. DABBIR is monitoring the business.');
+    const limited=[conversations,handoffs,followups,todayAppointments,olderAppointments,orders].some(rows=>rows.length>=100)||products.length>=200||channels.length>=50;
+    const handledPrefixAr=handledResult.available&&handledCount>0?`دَبِّر أنجز ${handledCount} إجراءً موثقًا تلقائيًا في النشاط اليوم. `:'';
+    const handledPrefixEn=handledResult.available&&handledCount>0?`DABBIR completed ${handledCount} verified autonomous ${handledCount===1?'action':'actions'} across the business today. `:'';
+    const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد أولويات في البيانات المتاحة.')+(limited?' قد توجد سجلات إضافية؛ راجع القسم المعني للقائمة الكاملة.':'');
+    const briefEn=handledPrefixEn+(top.length?`What needs your attention now: ${top.map(item=>item.title_en).join(', ')}.`:'No priorities in the available data.')+(limited?' Additional records may exist; open the relevant section for its full list.':'');
 
     res.setHeader('x-dabbir-owner-action-center-auth','fast-v1');
     return json(res,200,{
       ok:true,
       business_id:businessId,
+      branch_scope:{mode:scope.mode,branch_id:scope.branch_id},
       role:membership.role,
       generated_at:new Date().toISOString(),
       country_code:market.country_code,
       currency_code:market.currency_code,
       timezone:market.timezone,
       status:urgent>0?'needs_attention':warning>0?'watch':'clear',
-      metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
-      handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
+      metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>['appointment','followup'].includes(item.type)&&Date.parse(item.due_at)>=now&&Date.parse(item.due_at)<=in24h).length,low_stock:items.filter(item=>item.type==='inventory'&&Number.isFinite(item.stock_available)).length,orders_needing_action:items.filter(item=>item.type==='order').length},
+      handled:{scope:'business',available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
       brief:{ar:briefAr,en:briefEn},
       items,
-      truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,market_contract:'verified_country_currency_timezone',money_source:'currency_snapshotted_generic_amounts',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
+      truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,market_contract:'verified_country_currency_timezone',money_source:'currency_snapshotted_generic_amounts',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true,inventory_scope:'business',channels_scope:'business',source_limits_reached:limited},
     });
   }catch(error){
     const status=Number(error?.status||500);

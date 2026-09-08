@@ -23,6 +23,11 @@ const client=String.raw`
   let expanded=false;
 
   const workspaceNow=()=>{try{return typeof workspace!=='undefined'?workspace:window.workspace}catch{return window.workspace||null}};
+  const branchScope=()=>window.dabbirBranchContext?.scope?.()||workspaceNow()?.branch_scope||{mode:'all'};
+  const scopeMatches=data=>{
+    const expected=branchScope();
+    return data?.branch_scope?.mode===(expected.mode||'all')&&(expected.mode!=='selected'||data.branch_scope.branch_id===expected.branch_id);
+  };
   const scopeKey=()=>{
     const w=workspaceNow();
     const scope=window.dabbirBranchContext?.scope?.()||w?.branch_scope||{};
@@ -35,9 +40,9 @@ const client=String.raw`
   };
 
   const text=()=>lang==='ar'?{
-    title:'اليوم في دَبِّر',refresh:'تحديث',loading:'دَبِّر يراجع النشاط…',handled:'عالجها دَبِّر',urgent:'يحتاج تدخلك',warning:'راقب اليوم',empty:'كل شيء تحت السيطرة الآن',open:'فتح',error:'تعذر تحميل مركز الأولويات',showLess:'عرض الأهم فقط'
+    title:'اليوم في دَبِّر',refresh:'تحديث',loading:'دَبِّر يراجع النشاط…',handled:'عالجها دَبِّر',urgent:'يحتاج تدخلك',warning:'راقب اليوم',empty:'لا توجد أولويات في البيانات المتاحة',open:'فتح',error:'تعذر تحميل مركز الأولويات',showLess:'عرض الأهم فقط'
   }:{
-    title:'Today in DABBIR',refresh:'Refresh',loading:'DABBIR is reviewing the business…',handled:'Handled by DABBIR',urgent:'Needs you',warning:'Watch today',empty:'Everything is under control right now',open:'Open',error:'Could not load action center',showLess:'Show top 3 only'
+    title:'Today in DABBIR',refresh:'Refresh',loading:'DABBIR is reviewing the business…',handled:'Handled by DABBIR',urgent:'Needs you',warning:'Watch today',empty:'No priorities in the available data',open:'Open',error:'Could not load action center',showLess:'Show top 3 only'
   };
 
   function ensurePanel(){
@@ -85,7 +90,7 @@ const client=String.raw`
   }
 
   function render(data){
-    if(!data?.business_id||data.business_id!==workspaceNow()?.business?.id)return;
+    if(!data?.business_id||data.business_id!==workspaceNow()?.business?.id||!scopeMatches(data))return;
     const panel=ensurePanel();
     if(!panel)return;
     panel.dataset.businessId=data.business_id;
@@ -103,12 +108,13 @@ const client=String.raw`
     status.textContent=effectiveStatus==='needs_attention'?(lang==='ar'?'هناك عناصر حرجة':'Critical items need attention'):effectiveStatus==='watch'?(lang==='ar'?'هناك أمور تحتاج متابعة':'Some items need monitoring'):(lang==='ar'?'لا توجد عناصر حرجة':'No critical items');
     const top=rows.slice(0,DEFAULT_VISIBLE).map(item=>lang==='ar'?item.title_ar:item.title_en).filter(Boolean);
     panel.querySelector('#dacBrief').textContent=filtered?(top.join(lang==='ar'?'، ':', ')||t.empty):(lang==='ar'?data?.brief?.ar:data?.brief?.en)||t.empty;
+    if(filtered&&data?.truth?.source_limits_reached)panel.querySelector('#dacBrief').textContent+=(lang==='ar'?' قد توجد سجلات إضافية؛ راجع القسم المعني للقائمة الكاملة.':' Additional records may exist; open the relevant section for its full list.');
 
     const handledAvailable=data?.handled?.available===true;
     const handledValue=handledAvailable?(data?.handled?.verified_autonomous_today??0):'—';
     const metrics=panel.querySelector('#dacMetrics');
     metrics.replaceChildren(
-      metric(t.handled,handledValue,'handled'),
+      metric(branchScope().mode==='selected'?(lang==='ar'?'عالجها دَبِّر في النشاط':'Handled across the business'):t.handled,handledValue,'handled'),
       metric(t.urgent,urgent,'critical'),
       metric(t.warning,warning,'warning')
     );
@@ -137,7 +143,7 @@ const client=String.raw`
       const detail=document.createElement('span');
       detail.textContent=lang==='ar'?item.detail_ar:item.detail_en;
       const when=document.createElement('small');
-      when.textContent=formatWhen(item.due_at);
+      when.textContent=(item.scope==='business'&&branchScope().mode==='selected'?(lang==='ar'?'على مستوى النشاط · ':'Across the business · '):'')+formatWhen(item.due_at);
       body.append(title,detail,when);
       const button=document.createElement('button');
       button.type='button';
@@ -174,10 +180,12 @@ const client=String.raw`
       if(['conversation','handoff','followup'].includes(type)){
         if(!id||typeof api!=='function'){unavailable();return false}
         const params=new URLSearchParams({business_id:businessId,conversation_id:id});
+        const scope=branchScope();
+        if(scope.mode==='selected')params.set('branch_id',scope.branch_id);
         const {r,j}=await api('/api/dabbir-runtime-fast?'+params.toString());
         if(!stillCurrent())return false;
         const conversation=(j?.conversations||[]).find(row=>row.id===id);
-        if(!r?.ok||!j?.ok||j.business?.id!==businessId||j.selected_conversation_id!==id||!conversation||(conversation.business_id&&conversation.business_id!==businessId)){unavailable();return false}
+        if(!r?.ok||!j?.ok||j.business?.id!==businessId||j.selected_conversation_id!==id||!conversation||(conversation.business_id&&conversation.business_id!==businessId)||(scope.mode==='selected'&&(conversation.branch_id!==scope.branch_id||j.branch_scope?.branch_id!==scope.branch_id))){unavailable();return false}
         workspace=j;
         selectedConversationId=id;
         if(typeof renderAll==='function')renderAll();
@@ -189,8 +197,8 @@ const client=String.raw`
         if(!id||!reader||!lifecycle){unavailable();return false}
         if(!reader.find(w,id)){
           const day=lifecycle.dayKey(item.due_at,w.business);
-          if(day)lifecycle.setView(w,{day,view:'day',scope:'current',allDates:false});
-          await reader.ensure(w);
+          if(day)lifecycle.setView(w,{day,view:'day',scope:item.lifecycle_scope==='review'?'review':'current',allDates:false,followToday:false});
+          await reader.ensureRecord(w,id);
         }
         if(!stillCurrent())return false;
         const row=reader?.find?.(w,id);
@@ -228,7 +236,7 @@ const client=String.raw`
     const key=scopeKey();
     if(!businessId){requestGeneration++;pending=null;clearPanel(document.querySelector('#dabbirActionCenter'),'unavailable','');return}
     if(pending?.key===key)return pending.promise;
-    if(lastBusinessId&&businessId!==lastBusinessId)expanded=false;
+    if(lastScopeKey&&key!==lastScopeKey)expanded=false;
     const now=Date.now();
     if(!force&&key===lastScopeKey&&businessId===lastBusinessId&&now-lastLoadedAt<CACHE_MS&&w?.owner_action_center){
       render(w.owner_action_center);
@@ -243,11 +251,13 @@ const client=String.raw`
       clearPanel(panel,'loading',t.loading);
     }
     const promise=(async()=>{try{
-      const response=await fetch('/api/owner-action-center?business_id='+encodeURIComponent(businessId),{credentials:'same-origin',headers:{accept:'application/json'},cache:'no-store'});
+      const scope=branchScope();
+      const params=new URLSearchParams({business_id:businessId,branch_id:scope.mode==='selected'?scope.branch_id:'all'});
+      const response=await fetch('/api/owner-action-center?'+params.toString(),{credentials:'same-origin',headers:{accept:'application/json','x-dabbir-client':'web'},cache:'no-store'});
       const data=await response.json().catch(()=>null);
       if(generation!==requestGeneration||scopeKey()!==key)return;
       if(!response.ok||!data?.ok||!Array.isArray(data.items))throw new Error(data?.error||('ACTION_CENTER_'+response.status));
-      if(data.business_id!==businessId)throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');
+      if(data.business_id!==businessId||!scopeMatches(data))throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');
       const live=workspaceNow();
       if(live&&live.business?.id===businessId)live.owner_action_center=data;
       lastBusinessId=businessId;
@@ -287,6 +297,7 @@ const client=String.raw`
   }
 
   window.__dabbirUiLifecycle?.on?.('afterRender','owner-action-center-context',()=>loadActionCenter(false));
+  window.addEventListener?.('dabbir:branch-scope-changed',()=>loadActionCenter(true));
   window.__dabbirUiLifecycle?.on?.('afterLanguage','owner-action-center-language',()=>{const w=workspaceNow();if(w?.owner_action_center)render(w.owner_action_center)});
   window.__dabbirOwnerActionCenter={refresh:()=>loadActionCenter(true),open:openItem,render,version:'owner-action-center-v3'};
 })();

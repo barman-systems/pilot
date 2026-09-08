@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
+import { runBookingOwnerJourney } from '../.github/scripts/dabbir-booking-owner-journey.mjs';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
@@ -27,6 +29,7 @@ let oidcToken = null;
 let owner = null;
 let employee = null;
 let businessId = null;
+const bookingQaBusinessIds = new Set();
 let customerId = null;
 let conversationId = null;
 let productId = null;
@@ -442,20 +445,34 @@ async function browserJourney() {
     fs.mkdirSync(dir, { recursive: true });
     const visual = { sha: process.env.GITHUB_SHA, origin: ORIGIN, engine: 'WebKit emulation; not physical Safari', cases: [] };
     const screens = ['dashboard', 'tasks', 'notifications', 'customers', 'appointments', 'operations', 'integrations', 'settings', 'automations', 'analytics'];
+    let activeEntry = null;
+    let visualSummary;
     try {
+      // Read-only and tenant-checked. If unavailable, missing navigation remains
+      // UNAVAILABLE; it must not be inferred to be an intentional exclusion.
+      const capabilityResult = await ownerSession.request(`/api/activity-tasks?business_id=${encodeURIComponent(businessId)}`, { retry: false }).catch(() => null);
+      const capabilities = scopedVisualCapabilities(capabilityResult, businessId);
       for (const [device, width, height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]) {
         await page.setViewportSize({ width, height });
         for (const language of ['ar', 'en']) {
           await page.locator(`#${language}Btn`).click();
           for (const screen of screens) {
+            const entry = { device, width, height, language, screen, status: 'RUNNING' };
+            visual.cases.push(entry);
+            activeEntry = entry;
             if (await page.locator('#menuBtn:visible').count() && !(await page.locator('#side.open').count())) await page.locator('#menuBtn').click();
-            let nav = page.locator(`#side [data-screen="${screen}"]`);
-            if (!(await nav.count())) {
-              await page.locator('#side [data-screen="more"]').click();
-              nav = page.locator(`#screen-more [data-screen="${screen}"]`);
+            let nav = page.locator(`#side [data-screen="${screen}"]:visible`);
+            if (!(await nav.count()) && await page.locator('#side [data-screen="more"]:visible').count()) {
+              await page.locator('#side [data-screen="more"]:visible').click();
+              nav = page.locator(`#screen-more [data-screen="${screen}"]:visible`);
             }
-            const entry = { device, width, height, language, screen };
-            if (!(await nav.count())) { entry.status = 'UNAVAILABLE'; visual.cases.push(entry); continue; }
+            const availability = visualAvailability({ screen, hasVisibleNavigation: (await nav.count()) > 0, hasTarget: (await page.locator(`#screen-${screen}`).count()) > 0, capabilities });
+            if (availability !== 'READY') {
+              entry.status = availability;
+              if (availability === 'BROKEN_TARGET') throw new Error('INTERNAL_VISUAL_BROKEN_TARGET');
+              activeEntry = null;
+              continue;
+            }
             await nav.click({ timeout: 10000 });
             await page.locator(`#screen-${screen}.active`).waitFor({ state: 'visible', timeout: 10000 });
             await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
@@ -463,8 +480,6 @@ async function browserJourney() {
             entry.overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
             entry.file = `${device}-${language}-${screen}.png`;
             await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
-            entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
-            visual.cases.push(entry);
             if(['dashboard','settings'].includes(screen)&&['iphone','desktop'].includes(device)){
               // Text-only 200% enlargement, separate from physical Safari/Dynamic Type.
               await page.evaluate(()=>{
@@ -499,6 +514,8 @@ async function browserJourney() {
                 }
               }
             }
+            entry.status = entry.overflow ? 'OVERFLOW' : 'PASS';
+            activeEntry = null;
           }
         }
       }
@@ -510,22 +527,33 @@ async function browserJourney() {
         await teamPage.locator('#members .row').first().waitFor({timeout:25000});
         visual.team={language:await teamPage.locator('html').getAttribute('lang'),cases:[]};
         for(const [device,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
+          const entry = { device, width, height, status: 'RUNNING' };
+          visual.team.cases.push(entry);
+          activeEntry = entry;
           await teamPage.setViewportSize({width,height});
           await teamPage.screenshot({path:`${dir}/${device}-team.png`,timeout:15000});
-          visual.team.cases.push({device,width,height,overflow:await teamPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)});
+          entry.overflow = await teamPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);
+          entry.status = entry.overflow ? 'OVERFLOW' : 'PASS';
+          activeEntry = null;
         }
       }finally{await teamPage.close()}
     } catch (error) {
+      if (activeEntry && activeEntry.status !== 'BROKEN_TARGET') activeEntry.status = 'ACTION_FAILED';
+      visual.interrupted = true;
       visual.error = String(error.message);
       throw error;
     } finally {
+      // Emit even on a failed click/wait/screenshot, before writing the artifact.
+      // The helper projects only fixed screen/status names, language and dimensions.
+      visualSummary = emitInternalVisualSummary(visual);
       fs.writeFileSync(`${dir}/report.json`, JSON.stringify(visual, null, 2));
     }
+    assertInternalVisualGate(visualSummary);
   }
 
-  // The functional report is sufficient evidence here. In protected WebKit,
-  // screenshot rasterization can block the browser channel long after every
-  // interaction has already passed, so it must not determine journey success.
+  // The functional report and optional visual gate are separate evidence.
+  // When visual QA is enabled, visible overflow fails the journey; screenshots
+  // alone do not certify the page's data, permissions or customer workflow.
   assert(pageErrors.length === 0, `BROWSER_PAGE_ERRORS:${pageErrors.join(' | ')}`);
   assert(consoleErrors.length === 0, `BROWSER_CONSOLE_ERRORS:${consoleErrors.slice(0, 5).join(' | ')}`);
   return { detail: 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.' };
@@ -864,6 +892,11 @@ async function runJourney() {
 
   await step('25_mobile_webkit_owner_journey', browserJourney);
 
+  await step('25b_owner_booking_create_replay_complete', () => runBookingOwnerJourney({
+    ownerSession, employeeSession, runLabel: RUN_LABEL,
+    registerBusinessCleanup: id => { bookingQaBusinessIds.add(id); },
+  }));
+
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
     assert(logout.ok, `EMPLOYEE_LOGOUT_FAILED_${logout.status}`);
@@ -890,14 +923,26 @@ try {
   if (browserContext) await browserContext.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
 
+  let bookingCleanupSucceeded = true;
+  for (const id of bookingQaBusinessIds) {
+    try {
+      const result = await qaControl('dabbir_ai_qa_cleanup', { business_id: id });
+      report.cleanup.push({ item: 'qa_booking_business', status: 'PASS', http_status: result.status, detail: 'Disposable booking tenant deleted.' });
+    } catch (error) {
+      bookingCleanupSucceeded = false;
+      report.cleanup.push({ item: 'qa_booking_business', status: 'FAIL', detail: small(error?.message || error) });
+      report.required_failures += 1;
+    }
+  }
+
   if (owner?.id || employee?.id || businessId) {
     try {
       const result = await qaControl('dabbir_ai_qa_cleanup', {
         business_id: businessId || undefined,
-        owner_user_id: owner?.id || undefined,
+        owner_user_id: bookingCleanupSucceeded ? owner?.id || undefined : undefined,
         employee_user_id: employee?.id || undefined,
       });
-      report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: 'PASS', http_status: result.status, detail: 'QA business data and disposable identities deleted.' });
+      report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: bookingCleanupSucceeded ? 'PASS' : 'PARTIAL', http_status: result.status, detail: bookingCleanupSucceeded ? 'QA business data and disposable identities deleted.' : 'Main QA tenant and employee deleted; owner retained because a booking tenant still needs cleanup.' });
     } catch (error) {
       report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: 'FAIL', detail: small(error?.message || error) });
       report.required_failures += 1;

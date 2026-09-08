@@ -58,16 +58,16 @@ const script=String.raw`(()=>{
   }
   function businessType(){return String(ws()?.business?.business_type||'').toLowerCase()}
   function genericCalendarEnabled(){return !window.__dabbirActivityProfile?.ownsCalendar&&!['store','creator','real_estate','salon'].includes(businessType())}
-  function calendarDayKey(value){const raw=dubaiLocalMinute(value instanceof Date?value:new Date(value));return raw.slice(0,10)}
-  function calendarWallDate(value){const key=calendarDayKey(value);const d=new Date(key+'T12:00:00');return Number.isNaN(d.getTime())?new Date(value):d}
-  function startDay(value){const d=calendarWallDate(value);d.setHours(12,0,0,0);return d}
-  function addDays(value,n){const d=new Date(value);d.setDate(d.getDate()+n);return d}
-  function startWeek(value){const d=startDay(value),dow=(d.getDay()+6)%7;return addDays(d,-dow)}
-  function startMonth(value){const d=startDay(value);d.setDate(1);return d}
+  function calendarDayKey(value){return lifecycle.dayKey(value,ws()?.business)}
+  function calendarWallDate(value){return lifecycle.wallDate(calendarDayKey(value))}
+  function startDay(value){return calendarWallDate(value)}
+  function addDays(value,n){const d=new Date(value);d.setUTCDate(d.getUTCDate()+n);return d}
+  function startWeek(value){const d=startDay(value),dow=(d.getUTCDay()+6)%7;return addDays(d,-dow)}
+  function startMonth(value){const d=startDay(value);d.setUTCDate(1);return d}
   function sameDay(a,b){return calendarDayKey(a)===calendarDayKey(b)}
-  function dayLabel(value,weekday=true){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{weekday:weekday?'short':undefined,month:'short',day:'numeric'}).format(value)}catch{return calendarDayKey(value)}}
-  function monthLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{month:'long',year:'numeric'}).format(value)}catch{return calendarDayKey(value).slice(0,7)}}
-  function timeLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
+  function dayLabel(value,weekday=true){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:'UTC',weekday:weekday?'short':undefined,month:'short',day:'numeric'}).format(value)}catch{return calendarDayKey(value)}}
+  function monthLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:'UTC',month:'long',year:'numeric'}).format(value)}catch{return calendarDayKey(value).slice(0,7)}}
+  function timeLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:lifecycle.timezone(ws()?.business),hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
   function activeRows(){return reader.rows(ws())}
   function eventClass(a){const s=String(a.status||'requested').toLowerCase();return s==='completed'?' completed':(s==='cancelled'||s==='canceled'?' cancelled':'')}
   function eventButton(a,compact=false){const name=customerName(a.customer_id),meta=timeLabel(a.starts_at)+' · '+statusLabel(a.status);return '<button type="button" class="'+(compact?'dabbirGenericMonthEvent':'dabbirGenericEvent'+eventClass(a))+'" data-calendar-appt="'+esc(a.id)+'" title="'+esc(fmt(a.starts_at))+'"><b>'+esc(name)+'</b>'+(compact?'':'<small>'+esc(meta)+'</small>')+'</button>'}
@@ -80,7 +80,7 @@ const script=String.raw`(()=>{
   }
   function renderDayCalendar(rows){const c=copy(),key=calendarDayKey(calendarCursor),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key);return dayRows.length?'<div class="dabbirGenericDay">'+dayRows.map(a=>'<div class="dabbirGenericTimelineRow"><div class="dabbirGenericTimelineTime">'+esc(timeLabel(a.starts_at))+'</div>'+eventButton(a)+'</div>').join('')+'</div>':'<div class="dabbirGenericEmpty">'+esc(c.noBookings)+'</div>'}
   function renderWeekCalendar(rows){const c=copy(),start=startWeek(calendarCursor),days=Array.from({length:7},(_,i)=>addDays(start,i));return '<div class="dabbirGenericWeekWrap"><div class="dabbirGenericWeek">'+days.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key);return '<div class="dabbirGenericWeekDay"><div class="dabbirGenericWeekHead">'+esc(dayLabel(day))+'</div><div class="dabbirGenericWeekEvents">'+(dayRows.length?dayRows.map(a=>eventButton(a)).join(''):'<div class="dabbirGenericEmpty">'+esc(c.noBookings)+'</div>')+'</div></div>'}).join('')+'</div></div>'}
-  function renderMonthCalendar(rows){const c=copy(),month=startMonth(calendarCursor),gridStart=startWeek(month),todayKey=calendarDayKey(new Date());const cells=Array.from({length:42},(_,i)=>addDays(gridStart,i));return '<div class="dabbirGenericMonthWrap"><div class="dabbirGenericMonth">'+cells.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key),outside=day.getMonth()!==month.getMonth(),shown=dayRows.slice(0,3),more=Math.max(0,dayRows.length-shown.length);return '<div class="dabbirGenericMonthDay'+(outside?' out':'')+(key===todayKey?' today':'')+'"><div class="dabbirGenericMonthDate">'+esc(String(day.getDate()))+'</div>'+shown.map(a=>eventButton(a,true)).join('')+(more?'<div class="dabbirGenericRange">+'+more+' '+esc(c.more)+'</div>':'')+'</div>'}).join('')+'</div></div>'}
+  function renderMonthCalendar(rows){const c=copy(),month=startMonth(calendarCursor),gridStart=startWeek(month),todayKey=calendarDayKey(new Date());const cells=Array.from({length:42},(_,i)=>addDays(gridStart,i));return '<div class="dabbirGenericMonthWrap"><div class="dabbirGenericMonth">'+cells.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key),outside=day.getUTCMonth()!==month.getUTCMonth(),shown=dayRows.slice(0,3),more=Math.max(0,dayRows.length-shown.length);return '<div class="dabbirGenericMonthDay'+(outside?' out':'')+(key===todayKey?' today':'')+'"><div class="dabbirGenericMonthDate">'+esc(String(day.getUTCDate()))+'</div>'+shown.map(a=>eventButton(a,true)).join('')+(more?'<div class="dabbirGenericRange">+'+more+' '+esc(c.more)+'</div>':'')+'</div>'}).join('')+'</div></div>'}
   function calendarRangeLabel(){if(calendarView==='day')return dayLabel(calendarCursor);if(calendarView==='month')return monthLabel(calendarCursor);const start=startWeek(calendarCursor),end=addDays(start,6);return dayLabel(start,false)+' – '+dayLabel(end,false)}
   function moveCalendar(direction){lifecycle.move(ws(),direction)}
   function renderCalendar(rows){
@@ -135,7 +135,7 @@ const script=String.raw`(()=>{
   }
   function openEdit(id){
     const w=ws(),a=reader.find(w,id);if(!a||!lifecycle.inContext(a,w))return;
-    editingId=id;editingContext={key:lifecycle.contextKey(w),business_id:w.business.id,branch_id:a.branch_id,starts_at:a.starts_at,history:lifecycle.terminal(a)};
+    editingId=id;editingContext={key:lifecycle.contextKey(w),business_id:w.business.id,branch_id:a.branch_id,starts_at:a.starts_at,local_start:a.starts_at?dubaiLocalMinute(new Date(a.starts_at)):'',history:lifecycle.terminal(a)};
     const c=copy(),modal=ensureModal(),readonly=editingContext.history;
     modal.innerHTML='<form class="dabbirApptModalBox" id="dabbirApptEditForm"><h3>'+esc(readonly?c.details:c.editTitle)+'</h3><div class="dabbirApptField"><label>'+esc(c.customer)+'</label><input value="'+esc(customerName(a.customer_id))+'" disabled></div><div class="dabbirApptField"><label for="dabbirApptEditTime">'+esc(c.time)+'</label><input id="dabbirApptEditTime" type="datetime-local" dir="ltr" value="'+esc(a.starts_at?dubaiLocalMinute(new Date(a.starts_at)):'')+'" '+(readonly?'disabled':'required')+'></div><div class="dabbirApptField"><label for="dabbirApptEditStatus">'+esc(c.status)+'</label><select id="dabbirApptEditStatus" '+(readonly?'disabled':'')+'>'+['requested','new','confirmed','rescheduled','arrived','in_progress','completed','cancelled','no_show'].map(status=>'<option value="'+status+'" '+(lifecycle.status(a)===status?'selected':'')+'>'+esc(c[status])+'</option>').join('')+'</select></div><div class="dabbirApptModalActions"><button type="button" class="cancel" id="dabbirApptEditCancel">'+esc(c.cancel)+'</button>'+(!readonly?'<button type="submit" class="save">'+esc(c.save)+'</button>':'')+'</div></form>';
     q('#dabbirApptEditCancel').onclick=closeModal;
@@ -145,7 +145,7 @@ const script=String.raw`(()=>{
   }
   function closeModal(){q('#dabbirApptEditModal')?.classList.remove('open');editingId=null;editingContext=null}
   async function request(body){
-    const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
+    const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json','x-dabbir-client':'web'},body:JSON.stringify(body)});
     const data=await response.json().catch(()=>({}));return {response,data};
   }
   function applySaved(w,id,row){
@@ -157,10 +157,12 @@ const script=String.raw`(()=>{
     event.preventDefault();if(busy||!editingId||!editingContext||editingContext.history)return;
     const w=ws(),context={...editingContext},id=editingId;
     if(lifecycle.contextKey(w)!==context.key){closeModal();return}
-    const start=isoFromDubaiLocal(q('#dabbirApptEditTime')?.value),status=q('#dabbirApptEditStatus')?.value;if(!start)return;
+    const localStart=q('#dabbirApptEditTime')?.value,start=isoFromDubaiLocal(localStart),status=q('#dabbirApptEditStatus')?.value;if(!start)return;
     const body={action:'update',business_id:context.business_id,appointment_id:id,status};
     if(context.branch_id)body.branch_id=context.branch_id;
-    if(new Date(start).getTime()!==new Date(context.starts_at).getTime())body.starts_at=start;
+    // datetime-local displays minutes. A status-only edit must preserve the
+    // original seconds and must not accidentally reschedule historical work.
+    if(localStart!==context.local_start&&new Date(start).getTime()!==new Date(context.starts_at).getTime())body.starts_at=start;
     busy=true;const submit=event.submitter;if(submit)submit.disabled=true;
     try{
       const {response,data}=await request(body);
