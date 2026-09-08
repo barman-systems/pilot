@@ -12,10 +12,9 @@ test('Arabic tenants reject Cloudflare English-only voice transcripts instead of
   assert.match(sql,/v_uncertain:=true/);
 });
 
-test('booking time voice transcripts require temporal evidence before AI execution',()=>{
-  assert.match(sql,/v_pending_action='service_selected'/);
-  assert.match(sql,/اليوم\|باجر/);
-  assert.match(sql,/today\|tomorrow/);
-  assert.match(sql,/VOICE_NOTE_UNCERTAIN/);
+test('booking voice guard accepts valid conversational turns such as greetings',()=>{
+  assert.doesNotMatch(sql,/v_pending_action='service_selected'[^;]+v_transcript !~/i);
+  assert.match(sql,/valid conversational turns/i);
+  assert.match(sql,/booking_context/i);
   assert.match(sql,/if not v_uncertain then[\s\S]*dabbir_enqueue_message_batch/);
 });
