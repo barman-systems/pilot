@@ -6,7 +6,7 @@ export const TRUST = Object.freeze({ PROVIDER_VERIFIED: 100, DATABASE_FACT: 95, 
   CUSTOMER_STATED: 80, CUSTOMER_MEMORY: 75, AI_INFERENCE: 0 });
 export const BUDGET = Object.freeze({ maxModelCalls: 1, maxSteps: 8, timeoutMs: 25000, maxContextChars: 10000 });
 export const ONTOLOGIES = Object.freeze({
-  car_wash: { actors: ['Customer','Vehicle','Team'], entities: ['Service','Package','Location','ServiceArea','Slot','Duration','Price','Booking'] },
+  car_wash: { actors: ['Customer','Vehicle','Team'], entities: ['Service','Package','Location','ServiceArea','Slot','Duration','Price','Booking'], required: ['vehicle','location'] },
   salon: { actors: ['Customer','Staff'], entities: ['Service','Branch','Slot','Duration','Price','Booking'] },
   clinic: { actors: ['Patient','Doctor'], entities: ['Specialty','Branch','Appointment'], diagnosticReasoning: false },
   default: { actors: ['Customer','Worker'], entities: ['Service','Branch','Slot','Duration','Price','Booking'] },
@@ -26,6 +26,7 @@ const addDays = (d,n) => new Date(Date.parse(d+'T12:00:00Z')+n*86400000).toISOSt
 const includesName = (text,name) => name && (' '+text+' ').includes(' '+normalizeSemanticText(name)+' ');
 function scoped(rows,c) { return arr(rows).filter(x => (!x.business_id || x.business_id===c.business.id) && (!x.branch_id || x.branch_id===c.conversation.branch_id)); }
 function scopeValid(c) { return !!(c.business?.id && c.conversation?.id && c.customer?.id && c.conversation?.branch_id && c.business?.timezone); }
+function validCoordinates(lat,lng) { return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180; }
 
 function fact(s,key,value,source,confidence,now,extra={}) {
   const old=s.entities[key];
@@ -91,6 +92,21 @@ function parseTime(raw,s) {
   const hh=period?h%12+(period==='pm'?12:0):h;
   return {value:String(hh).padStart(2,'0')+':'+String(minute).padStart(2,'0'),confidence:.99,period,hour:h,minute};
 }
+function parseCarWashVehicle(raw) {
+  const t=normalizeSemanticText(raw);
+  if(/(?:^|\s)(?:ستيشن|station|suv|4x4|دفع رباعي|جيب)(?:\s|$)/.test(t))return {value:'station',label:'ستيشن/SUV'};
+  if(/(?:^|\s)(?:صالون|saloon|sedan)(?:\s|$)/.test(t))return {value:'saloon',label:'صالون'};
+  return null;
+}
+function parseWhatsAppLocation(raw) {
+  const text=clean(raw,1000);
+  const m=text.match(/(?:موقع واتساب|whatsapp location)\s*:\s*(-?\d{1,2}(?:\.\d{1,6})?)\s*,\s*(-?\d{1,3}(?:\.\d{1,6})?)(?:\s*[—-]\s*(.{1,180}))?$/i);
+  if(!m)return null;
+  const lat=Number(m[1]),lng=Number(m[2]);
+  if(!validCoordinates(lat,lng))return null;
+  const label=clean(m[3],180)||null;
+  return {value:{lat,lng,...(label?{label}:{})},label:label||`${lat.toFixed(6)}, ${lng.toFixed(6)}`};
+}
 
 function resolveCatalog(s,c,text,now,source) {
   const services=scoped(c.services,c),workers=scoped(c.workers,c);
@@ -117,9 +133,18 @@ function reuseMemory(s,c,t,now) {
     if(m.business_id!==c.business.id || m.customer_id!==c.customer.id || m.status!=='verified' || !['DATABASE_FACT','CUSTOMER_CONFIRMED','OWNER_POLICY','PROVIDER_VERIFIED'].includes(m.source) || m.confidence<.9 || !m.last_confirmed_at || (m.expires_at && Date.parse(m.expires_at)<=Date.parse(now)))continue;
     const k=m.memory_key.replace(/^last_verified_|^preferred_|^known_|^usual_/,'');
     if(!allowed.includes(k))continue;
-    const val=m.value?.id??m.value?.value;
+    let val=m.value?.id??m.value?.value;
     if(k==='service'&&!scoped(c.services,c).some(x=>x.id===val))continue;
     if(k==='worker'&&!scoped(c.workers,c).some(x=>x.id===val))continue;
+    if(k==='vehicle') {
+      val=clean(m.value?.vehicle_type??m.value?.value,40).toLowerCase();
+      if(!['saloon','station'].includes(val))continue;
+    }
+    if(k==='location') {
+      const lat=Number(m.value?.lat),lng=Number(m.value?.lng);
+      if(!validCoordinates(lat,lng))continue;
+      val={lat,lng,...(clean(m.value?.label,180)?{label:clean(m.value.label,180)}:{})};
+    }
     if(val!=null){fact(s,k,val,'CUSTOMER_MEMORY',Math.min(.96,Number(m.confidence)),now,{memory_version:m.version});used++;}
   }
   if(!used)s.unresolved_references.push(onlyVehicle?'vehicle':onlyWorker?'worker':'verified_history');
@@ -133,9 +158,9 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   const s=same&&!completed?structuredClone(previous):{...fresh,last_verified_action:same?previous?.last_verified_action||null:null,last_verified_outcome:same?previous?.last_verified_outcome||null:null};
   s.updated_at=stamp;s.revision=(previous?.revision||0)+1;s.missing_fields=[];s.unresolved_references=[];s.pending_action=null;
   delete s.entities.slot; // Confirmation authorizes exactly this customer turn.
-  s.business_constraints=arr(c.understanding_policy?.required_fields).filter(x=>['location','vehicle','worker'].includes(x));
-  s.owner_policies=arr(c.approved_aliases).map(x=>({id:x.id,version:x.version})).slice(0,20);
   s.ontology=Object.keys(ONTOLOGIES).find(k=>k!=='default' && String(c.business?.business_type).includes(k))||'default';
+  s.business_constraints=[...new Set([...arr(ONTOLOGIES[s.ontology]?.required),...arr(c.understanding_policy?.required_fields)])].filter(x=>['location','vehicle','worker'].includes(x));
+  s.owner_policies=arr(c.approved_aliases).map(x=>({id:x.id,version:x.version})).slice(0,20);
   const turns=arr(c.batch_messages).slice(-12).flatMap(x=>clean(x.body,1500).split(/(?=لا قصدي|i mean)/i).map(body=>({body,catalog_service_id:x.catalog_service_id,language_body:clean(x.language_body??x.body,1500)})));
   const texts=turns.map(x=>x.body);
   const all=normalizeSemanticText(texts.join(' '));
@@ -182,6 +207,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     else if(booking){s.goal='BOOK_SERVICE';s.intent='BOOKING';s.intent_confirmed=true;}
     else if(s.goal==='BOOK_SERVICE' && !/^(?:شكرا|thanks|thank you)$/.test(t))s.intent='BOOKING';
     resolveCatalog(s,c,t,stamp,source);reuseMemory(s,c,t,stamp);
+    if(s.ontology==='car_wash') {
+      const vehicle=parseCarWashVehicle(raw),location=parseWhatsAppLocation(raw);
+      if(vehicle)fact(s,'vehicle',vehicle.value,source,.99,stamp,{label:vehicle.label,grounded_by:'CUSTOMER_STATED'});
+      if(location)fact(s,'location',location.value,'CUSTOMER_STATED',1,stamp,{label:location.label,grounded_by:'SIGNED_WHATSAPP_LOCATION'});
+    }
     if(/^(?:هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(t)) {
       if(previous?.clarification_entity==='intent_confirmation')s.intent_confirmed=true;
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
@@ -242,7 +272,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   s.unresolved_references=[...new Set(s.unresolved_references)];
   const selected=supported(s.entities.slot) && arr(c.pending_state?.payload?.slots)[valueOf(s,'slot')];
   if(s.intent==='BOOKING'||s.intent==='RESCHEDULE_BOOKING') {
-    const required=s.intent==='RESCHEDULE_BOOKING'?['appointment','date','time']:['service','date','time',...s.business_constraints];
+    const required=s.intent==='RESCHEDULE_BOOKING'?['appointment','date','time']:(s.ontology==='car_wash'?['service','vehicle','location','date','time',...s.business_constraints]:['service','date','time',...s.business_constraints]);
     s.missing_fields=selected?s.business_constraints.filter(k=>!supported(s.entities[k])):required.filter(k=>!supported(s.entities[k]));
     if(s.entities.worker && !supported(s.entities.worker))s.missing_fields.push('worker');
   } else if(s.intent==='CANCEL_BOOKING')s.missing_fields=supported(s.entities.appointment)?[]:['appointment'];
@@ -282,8 +312,8 @@ export function clarification(s,c) {
     return en?'What time works for you?':'أي وقت يناسبك؟';
   }
   if(key==='worker')return en?'Which staff member would you prefer?':'أي موظف تفضل؟';
-  if(key==='location')return en?'Where should the service take place?':'وين موقع الخدمة؟';
-  if(key==='vehicle')return en?'Which vehicle is this for?':'لأي سيارة تبا الخدمة؟';
+  if(key==='location')return s.ontology==='car_wash'?(en?'Please send the car location using WhatsApp Location.':'أرسل موقع السيارة من خيار «الموقع» في واتساب.'):(en?'Where should the service take place?':'وين موقع الخدمة؟');
+  if(key==='vehicle')return s.ontology==='car_wash'?(en?'Is the vehicle a saloon/sedan or a station/SUV?':'السيارة صالون ولا ستيشن/SUV؟'):(en?'Which vehicle is this for?':'لأي سيارة تبا الخدمة؟');
   return en?'Which detail should I use?':'أي تفصيل تقصد؟';
 }
 
