@@ -40,7 +40,7 @@ const UI_MODULE_ORDER = [
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260908-owner-correction-v5';
+const UI_BUNDLE_VERSION = '20260908-owner-policy-read-v6';
 
 // One shell-level lifecycle authority owns final render/navigation/language/chat render entry points.
 // Legacy modules may still wrap them during migration; reconcile() reasserts the

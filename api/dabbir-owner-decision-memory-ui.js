@@ -18,7 +18,7 @@ const client=String.raw`
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
   const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent=${JSON.stringify(css)};document.head.appendChild(style);
   const nativeFetch=window.fetch.bind(window);
-  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false});
+  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false});
   let state=emptyState(null),generation=0,returnFocus=null;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
@@ -59,7 +59,7 @@ const client=String.raw`
     const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
     if(!current(id,epoch))return;
     const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
-    state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',loaded:true};
+    state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',policyError:policies.status!=='fulfilled',loaded:true};
     renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
   }
   function renderButton(){
@@ -107,10 +107,15 @@ const client=String.raw`
     const dialog=document.createElement('section');dialog.className='dabbir-memory-dialog';overlay.setAttribute('aria-labelledby','dabbirMemoryTitle');
     const title=document.createElement('h3');title.id='dabbirMemoryTitle';title.textContent=x.title;const desc=document.createElement('p');desc.textContent=x.desc;dialog.append(title,desc);
     renderKnowledge(dialog);
+    if(state.policyError){
+      const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=ar()?'تعذر تحميل سياسات المالك. حاول مجددًا.':'Could not load owner policies. Try again.';dialog.append(error);
+      const retry=document.createElement('button');retry.textContent=ar()?'إعادة تحميل السياسات':'Retry policies';retry.onclick=()=>load(true);dialog.append(retry);
+    }else{
     const suggestions=document.createElement('div');suggestions.className='dabbir-memory-section';suggestions.textContent=x.suggestions;dialog.append(suggestions);
     if(state.candidates.length)state.candidates.forEach(item=>dialog.append(policyCard(item,true)));else{const empty=document.createElement('div');empty.className='dabbir-memory-empty';empty.textContent=x.empty;dialog.append(empty)}
     const active=document.createElement('div');active.className='dabbir-memory-section';active.textContent=x.active;dialog.append(active);
     state.policies.filter(item=>['ACTIVE','PAUSED'].includes(item.state)).forEach(item=>dialog.append(policyCard(item,false)));
+    }
     const close=document.createElement('button');close.className='dabbir-memory-close';close.textContent=x.close;close.onclick=closeDialog;dialog.append(close);
     overlay.append(dialog);overlay.onclick=event=>{if(event.target===overlay)closeDialog()};document.body.append(overlay);overlay.showModal();overlay.oncancel=event=>{event.preventDefault();closeDialog()};close.focus();
     overlay.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeDialog()}else if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button,input,select,summary')].filter(el=>!el.disabled);const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};

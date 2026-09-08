@@ -1,4 +1,5 @@
 import { singleQueryValue } from './_request-query.js';
+import { readOwnerPolicyRows } from './_owner-policy-read.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -29,13 +30,8 @@ async function rpc(token,name,params,fallback){
   return payload;
 }
 
-async function rest(token,path){
-  const response=await supabaseRest(path,token);
-  const text=await response.text();
-  let payload=[];
-  try{payload=text?JSON.parse(text):[]}catch{payload=[]}
-  if(!response.ok){const error=new Error('OWNER_POLICY_LOOKUP_FAILED');error.status=response.status;throw error}
-  return payload;
+async function readPolicy(token,path,source,options={}){
+  return readOwnerPolicyRows(signal=>supabaseRest(path,token,{...options,signal}),source);
 }
 
 async function ownerContext(req,res,businessId){
@@ -65,9 +61,9 @@ export default async function handler(req,res){
       const ctx=await ownerContext(req,res,businessId);
       if(!ctx)return;
       const [candidates,policies,audit]=await Promise.all([
-        rpc(ctx.token,'dabbir_owner_policy_candidates',{p_business_id:businessId},'POLICY_CANDIDATES_FAILED'),
-        rest(ctx.token,`dabbir_owner_policy_versions?business_id=eq.${businessId}&select=id,action_key,version,state,risk_class,decision_key,decision_value,match_bounds,match_fingerprint,explicit_confirmation,confirmation_source,activated_at,paused_at,revoked_at,created_at&order=created_at.desc&limit=50`),
-        rest(ctx.token,`dabbir_owner_policy_audit?business_id=eq.${businessId}&select=id,policy_id,event_type,action_key,policy_version,match_reason,safe_metadata,created_at&order=created_at.desc&limit=50`),
+        readPolicy(ctx.token,'rpc/dabbir_owner_policy_candidates','candidates',{method:'POST',body:JSON.stringify({p_business_id:businessId}),headers:{prefer:'return=representation'}}),
+        readPolicy(ctx.token,`dabbir_owner_policy_versions?business_id=eq.${businessId}&select=id,action_key,version,state,risk_class,decision_key,decision_value,match_bounds,match_fingerprint,explicit_confirmation,confirmation_source,activated_at,paused_at,revoked_at,created_at&order=created_at.desc&limit=50`,'policies'),
+        readPolicy(ctx.token,`dabbir_owner_policy_audit?business_id=eq.${businessId}&select=id,policy_id,event_type,action_key,policy_version,match_reason,safe_metadata,created_at&order=created_at.desc&limit=50`,'audit'),
       ]);
       return json(res,200,{
         ok:true,
@@ -129,6 +125,7 @@ export default async function handler(req,res){
 
     return json(res,400,{ok:false,error:'UNSUPPORTED_POLICY_ACTION'});
   }catch(error){
+    if(req.method==='GET'&&error?.message==='OWNER_POLICY_READ_UNAVAILABLE')return json(res,error.status,{ok:false,error:'OWNER_POLICY_READ_UNAVAILABLE'});
     const code=clean(error?.message||'OWNER_POLICY_FAILED',140);
     const forbidden=['OWNER_REQUIRED','SENSITIVE_ACTION_NOT_LEARNABLE','POLICY_MEMORY_LOW_RISK_ONLY'].includes(code);
     const conflict=['INSUFFICIENT_MATCHING_OBSERVATIONS','REVOKED_POLICY_IMMUTABLE','POLICY_CANNOT_RESUME','ANOTHER_ACTIVE_POLICY_EXISTS'].includes(code);
