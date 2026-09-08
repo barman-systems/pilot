@@ -1,0 +1,52 @@
+-- Controlled database smoke only. No provider send; every fixture is rolled back.
+begin;
+do $smoke$
+declare biz uuid:=gen_random_uuid(); own uuid:=gen_random_uuid(); br uuid:=gen_random_uuid(); cust uuid:=gen_random_uuid(); conv uuid:=gen_random_uuid(); msg uuid:=gen_random_uuid(); batch uuid:=gen_random_uuid(); token uuid:=gen_random_uuid(); blocked boolean; result jsonb;
+begin
+ insert into auth.users(id,email) values(own,'qa-return-ai-'||own||'@example.invalid');
+ insert into public.dabbir_businesses(id,slug,name,business_type,demo_mode) values(biz,'qa-return-ai-'||biz,'Return to AI rollback QA','car_wash',true);
+ insert into public.dabbir_memberships(business_id,user_id,role,status) values(biz,own,'owner','active');
+ insert into public.dabbir_business_branches(id,business_id,name) values(br,biz,'Isolated QA branch');
+ insert into public.dabbir_customers(id,business_id,display_name) values(cust,biz,'Synthetic rollback customer');
+ insert into public.dabbir_conversations(id,business_id,customer_id,branch_id,channel_type,demo_mode) values(conv,biz,cust,br,'whatsapp',false);
+ insert into public.dabbir_messages(id,business_id,conversation_id,sender_type,body,simulated) values(msg,biz,conv,'customer','Synthetic boundary check',false);
+ insert into public.dabbir_message_batches(id,business_id,conversation_id,customer_id,channel_type,state,lock_token,locked_until,message_count) values(batch,biz,conv,cust,'whatsapp','PROCESSING',token,now()+interval '10 minutes',1);
+ insert into public.dabbir_message_batch_items(business_id,batch_id,message_id,ordinal) values(biz,batch,msg,1);
+ insert into public.dabbir_ai_conversation_state(business_id,conversation_id,pending_action,payload,semantic_version,semantic_batch_id,semantic_message_revision,semantic_state)
+   values(biz,conv,'handoff','{"fixture":true}',1,batch,1,'{"entities":{"time":{"source":"CUSTOMER_STATED","confidence":0.55}}}');
+ perform set_config('request.jwt.claim.sub',own::text,true);
+ perform set_config('request.jwt.claim.role','authenticated',true);
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
+ set local role authenticated;
+ perform public.dabbir_takeover_conversation(biz,conv);
+ reset role;
+ update public.dabbir_handoffs set route_class='OWNER_DECISION',reason='routine_followup',priority=30 where business_id=biz and conversation_id=conv and state='HUMAN_ACTIVE';
+ set local role authenticated;
+ result:=public.dabbir_return_conversation_to_ai(biz,conv);
+ if result->>'state'<>'waiting_customer' then raise exception 'QA_RETURN_FAILED'; end if;
+ perform public.dabbir_return_conversation_to_ai(biz,conv);
+ blocked:=false;begin update public.dabbir_ai_conversation_state set pending_action='none' where business_id=biz;exception when insufficient_privilege then blocked:=true;end;
+ if not blocked then raise exception 'QA_DIRECT_STATE_WRITE_ALLOWED';end if;
+ blocked:=false;begin perform dabbir_private.conversation_return_to_ai_v3();exception when insufficient_privilege then blocked:=true;end;
+ if not blocked then raise exception 'QA_PRIVATE_EXECUTE_ALLOWED';end if;
+ blocked:=false;begin perform public.dabbir_return_conversation_to_ai(gen_random_uuid(),conv);exception when others then if sqlerrm='REPLY_PERMISSION_REQUIRED' then blocked:=true;else raise;end if;end;
+ if not blocked then raise exception 'QA_FOREIGN_TENANT_ALLOWED';end if;
+ reset role;
+ if not exists(select 1 from public.dabbir_ai_conversation_state where business_id=biz and conversation_id=conv and pending_action='none' and payload='{}'::jsonb and semantic_version=1 and semantic_state#>>'{entities,time,source}'='CUSTOMER_STATED') then raise exception 'QA_STATE_PRESERVATION_FAILED';end if;
+ if (select understanding_revision from public.dabbir_conversations where id=conv)<>2 then raise exception 'QA_REVISION_REPLAY_FAILED';end if;
+ perform set_config('request.jwt.claim.role','service_role',true);
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+ blocked:=false;begin perform public.dabbir_semantic_assert_current_v2(batch,token,1);exception when others then if sqlerrm='SEMANTIC_SUPERSEDED' then blocked:=true;else raise;end if;end;
+ if not blocked then raise exception 'QA_OLD_DECISION_STILL_AUTHORIZED';end if;
+ if (select count(*) from public.dabbir_owner_decision_observations where business_id=biz)<>1 or exists(select 1 from public.dabbir_owner_policy_versions where business_id=biz) then raise exception 'QA_OWNER_OBSERVATION_FAILED';end if;
+ perform set_config('request.jwt.claim.role','authenticated',true);
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',own)::text,true);
+ insert into public.account_access_state(user_id,status,reason,suspended_at) values(own,'suspended','Synthetic rollback gate test',now()) on conflict(user_id) do update set status='suspended',reason='Synthetic rollback gate test',suspended_at=now();
+ set local role authenticated;
+ blocked:=false;begin perform public.dabbir_return_conversation_to_ai(biz,conv);exception when others then if sqlerrm in ('REPLY_PERMISSION_REQUIRED','CONVERSATION_NOT_FOUND') then blocked:=true;else raise;end if;end;
+ if not blocked then raise exception 'QA_SUSPENDED_RETURN_ALLOWED';end if;
+ reset role;
+ perform set_config('dabbir.return_ai_smoke','{"owner_return":true,"state_cleared":true,"facts_preserved":true,"old_decision_denied":true,"replay_stable":true,"foreign_tenant_denied":true,"private_execute_denied":true,"direct_state_write_denied":true,"owner_observation_inactive":true,"suspended_account_denied":true,"per_call_transition_identity":true}',true);
+end $smoke$;
+select current_setting('dabbir.return_ai_smoke')::jsonb as result;
+rollback;
