@@ -88,3 +88,20 @@ test('BAR-12 workflow imports technical evidence before evaluation and keeps ext
   assert.match(journeyWorkflow,/- '\.github\/scripts\/dabbir-bar12-\*'/);
   assert.match(journeyWorkflow,/- 'test\/dabbir-bar12-\*'/);
 });
+
+test('release review is supplied after deployment and missing input never reuses committed historical evidence',async()=>{
+  const {readTechnicalReviewInput}=await import('../.github/scripts/dabbir-bar12-technical-evidence.mjs');
+  for(const raw of ['',undefined,'null','[]','{}','not-json'])assert.throws(()=>readTechnicalReviewInput(raw),/BAR12_/);
+  assert.throws(()=>readTechnicalReviewInput(' '.repeat(16385)+'{}'),/TOO_LARGE/);
+  const live=readTechnicalReviewInput(JSON.stringify(review));
+  assert.equal(mergeTechnicalEvidence(base,live,{now:NOW}).report.runtime_monitoring.valid,true);
+  const stale=mergeTechnicalEvidence(base,live,{now:NOW+25*60*60*1000});
+  assert.equal(stale.report.runtime_monitoring.valid,false);
+  assert.equal(stale.report.alert_delivery.valid,false);
+  assert.equal(stale.report.critical_security.valid,false);
+  const script=fs.readFileSync(new URL('../.github/scripts/dabbir-bar12-technical-evidence.mjs',import.meta.url),'utf8');
+  assert.doesNotMatch(script,/docs\/evidence\/dabbir-bar12-technical-review\.json/);
+  const workflow=fs.readFileSync(new URL('../.github/workflows/dabbir-bar12-readiness.yml',import.meta.url),'utf8');
+  assert.match(workflow,/DABBIR_BAR12_TECHNICAL_REVIEW_JSON: \$\{\{ inputs\.technical_review_json \|\| vars\.DABBIR_BAR12_TECHNICAL_REVIEW_JSON \}\}/);
+  assert.doesNotMatch(workflow,/run:.*\$\{\{ inputs\.technical_review_json/);
+});
