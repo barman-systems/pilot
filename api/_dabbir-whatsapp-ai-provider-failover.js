@@ -103,8 +103,20 @@ export async function failoverWhatsAppAiProvider(dispatchToken,errorCode){
     p_dispatch_token:token,
     p_error:code,
   }));
+  const resultState=clean(result?.state,60).toUpperCase();
+  if(result?.handled===true&&resultState==='HUMAN_REQUIRED'){
+    return {
+      handled:true,
+      state:'HUMAN_REQUIRED',
+      degraded:true,
+      handoff:true,
+      attempt_count:Number.isFinite(Number(result?.attempt_count))?Number(result.attempt_count):null,
+      customer_requested_human:false,
+      reason_code:clean(result?.reason_code,120)||'AI_PROVIDER_FAILED_TWICE',
+    };
+  }
   if(!result?.handled||!UUID.test(clean(result?.batch_id,80))||!UUID.test(clean(result?.business_id,80))||!UUID.test(clean(result?.conversation_id,80))){
-    return {handled:false,state:clean(result?.state,60)||'NOT_HANDLED'};
+    return {handled:false,state:resultState||'NOT_HANDLED'};
   }
   result.dispatch_token=token;
 
