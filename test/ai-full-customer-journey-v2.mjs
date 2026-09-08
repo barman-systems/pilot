@@ -810,10 +810,11 @@ async function runJourney() {
       status: probe.status, state: probe.json?.state || 'UNKNOWN',
       error: probe.json?.error || null, provider: probe.json?.provider || null,
       model: probe.json?.model || null, checks: probe.json?.checks || null,
+      policy_action:probe.json?.policy_action || null, proposed_risk:probe.json?.proposed_risk || null,
     };
     assert(probe.ok && probe.json?.ok === true && probe.json?.state === 'SUCCESS'
       && probe.json?.synthetic_probe === true && probe.json?.external_side_effects === false
-      && probe.json?.semantic_probe === true && Object.values(probe.json?.checks || {}).length === 4
+      && probe.json?.semantic_probe === true && Object.values(probe.json?.checks || {}).length === 5
       && Object.values(probe.json.checks).every(value => value === true),
       `REAL_AI_PROVIDER_PROBE_FAILED:${JSON.stringify(providerEvidence)}`);
     const result = await ownerSession.request('/api/chat-customer', {

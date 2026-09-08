@@ -1,6 +1,8 @@
 import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
+import { understandConversation } from './_dabbir-semantic-engine.js';
+import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
 function groundedServiceName(x,message,context) {
   // Catalog membership proves existence, never customer selection. Missing
@@ -40,15 +42,41 @@ export async function interpretSemanticMessage({ message, context, referenceTime
 
 // Fixed, authenticated synthetic case exercises the SAME interpreter used by
 // WhatsApp. It loads no customer data and has no tools or outbound side effects.
+export function evaluateSemanticProbe(p) {
+  // In-memory synthetic fixture only. No database reads/writes or execution
+  // tools are reachable here. Verify the actual reducer's decision, not an
+  // arbitrary provider risk label: MEDIUM can safely yield CLARIFY, HIGH must
+  // still fail this availability case by producing HANDOFF.
+  const businessId='10000000-0000-4000-8000-000000000001',branchId='20000000-0000-4000-8000-000000000001';
+  const serviceId='30000000-0000-4000-8000-000000000001';
+  const schema=registry.activities.car_wash;
+  const context={business:{id:businessId,business_type:'car_wash',timezone:'Asia/Dubai'},
+    conversation:{id:'40000000-0000-4000-8000-000000000001',branch_id:branchId,state:'ai_active'},
+    customer:{id:'50000000-0000-4000-8000-000000000001'},
+    services:[{id:serviceId,business_id:businessId,branch_id:branchId,name:'غسيل كامل'}],workers:[],
+    batch_messages:[{body:'فاضين بكره 9 الصبح',created_at:'2026-09-08T18:10:11Z'}],
+    activity_profile:{version:1,source:'DATABASE_FACT',business_id:businessId,branch_id:branchId,
+      services:[{business_id:businessId,branch_id:branchId,service_id:serviceId,activity_type:'car_wash',
+        schema_version:1,contract_version:'synthetic-probe-v1',delivery_modes:['MOBILE'],
+        mode_requirements:schema.mode_requirements,collection_priority:registry.platform.collection_priority,
+        entity_definitions:registry.platform.entity_definitions,automatic_booking:true,owner_approval:false}]}};
+  const {state,decision}=understandConversation({context,now:new Date('2026-09-08T18:10:11Z'),proposal:p});
+  const has=(entity,value)=>p.entities.some(f=>f.entity===entity && f.value===value && f.confidence>=.9 && 'فاضين بكره 9 الصبح'.includes(f.evidence));
+  const verified=(key,value)=>state.entities[key]?.value===value && state.entities[key]?.source==='CUSTOMER_STATED';
+  const checks={booking_intent:p.intent==='BOOKING' && p.confidence>=.86,
+    date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null,
+    operational_clarification:decision.action==='CLARIFY' && state.missing_fields.includes('service')
+      && verified('date','2026-09-09') && verified('time','09:00') && !state.last_verified_action};
+  return {checks,passed:Object.values(checks).every(Boolean),policy_action:decision.action,
+    proposed_action:p.action,proposed_risk:p.riskLevel};
+}
+
 export async function probeSemanticInterpreter() {
   const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',
     referenceTime:'2026-09-08T18:10:11Z',context:{business:{type:'car_wash',timezone:'Asia/Dubai'},
       services:[{name:'غسيل كامل'}],activity:{delivery_mode:'MOBILE',required:['service','vehicle','location','date','time']}}});
-  const p=result.proposal;
-  const has=(entity,value)=>p.entities.some(f=>f.entity===entity && f.value===value && f.confidence>=.9 && 'فاضين بكره 9 الصبح'.includes(f.evidence));
-  const passed=p.intent==='BOOKING' && p.confidence>=.86 && p.riskLevel==='LOW' && p.serviceName===null
-    && has('date','2026-09-09') && has('time','09:00');
+  const {passed,checks,policy_action,proposed_action,proposed_risk}=evaluateSemanticProbe(result.proposal);
   return {ok:passed,state:passed?'SUCCESS':'PROVIDER_ERROR',error:passed?null:'SEMANTIC_PROBE_FAILED',
     provider:result.provider,model:result.model,semantic_probe:true,case_id:'gcc_availability_tomorrow_morning',
-    checks:{booking_intent:p.intent==='BOOKING' && p.confidence>=.86,date:has('date','2026-09-09'),time:has('time','09:00'),unknown_service:p.serviceName===null}};
+    checks,policy_action,proposed_action,proposed_risk};
 }
