@@ -59,7 +59,7 @@ function parseDate(t,today) {
   t=t.split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1).trim();
   if(/(?:عقب باجر|بعد باجر|بعد بكره|بعد غد|day after tomorrow)/.test(t))return addDays(today,2);
   if(/(?:^|\s)(?:باجر|باكر|بكره|غدا|tomorrow)(?:\s|$)/.test(t) && !/(?:مب|مو|not)\s+(?:باجر|tomorrow)\s*$/.test(t))return addDays(today,1);
-  if(/(?:^|\s)(?:اليوم|today)(?:\s|$)/.test(t))return today;
+  if(/(?:^|\s)(?:اليوم|اباليوم|باليوم|today)(?:\s|$)/.test(t))return today;
   const m=t.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   if(m && !Number.isNaN(Date.parse(m[1])) && new Date(m[1]).toISOString().slice(0,10)===m[1])return m[1];
   return null;
@@ -79,13 +79,14 @@ function parseTime(raw,s) {
       const hour=s.entities.time.hour%12+(period==='pm'?12:0);
       return {value:String(hour).padStart(2,'0')+':'+String(s.entities.time.minute||0).padStart(2,'0'),confidence:.99,period,hour:s.entities.time.hour,minute:s.entities.time.minute||0};
     }
-    if(period||/الظهر|الليل|الصبح/.test(t))return {value:null,confidence:.55,part:period||'daypart'};
+    if(period||/الظهر|الليل|الصبح/.test(t))return {value:null,confidence:.55,part:period||'daypart',...(period?{period,period_explicit:true}:{})};
     return null;
   }
   const h=Number(clock[1]),minute=Number(clock[2]||0);
   if(clock[3])period=/^(pm|م)$/.test(clock[3])?'pm':'am';
-  // A correction can retain an explicitly established period, never an inferred one.
-  if(!period && corrected && s.entities.time?.period)period=s.entities.time.period;
+  // Reuse only a period explicitly stated by the same customer in this semantic session.
+  if(!period && s.entities.time?.period_explicit && ['CUSTOMER_STATED','CUSTOMER_CORRECTION','CUSTOMER_CONFIRMED'].includes(s.entities.time.source))period=s.entities.time.period;
+  else if(!period && corrected && s.entities.time?.period)period=s.entities.time.period;
   if(!period && h<13 && h!==0)return {value:null,confidence:.55,hour:h,minute,part:'am_pm'};
   const hh=period?h%12+(period==='pm'?12:0):h;
   return {value:String(hh).padStart(2,'0')+':'+String(minute).padStart(2,'0'),confidence:.99,period,hour:h,minute};
@@ -135,10 +136,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   s.business_constraints=arr(c.understanding_policy?.required_fields).filter(x=>['location','vehicle','worker'].includes(x));
   s.owner_policies=arr(c.approved_aliases).map(x=>({id:x.id,version:x.version})).slice(0,20);
   s.ontology=Object.keys(ONTOLOGIES).find(k=>k!=='default' && String(c.business?.business_type).includes(k))||'default';
-  const turns=arr(c.batch_messages).slice(-12).flatMap(x=>clean(x.body,1500).split(/(?=لا قصدي|i mean)/i).map(body=>({body,catalog_service_id:x.catalog_service_id})));
+  const turns=arr(c.batch_messages).slice(-12).flatMap(x=>clean(x.body,1500).split(/(?=لا قصدي|i mean)/i).map(body=>({body,catalog_service_id:x.catalog_service_id,language_body:clean(x.language_body??x.body,1500)})));
   const texts=turns.map(x=>x.body);
   const all=normalizeSemanticText(texts.join(' '));
-  s.language=/[\u0600-\u06ff]/.test(all)?'ar':/[a-z]/.test(all)?'en':s.language;
+  const languageText=turns.map(x=>x.language_body).join(' ');
+  s.language=/[\u0600-\u06ff]/.test(languageText)?'ar':/[a-z]/i.test(languageText)?'en':s.language;
   s.dialect=/ابا|ابي|ابغي|باجر|عقب|طرش|دز|هيه|شو|ماشي/.test(all)?'GCC':s.dialect;
   s.audio_confidence=c.voice?.audio_confidence??null;
   s.transcription_confidence=c.voice?.transcription_confidence??null;
@@ -185,13 +187,15 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
     }
     if(valueOf(s,'service') && s.goal==='UNKNOWN' && s.intent==='SUPPORT'){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
+    const bareDateChoice=previous?.clarification_entity==='date' && /^[123]$/.test(t) && (!c.pending_state?.pending_action || c.pending_state.pending_action==='none');
     const isBareChoice=/^[123]$/.test(t) && c.pending_state?.pending_action==='choose_slot';
-    const d=parseDate(t,today),time=isBareChoice?null:parseTime(raw,s);
+    const d=parseDate(t,today),time=(isBareChoice||bareDateChoice)?null:parseTime(raw,s);
     if(d){if(d!==valueOf(s,'date'))invalidate(s,'slot',stamp);fact(s,'date',d,source,.99,stamp);}
     if(time){invalidate(s,'slot',stamp);fact(s,'time',time.value,source,time.confidence,stamp,time);}
+    if(bareDateChoice)s.unresolved_references.push('date_input');
     if(/(?:مب|مو|not)\s+(?:باجر|tomorrow)\s*$/.test(t))invalidate(s,'date',stamp);
     if(/(?:لا تلغي|لا تلغ|dont cancel|do not cancel|don't cancel)\s*(?:الموعد|it)?$/.test(t)){s.intent='SUPPORT';s.goal='UNKNOWN';invalidate(s,'appointment',stamp);}
-    const ordinal=resolveOrdinal(raw),slots=arr(c.pending_state?.payload?.slots);
+    const ordinal=bareDateChoice?{index:null,ambiguous:false,mentioned:false}:resolveOrdinal(raw),slots=arr(c.pending_state?.payload?.slots);
     const pendingLive=c.pending_state?.payload?.presented===true && c.pending_state?.expires_at && Date.parse(c.pending_state.expires_at)>now.getTime();
     const referenceQuestion=ordinal.index!=null && /[?؟]|(?:^|\s)(?:متى|كم|هل|when|what|price|does|is)(?:\s|$)/i.test(raw);
     if(ordinal.ambiguous)s.unresolved_references.push('multiple_options');
@@ -266,6 +270,7 @@ export function clarification(s,c) {
   if(ref==='vehicle')return en?'Which vehicle do you mean?':'أي سيارة تقصد؟';
   if(ref==='slot_confirmation')return en?'Do you want to book that time?':'تبا تحجز هذا الوقت؟';
   if(ref==='multiple_options'||ref==='offered_option')return en?'Which one option do you mean?':'أي خيار واحد تقصد؟';
+  if(ref==='date_input')return en?'Do you mean today, tomorrow, or a specific date?':'تقصد اليوم أو باجر، أو اكتب التاريخ؟';
   if(key==='appointment'||ref==='appointment')return en?'Which appointment do you mean?':'أي موعد تقصد؟';
   if(key==='service') {if(s.entities.service?.source==='AI_INFERENCE'&&s.entities.service.label)return en?`Do you mean ${s.entities.service.label}?`:`تقصد ${s.entities.service.label}؟`;const names=arr(s.entities.service?.candidates).map(x=>x.label).slice(0,2);return names.length===2?(en?`Do you mean ${names[0]} or ${names[1]}?`:`تقصد ${names[0]} أو ${names[1]}؟`):(en?'Which service would you like?':'أي خدمة تبا؟');}
   if(key==='date')return en?'Which day works for you?':'أي يوم يناسبك؟';
