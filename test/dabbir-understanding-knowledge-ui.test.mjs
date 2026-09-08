@@ -57,7 +57,11 @@ test('untrusted alias remains text and cannot create markup',async()=>{const ui=
 test('the shipped deferred bundle mounts owner knowledge, beyond the historical module-order comment',async()=>{
   const fs=await import('node:fs');
   const manifest=JSON.parse(fs.readFileSync('config/dabbir-ui-bundles.json','utf8'));
-  assert.equal(manifest.deferred.filter(x=>x==='/api/dabbir-owner-decision-memory-ui').length,1);
+  assert.equal(manifest.deferred.filter(x=>x==='/api/owner-action-center-ui').length,1);
+  assert.equal(manifest.critical.length+manifest.deferred.length,26);
+  const {default:composed}=await import('../api/owner-action-center-ui.js');
+  let client;composed({method:'GET'},{setHeader(){},status(){return this},send(s){client=s}});
+  assert.match(client,/owner-decision-memory-ui-v2/);
   const bundle=fs.readFileSync('public/dabbir-ui-deferred.js','utf8');
   assert.match(bundle,/owner-decision-memory-ui-v2/);
   assert.match(bundle,/معاني الخدمات/);

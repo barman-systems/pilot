@@ -38,6 +38,6 @@ test('booking time guard derives local time from GCC business authority',()=>{
 });
 
 test('Safari and shell use the same deployment cache-bust token',()=>{
-  assert.match(recovery,/UI_BUNDLE_VERSION = '20260903-chat-render-lifecycle-v3'/);
-  assert.match(safari,/UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
+  assert.match(recovery,/UI_BUNDLE_VERSION = '20260908-owner-knowledge-v2'/);
+  assert.match(safari,/UI_CACHE_BUST = '20260908-owner-knowledge-v2'/);
 });
