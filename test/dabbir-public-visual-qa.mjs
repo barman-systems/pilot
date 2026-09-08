@@ -46,6 +46,7 @@ for(const [name,width,height] of devices){
    await page.screenshot({path:`public-visual-evidence/${name}-${lang}-login.png`,fullPage:true});
    for(const path of ['/try','/try/','/try.html','/api/dabbir-market-preview']){
     await page.goto(origin+path,{waitUntil:'domcontentloaded'});
+    await page.waitForURL(url=>url.pathname==='/',{waitUntil:'domcontentloaded'});
     await page.locator('#authGate:not(.hidden)').waitFor({timeout:30000});
     assert.equal(new URL(page.url()).pathname,'/');
     assert.equal(await page.locator('html').getAttribute('lang'),lang);

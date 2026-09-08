@@ -7,7 +7,11 @@ const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.
 
 test('login and signup remain available without the retired public demo', () => {
   assert.doesNotMatch(shell, /demoFirst|preSignupValue|href="\/try"/);
-  assert.equal(fs.existsSync(new URL('../try.html', import.meta.url)), false);
+  const redirect = fs.readFileSync(new URL('../try.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(redirect, /demoForm|demoMessage|runDemo|fetch\(/);
+  assert.ok(redirect.includes('http-equiv="refresh" content="0;url=/"'));
+  assert.ok(redirect.includes("window.location.replace('/');"));
+  assert.ok(redirect.includes('href="/"'));
   for (const id of ['authForm', 'authEmail', 'authPassword', 'loginTab', 'signupTab', 'authAr', 'authEn']) {
     assert.ok(shell.includes(`id="${id}"`));
   }
@@ -16,13 +20,12 @@ test('login and signup remain available without the retired public demo', () => 
 });
 
 test('old demo paths resolve to the retirement handler while the root keeps its auth runtime', () => {
-  for (const path of ['/try', '/try/', '/try.html', '/try.html/']) {
+  for (const path of ['/try', '/try/']) {
     const route = vercel.routes.find(route => new RegExp(route.src).test(path));
     assert.equal(route?.dest, '/api/dabbir-market-preview');
   }
-  for (const path of ['/try', '/try.html']) {
+  for (const path of ['/try']) {
     assert.ok(vercel.rewrites.some(route => route.source === path && route.destination === '/api/dabbir-market-preview'));
   }
-  assert.ok(!vercel.functions['api/dabbir-market-preview.js'].includeFiles.includes('try.html'));
   assert.ok(vercel.routes.some(route => route.src === '^/$' && route.dest === '/api/app-safari-recovery'));
 });

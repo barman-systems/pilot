@@ -69,7 +69,7 @@
       "includeFiles": "{booking.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/dabbir-market-preview.js": {
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
+      "includeFiles": "{try.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/team-page.js": {
       "includeFiles": "{team.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
@@ -89,7 +89,7 @@
     { "src": "^/owner-dashboard/?$", "dest": "/api/owner-dashboard-gateway" },
     { "src": "^/api/owner-command-center-v[0-9]+(?:\\.js)?/?$", "dest": "/api/owner-command-center" },
     { "src": "^/book/?$", "dest": "/api/car-wash-booking" },
-    { "src": "^/try(?:\\.html)?/?$", "dest": "/api/dabbir-market-preview" },
+    { "src": "^/try/?$", "dest": "/api/dabbir-market-preview" },
     { "src": "^/$", "dest": "/api/app-safari-recovery" }
   ],
   "rewrites": [
@@ -101,7 +101,6 @@
     { "source": "/owner-dashboard", "destination": "/api/owner-dashboard-gateway" },
     { "source": "/book", "destination": "/api/car-wash-booking" },
     { "source": "/try", "destination": "/api/dabbir-market-preview" },
-    { "source": "/try.html", "destination": "/api/dabbir-market-preview" },
     { "source": "/", "destination": "/api/app-safari-recovery" }
   ],
   "headers": [

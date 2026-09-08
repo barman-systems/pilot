@@ -6,7 +6,6 @@ on:
       - try.html
       - api/dabbir-market-preview.js
       - api/dabbir-market-demo.js
-      - vercel.json
       - api/dabbir-owner-first-ui.js
       - test/dabbir-public-visual-qa.mjs
       - .github/workflows/dabbir-public-visual-qa.yml
@@ -17,7 +16,6 @@ on:
       - try.html
       - api/dabbir-market-preview.js
       - api/dabbir-market-demo.js
-      - vercel.json
       - api/dabbir-owner-first-ui.js
       - test/dabbir-public-visual-qa.mjs
       - .github/workflows/dabbir-public-visual-qa.yml
