@@ -71,6 +71,8 @@ test('voice transcription uses Gemini audio understanding with Cloudflare Whispe
   must(voice,/wa-voice-clarify:\$\{claim\.voice_ingest_id\}/);
   must(voice,/dabbir_record_ai_usage_v1/);
   must(voice,/raw_audio_persisted:false/);
+  must(voice,/request\.language=hint/);
+  must(voice,/languageHint:tenantLanguage/);
 });
 
 test('voice recovery is non-blocking inside the existing WhatsApp recovery cron',()=>{
@@ -93,7 +95,7 @@ test('Gemini transcription preserves Gulf Arabic and returns structured confiden
     }),{status:200,headers:{'content-type':'application/json'}});
   };
   const result=await transcribeWhatsAppVoiceAudio(Buffer.from('fake-audio'),'audio/ogg',{
-    env:{GEMINI_API_KEY:'test-key',DABBIR_GEMINI_MODEL:'gemini-3.7-flash'},fetchImpl,
+    env:{GEMINI_API_KEY:'test-key',DABBIR_GEMINI_MODEL:'gemini-3.7-flash'},fetchImpl,languageHint:'ar',
   });
   assert.equal(result.transcript,'أبا غسيل باجر الساعة خمس');
   assert.equal(result.language,'ar');
@@ -109,9 +111,9 @@ test('Gemini transcription preserves Gulf Arabic and returns structured confiden
 test('Cloudflare Whisper is used when Gemini has a retryable provider failure',async()=>{
   const calls=[];
   const fetchImpl=async(url,options)=>{
-    calls.push(String(url));
+    calls.push({url:String(url),options});
     if(String(url).includes('generativelanguage.googleapis.com'))return new Response('{}',{status:503});
-    return new Response(JSON.stringify({success:true,result:{text:'same as last time tomorrow at five'}}),{
+    return new Response(JSON.stringify({success:true,result:{text:'السلام عليكم'}}),{
       status:200,headers:{'content-type':'application/json'},
     });
   };
@@ -119,11 +121,29 @@ test('Cloudflare Whisper is used when Gemini has a retryable provider failure',a
     env:{
       GEMINI_API_KEY:'test-key',DABBIR_GEMINI_MODEL:'gemini-3.7-flash',
       CLOUDFLARE_API_TOKEN:'cf-test',CLOUDFLARE_ACCOUNT_ID:'acct-test',
-    },fetchImpl,
+    },fetchImpl,languageHint:'ar',
   });
   assert.equal(result.provider,'cloudflare-workers-ai');
   assert.equal(result.model,'@cf/openai/whisper-large-v3-turbo');
-  assert.equal(result.transcript,'same as last time tomorrow at five');
+  assert.equal(result.transcript,'السلام عليكم');
+  assert.equal(result.language,'ar');
+  assert.equal(result.needsConfirmation,false);
   assert.equal(calls.length,2);
-  assert.match(calls[1],/cloudflare\.com/);
+  assert.match(calls[1].url,/cloudflare\.com/);
+  const body=JSON.parse(calls[1].options.body);
+  assert.equal(body.language,'ar');
+  assert.match(body.initial_prompt,/العربية الخليجية/);
+});
+
+test('Cloudflare tenant-language mismatch fails closed instead of executing hallucinated text',async()=>{
+  const fetchImpl=async()=>new Response(JSON.stringify({success:true,result:{text:'This is not Arabic'}}),{
+    status:200,headers:{'content-type':'application/json'},
+  });
+  const result=await transcribeWhatsAppVoiceAudio(Buffer.from('fake-audio'),'audio/ogg',{
+    env:{CLOUDFLARE_API_TOKEN:'cf-test',CLOUDFLARE_ACCOUNT_ID:'acct-test'},fetchImpl,languageHint:'ar',
+  });
+  assert.equal(result.provider,'cloudflare-workers-ai');
+  assert.equal(result.language,'en');
+  assert.equal(result.needsConfirmation,true);
+  assert.ok(result.confidence<0.82);
 });
