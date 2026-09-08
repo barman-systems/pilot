@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { transcribeWhatsAppVoiceAudio } from '../api/_dabbir-whatsapp-voice.js';
 
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260908011000_dabbir_whatsapp_voice_notes_ai_v1.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260908012924_dabbir_whatsapp_voice_notes_ai_v1.sql',import.meta.url),'utf8');
 const webhook=fs.readFileSync(new URL('../api/dabbir-whatsapp-webhook.js',import.meta.url),'utf8');
 const voice=fs.readFileSync(new URL('../api/_dabbir-whatsapp-voice.js',import.meta.url),'utf8');
 const worker=fs.readFileSync(new URL('../api/dabbir-whatsapp-voice-worker.js',import.meta.url),'utf8');
