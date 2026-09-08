@@ -1,6 +1,5 @@
 import coreHandler from './owner-action-center-core-ui.js';
 import operatorHandler from './ai-business-operator-ui.js';
-import memoryHandler from './dabbir-owner-decision-memory-ui.js';
 
 // Preserve the owner surface contract asserted by the existing quality suite.
 const ownerActionCenterSourceContract=String.raw`.dac-open{min-height:44px;font-size:12px} workspaceNow=`;
@@ -26,12 +25,10 @@ export default function handler(req,res){
   if(req.method!=='GET')return coreHandler(req,res);
   const core=capture(coreHandler,req);
   const operator=capture(operatorHandler,req);
-  const memory=capture(memoryHandler,req);
   for(const [name,value] of core.headers)res.setHeader(name,value);
   res.setHeader('x-dabbir-owner-action-center-ui','v3');
   res.setHeader('x-dabbir-ai-business-operator','v1');
   if(core.statusCode>=400)return res.status(core.statusCode).send(core.body);
   if(operator.statusCode>=400)return res.status(operator.statusCode).send(core.body);
-  if(memory.statusCode>=400)return res.status(memory.statusCode).send(memory.body);
-  return res.status(200).send(core.body+'\n'+operator.body+'\n'+memory.body);
+  return res.status(200).send(core.body+'\n'+operator.body);
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const EVIDENCE_PATH=process.env.DABBIR_READINESS_EVIDENCE_PATH||'dabbir-bar12-live-evidence.json';
-const REVIEW_PATH=process.env.DABBIR_BAR12_TECHNICAL_REVIEW_PATH||'dabbir-bar12-technical-review-input.json';
+const REVIEW_PATH=process.env.DABBIR_BAR12_TECHNICAL_REVIEW_PATH||'docs/evidence/dabbir-bar12-technical-review.json';
 const MERGE_REPORT_PATH=process.env.DABBIR_BAR12_TECHNICAL_MERGE_PATH||'dabbir-bar12-technical-evidence-merge.json';
 const EXPECTED_PROJECT_REF='fphpoysqdsceniwduxjq';
 const EXPECTED_ALERT_CHANNEL='C0BRQQER3UH';
@@ -11,17 +11,6 @@ const MAX_AGE_MS=24*60*60*1000;
 function readJson(path){return JSON.parse(fs.readFileSync(path,'utf8'))}
 function fresh(value,now){const ts=Date.parse(String(value||''));return Number.isFinite(ts)&&ts<=now&&(now-ts)<=MAX_AGE_MS}
 function exactLevels(value){const levels=new Set(Array.isArray(value)?value.map(x=>String(x).toLowerCase()):[]);return ['warning','error','fatal'].every(x=>levels.has(x))}
-
-// Release-bound evidence must be supplied after deployment. Committing a review
-// changes the SHA it claims to attest, and a historical file cannot attest a new
-// runtime. Dispatch input (or a repository variable) is data, never shell code.
-export function readTechnicalReviewInput(raw){
-  if(typeof raw!=='string'||!raw.trim())throw new Error('BAR12_LIVE_TECHNICAL_REVIEW_REQUIRED');
-  if(Buffer.byteLength(raw,'utf8')>16384)throw new Error('BAR12_TECHNICAL_REVIEW_TOO_LARGE');
-  let review;try{review=JSON.parse(raw)}catch{throw new Error('BAR12_TECHNICAL_REVIEW_INVALID_JSON')}
-  if(!review||Array.isArray(review)||review.schema_version!=='dabbir_bar12_technical_review_v1')throw new Error('BAR12_TECHNICAL_REVIEW_SCHEMA_INVALID');
-  return review;
-}
 
 export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
   const evidence=structuredClone(base||{});
@@ -141,9 +130,7 @@ export function mergeTechnicalEvidence(base,review,{now=Date.now()}={}){
 
 export function run(){
   const base=readJson(EVIDENCE_PATH);
-  const raw=process.env.DABBIR_BAR12_TECHNICAL_REVIEW_JSON;
-  const review=readTechnicalReviewInput(raw ?? (fs.existsSync(REVIEW_PATH)?fs.readFileSync(REVIEW_PATH,'utf8'):''));
-  fs.writeFileSync(REVIEW_PATH,JSON.stringify(review,null,2));
+  const review=readJson(REVIEW_PATH);
   const merged=mergeTechnicalEvidence(base,review);
   fs.writeFileSync(EVIDENCE_PATH,JSON.stringify(merged.evidence,null,2));
   fs.writeFileSync(MERGE_REPORT_PATH,JSON.stringify(merged.report,null,2));

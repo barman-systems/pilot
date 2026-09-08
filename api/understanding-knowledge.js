@@ -15,17 +15,9 @@ export default async function handler(req,res){
     if(!user)return json(res,401,{ok:false,error:'AUTH_REQUIRED'});
     if(!memberships?.some(m=>m.business_id===businessId&&m.role==='owner'&&m.status==='active'))return json(res,403,{ok:false,error:'OWNER_REQUIRED'});
     if(req.method==='GET'){
-      // The owner's JWT and explicit tenant filter apply to every read. Only
-      // service aliases are currently resolved by the operational engine.
-      const responses=await Promise.all([
-        supabaseRest(`dabbir_ai_knowledge_proposals?business_id=eq.${businessId}&select=id,entity_type,alias,target_id,status,confidence,impact,version,created_at,reviewed_at&order=created_at.desc&limit=50`,token),
-        supabaseRest(`dabbir_services?business_id=eq.${businessId}&select=id,name,active&order=name.asc&limit=200`,token),
-        supabaseRest(`dabbir_ai_understanding_events?business_id=eq.${businessId}&proposal_id=not.is.null&select=proposal_id,event_type,created_at&order=created_at.desc&limit=100`,token),
-      ]);
-      if(responses.some(response=>!response.ok))throw new Error('KNOWLEDGE_READ_FAILED');
-      const [proposals,services,audit]=await Promise.all(responses.map(response=>response.json()));
-      if(![proposals,services,audit].every(Array.isArray))throw new Error('KNOWLEDGE_READ_FAILED');
-      return json(res,200,{ok:true,proposals,services,audit,supported_entity_types:['service']});
+      const response=await supabaseRest(`dabbir_ai_knowledge_proposals?business_id=eq.${businessId}&select=id,entity_type,alias,target_id,status,confidence,impact,version,created_at,reviewed_at&order=created_at.desc&limit=50`,token);
+      if(!response.ok)throw new Error('KNOWLEDGE_READ_FAILED');
+      return json(res,200,{ok:true,proposals:await response.json()});
     }
     const action=String(body.action||'');let name,args;
     if(action==='propose'){

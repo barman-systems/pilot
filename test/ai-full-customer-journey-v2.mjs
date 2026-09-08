@@ -263,11 +263,6 @@ async function verifyTotp(session, factorId, secret) {
 
 async function browserJourney() {
   assert(mfaSecret, 'BROWSER_MFA_SECRET_REQUIRED');
-  const service = await ownerSession.request('/api/owner-operations', {
-    method: 'POST', body: {business_id: businessId, action: 'create_service', name: 'QA Gold Wash', duration_minutes: 30},
-  });
-  assert(service.ok && service.json?.ok && service.json?.result?.id, 'KNOWLEDGE_QA_SERVICE_CREATE_FAILED');
-  const serviceId = service.json.result.id;
   const { webkit } = await import('playwright');
   browser = await webkit.launch({ headless: true });
   browserContext = await browser.newContext({
@@ -307,38 +302,6 @@ async function browserJourney() {
   const logo = page.locator('#appShell:not(.hidden) .brand .logo').first();
   await logo.waitFor({ state: 'visible', timeout: 10_000 });
   assert(String(await logo.evaluate(el => getComputedStyle(el).backgroundImage)).includes('dabbir-app-icon'), 'BROWSER_APPROVED_LOGO_MISSING');
-
-  // Disposable QA tenant only; every click uses the shipped UI and real API.
-  // Database readback proves a saved proposal has not silently activated.
-  await page.locator('#dabbirMemoryButton').click({timeout:15_000});
-  const form=page.locator('[data-knowledge-form="v2"]');
-  await form.waitFor({state:'visible',timeout:15_000});
-  await form.locator('input[name="alias"]').fill('QA VIP');
-  await form.locator('select[name="service"]').selectOption(serviceId);
-  await form.locator('button[type="submit"]').click();
-  const card=page.locator('[data-knowledge="v2"] article').filter({hasText:'QA VIP'});
-  await card.waitFor({state:'visible',timeout:15_000});
-  const readMeaning=async expected=>{
-    const result=await ownerSession.request('/api/understanding-knowledge?business_id='+encodeURIComponent(businessId));
-    assert(result.ok&&result.json?.ok,'KNOWLEDGE_READBACK_FAILED');
-    const proposal=result.json.proposals.find(p=>p.alias==='QA VIP'&&p.target_id===serviceId);
-    assert(proposal?.status===expected,'KNOWLEDGE_STATUS_MISMATCH_'+expected);
-    return {proposal,audit:result.json.audit.filter(e=>e.proposal_id===proposal.id)};
-  };
-  await readMeaning('PROPOSED');
-  await card.getByRole('button',{name:/اعتماد المعنى|^Approve meaning$/}).click();
-  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
-  const approved=await readMeaning('OWNER_APPROVED');
-  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).click();
-  await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).waitFor();
-  await readMeaning('REVOKED');
-  await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).click();
-  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
-  const restored=await readMeaning('OWNER_APPROVED');
-  assert(restored.proposal.version>approved.proposal.version,'KNOWLEDGE_ROLLBACK_VERSION_NOT_INCREMENTED');
-  assert(['PROPOSED','OWNER_APPROVED','REVOKED','ROLLBACK'].every(type=>restored.audit.some(e=>e.event_type===type)),'KNOWLEDGE_AUDIT_INCOMPLETE');
-  await page.locator('.dabbir-memory-close').click();
-  console.log('OWNER_KNOWLEDGE_BROWSER_PASS propose_inactive=true approve=true revoke=true rollback=true audit_events=4');
 
   await page.locator('#bottomNav [data-screen="conversations"]').click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
