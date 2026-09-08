@@ -111,7 +111,7 @@ test('unverified, expired, out-of-range or ambiguous service ordinals never sele
 });
 
 test('database repair adds choose_service and clears only stale handoff pending state on return to AI',()=>{
-  const sql=fs.readFileSync(new URL('../supabase/migrations/20260908062000_dabbir_whatsapp_service_menu_state_repair_v1.sql',import.meta.url),'utf8');
+  const sql=fs.readFileSync(new URL('../supabase/migrations/20260908062836_dabbir_whatsapp_service_menu_state_repair_v1.sql',import.meta.url),'utf8');
   assert.match(sql,/choose_service/);
   assert.match(sql,/pending_action='handoff'/);
   assert.match(sql,/set pending_action='none',payload='\{\}'::jsonb,expires_at=null/);
