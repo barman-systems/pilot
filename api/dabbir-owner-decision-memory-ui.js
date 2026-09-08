@@ -1,8 +1,8 @@
 const css=String.raw`
 .dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}
 .dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}
-.dabbir-memory-overlay{position:fixed;inset:0;z-index:82;background:#000c;display:flex;align-items:center;justify-content:center;padding:18px}
-.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}
+.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}
+.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}
 .dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}
 .dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}
 .dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}
@@ -78,7 +78,7 @@ const client=String.raw`
     const nextLabel=hasCandidate?x.candidate+' · '+pending:x.button;
     if(button.textContent!==nextLabel)button.textContent=nextLabel;
   }
-  function closeDialog(){document.querySelector('#dabbirMemoryOverlay')?.remove();returnFocus?.focus?.()}
+  function closeDialog(){const overlay=document.querySelector('#dabbirMemoryOverlay');if(overlay?.open)overlay.close();overlay?.remove();returnFocus?.focus?.()}
   function policyActions(card,policy,isCandidate){
     const x=copy(),actions=document.createElement('div');actions.className='dabbir-memory-actions';
     const scope=state.business,epoch=generation,mutate=(action,extra)=>mutatePolicy(action,extra,scope,epoch);
@@ -102,8 +102,8 @@ const client=String.raw`
     if(!syncScope())return;
     const hadDialog=Boolean(document.querySelector('#dabbirMemoryOverlay'));
     if(!hadDialog)returnFocus=document.activeElement;
-    closeDialog();const x=copy(),overlay=document.createElement('div');overlay.id='dabbirMemoryOverlay';overlay.className='dabbir-memory-overlay';
-    const dialog=document.createElement('section');dialog.className='dabbir-memory-dialog';dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','dabbirMemoryTitle');
+    closeDialog();const x=copy(),overlay=document.createElement('dialog');overlay.id='dabbirMemoryOverlay';overlay.className='dabbir-memory-overlay';
+    const dialog=document.createElement('section');dialog.className='dabbir-memory-dialog';overlay.setAttribute('aria-labelledby','dabbirMemoryTitle');
     const title=document.createElement('h3');title.id='dabbirMemoryTitle';title.textContent=x.title;const desc=document.createElement('p');desc.textContent=x.desc;dialog.append(title,desc);
     renderKnowledge(dialog);
     const suggestions=document.createElement('div');suggestions.className='dabbir-memory-section';suggestions.textContent=x.suggestions;dialog.append(suggestions);
@@ -111,7 +111,7 @@ const client=String.raw`
     const active=document.createElement('div');active.className='dabbir-memory-section';active.textContent=x.active;dialog.append(active);
     state.policies.filter(item=>['ACTIVE','PAUSED'].includes(item.state)).forEach(item=>dialog.append(policyCard(item,false)));
     const close=document.createElement('button');close.className='dabbir-memory-close';close.textContent=x.close;close.onclick=closeDialog;dialog.append(close);
-    overlay.append(dialog);overlay.onclick=event=>{if(event.target===overlay)closeDialog()};document.body.append(overlay);close.focus();
+    overlay.append(dialog);overlay.onclick=event=>{if(event.target===overlay)closeDialog()};document.body.append(overlay);overlay.showModal();overlay.oncancel=event=>{event.preventDefault();closeDialog()};close.focus();
     overlay.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeDialog()}else if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button,input,select')].filter(el=>!el.disabled);const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
   }
   const knowledgeCopy=()=>ar()?{

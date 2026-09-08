@@ -35,7 +35,7 @@ test('unsupported shell methods retain 405 without running HTML transforms', () 
 });
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260908-owner-knowledge-v2'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260908-owner-knowledge-dialog-v3'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
