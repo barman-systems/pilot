@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const owner=fs.readFileSync(new URL('../api/dabbir-owner-first-ui.js',import.meta.url),'utf8');
-const action=fs.readFileSync(new URL('../api/owner-action-center-ui.js',import.meta.url),'utf8');
+const action=fs.readFileSync(new URL('../api/owner-action-center-core-ui.js',import.meta.url),'utf8');
 
 test('owner interface removes micro typography from daily mobile surfaces',()=>{
   assert.match(owner,/\.bottomNav>button,\.bottomNav>a\{[^}]*font-size:11px/);
@@ -22,14 +22,16 @@ test('mobile conversation sizing respects dynamic viewport and safe areas',()=>{
 test('owner surfaces follow active workspace and business timezone',()=>{
   assert.match(owner,/workspaceNow=/);
   assert.match(action,/workspaceNow=/);
-  assert.match(owner,/function businessTimeZone\(\)/);
   assert.match(action,/const businessTimeZone=\(\)=>/);
   assert.doesNotMatch(owner,/timeZone:['"]Asia\/Dubai['"]/);
   assert.doesNotMatch(action,/timeZone:['"]Asia\/Dubai['"]/);
 });
 
 test('owner action center refreshes when priority facts change',()=>{
-  assert.match(owner,/\[x\.id,x\.due_at,x\.severity\]/);
+  assert.doesNotMatch(owner,/function normalizeActionCenter\(/);
+  assert.match(action,/lastLoadedAt=Date.now\(\)/);
+  assert.match(action,/render\(data\)/);
+  assert.match(action,/visibleLimit=expanded\?rows.length:DEFAULT_VISIBLE/);
 });
 
 test('owner mobile authority preserves five primary destinations without polling',()=>{

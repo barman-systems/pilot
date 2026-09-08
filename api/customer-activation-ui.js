@@ -10,6 +10,8 @@ const script=String.raw`(()=>{
   let whatsapp=null;
   let loading=false;
   let loadedAt=0;
+  let requestVersion=0;
+  let loadError=false;
   const CACHE_MS=30000;
 
   const style=document.createElement('style');
@@ -33,10 +35,10 @@ const script=String.raw`(()=>{
   document.head.append(style);
 
   function copy(){return ar()?{
-    title:'جهّز دَبِّر ليعمل عنك',readyTitle:'دَبِّر جاهز للعمل',desc:'دقيقة واحدة هنا تختصر عليك البحث داخل الإعدادات. نعرض فقط ما تم التحقق منه فعليًا.',readyDesc:'الأساسيات التشغيلية جاهزة. راقب ما أنجزه دَبِّر وما يحتاج قرارك فقط.',score:'الجاهزية',next:'الخطوة الأفضل الآن',proof:'دليل القيمة',intentTitle:'ماذا تريد من دَبِّر الآن؟',
+    title:'جهّز دَبِّر ليعمل عنك',readyTitle:'اكتمل الإعداد الأساسي',desc:'راجع ما اكتمل من إعداد نشاطك وما يحتاج خطوة منك.',readyDesc:'اكتملت معلومات النشاط وربط واتساب وإعداد الردود. تابع النتائج الفعلية وما يحتاج قرارك من أولويات اليوم.',score:'اكتمال الإعداد',next:'الخطوة الأفضل الآن',proof:'نشاطك بالأرقام',intentTitle:'ماذا تريد من دَبِّر الآن؟',readError:'تعذر التحقق من إعداد هذا النشاط الآن. أعد المحاولة؛ لم نغيّر إعداداتك.',retry:'إعادة المحاولة',
     profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
   }:{
-    title:'Get DABBIR working for you',readyTitle:'DABBIR is ready to operate',desc:'One minute here saves hunting through settings. Only verified setup state is shown.',readyDesc:'Core operations are ready. Focus on what DABBIR completed and what actually needs your decision.',score:'Readiness',next:'Best next step',proof:'Proof of value',intentTitle:'What do you want DABBIR to do now?',
+    title:'Get DABBIR working for you',readyTitle:'Basic setup is complete',desc:'Review what is set up for your business and what needs your next step.',readyDesc:'Business information, WhatsApp and reply configuration are set up. Review actual outcomes and decisions in today’s priorities.',score:'Setup completion',next:'Best next step',proof:'Business counts',intentTitle:'What do you want DABBIR to do now?',readError:'We could not verify this business’s setup. Try again; your settings were not changed.',retry:'Try again',
     profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
   }}
 
@@ -58,6 +60,18 @@ const script=String.raw`(()=>{
   }
 
   function aiReady(){return Boolean(workspace?.ai?.configured)}
+
+  function syncBusinessScope(id){
+    if(businessId===id)return;
+    requestVersion++;
+    businessId=id;
+    profile=null;
+    whatsapp=null;
+    loading=false;
+    loadedAt=0;
+    loadError=false;
+  }
+
   function exactMetric(key){
     const m=workspace?.verified_metrics;
     if(!m||m.state!=='VERIFIED_EXACT_COUNTS')return null;
@@ -102,9 +116,17 @@ const script=String.raw`(()=>{
   }
 
   function render(){
-    const panel=ensure();if(!panel||!workspace?.business)return;
+    const id=workspace?.business?.id||null;
+    syncBusinessScope(id);
+    const panel=ensure();if(!panel)return;
+    if(!id){panel.innerHTML='';return}
     const t=copy();
-    if(loading&&(!profile||!whatsapp)){panel.innerHTML='<div class="daLoading">'+esc(t.loading)+'</div>';return}
+    if(loading||!loadedAt){panel.innerHTML='<div class="daLoading" role="status">'+esc(t.loading)+'</div>';return}
+    if(loadError){
+      panel.innerHTML='<div class="daLoading" role="status">'+esc(t.readError)+'</div><div class="daActions"><button type="button" class="daSecondary" id="daRetry">'+esc(t.retry)+'</button></div>';
+      const retry=q('#daRetry');if(retry)retry.onclick=()=>load(true);
+      return;
+    }
     const states=[profileReady(),whatsappReady(),aiReady()];
     const done=states.filter(Boolean).length;
     const score=Math.round(done/states.length*100);
@@ -130,15 +152,21 @@ const script=String.raw`(()=>{
   }
 
   async function load(force=false){
-    const id=workspace?.business?.id;if(!id||loading)return;
-    if(!force&&businessId===id&&Date.now()-loadedAt<CACHE_MS){render();return}
-    businessId=id;loading=true;render();
+    const id=workspace?.business?.id||null;
+    syncBusinessScope(id);
+    if(!id){render();return}
+    if(loading)return;
+    if(!force&&loadedAt&&Date.now()-loadedAt<CACHE_MS){render();return}
+    const version=++requestVersion;
+    loading=true;loadError=false;render();
     const [p,w]=await Promise.allSettled([
       fetchJson('/api/business-profile?business_id='+encodeURIComponent(id)),
       fetchJson('/api/dabbir-whatsapp-status?business_id='+encodeURIComponent(id))
     ]);
+    if(version!==requestVersion||businessId!==id||workspace?.business?.id!==id)return;
     profile=p.status==='fulfilled'?p.value:null;
-    whatsapp=w.status==='fulfilled'?w.value:(workspace?.whatsapp||null);
+    whatsapp=w.status==='fulfilled'?w.value:null;
+    loadError=p.status!=='fulfilled'||w.status!=='fulfilled';
     loadedAt=Date.now();loading=false;render();
   }
 

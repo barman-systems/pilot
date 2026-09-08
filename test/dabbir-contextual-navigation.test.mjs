@@ -75,6 +75,7 @@ test('contextual navigation loads after service and owner UX layers', () => {
 });
 
 test('contextual navigation is event-driven and does not add continuous DOM polling', () => {
-  assert.doesNotMatch(router, /MutationObserver/);
   assert.doesNotMatch(router, /setInterval/);
+  assert.doesNotMatch(router, /subtree\s*:\s*true/);
+  assert.match(router, /observe\(side,\{attributes:true,attributeFilter:\['class','hidden'\]\}\)/);
 });

@@ -17,7 +17,12 @@ import {
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
 const number=value=>Number.isFinite(Number(value))?Number(value):0;
-const terminal=value=>['closed','completed','cancelled','resolved','returned_to_ai','sent','blocked'].includes(String(value||'').toLowerCase());
+const terminalStates=['closed','completed','cancelled','resolved','returned_to_ai','sent','blocked'];
+const terminal=value=>terminalStates.includes(String(value||'').toLowerCase());
+// Handoffs/follow-ups use uppercase lifecycle values; older rows may be lowercase.
+const terminalFilter=`not.in.(${terminalStates.flatMap(value=>[value,value.toUpperCase()]).join(',')})`;
+const appointmentTerminalStates=[...terminalStates,'done','canceled','no_show','rejected'];
+const appointmentTerminalFilter=`not.in.(${appointmentTerminalStates.flatMap(value=>[value,value.toUpperCase()]).join(',')})`;
 
 async function readData(response,fallback){
   const text=await response.text();
@@ -29,10 +34,21 @@ async function readData(response,fallback){
     error.detail=payload?.message||payload?.code||null;
     throw error;
   }
+  // Every read here is a table collection. A missing/malformed upstream payload
+  // is unavailable data, never evidence that the business has no pending work.
+  if(!Array.isArray(payload))throw Object.assign(new Error(fallback),{status:502});
   return payload;
 }
 
 const rest=(token,path,fallback)=>supabaseRest(path,token).then(r=>readData(r,fallback));
+async function restWithCount(token,path,fallback){
+  const response=await supabaseRest(path,token,{headers:{prefer:'count=exact'}});
+  const rows=await readData(response,fallback);
+  const countMatch=/^(?:\d+-\d+|\*)\/(\d+)$/.exec(response.headers.get('content-range')||'');
+  const total=countMatch?Number(countMatch[1]):NaN;
+  if(!Number.isSafeInteger(total)||total<rows.length)throw Object.assign(new Error(fallback),{status:502});
+  return {rows,total};
+}
 
 async function authenticatedContext(req,res){
   const token=accessTokenFromRequest(req);
@@ -86,7 +102,9 @@ export default async function handler(req,res){
   if(!context)return;
 
   try{
-    const requested=safeId(singleQueryValue(req,'business_id'));
+    const requestedValue=singleQueryValue(req,'business_id');
+    const requested=safeId(requestedValue);
+    if(requestedValue!=null&&!requested)return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});
     const membership=membershipFor(context.memberships,requested);
     if(!membership)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
     const businessId=membership.business_id;
@@ -104,22 +122,25 @@ export default async function handler(req,res){
     const in24h=now+24*60*60*1000;
     const in2h=now+2*60*60*1000;
     const dayStart=marketDayStartIso(now,market);
+    const in24hIso=new Date(in24h).toISOString();
 
-    const handledLookup=rest(
+    const handledLookup=restWithCount(
       context.token,
       `dabbir_operation_outcomes?select=operation_type,outcome,autonomous,estimated_manual_seconds,completed_at&business_id=eq.${businessId}&outcome=eq.VERIFIED_SUCCESS&autonomous=eq.true&completed_at=gte.${dayStart}&order=completed_at.desc&limit=20`,
       'VERIFIED_OUTCOMES_LOOKUP_FAILED'
-    ).then(rows=>({available:true,rows:Array.isArray(rows)?rows:[]}))
+    ).then(({rows,total})=>({available:true,rows,total}))
       .catch(error=>({available:false,rows:[],status:Number(error?.status||0)||null}));
 
     const [conversations,handoffs,followups,appointments,products,inventory,orders,channels,customers,handledResult]=await Promise.all([
-      rest(context.token,`dabbir_conversations?select=id,customer_id,state,channel_type,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=100`,'CONVERSATIONS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_handoffs?select=id,conversation_id,customer_id,state,priority,reason,summary,assigned_user_id,created_at,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=100`,'HANDOFFS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_followups?select=id,conversation_id,customer_id,status,reason,due_at,recommended_message,blocked_reason,send_count,max_sends&business_id=eq.${businessId}&order=due_at.asc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,status,simulated&business_id=eq.${businessId}&order=starts_at.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
+      // Filter actionable rows BEFORE bounding the reads. Historical successes
+      // must not fill the first page and hide today's work from an active owner.
+      rest(context.token,`dabbir_conversations?select=id,customer_id,state,channel_type,updated_at&business_id=eq.${businessId}&state=eq.action_required&order=updated_at.desc,id.asc&limit=100`,'CONVERSATIONS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_handoffs?select=id,conversation_id,customer_id,state,priority,reason,summary,assigned_user_id,created_at,updated_at&business_id=eq.${businessId}&state=${terminalFilter}&order=updated_at.desc,id.asc&limit=100`,'HANDOFFS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_followups?select=id,conversation_id,customer_id,status,reason,due_at,recommended_message,blocked_reason,send_count,max_sends&business_id=eq.${businessId}&status=${terminalFilter}&due_at=lte.${in24hIso}&order=due_at.asc,id.asc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}&status=${appointmentTerminalFilter}&simulated=not.is.true&starts_at=gte.${dayStart}&starts_at=lte.${in24hIso}&order=starts_at.asc,id.asc&limit=100`,'APPOINTMENTS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_products?select=id,name,sku,active&business_id=eq.${businessId}&limit=200`,'PRODUCTS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&limit=200`,'INVENTORY_LOOKUP_FAILED'),
-      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_amount,currency_code,simulated,created_at&business_id=eq.${businessId}&order=created_at.desc&limit=100`,'ORDERS_LOOKUP_FAILED'),
+      rest(context.token,`dabbir_orders?select=id,customer_id,status,total_amount,currency_code,simulated,created_at&business_id=eq.${businessId}&status=in.(draft,reserved)&simulated=eq.false&order=created_at.desc,id.asc&limit=100`,'ORDERS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_channels?select=id,channel_type,status,updated_at&business_id=eq.${businessId}&order=updated_at.desc&limit=50`,'CHANNELS_LOOKUP_FAILED'),
       rest(context.token,`dabbir_customers?select=id,display_name&business_id=eq.${businessId}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
       handledLookup,
@@ -152,12 +173,26 @@ export default async function handler(req,res){
     }
 
     for(const appointment of appointments||[]){
-      if(appointment.simulated===true||terminal(appointment.status))continue;
+      const status=String(appointment.status||'').toLowerCase();
+      if(appointment.simulated===true||appointmentTerminalStates.includes(status))continue;
       const starts=appointment.starts_at?Date.parse(appointment.starts_at):NaN;
-      if(!Number.isFinite(starts)||starts<now||starts>in24h)continue;
+      if(!Number.isFinite(starts)||starts<Date.parse(dayStart)||starts>in24h)continue;
       const soon=starts<=in2h;
+      const started=starts<now;
+      const ends=appointment.ends_at?Date.parse(appointment.ends_at):NaN;
+      const ongoing=started&&status==='in_progress'&&(!Number.isFinite(ends)||ends>now);
+      const needsReview=started&&!ongoing;
       const name=customerName.get(appointment.customer_id)||'عميل';
-      addItem(items,{id:`appointment:${appointment.id}`,type:'appointment',priority:soon?78:58,severity:soon?'warning':'info',title_ar:soon?`موعد قريب جدًا: ${name}`:`موعد خلال 24 ساعة: ${name}`,title_en:soon?`Appointment soon: ${name}`:`Appointment within 24 hours: ${name}`,detail_ar:'راجع الموعد وتأكد من جاهزية النشاط.',detail_en:'Review the appointment and make sure the business is ready.',target:'appointments',entity_id:appointment.id,due_at:appointment.starts_at});
+      addItem(items,{
+        id:`appointment:${appointment.id}`,type:'appointment',
+        priority:needsReview?88:ongoing?58:soon?78:58,
+        severity:needsReview?'critical':ongoing?'info':soon?'warning':'info',
+        title_ar:needsReview?`راجع حالة موعد اليوم: ${name}`:ongoing?`خدمة جارية: ${name}`:soon?`موعد قريب جدًا: ${name}`:`موعد خلال 24 ساعة: ${name}`,
+        title_en:needsReview?`Review today's appointment: ${name}`:ongoing?`Service in progress: ${name}`:soon?`Appointment soon: ${name}`:`Appointment within 24 hours: ${name}`,
+        detail_ar:needsReview?'مر وقت الموعد دون تسجيل نتيجة نهائية. راجع حالته؛ مرور الوقت لا يعني إكمال الخدمة.':ongoing?'الحالة المسجلة: الخدمة قيد التنفيذ.':'راجع الموعد وتأكد من جاهزية النشاط.',
+        detail_en:needsReview?'The scheduled time has passed without a final outcome. Review the status; elapsed time does not prove completion.':ongoing?'Recorded status: service in progress.':'Review the appointment and make sure the business is ready.',
+        target:'appointments',entity_id:appointment.id,due_at:appointment.starts_at,
+      });
     }
 
     for(const product of products||[]){
@@ -195,7 +230,7 @@ export default async function handler(req,res){
       const label=handledLabel(row.operation_type);
       return {operation_type:row.operation_type,title_ar:label.ar,title_en:label.en,completed_at:row.completed_at};
     });
-    const handledCount=handledRows.length;
+    const handledCount=handledResult.available?handledResult.total:null;
     const handledPrefixAr=handledResult.available&&handledCount>0?`دَبِّر أنجز ${handledCount} إجراءً موثقًا تلقائيًا اليوم. `:'';
     const handledPrefixEn=handledResult.available&&handledCount>0?`DABBIR completed ${handledCount} verified autonomous ${handledCount===1?'action':'actions'} today. `:'';
     const briefAr=handledPrefixAr+(top.length?`أهم ما يحتاج تدخلك الآن: ${top.map(item=>item.title_ar).join('، ')}.`:'لا توجد عناصر حرجة أو مستحقة خلال 24 ساعة. دَبِّر يراقب النشاط.');
@@ -214,7 +249,7 @@ export default async function handler(req,res){
       metrics:{urgent,warning,total:items.length,handled_verified_today:handledResult.available?handledCount:null,upcoming_24h:items.filter(item=>item.type==='appointment'||item.type==='followup').length,low_stock:items.filter(item=>item.type==='inventory').length,orders_needing_action:items.filter(item=>item.type==='order').length},
       handled:{available:handledResult.available,verified_autonomous_today:handledResult.available?handledCount:null,latest:handledResult.available?handledLatest:[]},
       brief:{ar:briefAr,en:briefEn},
-      items:items.slice(0,12),
+      items,
       truth:{source:'live_dabbir_tenant_data',auth_fast_path:true,market_contract:'verified_country_currency_timezone',money_source:'currency_snapshotted_generic_amounts',simulated_orders_excluded:true,simulated_appointments_excluded:true,handled_counts_only_verified_success_autonomous_outcomes:true,handled_unavailable_is_not_zero:true},
     });
   }catch(error){

@@ -198,61 +198,8 @@ const script = String.raw`(()=>{
     });
   }
 
-  function activityType(){return String(workspaceNow()?.business?.business_type||'other').toLowerCase()}
-  function businessTimeZone(){
-    const business=workspaceNow()?.business||{};
-    return String(business.timezone||document.documentElement.dataset.dabbirTimezone||window.__dabbirTimeZone||'Asia/Dubai');
-  }
-  function keepActionItem(item){
-    const type=activityType();
-    if(type==='store')return item?.type!=='appointment';
-    if(['clinic','salon','real_estate','creator','services','other'].includes(type))return !['inventory','order'].includes(String(item?.type||''));
-    return true;
-  }
-  function formatWhen(value){
-    if(!value)return '';
-    const date=new Date(value);if(Number.isNaN(date.getTime()))return '';
-    try{return new Intl.DateTimeFormat(isArabic()?'ar-AE':'en-AE',{timeZone:businessTimeZone(),day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(date)}catch{return ''}
-  }
-  function actionCopy(){return isArabic()?{urgent:'يحتاج تدخلك',warning:'راقب اليوم',total:'إجمالي الأولويات',empty:'كل شيء تحت السيطرة الآن',open:'فتح',brief:'أهم ما يحتاج تدخلك الآن'}:{urgent:'Needs you',warning:'Watch today',total:'Total priorities',empty:'Everything is under control right now',open:'Open',brief:'What needs your attention now'}}
-
-  function normalizeActionCenter(){
-    const panel=q('#dabbirActionCenter');
-    const data=workspaceNow()?.owner_action_center;
-    if(!panel||!data)return;
-    const items=(Array.isArray(data.items)?data.items:[]).filter(keepActionItem);
-    const signature=activityType()+'|'+(isArabic()?'ar':'en')+'|'+items.map(x=>[x.id,x.due_at,x.severity].join(':')).join('|');
-    const list=panel.querySelector('#dacItems');
-    if(!list||panel.dataset.d4Signature===signature)return;
-    panel.dataset.d4Signature=signature;
-    const t=actionCopy();
-    const urgent=items.filter(x=>x.severity==='critical').length;
-    const warning=items.filter(x=>x.severity==='warning').length;
-    const metrics=panel.querySelector('#dacMetrics');
-    if(metrics){
-      const metric=(label,value,tone)=>'<div class="dac-metric '+tone+'"><strong>'+String(value)+'</strong><span>'+label+'</span></div>';
-      metrics.innerHTML=metric(t.urgent,urgent,'critical')+metric(t.warning,warning,'warning')+metric(t.total,items.length,'');
-    }
-    const brief=panel.querySelector('#dacBrief');
-    if(brief){
-      const top=items.slice(0,3).map(x=>isArabic()?x.title_ar:x.title_en).filter(Boolean);
-      brief.textContent=top.length?t.brief+': '+top.join(isArabic()?'، ':', ')+'.':t.empty;
-    }
-    list.replaceChildren();
-    if(!items.length){const empty=document.createElement('div');empty.className='dac-empty';empty.textContent=t.empty;list.append(empty);return;}
-    for(const item of items.slice(0,3)){
-      const row=document.createElement('article');row.className='dac-item '+(item.severity||'info');
-      const body=document.createElement('div');body.className='dac-item-body';
-      const title=document.createElement('b');title.textContent=isArabic()?item.title_ar:item.title_en;
-      const detail=document.createElement('span');detail.textContent=isArabic()?item.detail_ar:item.detail_en;
-      const small=document.createElement('small');small.textContent=formatWhen(item.due_at);
-      body.append(title,detail,small);
-      const button=document.createElement('button');button.type='button';button.className='secondary dac-open';button.textContent=t.open;
-      button.onclick=()=>{const target=String(item.target||'dashboard');if(typeof showScreen==='function')showScreen(target)};
-      row.append(body,button);list.append(row);
-    }
-    panel.querySelector('#dacMoreWrap')?.setAttribute('hidden','');
-  }
+  // The action center owns its data, scoped links, expansion, and verified metrics.
+  // Presentation layers must not rebuild or truncate its operational list.
 
   function tuneWhatsappCard(){
     const grid=q('#integrationGrid');if(!grid)return;
@@ -291,7 +238,7 @@ const script = String.raw`(()=>{
     frame=requestAnimationFrame(()=>{frame=0;polish()});
   }
   function polish(){
-    installHeaderMark();decorateNav();decorateMetrics();decorateAiMessages();localizeMachineText();normalizeActionCenter();tuneWhatsappCard();reorderDashboard();bindActionObserver();
+    installHeaderMark();decorateNav();decorateMetrics();decorateAiMessages();localizeMachineText();tuneWhatsappCard();reorderDashboard();bindActionObserver();
     if(style.parentNode===document.head&&style!==document.head.lastElementChild)document.head.appendChild(style);
     document.body?.setAttribute('data-dabbir-ui','owner-first-v4');
     document.body?.setAttribute('data-dabbir-design','executive-calm-v1');

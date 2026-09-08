@@ -21,8 +21,7 @@ test('owner action center keeps top three priorities and surfaces verified handl
   assert.equal(result.statusCode, 200);
   assert.equal(result.headers.get('x-dabbir-owner-action-center-ui'), 'v3');
   assert.match(result.body, /const DEFAULT_VISIBLE=3;/);
-  assert.match(result.body, /const MAX_VISIBLE=8;/);
-  assert.match(result.body, /visibleLimit=expanded\?MAX_VISIBLE:DEFAULT_VISIBLE/);
+  assert.match(result.body, /visibleLimit=expanded\?rows.length:DEFAULT_VISIBLE/);
   assert.match(result.body, /عالجها دَبِّر/);
   assert.match(result.body, /Handled by DABBIR/);
   assert.match(result.body, /handledAvailable=data\?\.handled\?\.available===true/);
@@ -31,6 +30,7 @@ test('owner action center keeps top three priorities and surfaces verified handl
   assert.match(result.body, /عرض بقية الأولويات/);
   assert.match(result.body, /Show top 3 only/);
   assert.match(result.body, /aria-expanded/);
+  assert.match(result.body, /\.dabbir-action-center \[hidden\]\{display:none!important\}/);
   assert.match(result.body, /owner-action-center-v3/);
 });
 
