@@ -1,5 +1,7 @@
+import { createHmac } from 'node:crypto';
 import baseHandler,{verifyMetaSignature} from './dabbir-whatsapp-webhook.js';
 import { extractCoexistenceEvents,persistCoexistenceEvent } from './_whatsapp-coexistence.js';
+import { parseBookingFlowReply,persistBookingFlowReply } from './_dabbir-whatsapp-flows.js';
 
 export const config={api:{bodyParser:false}};
 const firstEnv=(...names)=>{for(const name of names){const value=String(process.env[name]||'').trim();if(value)return value;}return '';};
@@ -12,6 +14,23 @@ async function rawBody(req){
   return chunks.length?Buffer.concat(chunks):Buffer.alloc(0);
 }
 function isUnlinked(error){return String(error?.code||error?.message||'').includes('WHATSAPP_TENANT_CONNECTION_NOT_FOUND');}
+function terminalFlowError(error){
+  const code=String(error?.code||error?.message||'');
+  return ['WHATSAPP_FLOW_SESSION_NOT_FOUND','WHATSAPP_FLOW_TOKEN_ALREADY_USED','WHATSAPP_FLOW_SESSION_NOT_ACTIVE','WHATSAPP_FLOW_SESSION_EXPIRED','WHATSAPP_FLOW_CONNECTION_SCOPE_INVALID','WHATSAPP_FLOW_CONVERSATION_SCOPE_INVALID','WHATSAPP_FLOW_SENDER_SCOPE_INVALID','WHATSAPP_FLOW_SERVICE_SCOPE_INVALID','WHATSAPP_FLOW_REQUIRED_FIELD_MISSING'].some(x=>code.includes(x));
+}
+function canonicalizeFlowForBase(payload,secret){
+  let changed=false;
+  for(const entry of payload.entry||[])for(const change of entry.changes||[]){
+    if(change?.field!=='messages')continue;
+    for(const message of change?.value?.messages||[]){
+      if(message?.interactive?.type!=='nfm_reply')continue;
+      message.type='text';message.text={body:'[DABBIR_BOOKING_FLOW_RECEIVED]'};delete message.interactive;changed=true;
+    }
+  }
+  if(!changed)return null;
+  const raw=Buffer.from(JSON.stringify(payload));
+  return {raw,signature:`sha256=${createHmac('sha256',secret).update(raw).digest('hex')}`};
+}
 
 export default async function handler(req,res){
   if(req.method!=='POST')return baseHandler(req,res);
@@ -25,7 +44,7 @@ export default async function handler(req,res){
   try{payload=JSON.parse(raw.toString('utf8'));}catch{return baseHandler(req,res);}
   if(payload?.object!=='whatsapp_business_account')return baseHandler(req,res);
 
-  let applied=0,duplicates=0,queued=0,unlinked=0;
+  let applied=0,duplicates=0,queued=0,unlinked=0,flowApplied=0,flowDuplicates=0,flowInvalid=0;
   try{
     for(const entry of payload.entry||[]){
       for(const change of entry.changes||[]){
@@ -40,16 +59,38 @@ export default async function handler(req,res){
             throw error;
           }
         }
+        if(change?.field==='messages'){
+          const phoneNumberId=change?.value?.metadata?.phone_number_id||change?.value?.phone_number_id||null;
+          for(const message of change?.value?.messages||[]){
+            const flowReply=parseBookingFlowReply(message);if(!flowReply)continue;
+            if(!flowReply.valid){flowInvalid++;continue;}
+            const event={messageId:message.id||null,from:message.from||null,timestamp:message.timestamp||null,phoneNumberId,flowReply};
+            try{
+              const result=await persistBookingFlowReply(event);if(result.persisted)flowApplied++;if(result.duplicate)flowDuplicates++;
+            }catch(error){
+              if(terminalFlowError(error)){flowInvalid++;continue;}
+              throw error;
+            }
+          }
+        }
       }
     }
   }catch(error){
-    console.error('dabbir_whatsapp_coexistence_persistence_failed',{error:String(error?.code||error?.message||'COEXISTENCE_PERSISTENCE_FAILED').slice(0,160)});
-    return res.status(Number(error?.status||502)).setHeader('cache-control','no-store').json({ok:false,service:'dabbir-whatsapp-webhook',state:'COEXISTENCE_PERSISTENCE_FAILED',retryable:true});
+    console.error('dabbir_whatsapp_extension_persistence_failed',{error:String(error?.code||error?.message||'WHATSAPP_EXTENSION_PERSISTENCE_FAILED').slice(0,160)});
+    return res.status(Number(error?.status||502)).setHeader('cache-control','no-store').json({ok:false,service:'dabbir-whatsapp-webhook',state:'WHATSAPP_EXTENSION_PERSISTENCE_FAILED',retryable:true});
   }
+
+  // The outer gate already verified Meta's original signature. Replace only the
+  // nfm_reply shape with a harmless text marker and re-sign that internal copy so
+  // the existing canonical handler can perform its normal duplicate/status logic.
+  // A valid Flow reply was persisted above with the same Meta message id, so the
+  // canonical handler observes a duplicate and cannot enqueue a second AI turn.
+  const canonical=canonicalizeFlowForBase(payload,secret);
+  if(canonical){req.rawBody=canonical.raw;req.headers['x-hub-signature-256']=canonical.signature;}
 
   const originalJson=typeof res.json==='function'?res.json.bind(res):null;
   if(originalJson){
-    res.json=body=>originalJson(body&&typeof body==='object'?{...body,coexistence_applied:applied,coexistence_duplicates:duplicates,coexistence_queued_mutations:queued,coexistence_unlinked:unlinked}:body);
+    res.json=body=>originalJson(body&&typeof body==='object'?{...body,coexistence_applied:applied,coexistence_duplicates:duplicates,coexistence_queued_mutations:queued,coexistence_unlinked:unlinked,booking_flow_applied:flowApplied,booking_flow_duplicates:flowDuplicates,booking_flow_invalid:flowInvalid}:body);
   }
   return baseHandler(req,res);
 }
