@@ -26,3 +26,9 @@ No database schema changes or migration edits. No customer state was manually re
 ## Verification
 
 Regression cases cover malformed/empty/prose/truncated provider responses, fallback, all-provider failure, sanitized context, ordinary reply guard preservation, and current-message evidence after intent correction. Full CI, exact deployed SHA and live structured probe results must be checked on the merged release. A live structured probe is not evidence that a real WhatsApp delivery/booking completed.
+
+## Follow-up from the first live structured probe
+
+PR #624 deployed as `d6e00b9df559ca0e3f88dcd81defcd6d1911c8ec`, deployment `dpl_fnXXManEZS47MYHJRQsMUCFjF39R`. Workflow 34263336032 / job 102186471848 failed the real structured probe at 18:32:11 UTC: Groq returned valid interpretation with booking intent, date and time correct, but `unknown_service=false`. The gate correctly rejected an unsubstantiated service selection. The exact model service name was not included in diagnostic output.
+
+The follow-up requires a current-message service mention matching a scoped catalog name before retaining the proposal. Catalog membership alone cannot establish selection. Missing, invented, unrelated or out-of-scope service evidence drops that proposal while preserving correctly interpreted date/time and existing verified semantic state. Owner-approved aliases and verified memory remain resolved by the existing engine. The production assertion is unchanged; it must pass through the same grounding now used by WhatsApp.
