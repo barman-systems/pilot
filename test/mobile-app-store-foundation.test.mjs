@@ -102,7 +102,7 @@ test('DABBIR account deletion is product-scoped, de-identifying, access revoking
   assert.match(numberRelease, /delete from public\.dabbir_user_accounts/i);
   assert.doesNotMatch(numberRelease, /delete\s+from\s+auth\.users/i);
   assert.match(endpoint, /dabbir_delete_current_user_account/);
-  assert.match(endpoint, /product: null/);
+  assert.match(endpoint, /product\s*:\s*null/);
   assert.match(mobileLogin, /getVerifiedUser/);
   assert.match(mobileRefresh, /getVerifiedUser/);
   assert.match(mobileRuntime, /getVerifiedUser/);
