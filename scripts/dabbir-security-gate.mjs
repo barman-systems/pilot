@@ -245,7 +245,9 @@ export function verifySecurityContracts(root = process.cwd()) {
   ];
   for (const token of requiredIsolationTokens) if (!isolation.includes(token)) findings.push(finding('RUNTIME_ISOLATION_ATTACK_MISSING', 'test/dabbir-cross-tenant-isolation.mjs', `Required cross-tenant attack ${token} is missing.`));
   if (!journey.includes('test/dabbir-cross-tenant-isolation.mjs')) findings.push(finding('PRODUCTION_ISOLATION_EXECUTION_MISSING', '.github/workflows/dabbir-ai-customer-journey.yml', 'Exact-Production journey no longer runs the cross-tenant attack suite.'));
-  if (!/\.checks\s*\|\s*length\)\s*>=\s*13/.test(journey)) findings.push(finding('PRODUCTION_ISOLATION_THRESHOLD_WEAK', '.github/workflows/dabbir-ai-customer-journey.yml', 'Production isolation gate must require at least 13 successful attacks/checks.'));
+  if (!/\.verdict\s*==\s*\\?"PASS\\?"/.test(journey) || !/\.required_failures\s*==\s*0/.test(journey)) {
+    findings.push(finding('PRODUCTION_ISOLATION_FAIL_CLOSED_MISSING', '.github/workflows/dabbir-ai-customer-journey.yml', 'Exact-Production isolation execution must reject any non-PASS report or any required failure.'));
+  }
   return findings;
 }
 
