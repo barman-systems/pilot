@@ -316,10 +316,11 @@ async function browserJourney() {
   // Disposable QA tenant only; every click uses the shipped UI and real API.
   // Database readback proves a saved proposal has not silently activated.
   await page.locator('#dabbirMemoryButton').click({timeout:15_000});
-  const form=page.locator('[data-knowledge-form="v2"]');
+  await page.locator('[data-knowledge-correction="v2"] summary').click();
+  const form=page.locator('[data-knowledge-correction-form="v2"]');
   await form.waitFor({state:'visible',timeout:15_000});
-  await form.locator('input[name="alias"]').fill('QA VIP');
-  await form.locator('select[name="service"]').selectOption(serviceId);
+  const correctionLanguage=await page.locator('html').getAttribute('lang');
+  await form.locator('input[name="correction"]').fill(String(correctionLanguage).startsWith('ar')?'إذا قال العميل QA VIP فنحن نقصد QA Gold Wash':'when a customer says QA VIP, we mean QA Gold Wash');
   await form.locator('button[type="submit"]').click();
   const card=page.locator('[data-knowledge="v2"] article').filter({hasText:'QA VIP'});
   await card.waitFor({state:'visible',timeout:15_000});
@@ -343,7 +344,7 @@ async function browserJourney() {
   assert(restored.proposal.version>approved.proposal.version,'KNOWLEDGE_ROLLBACK_VERSION_NOT_INCREMENTED');
   assert(['PROPOSED','OWNER_APPROVED','REVOKED','ROLLBACK'].every(type=>restored.audit.some(e=>e.event_type===type)),'KNOWLEDGE_AUDIT_INCOMPLETE');
   await page.locator('.dabbir-memory-close').click();
-  console.log('OWNER_KNOWLEDGE_BROWSER_PASS propose_inactive=true approve=true revoke=true rollback=true audit_events=4');
+  console.log('OWNER_KNOWLEDGE_BROWSER_PASS owner_correction=true catalog_grounded=true propose_inactive=true approve=true revoke=true rollback=true audit_events=4');
 
   await page.locator('#bottomNav [data-screen="conversations"]').click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });

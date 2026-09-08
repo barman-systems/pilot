@@ -168,11 +168,11 @@
     box.dataset.state='ready';
   }
 
-  async function sync(){
+  async function sync(force=false){
     patchFetch();patchApi();
     const id=businessId();
     if(!id){activeBusiness=null;context=null;render();return}
-    if(id!==activeBusiness){
+    if(id!==activeBusiness||force){
       activeBusiness=id;context=null;render();
       try{await loadContext(id);render()}catch{const box=ensureUi();if(box){box.dataset.state='error';box.querySelector('small').textContent=copy().error}}
     }else render();
@@ -181,7 +181,7 @@
   window.dabbirBranchContext={
     scope:()=>{const id=businessId();const value=currentScope(id);return {business_id:id,mode:value==='all'?'all':'selected',branch_id:value==='all'?null:value}},
     query(url){const id=businessId(),value=currentScope(id);if(!id||!value||value==='all')return url;const u=new URL(url,location.origin);u.searchParams.set('branch_id',value);return u.pathname+u.search},
-    refresh:sync,
+    refresh:()=>sync(true),
   };
 
   let ticks=0;const timer=setInterval(()=>{sync();ticks++;if(ticks>120&&apiPatched&&fetchPatched&&businessId())clearInterval(timer)},250);
@@ -4097,7 +4097,7 @@
     panel.querySelector('#dacMoreWrap').hidden=true;
   }
 
-  async function loadActionCenter(force=false){
+  async function loadActionCenter(force=false,recoveredStaleBranch=false){
     const w=workspaceNow();
     const businessId=w?.business?.id;
     const key=scopeKey();
@@ -4122,6 +4122,11 @@
       const params=new URLSearchParams({business_id:businessId,branch_id:scope.mode==='selected'?scope.branch_id:'all'});
       const response=await fetch('/api/owner-action-center?'+params.toString(),{credentials:'same-origin',headers:{accept:'application/json','x-dabbir-client':'web'},cache:'no-store'});
       const data=await response.json().catch(()=>null);
+      if(response.status===404&&data?.error==='BRANCH_NOT_FOUND'&&!recoveredStaleBranch&&typeof window.dabbirBranchContext?.refresh==='function'){
+        await window.dabbirBranchContext.refresh();
+        if(generation!==requestGeneration)return;
+        return loadActionCenter(true,true);
+      }
       if(generation!==requestGeneration||scopeKey()!==key)return;
       if(!response.ok||!data?.ok||!Array.isArray(data.items))throw new Error(data?.error||('ACTION_CENTER_'+response.status));
       if(data.business_id!==businessId||!scopeMatches(data))throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');
@@ -4192,9 +4197,9 @@
 (()=>{
   if(window.__dabbirOwnerDecisionMemoryUiLoaded)return;
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
-  const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent="\n.dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}\n.dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}\n.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}\n.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}\n.dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}\n.dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}\n.dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}\n.dabbir-memory-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.dabbir-memory-actions button{min-height:36px;border-radius:10px;padding:7px 10px;font-size:9px;font-weight:900}\n.dabbir-memory-approve{border:1px solid #6c63d8;background:#262047;color:#e2ddff}.dabbir-memory-pause{border:1px solid #5e5637;background:#242117;color:#ffe4a1}.dabbir-memory-revoke{border:1px solid #64373c;background:#29191c;color:#ffb9bd}\n.dabbir-memory-field{display:block;margin-top:12px;font-size:12px;color:#d8dde6}.dabbir-memory-field input,.dabbir-memory-field select{display:block;box-sizing:border-box;width:100%;margin-top:6px;min-height:44px;padding:10px;border-radius:10px;border:1px solid #465064;background:#181c23;color:#f3f4f6;font-size:16px}[data-knowledge=\"v2\"] .dabbir-memory-card b{font-size:14px}[data-knowledge=\"v2\"] .dabbir-memory-card p{font-size:12px}[data-knowledge=\"v2\"] .dabbir-memory-card small{font-size:11px}[data-knowledge=\"v2\"] button{min-height:44px;font-size:13px}[data-knowledge=\"v2\"] .dabbir-memory-empty{font-size:12px}.dabbir-memory-status{font-size:12px;color:#bdc7d9;line-height:1.7}.dabbir-memory-actions button:disabled{opacity:.55;cursor:wait}.dabbir-memory-close{width:100%;min-height:42px;margin-top:12px;border:0;background:transparent;color:#9fa8b6;font-weight:800}.dabbir-memory-empty{padding:13px;margin-top:10px;border:1px dashed #343b49;border-radius:13px;color:#929ba8;font-size:10px}.dabbir-memory-section{margin-top:14px;font-size:11px;color:#e8ebf1}\n@media(max-width:700px){.dabbir-memory-overlay{align-items:flex-end;padding:10px}.dabbir-memory-dialog{border-radius:20px 20px 14px 14px;max-height:88vh}.dabbir-memory-btn{min-height:40px}.dabbir-memory-actions button{flex:1}}\n";document.head.appendChild(style);
+  const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent="\n.dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}\n.dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}\n.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}\n.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}\n.dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}\n.dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}\n.dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}\n.dabbir-memory-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.dabbir-memory-actions button{min-height:36px;border-radius:10px;padding:7px 10px;font-size:9px;font-weight:900}\n.dabbir-memory-approve{border:1px solid #6c63d8;background:#262047;color:#e2ddff}.dabbir-memory-pause{border:1px solid #5e5637;background:#242117;color:#ffe4a1}.dabbir-memory-revoke{border:1px solid #64373c;background:#29191c;color:#ffb9bd}\n[data-knowledge-correction] summary{cursor:pointer;min-height:44px;padding-top:12px;box-sizing:border-box}.dabbir-memory-field{display:block;margin-top:12px;font-size:12px;color:#d8dde6}.dabbir-memory-field input,.dabbir-memory-field select{display:block;box-sizing:border-box;width:100%;margin-top:6px;min-height:44px;padding:10px;border-radius:10px;border:1px solid #465064;background:#181c23;color:#f3f4f6;font-size:16px}[data-knowledge=\"v2\"] .dabbir-memory-card b{font-size:14px}[data-knowledge=\"v2\"] .dabbir-memory-card p{font-size:12px}[data-knowledge=\"v2\"] .dabbir-memory-card small{font-size:11px}[data-knowledge=\"v2\"] button{min-height:44px;font-size:13px}[data-knowledge=\"v2\"] .dabbir-memory-empty{font-size:12px}.dabbir-memory-status{font-size:12px;color:#bdc7d9;line-height:1.7}.dabbir-memory-actions button:disabled{opacity:.55;cursor:wait}.dabbir-memory-close{width:100%;min-height:42px;margin-top:12px;border:0;background:transparent;color:#9fa8b6;font-weight:800}.dabbir-memory-empty{padding:13px;margin-top:10px;border:1px dashed #343b49;border-radius:13px;color:#929ba8;font-size:10px}.dabbir-memory-section{margin-top:14px;font-size:11px;color:#e8ebf1}\n@media(max-width:700px){.dabbir-memory-overlay{align-items:flex-end;padding:10px}.dabbir-memory-dialog{border-radius:20px 20px 14px 14px;max-height:88vh}.dabbir-memory-btn{min-height:40px}.dabbir-memory-actions button{flex:1}}\n";document.head.appendChild(style);
   const nativeFetch=window.fetch.bind(window);
-  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:''},loading:false,business:id,knowledgeError:false});
+  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false});
   let state=emptyState(null),generation=0,returnFocus=null;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
@@ -4235,7 +4240,7 @@
     const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
     if(!current(id,epoch))return;
     const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
-    state={...emptyState(id),draft:state.draft,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',loaded:true};
+    state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',loaded:true};
     renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
   }
   function renderButton(){
@@ -4289,16 +4294,20 @@
     state.policies.filter(item=>['ACTIVE','PAUSED'].includes(item.state)).forEach(item=>dialog.append(policyCard(item,false)));
     const close=document.createElement('button');close.className='dabbir-memory-close';close.textContent=x.close;close.onclick=closeDialog;dialog.append(close);
     overlay.append(dialog);overlay.onclick=event=>{if(event.target===overlay)closeDialog()};document.body.append(overlay);overlay.showModal();overlay.oncancel=event=>{event.preventDefault();closeDialog()};close.focus();
-    overlay.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeDialog()}else if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button,input,select')].filter(el=>!el.disabled);const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
+    overlay.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeDialog()}else if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button,input,select,summary')].filter(el=>!el.disabled);const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
   }
   const knowledgeCopy=()=>ar()?{
     title:'معاني الخدمات',desc:'اربط تعبير العميل بخدمة من قائمتك، مثل VIP. حفظ الاقتراح لا يفعّله؛ راجعه ثم اعتمده. يسري داخل هذا النشاط وعلى الفروع التي تقدم الخدمة.',
     alias:'تعبير العميل',service:'الخدمة المقصودة',choose:'اختر الخدمة',propose:'حفظ اقتراح للمراجعة',approve:'اعتماد المعنى',reject:'رفض الاقتراح',revoke:'إلغاء الاعتماد',rollback:'إعادة اعتماد هذا الإصدار',
+    correctionTitle:'أو اكتب تصحيحًا للمعنى',correction:'تصحيح المالك',correctionHint:'مثال: VIP يعني الباقة الذهبية. استخدم اسم الخدمة كما يظهر في قائمتك.',correctionSave:'تحويل التصحيح إلى اقتراح',
+    CORRECTION_FORMAT_REQUIRED:'اكتب معنى واحدًا بصيغة «VIP يعني اسم الخدمة»، أو اختر الخدمة من النموذج أعلاه.',CORRECTION_SERVICE_NOT_FOUND:'لم نجد خدمة فعالة بهذا الاسم. اختر الخدمة من النموذج أعلاه.',CORRECTION_SERVICE_AMBIGUOUS:'يوجد أكثر من خدمة بهذا الاسم. حدّد الخدمة من النموذج أعلاه.',CORRECTION_USE_SERVICE_PICKER:'حدّد الخدمة من النموذج أعلاه لحفظ هذا المعنى.',
     empty:'لا توجد معانٍ محفوظة بعد.',noServices:'أضف خدمة فعالة إلى قائمة خدماتك أولًا.',unavailable:'الخدمة غير متاحة حاليًا',error:'تعذر تحميل معاني الخدمات. حاول مجددًا.',retry:'إعادة المحاولة',loading:'جارٍ التحميل…',saved:'تم حفظ الاقتراح. يحتاج اعتمادك ليصبح فعالًا.',updated:'تم تحديث المعنى',failed:'تعذر حفظ التغيير. حدّث القائمة قبل المحاولة مجددًا.',audit:'سجل التغييرات',version:'الإصدار',
     PROPOSED:'بانتظار اعتمادك',OWNER_APPROVED:'معتمد',REJECTED:'مرفوض',REVOKED:'ملغى',SUPERSEDED:'استُبدل بإصدار آخر',ROLLBACK:'أعيد اعتماده'
   }:{
     title:'Service meanings',desc:'Map a customer expression, such as VIP, to a service in your catalog. Saving a proposal does not activate it; review and approve it separately. It applies within this business and branches offering the service.',
     alias:'Customer expression',service:'Intended service',choose:'Choose a service',propose:'Save proposal for review',approve:'Approve meaning',reject:'Reject proposal',revoke:'Revoke approval',rollback:'Approve this version again',
+    correctionTitle:'Or describe a correction',correction:'Owner correction',correctionHint:'For example: VIP means Gold Wash. Use the service name shown in your catalog.',correctionSave:'Turn correction into proposal',
+    CORRECTION_FORMAT_REQUIRED:'Write one meaning as “VIP means service name”, or choose the service in the form above.',CORRECTION_SERVICE_NOT_FOUND:'No active service matches that name. Choose the service in the form above.',CORRECTION_SERVICE_AMBIGUOUS:'More than one service has that name. Choose the intended service in the form above.',CORRECTION_USE_SERVICE_PICKER:'Choose the service in the form above to save this meaning.',
     empty:'No saved meanings yet.',noServices:'Add an active service to your catalog first.',unavailable:'Service currently unavailable',error:'Could not load service meanings. Try again.',retry:'Retry',loading:'Loading…',saved:'Proposal saved. Your approval is required to activate it.',updated:'Meaning updated',failed:'Could not save the change. Refresh the list before trying again.',audit:'Change history',version:'Version',
     PROPOSED:'Awaiting your approval',OWNER_APPROVED:'Approved',REJECTED:'Rejected',REVOKED:'Revoked',SUPERSEDED:'Replaced by another version',ROLLBACK:'Approved again'
   };
@@ -4322,6 +4331,17 @@
       const actions=document.createElement('div');actions.className='dabbir-memory-actions';actions.append(submit);form.append(aliasLabel,serviceLabel,actions);
       form.onsubmit=event=>{event.preventDefault();if(!current(scope,epoch)||!alias.value.trim()||!active.some(s=>s.id===service.value))return;return mutate('propose',{entity_type:'service',alias:alias.value.trim(),target_id:service.value},'/api/understanding-knowledge',scope,epoch)};
       section.append(form);
+      const details=document.createElement('details');details.dataset.knowledgeCorrection='v2';details.open=Boolean(state.draft.correction||state.correctionError);
+      const summary=document.createElement('summary');summary.textContent=k.correctionTitle;summary.className='dabbir-memory-field';
+      const correctionForm=document.createElement('form');correctionForm.dataset.knowledgeCorrectionForm='v2';
+      const correctionLabel=document.createElement('label');correctionLabel.className='dabbir-memory-field';correctionLabel.textContent=k.correction;
+      const correction=document.createElement('input');correction.name='correction';correction.maxLength=400;correction.required=true;correction.autocomplete='off';correction.value=state.draft.correction;correction.setAttribute('aria-describedby','dabbirCorrectionHint');correction.oninput=()=>{if(current(scope,epoch))state.draft.correction=correction.value};correctionLabel.append(correction);
+      const hint=document.createElement('p');hint.id='dabbirCorrectionHint';hint.className='dabbir-memory-status';hint.textContent=k.correctionHint;
+      const correctionSave=document.createElement('button');correctionSave.type='submit';correctionSave.className='dabbir-memory-approve';correctionSave.textContent=k.correctionSave;
+      const correctionActions=document.createElement('div');correctionActions.className='dabbir-memory-actions';correctionActions.append(correctionSave);correctionForm.append(correctionLabel,hint,correctionActions);
+      if(state.correctionError){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=k[state.correctionError]||k.failed;correctionForm.append(error)}
+      correctionForm.onsubmit=event=>{event.preventDefault();if(!current(scope,epoch)||!correction.value.trim()||correction.value.length>400)return;return mutate('propose_correction',{correction:correction.value.trim()},'/api/understanding-knowledge',scope,epoch)};
+      details.append(summary,correctionForm);section.append(details);
     }else{const p=document.createElement('p');p.textContent=k.noServices;section.append(p)}
     const proposals=state.proposals.filter(p=>p.entity_type==='service');
     if(!proposals.length){const p=document.createElement('p');p.className='dabbir-memory-empty';p.textContent=k.empty;section.append(p)}
@@ -4346,12 +4366,13 @@
     document.querySelectorAll('#dabbirMemoryOverlay button,#dabbirMemoryOverlay input,#dabbirMemoryOverlay select').forEach(el=>el.disabled=true);
     try{
       const response=await nativeFetch(path,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json','x-dabbir-client':'web'},body:JSON.stringify({business_id:id,action,...extra})});
-      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error('OWNER_POLICY_UPDATE_FAILED');
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(['CORRECTION_FORMAT_REQUIRED','CORRECTION_SERVICE_NOT_FOUND','CORRECTION_SERVICE_AMBIGUOUS','CORRECTION_USE_SERVICE_PICKER'].includes(payload?.error)?payload.error:'OWNER_POLICY_UPDATE_FAILED');
       if(!current(id,epoch))return;
-      if(path==='/api/understanding-knowledge'&&action==='propose')state.draft={alias:'',target_id:''};
+      if(path==='/api/understanding-knowledge'&&action==='propose')state.draft={...state.draft,alias:'',target_id:''};
+      if(path==='/api/understanding-knowledge'&&action==='propose_correction'){state.draft={...state.draft,correction:''};state.correctionError=''}
       state.loading=false;await load(true);if(!current(id,epoch))return;
-      notify(path==='/api/understanding-knowledge'?(action==='propose'?k.saved:k.updated):copy().saved);
-    }catch{if(!current(id,epoch))return;state.loading=false;await load(true);if(current(id,epoch))notify(k.failed)}
+      notify(path==='/api/understanding-knowledge'?(['propose','propose_correction'].includes(action)?k.saved:k.updated):copy().saved);
+    }catch(error){if(!current(id,epoch))return;if(action==='propose_correction')state.correctionError=error.message;state.loading=false;await load(true);if(current(id,epoch))notify(action==='propose_correction'?(k[state.correctionError]||k.failed):k.failed)}
   }
   let observerFrame=0;
   function scheduleObservedSync(){
