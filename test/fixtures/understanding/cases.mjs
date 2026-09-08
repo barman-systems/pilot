@@ -1,7 +1,9 @@
 export const now=new Date('2026-09-08T09:00:00Z');
 export const ids={business:'20000000-0000-4000-8000-000000000001',other:'20000000-0000-4000-8000-000000000002',conversation:'30000000-0000-4000-8000-000000000001',customer:'40000000-0000-4000-8000-000000000001',branch:'50000000-0000-4000-8000-000000000001',service:'60000000-0000-4000-8000-000000000001',worker:'70000000-0000-4000-8000-000000000001'};
 export const slots=[17,18,19].map(h=>({starts_at:`2026-09-09T${String(h-4).padStart(2,'0')}:00:00Z`,service_id:ids.service,worker_id:ids.worker,timezone:'Asia/Dubai'}));
-export function context(extra={}){return {business:{id:ids.business,timezone:'Asia/Dubai',business_type:'car_wash',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[{id:ids.service,name_ar:'غسيل كامل',name_en:'Full wash',price:50}],workers:[{id:ids.worker,display_name:'سالم'}],...extra};}
+// This is the domain-neutral Understanding V2 golden fixture. Vertical requirements
+// such as car-wash vehicle/location are covered by dedicated vertical regression tests.
+export function context(extra={}){return {business:{id:ids.business,timezone:'Asia/Dubai',business_type:'services',currency_code:'AED'},conversation:{id:ids.conversation,branch_id:ids.branch,state:'ai_active'},customer:{id:ids.customer},services:[{id:ids.service,name_ar:'غسيل كامل',name_en:'Full wash',price:50}],workers:[{id:ids.worker,display_name:'سالم'}],...extra};}
 export const offered={pending_action:'choose_slot',payload:{mode:'booking',slots,presented:true,provider_message_id:'verified-offer'},expires_at:'2026-09-08T09:15:00Z'};
 export const appointments=[1,2].map(i=>({id:`80000000-0000-4000-8000-00000000000${i}`,business_id:ids.business,branch_id:ids.branch,starts_at:`2026-09-09T${i+10}:00:00Z`,service_id:ids.service,worker_id:ids.worker,status:'confirmed'}));
 export const offeredAppointments={pending_action:'choose_appointment',payload:{appointments,presented:true,provider_message_id:'verified-offer'},expires_at:'2026-09-08T09:15:00Z'};

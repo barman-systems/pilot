@@ -93,6 +93,18 @@ function safeRetailerId(value) {
   return String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255);
 }
 
+function locationText(message = {}) {
+  const location = message?.location;
+  if (!location) return '';
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return '';
+  const safe = value => String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').slice(0, 160);
+  const label = [safe(location.name), safe(location.address)].filter(Boolean).join(' — ').slice(0, 180);
+  return `📍 موقع واتساب: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${label ? ` — ${label}` : ''}`;
+}
+
 function catalogEnvelope(message = {}) {
   const referred = message?.context?.referred_product || null;
   const referredCatalogId = safeMetaId(referred?.catalog_id);
@@ -133,6 +145,7 @@ function messageText(message = {}) {
     || message.interactive?.button_reply?.title
     || message.interactive?.list_reply?.title
     || message.order?.text
+    || locationText(message)
     || '';
   const envelope = catalogEnvelope(message);
   const customerText=String(base || '').replace(/\[DABBIR_CATALOG_(?:PRODUCT|ORDER)[^\]]*\]/g,'').trim();
