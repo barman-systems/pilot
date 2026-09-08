@@ -1,5 +1,6 @@
 import {accessTokenFromRequest,getBusinessMemberships,getVerifiedUser,json,readJsonBody,readRpcJson,requireSameOrigin,rpcErrorCode,supabaseRest,supabaseRpc} from './_auth-core.js';
 import {singleQueryValue} from './_request-query.js';
+import {parseOwnerServiceCorrection,groundOwnerServiceCorrection} from './_dabbir-owner-correction.js';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=x=>UUID.test(String(x||''))?String(x):null;
 export default async function handler(req,res){
@@ -28,7 +29,18 @@ export default async function handler(req,res){
       return json(res,200,{ok:true,proposals,services,audit,supported_entity_types:['service']});
     }
     const action=String(body.action||'');let name,args;
-    if(action==='propose'){
+    if(action==='propose_correction'){
+      if((body.conversation_id&&!id(body.conversation_id))||(body.correction_id&&!id(body.correction_id)))return json(res,400,{ok:false,error:'INVALID_PROPOSAL'});
+      const parsed=parseOwnerServiceCorrection(body.correction);
+      if(!parsed)return json(res,400,{ok:false,error:'CORRECTION_FORMAT_REQUIRED'});
+      const catalog=await supabaseRest(`dabbir_services?business_id=eq.${businessId}&active=eq.true&select=id,name,active&order=name.asc&limit=201`,token);
+      if(!catalog.ok)throw new Error('KNOWLEDGE_READ_FAILED');
+      const grounded=groundOwnerServiceCorrection(parsed,await catalog.json());
+      if(grounded.error)return json(res,400,{ok:false,error:grounded.error});
+      // The existing RPC rechecks the target and owner under DB authorization.
+      // Caller-supplied target/alias/action fragments cannot bypass grounding.
+      name='dabbir_knowledge_propose_v2';args={p_business_id:businessId,p_conversation_id:id(body.conversation_id),p_correction_id:id(body.correction_id),p_entity_type:'service',p_alias:grounded.alias,p_target_id:grounded.targetId};
+    }else if(action==='propose'){
       if(!id(body.target_id)||!['service','worker','branch'].includes(body.entity_type)||typeof body.alias!=='string'||!body.alias.trim()||body.alias.trim().length>80||(body.conversation_id&&!id(body.conversation_id))||(body.correction_id&&!id(body.correction_id)))return json(res,400,{ok:false,error:'INVALID_PROPOSAL'});
       name='dabbir_knowledge_propose_v2';args={p_business_id:businessId,p_conversation_id:id(body.conversation_id),p_correction_id:id(body.correction_id),p_entity_type:body.entity_type,p_alias:body.alias.trim(),p_target_id:id(body.target_id)};
     }else if(['approve','reject','revoke','rollback'].includes(action)&&id(body.proposal_id)){

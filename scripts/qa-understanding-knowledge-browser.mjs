@@ -13,7 +13,7 @@ const server=http.createServer((req,res)=>{
   res.end(`<!doctype html><html lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px system-ui;background:#111;color:white}#screen-automations{display:none}#tour{display:none;position:fixed;inset:0;z-index:120;background:#234a;pointer-events:auto}</style><div id="screen-automations"><div class="hero"></div></div><div id="dabbirActionCenter"></div><div id="tour">Synthetic onboarding overlay</div><script>
 let workspace={business:{id:'qa-business'},membership:{role:'owner'}},status=null,version=0,writes=[];
 window.fetch=async(url,options={})=>{
- if(options.method==='POST'){const body=JSON.parse(options.body);writes.push(body.action);status={propose:'PROPOSED',approve:'OWNER_APPROVED',revoke:'REVOKED',rollback:'OWNER_APPROVED'}[body.action];version++;document.querySelector('#tour').style.display='block'}
+ if(options.method==='POST'){const body=JSON.parse(options.body);writes.push(body.action);status={propose:'PROPOSED',propose_correction:'PROPOSED',approve:'OWNER_APPROVED',revoke:'REVOKED',rollback:'OWNER_APPROVED'}[body.action];version++;document.querySelector('#tour').style.display='block'}
  return {ok:true,json:async()=>({ok:true,services:[{id:'qa-service',name:'Gold wash',active:true}],proposals:status?[{id:'qa-proposal',entity_type:'service',alias:'VIP',target_id:'qa-service',status,version}]:[],audit:[]})};
 };
 setTimeout(()=>{const host=document.createElement('div');host.className='dac-head';document.querySelector('#dabbirActionCenter').append(host)},900);
@@ -34,14 +34,23 @@ try{
     // Exercise that transition in both engines and languages with native inputs.
     await page.evaluate(()=>window.__dabbirOwnerDecisionMemory.refresh());
     if(await page.locator('input[name="alias"]').inputValue()!=='VIP'||await page.locator('select[name="service"]').inputValue()!=='qa-service')throw Error('KNOWLEDGE_DRAFT_LOST_ON_REFRESH');
-    await page.locator('form button[type="submit"]').click();
+    // Exercise both entry paths while retaining the existing manual draft check.
+    const action=width===820?'propose_correction':'propose';
+    if(action==='propose_correction'){
+     await page.locator('[data-knowledge-correction="v2"] summary').click();
+     const correction=language==='ar'?'VIP يعني Gold wash':'VIP means Gold wash';
+     await page.locator('input[name="correction"]').fill(correction);
+     await page.evaluate(()=>window.__dabbirOwnerDecisionMemory.refresh());
+     if(await page.locator('input[name="correction"]').inputValue()!==correction)throw Error('CORRECTION_DRAFT_LOST_ON_REFRESH');
+     await page.locator('[data-knowledge-correction-form="v2"] button[type="submit"]').click();
+    }else await page.locator('[data-knowledge-form="v2"] button[type="submit"]').click();
     const card=page.locator('[data-knowledge="v2"] article').filter({hasText:'VIP'});
     await card.getByRole('button',{name:/اعتماد المعنى|^Approve meaning$/}).click();
     await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).click();
     await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).click();
     await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
     const evidence=await page.evaluate(()=>({actions:writes,status,version,modal:document.querySelector('#dabbirMemoryOverlay').matches(':modal'),tourVisible:getComputedStyle(document.querySelector('#tour')).display==='block'}));
-    if(evidence.actions.join(',')!=='propose,approve,revoke,rollback'||!evidence.modal||!evidence.tourVisible||evidence.version!==4)throw Error('KNOWLEDGE_BROWSER_EVIDENCE_INVALID');
+    if(evidence.actions.join(',')!==action+',approve,revoke,rollback'||!evidence.modal||!evidence.tourVisible||evidence.version!==4)throw Error('KNOWLEDGE_BROWSER_EVIDENCE_INVALID');
     entry.status='PASS';entry.evidence=evidence;
    }catch(error){entry.status='FAIL';entry.error=String(error.message);await page.screenshot({path:path.join(output,`knowledge-${name}-${language}-${width}.png`)}).catch(()=>{});throw error}
    finally{await context.close()}
