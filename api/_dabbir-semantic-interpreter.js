@@ -2,6 +2,23 @@ import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
 
+const arr=value=>Array.isArray(value)?value:[];
+function normalizeEvidence(value) {
+  return sanitizeSemanticText(value).normalize('NFKD').replace(/[\u064b-\u065f\u0670ـ]/g,'')
+    .replace(/[٠-٩]/g,n=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(n))).replace(/[أإآ]/g,'ا').replace(/ة/g,'ه')
+    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
+}
+function groundedServiceName(serviceName,message,context) {
+  if(!serviceName)return null;
+  const proposed=normalizeEvidence(serviceName),text=` ${normalizeEvidence(message)} `;
+  if(!proposed||!text.trim())return null;
+  const service=arr(context?.services).find(item=>[item?.name,item?.name_ar,item?.name_en]
+    .some(name=>name&&normalizeEvidence(name)===proposed));
+  if(!service)return null;
+  const labels=[service.name,service.name_ar,service.name_en].map(normalizeEvidence).filter(Boolean);
+  return labels.some(label=>text.includes(` ${label} `))?serviceName:null;
+}
+
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -16,8 +33,13 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
   const x=JSON.parse(result.reply);
+  // Catalog labels are context, not customer evidence. A provider may not promote a
+  // visible service into the semantic proposal unless the current customer message
+  // explicitly names that same catalog service. Existing grounded conversation state
+  // is preserved separately by the semantic engine.
+  const serviceName=groundedServiceName(x.service_name,message,context);
   const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName:x.service_name,knowledgeKey:x.knowledge_key,entities:x.entities,
+    serviceName,knowledgeKey:x.knowledge_key,entities:x.entities,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   return {proposal,provider:result.provider,model:result.model};
 }
