@@ -136,7 +136,7 @@ function reuseMemory(s,c,t,now) {
   if(!used)s.unresolved_references.push(onlyVehicle?'vehicle':onlyWorker?'worker':'verified_history');
 }
 
-export function understandConversation({context:c,previous=null,now=new Date(),proposal=null}) {
+export function understandConversation({context:c,previous=null,now=new Date(),proposal=null,proposalEvidence=null}) {
   const stamp=now.toISOString();
   const fresh=freshState(c,stamp);
   const same=previous && Object.keys(fresh.scope).every(k=>previous.scope?.[k]===fresh.scope[k]) && previous.version===2 && Date.parse(previous.expires_at)>now.getTime();
@@ -266,7 +266,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     if(s.goal==='UNKNOWN' && ['BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(proposal.intent)) {
       s.intent=proposal.intent;s.goal=proposal.intent==='BOOKING'?'BOOK_SERVICE':proposal.intent;s.intent_confirmed=false;
     }
-    const rawEvidence=turns.map(x=>x.language_body||x.body).join(' ');
+    const rawEvidence=(proposalEvidence || turns).map(x=>x.language_body||x.body).join(' ');
     for(const item of arr(proposal.entities).slice(0,8)) {
       const key=clean(item?.entity,40),evidence=clean(item?.evidence,300);
       if(!['delivery_mode','vehicle','property_details','date','time'].includes(key) || !evidence || !rawEvidence.includes(evidence) || Number(item.confidence)<.9)continue;

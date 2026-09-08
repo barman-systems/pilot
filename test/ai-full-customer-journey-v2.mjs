@@ -804,16 +804,17 @@ async function runJourney() {
     // real provider separately using this isolated QA owner's authenticated path.
     const probe = await ownerSession.request('/api/dabbir-ai', {
       method: 'POST', retry: false,
-      body: { synthetic: true, project: 'dabbir_businesses', message: 'قل جاهز فقط.', language: 'ar' },
+      body: { synthetic: true, probe: 'whatsapp_semantic' },
     });
     const providerEvidence = {
       status: probe.status, state: probe.json?.state || 'UNKNOWN',
       error: probe.json?.error || null, provider: probe.json?.provider || null,
-      model: probe.json?.model || null,
+      model: probe.json?.model || null, checks: probe.json?.checks || null,
     };
     assert(probe.ok && probe.json?.ok === true && probe.json?.state === 'SUCCESS'
       && probe.json?.synthetic_probe === true && probe.json?.external_side_effects === false
-      && typeof probe.json?.reply === 'string' && probe.json.reply.trim().length > 0,
+      && probe.json?.semantic_probe === true && Object.values(probe.json?.checks || {}).length === 4
+      && Object.values(probe.json.checks).every(value => value === true),
       `REAL_AI_PROVIDER_PROBE_FAILED:${JSON.stringify(providerEvidence)}`);
     const result = await ownerSession.request('/api/chat-customer', {
       method: 'POST',
