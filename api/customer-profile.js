@@ -12,6 +12,7 @@ import {
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
+const cleanName=value=>String(value??'').replace(/[\u0000-\u001f\u007f]+/g,' ').trim();
 
 async function payload(response,fallback){
   const text=await response.text();let body=null;
@@ -55,7 +56,7 @@ export default async function handler(req,res){
     if(!businessId||!customerId)return json(res,400,{ok:false,error:'CUSTOMER_CONTEXT_REQUIRED'});
     const member=membershipFor(ctx,businessId);
     if(!member||!canEdit(member))return json(res,403,{ok:false,error:'CUSTOMER_NAME_OWNER_REQUIRED'});
-    const name=String(body?.display_name||'').trim();
+    const name=cleanName(body?.display_name);
     if(!name||name.length>120)return json(res,400,{ok:false,error:'CUSTOMER_NAME_INVALID'});
     const customer=await payload(await supabaseRpc('dabbir_customer_update_display_name',ctx.token,{
       p_business_id:businessId,p_customer_id:customerId,p_display_name:name,
