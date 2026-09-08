@@ -800,13 +800,28 @@ async function runJourney() {
   if (!conversation) throw new Error('FATAL_CONVERSATION_CREATE_FAILED');
 
   await step('15_customer_message_gets_ai_reply', async () => {
+    // A persisted sender_type=ai can be a deterministic fallback. Exercise the
+    // real provider separately using this isolated QA owner's authenticated path.
+    const probe = await ownerSession.request('/api/dabbir-ai', {
+      method: 'POST', retry: false,
+      body: { synthetic: true, project: 'dabbir_businesses', message: 'قل جاهز فقط.', language: 'ar' },
+    });
+    const providerEvidence = {
+      status: probe.status, state: probe.json?.state || 'UNKNOWN',
+      error: probe.json?.error || null, provider: probe.json?.provider || null,
+      model: probe.json?.model || null,
+    };
+    assert(probe.ok && probe.json?.ok === true && probe.json?.state === 'SUCCESS'
+      && probe.json?.synthetic_probe === true && probe.json?.external_side_effects === false
+      && typeof probe.json?.reply === 'string' && probe.json.reply.trim().length > 0,
+      `REAL_AI_PROVIDER_PROBE_FAILED:${JSON.stringify(providerEvidence)}`);
     const result = await ownerSession.request('/api/chat-customer', {
       method: 'POST',
       body: { business_id: businessId, conversation_id: conversationId, message: 'مرحبا، هل المنتج متوفر وما سعره؟' },
     });
     assert(result.ok && result.json?.customer_message?.sender_type === 'customer', `CUSTOMER_MESSAGE_FAILED_${result.status}:${small(result.text)}`);
     assert(result.json?.ai_message?.sender_type === 'ai', 'AI_REPLY_MISSING');
-    return { status: result.status, detail: `AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
+    return { status: result.status, detail: `Real provider verified: ${JSON.stringify(providerEvidence)}; AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
   });
 
   await step('16_employee_human_takeover', async () => {
