@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   isClientSurface,
   scanChangedSqlAdditions,
@@ -11,6 +12,7 @@ import {
 } from '../scripts/dabbir-security-gate.mjs';
 
 const codes = rows => rows.map(row => row.code);
+const securityWorkflow = fs.readFileSync(new URL('../.github/workflows/dabbir-security-gate.yml', import.meta.url), 'utf8');
 
 test('browser and mobile surfaces are treated as secret-free trust boundaries', () => {
   assert.equal(isClientSurface('index.html'), true);
@@ -93,6 +95,9 @@ test('service-role endpoints cannot trust a request business_id without an autho
   assert.equal(scanServiceRoleEndpoint('api/safe.js', safe).length, 0);
 });
 
-test('repository keeps the mandatory security workflow and runtime isolation contracts wired', () => {
+test('repository keeps mandatory source, AI, runtime and storage isolation contracts wired', () => {
   assert.deepEqual(verifySecurityContracts(), []);
+  assert.match(securityWorkflow, /test\/dabbir-storage-tenant-isolation-contract\.test\.mjs/);
+  assert.match(securityWorkflow, /test\/dabbir-whatsapp-ai-closed-loop-hardening\.test\.mjs/);
+  assert.match(securityWorkflow, /test\/dabbir-whatsapp-multibranch-outbound-safety\.test\.mjs/);
 });
