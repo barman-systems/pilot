@@ -293,7 +293,9 @@ async function handleFastGet(req, res) {
   }
 
   const businessId = membership.business_id;
-  const requestedConversationId = safeId(singleQueryValue(req, 'conversation_id'));
+  const requestedConversationValue = singleQueryValue(req, 'conversation_id');
+  const requestedConversationId = safeId(requestedConversationValue);
+  if(requestedConversationValue&&!requestedConversationId)return json(res,400,{ok:false,error:'INVALID_CONVERSATION_ID'});
   const summaryOnly = singleQueryValue(req, 'summary') === '1';
 
   const businessPromise = rest(
@@ -348,20 +350,22 @@ async function handleFastGet(req, res) {
   const business = businessRows?.[0] || null;
   if (!business) return json(res, 404, { ok: false, error: 'BUSINESS_NOT_FOUND' });
 
-  const conversations = visibleConversations(rawConversations, customers);
-  const customerById = new Map((customers || []).map(customer => [customer.id, customer]));
-
-  let conversationId = requestedConversationId;
-  if (conversationId && !conversations.some(item => item.id === conversationId)) {
-    const hiddenRequested = (rawConversations || []).find(item => item.id === conversationId);
-    const hiddenCustomer = hiddenRequested ? customerById.get(hiddenRequested.customer_id) : null;
-    const hiddenName = normalizeDisplayName(hiddenCustomer?.display_name || '');
-    const replacement = hiddenName
-      ? conversations.find(item => normalizeDisplayName(customerById.get(item.customer_id)?.display_name || '') === hiddenName)
-      : null;
-    conversationId = replacement?.id || null;
+  let exactConversation=requestedConversationId&&(rawConversations||[]).find(row=>row.id===requestedConversationId);
+  if(requestedConversationId&&!exactConversation){
+    const rows=await rest(accessToken,`dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&id=eq.${requestedConversationId}&channel_type=eq.web&limit=1`,'CONVERSATION_LOOKUP_FAILED');
+    exactConversation=Array.isArray(rows)?rows.find(row=>row.id===requestedConversationId):null;
+    if(!exactConversation)return json(res,404,{ok:false,error:'CONVERSATION_NOT_FOUND'});
+    rawConversations.unshift(exactConversation);
+    if(exactConversation.customer_id&&!customers.some(row=>row.id===exactConversation.customer_id)){
+      const customerRows=await rest(accessToken,`dabbir_customers?select=id,display_name,lead_status,metadata,created_at&business_id=eq.${businessId}&id=eq.${exactConversation.customer_id}&limit=1`,'CUSTOMER_LOOKUP_FAILED');
+      if(Array.isArray(customerRows))customers.push(...customerRows);
+    }
   }
-  if (!conversationId) conversationId = conversations?.[0]?.id || null;
+
+  const conversations = visibleConversations(rawConversations, customers);
+  // Explicit record navigation must never be replaced by another customer with the same name.
+  if(exactConversation&&!conversations.some(row=>row.id===exactConversation.id))conversations.unshift(exactConversation);
+  const conversationId = requestedConversationId || conversations?.[0]?.id || null;
 
   let messages = [];
   let messagesLoaded = false;

@@ -31,6 +31,8 @@ export default async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
 
+  let createdBusinessId=null;
+  let creationAttempted=false;
   try{
     const accessToken=accessTokenFromRequest(req);
     if(!accessToken)return json(res,401,{ok:false,error:'AUTH_REQUIRED'});
@@ -49,6 +51,7 @@ export default async function handler(req,res){
     if(!market)return json(res,400,{ok:false,error:'UNSUPPORTED_MARKET'});
 
     const locale=localeForMarket(countryCode,lang);
+    creationAttempted=true;
     const created=await read(await supabaseRpc('dabbir_create_business',accessToken,{
       p_name:name,
       p_business_type:businessType,
@@ -56,15 +59,16 @@ export default async function handler(req,res){
       p_country_code:countryCode,
     }),'BUSINESS_CREATE_FAILED');
     const businessId=Array.isArray(created)?created[0]?.business_id:created?.business_id;
-    if(!businessId)return json(res,502,{ok:false,error:'BUSINESS_CREATE_UNVERIFIED'});
+    if(typeof businessId!=='string'||!businessId.trim())throw Object.assign(new Error('BUSINESS_CREATE_UNVERIFIED'),{status:502});
+    createdBusinessId=businessId;
 
     const rows=await read(await supabaseRest(
       `dabbir_businesses?select=id,slug,name,business_type,locale,demo_mode,country_code,currency_code,timezone,phone_country_prefix,vat_status,default_vat_rate,created_at,updated_at&id=eq.${encodeURIComponent(businessId)}&limit=1`,
       accessToken,
     ),'BUSINESS_PROFILE_VERIFY_FAILED');
     const business=Array.isArray(rows)?rows[0]:null;
-    if(!business?.id||business.country_code!==countryCode||business.currency_code!==market.currency_code||business.timezone!==market.timezone||business.phone_country_prefix!==market.phone_country_prefix){
-      return json(res,502,{ok:false,error:'BUSINESS_MARKET_PROFILE_UNVERIFIED',business_id:businessId});
+    if(business?.id!==businessId||business.country_code!==countryCode||business.currency_code!==market.currency_code||business.timezone!==market.timezone||business.phone_country_prefix!==market.phone_country_prefix){
+      throw Object.assign(new Error('BUSINESS_MARKET_PROFILE_UNVERIFIED'),{status:502});
     }
 
     return json(res,200,{
@@ -85,6 +89,18 @@ export default async function handler(req,res){
       truth:{state:'VERIFIED',source:'SUPABASE_RETURN_AND_READBACK',entity:'business',entity_id:businessId,verified_at:new Date().toISOString()},
     });
   }catch(error){
-    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'MARKET_BUSINESS_CREATE_FAILED',detail:error?.detail||null});
+    if(creationAttempted){
+      return json(res,Number(error?.status||503),{
+        ok:false,
+        error:createdBusinessId?'BUSINESS_VERIFICATION_PENDING':'BUSINESS_CREATE_OUTCOME_UNCERTAIN',
+        state:createdBusinessId?'CREATED_VERIFICATION_PENDING':'OUTCOME_UNCERTAIN',
+        business_id:createdBusinessId,
+        verified_persisted:false,
+        retry_create_blocked:true,
+        outcome_uncertain:!createdBusinessId,
+        next_action:createdBusinessId?'verify_existing_business':'review_business_list',
+      });
+    }
+    return json(res,Number(error?.status||500),{ok:false,error:error?.message||'MARKET_BUSINESS_CREATE_FAILED'});
   }
 }

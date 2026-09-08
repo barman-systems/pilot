@@ -130,9 +130,17 @@ const script=String.raw`(()=>{
   function openAssistant(){
     if(typeof showScreen==='function')showScreen('dashboard');
     setTimeout(()=>{
-      window.__dabbirOwnerCopilot?.refresh?.();
+      const command=q('#doCommandInput');
+      if(command&&command.getClientRects().length){
+        q('#dabbirOperatorSummary')?.scrollIntoView({behavior:'auto',block:'start'});
+        command.focus({preventScroll:true});return;
+      }
       const card=q('#dabbirOwnerCopilot');
-      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+      if(card&&card.getClientRects().length){
+        window.__dabbirOwnerCopilot?.refresh?.();
+        card.scrollIntoView({behavior:'auto',block:'start'});
+        card.querySelector('input,textarea')?.focus({preventScroll:true});
+      }
     },60);
   }
 
@@ -161,8 +169,30 @@ const script=String.raw`(()=>{
     assistant.innerHTML='<h3>'+t.assistantTitle+'</h3><p>'+t.assistantDesc+'</p>';
   }
 
+  let mobileMenuSide=null;
+  let mobileMenuObserver=null;
+  function syncMobileMenuAccessibility(){
+    const menu=q('#menuBtn'),side=q('#side');
+    if(!menu)return;
+    const expanded=Boolean(side?.classList.contains('open')&&!side.hidden&&!side.classList.contains('hidden'));
+    menu.setAttribute('aria-label',ar()?'القائمة الرئيسية':'Main navigation');
+    menu.setAttribute('aria-controls','side');
+    menu.setAttribute('aria-expanded',expanded?'true':'false');
+  }
   function bindMobileMenuResync(){
     const menu=q('#menuBtn');
+    const side=q('#side');
+    syncMobileMenuAccessibility();
+    // Observe only this panel's visibility attributes so every close path updates the control.
+    if(side!==mobileMenuSide){
+      mobileMenuObserver?.disconnect();
+      mobileMenuObserver=null;
+      mobileMenuSide=side;
+      if(side&&typeof MutationObserver==='function'){
+        mobileMenuObserver=new MutationObserver(syncMobileMenuAccessibility);
+        mobileMenuObserver.observe(side,{attributes:true,attributeFilter:['class','hidden']});
+      }
+    }
     if(!menu||menu.dataset.dabbirContextRouterBound==='true')return;
     menu.dataset.dabbirContextRouterBound='true';
     menu.addEventListener('click',()=>{

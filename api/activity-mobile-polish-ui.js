@@ -23,71 +23,7 @@ const script=String.raw`(()=>{
   ].join('');
   document.head.append(style);
 
-  const q=s=>document.querySelector(s);
-  const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
-  const activity=()=>String(window.workspace?.business?.business_type||'other').toLowerCase();
-  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-  function keepActionItem(item){
-    const type=activity();
-    if(type==='store') return item?.type!=='appointment';
-    if(['clinic','salon','real_estate','creator','services','other'].includes(type)) return !['inventory','order'].includes(String(item?.type||''));
-    return true;
-  }
-
-  function when(value){
-    if(!value)return '';
-    const date=new Date(value);
-    if(Number.isNaN(date.getTime()))return '';
-    try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:'Asia/Dubai',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(date)}catch{return ''}
-  }
-
-  function actionCopy(){return ar()?{urgent:'يحتاج تدخلك',warning:'راقب اليوم',total:'إجمالي الأولويات',empty:'كل شيء تحت السيطرة الآن',open:'فتح',brief:'أهم ما يحتاج تدخلك الآن'}:{urgent:'Needs you',warning:'Watch today',total:'Total priorities',empty:'Everything is under control right now',open:'Open',brief:'What needs your attention now'}}
-
-  function normalizeActionCenter(){
-    const panel=q('#dabbirActionCenter');
-    const data=window.workspace?.owner_action_center;
-    if(!panel||!data)return;
-    const raw=Array.isArray(data.items)?data.items:[];
-    const items=raw.filter(keepActionItem);
-    const signature=activity()+'|'+items.map(x=>x.id).join('|')+'|'+(ar()?'ar':'en');
-    const list=panel.querySelector('#dacItems');
-    if(!list)return;
-    const hasLegacy=list.querySelector('.dac-item:not([data-activity-normalized="true"])');
-    if(panel.dataset.activitySignature===signature&&!hasLegacy)return;
-    panel.dataset.activitySignature=signature;
-
-    const t=actionCopy();
-    const urgent=items.filter(x=>x.severity==='critical').length;
-    const warning=items.filter(x=>x.severity==='warning').length;
-    const metrics=panel.querySelector('#dacMetrics');
-    if(metrics){
-      const metric=(label,value,tone)=>'<div class="dac-metric '+tone+'"><strong>'+escapeHtml(value)+'</strong><span>'+escapeHtml(label)+'</span></div>';
-      metrics.innerHTML=metric(t.urgent,urgent,'critical')+metric(t.warning,warning,'warning')+metric(t.total,items.length,'');
-    }
-
-    const brief=panel.querySelector('#dacBrief');
-    if(brief){
-      const top=items.slice(0,3).map(x=>ar()?x.title_ar:x.title_en).filter(Boolean);
-      brief.textContent=top.length?t.brief+': '+top.join('، ')+'.':t.empty;
-    }
-
-    list.replaceChildren();
-    if(!items.length){
-      const empty=document.createElement('div');empty.className='dac-empty';empty.textContent=t.empty;list.append(empty);return;
-    }
-    for(const item of items.slice(0,3)){
-      const row=document.createElement('article');row.className='dac-item '+(item.severity||'info');row.dataset.activityNormalized='true';
-      const body=document.createElement('div');body.className='dac-item-body';
-      const title=document.createElement('b');title.textContent=ar()?item.title_ar:item.title_en;
-      const detail=document.createElement('span');detail.textContent=ar()?item.detail_ar:item.detail_en;
-      const small=document.createElement('small');small.textContent=when(item.due_at);
-      body.append(title,detail,small);
-      const button=document.createElement('button');button.type='button';button.className='secondary dac-open';button.textContent=t.open;
-      button.onclick=()=>{const target=String(item.target||'dashboard');if(typeof showScreen==='function')showScreen(target)};
-      row.append(body,button);list.append(row);
-    }
-  }
+  // Keep priority rendering under owner-action-center-core-ui authority.
 
   function removeMobileBrandText(){
     const brand=document.querySelector('.dabbirMobileBrand');
@@ -96,7 +32,7 @@ const script=String.raw`(()=>{
     const logo=brand.querySelector('.logo');if(logo)logo.textContent='';
   }
 
-  function polish(){removeMobileBrandText();normalizeActionCenter()}
+  function polish(){removeMobileBrandText()}
   const observer=new MutationObserver(()=>setTimeout(polish,0));
   observer.observe(document.body,{subtree:true,childList:true});
   setInterval(polish,700);
