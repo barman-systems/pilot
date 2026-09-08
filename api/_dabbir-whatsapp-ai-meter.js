@@ -105,22 +105,40 @@ export async function generateDABBIRAiReply(args={}){
         }
       }catch{}
     }
+    const provider=endpoint.includes('ai-gateway.vercel.sh')?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown';
     const started=Date.now();
-    const response=await upstreamFetch(url,nextOptions);
-    const attempt={endpoint:endpoint.includes('ai-gateway.vercel.sh')?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown',model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started};
-    attempts.push(attempt);
-    if(response?.ok){
-      try{
-        const payload=await response.clone().json();
-        successfulPayload=payload;
-        successfulResponse=response;
-      }catch{}
+    try{
+      const response=await upstreamFetch(url,nextOptions);
+      const attempt={provider,model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started,outcome:response?.ok?'ok':'http_error'};
+      attempts.push(attempt);
+      if(response?.ok){
+        try{
+          const payload=await response.clone().json();
+          successfulPayload=payload;
+          successfulResponse=response;
+        }catch{}
+      }
+      return response;
+    }catch(error){
+      attempts.push({provider,model:requestedModel,status:0,duration_ms:Date.now()-started,outcome:error?.name==='AbortError'?'timeout':'network_error'});
+      throw error;
     }
-    return response;
   };
 
   const result=await generateCoreReply({...args,fetchImpl:meteredFetch});
-  if(!identity.businessId||!result?.ok)return result;
+  if(!result?.ok){
+    // No message body, tenant id, conversation id, token or response body is logged.
+    // This preserves enough provider-chain truth to diagnose the next outage.
+    console.warn('dabbir_whatsapp_ai_provider_chain_failed',{
+      state:clean(result?.state,80)||'UNKNOWN',
+      error:clean(result?.error,120)||'UNKNOWN',
+      provider:clean(result?.provider,80)||'unknown',
+      model:clean(result?.model,120)||null,
+      attempts:attempts.slice(0,8),
+    });
+    return result;
+  }
+  if(!identity.businessId)return result;
 
   const usage=usageFromPayload(successfulPayload||{});
   const actualCostUsd=result?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
