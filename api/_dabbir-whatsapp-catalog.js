@@ -8,7 +8,7 @@ const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u
 const arr=value=>Array.isArray(value)?value:[];
 
 function catalogError(payload,response,code='META_WHATSAPP_CATALOG_REQUEST_FAILED'){
-  const error=Object.assign(new Error(code),{
+  return Object.assign(new Error(code),{
     code,
     providerStatus:Number(response?.status||0)||null,
     providerCode:payload?.error?.code??null,
@@ -17,7 +17,6 @@ function catalogError(payload,response,code='META_WHATSAPP_CATALOG_REQUEST_FAILE
     ambiguous:Number(response?.status||0)>=500,
     definitive:Number(response?.status||0)>=400&&Number(response?.status||0)<500,
   });
-  return error;
 }
 
 async function graphJson(platform,path,token,params={}){
@@ -76,39 +75,77 @@ export function catalogPermissionLikelyMissing(error){
     && (message.includes('permission')||message.includes('access')||message.includes('catalog'));
 }
 
-export async function syncMetaCatalogForConnection({connection,businessId}){
+async function recordAttempt(business,connectionId,state,retrySeconds,error=null){
+  return serviceRpc('dabbir_whatsapp_catalog_record_attempt',{
+    p_business_id:business,
+    p_connection_id:connectionId,
+    p_state:state,
+    p_retry_seconds:retrySeconds,
+    p_error_code:clean(error?.code||error?.message,200)||null,
+    p_provider_code:error?.providerCode===undefined||error?.providerCode===null?null:clean(error.providerCode,80),
+  }).catch(()=>null);
+}
+
+export async function catalogSyncDue({businessId,connectionId,conversationId=null}){
+  const business=clean(businessId,80),connection=clean(connectionId,80),conversation=clean(conversationId,80);
+  if(!UUID.test(business)||!UUID.test(connection))return {due:false,state:'invalid_context'};
+  const result=await serviceRpc('dabbir_whatsapp_catalog_sync_due',{
+    p_business_id:business,
+    p_connection_id:connection,
+    p_conversation_id:UUID.test(conversation)?conversation:null,
+  });
+  return {due:result?.due===true,state:clean(result?.state,40)||'unknown',nextRetryAt:result?.next_retry_at||null};
+}
+
+export async function syncMetaCatalogForConnection({connection,businessId,respectBackoff=false,conversationId=null}){
   const business=clean(businessId,80),connectionId=clean(connection?.id,80),wabaId=clean(connection?.waba_id,80);
   if(!UUID.test(business)||!UUID.test(connectionId)||!META_ID.test(wabaId)){
     throw Object.assign(new Error('WHATSAPP_CATALOG_SYNC_CONTEXT_INCOMPLETE'),{code:'WHATSAPP_CATALOG_SYNC_CONTEXT_INCOMPLETE'});
   }
+  if(respectBackoff){
+    const due=await catalogSyncDue({businessId:business,connectionId,conversationId});
+    if(!due.due)return {state:'BACKOFF',previous_state:due.state,next_retry_at:due.nextRetryAt,synced:false,skipped:true};
+  }
+
   const platform=applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());
   const token=openAccessToken(connection,platform,business);
   if(!token)throw Object.assign(new Error('WHATSAPP_CATALOG_TOKEN_UNAVAILABLE'),{code:'WHATSAPP_CATALOG_TOKEN_UNAVAILABLE'});
 
-  const linked=await graphJson(platform,`${encodeURIComponent(wabaId)}/product_catalogs`,token,{fields:'id,name',limit:20});
-  const catalogs=arr(linked?.data).filter(row=>META_ID.test(clean(row?.id,80)));
-  if(!catalogs.length)return {state:'NO_CATALOG',catalog_count:0,synced:false};
-  if(catalogs.length>1){
-    return {
-      state:'MULTIPLE_CATALOGS',
-      catalog_count:catalogs.length,
-      catalog_ids:catalogs.slice(0,10).map(row=>clean(row.id,80)),
-      synced:false,
-    };
-  }
+  try{
+    const linked=await graphJson(platform,`${encodeURIComponent(wabaId)}/product_catalogs`,token,{fields:'id,name',limit:20});
+    const catalogs=arr(linked?.data).filter(row=>META_ID.test(clean(row?.id,80)));
+    if(!catalogs.length){
+      await recordAttempt(business,connectionId,'no_catalog',86_400);
+      return {state:'NO_CATALOG',catalog_count:0,synced:false};
+    }
+    if(catalogs.length>1){
+      await recordAttempt(business,connectionId,'multiple_catalogs',86_400);
+      return {
+        state:'MULTIPLE_CATALOGS',
+        catalog_count:catalogs.length,
+        catalog_ids:catalogs.slice(0,10).map(row=>clean(row.id,80)),
+        synced:false,
+      };
+    }
 
-  const catalog=catalogs[0];
-  const catalogId=clean(catalog.id,80);
-  const items=await catalogProducts(platform,token,catalogId);
-  const applied=await serviceRpc('dabbir_whatsapp_catalog_apply_sync',{
-    p_business_id:business,
-    p_connection_id:connectionId,
-    p_meta_catalog_id:catalogId,
-    p_catalog_name:clean(catalog?.name,300)||null,
-    p_items:items,
-    p_make_primary:true,
-  });
-  return {state:'SYNCED',catalog_count:1,synced:true,...(applied||{}),fetched_items:items.length};
+    const catalog=catalogs[0];
+    const catalogId=clean(catalog.id,80);
+    const items=await catalogProducts(platform,token,catalogId);
+    const applied=await serviceRpc('dabbir_whatsapp_catalog_apply_sync',{
+      p_business_id:business,
+      p_connection_id:connectionId,
+      p_meta_catalog_id:catalogId,
+      p_catalog_name:clean(catalog?.name,300)||null,
+      p_items:items,
+      p_make_primary:true,
+    });
+    await recordAttempt(business,connectionId,'synced',21_600);
+    return {state:'SYNCED',catalog_count:1,synced:true,...(applied||{}),fetched_items:items.length};
+  }catch(error){
+    if(catalogPermissionLikelyMissing(error))await recordAttempt(business,connectionId,'permission_required',86_400,error);
+    else await recordAttempt(business,connectionId,'error',3_600,error);
+    throw error;
+  }
 }
 
 export async function catalogMenuForContext({context,connection}){
