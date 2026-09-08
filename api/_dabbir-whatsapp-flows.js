@@ -26,11 +26,10 @@ export const BOOKING_FLOW_JSON=JSON.stringify({
       type:'Form',name:'booking',children:[
         {type:'TextHeading',text:'أكمل طلب الحجز / Complete your booking request'},
         {type:'Dropdown',label:'الخدمة / Service',name:'service_id',required:true,'data-source':'${data.services}'},
-        {type:'TextInput',label:'الموقع / Location',name:'location',required:true},
         {type:'TextInput',label:'التاريخ المناسب / Preferred date',name:'preferred_date',required:true},
         {type:'TextInput',label:'الوقت المناسب / Preferred time',name:'preferred_time',required:true},
         {type:'Footer',label:'إرسال الطلب / Send request','on-click-action':{name:'complete',payload:{
-          dabbir_kind:'booking_v1',service_id:'${form.service_id}',location:'${form.location}',preferred_date:'${form.preferred_date}',preferred_time:'${form.preferred_time}'
+          dabbir_kind:'booking_v1',service_id:'${form.service_id}',preferred_date:'${form.preferred_date}',preferred_time:'${form.preferred_time}'
         }}},
       ]
     }]}
@@ -156,7 +155,7 @@ export async function sendMetaBookingFlow({context,connection,recipient,lang='ar
   if(!session?.session_id||!session?.recipient_handle)throw Object.assign(new Error('WHATSAPP_BOOKING_FLOW_SESSION_UNVERIFIED'),{code:'WHATSAPP_BOOKING_FLOW_SESSION_UNVERIFIED'});
   const platform=applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());const accessToken=openAccessToken(connection,platform,businessId);const phone=clean(connection?.phone_number_id,160);const to=clean(recipient||session.recipient_handle,160).replace(/[^0-9]/g,'');
   if(!accessToken||!phone||!to)throw Object.assign(new Error('WHATSAPP_BOOKING_FLOW_SEND_CONTEXT_INCOMPLETE'),{code:'WHATSAPP_BOOKING_FLOW_SEND_CONTEXT_INCOMPLETE'});
-  const interactive={type:'flow',header:{type:'text',text:lang==='ar'?'طلب حجز':'Booking request'},body:{text:lang==='ar'?'أكمل الخدمة والموقع والوقت في نموذج واحد.':'Choose the service, location and preferred time in one form.'},footer:{text:lang==='ar'?'يمكنك متابعة المحادثة هنا في أي وقت.':'You can continue this chat at any time.'},action:{name:'flow',parameters:{flow_message_version:'3',flow_action:'navigate',flow_token:tokenPlain,flow_id:String(localFlow.meta_flow_id),flow_cta:lang==='ar'?'إكمال الحجز':'Complete booking',flow_action_payload:{screen:'BOOKING',data:{services}}}}};
+  const interactive={type:'flow',header:{type:'text',text:lang==='ar'?'طلب حجز':'Booking request'},body:{text:lang==='ar'?'اختر الخدمة والوقت، ثم نكمل التفاصيل المطلوبة هنا.':'Choose the service and time; we will collect any remaining details here.'},footer:{text:lang==='ar'?'يمكنك متابعة المحادثة هنا في أي وقت.':'You can continue this chat at any time.'},action:{name:'flow',parameters:{flow_message_version:'3',flow_action:'navigate',flow_token:tokenPlain,flow_id:String(localFlow.meta_flow_id),flow_cta:lang==='ar'?'إكمال الحجز':'Complete booking',flow_action_payload:{screen:'BOOKING',data:{services}}}}};
   let response;
   try{
     response=await fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phone)}/messages`,{method:'POST',cache:'no-store',signal:AbortSignal.timeout(10000),headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to,type:'interactive',interactive})});
@@ -180,7 +179,7 @@ export function parseBookingFlowReply(message={}){
   let data;try{data=JSON.parse(raw)}catch{return {valid:false,reason:'FLOW_RESPONSE_INVALID_JSON'}}
   if(!data||typeof data!=='object'||Array.isArray(data))return {valid:false,reason:'FLOW_RESPONSE_INVALID_OBJECT'};
   const flowToken=clean(data.flow_token,240),serviceId=safeUuid(data.service_id),location=clean(data.location,500),preferredDate=clean(data.preferred_date,80),preferredTime=clean(data.preferred_time,80),kind=clean(data.dabbir_kind,40);
-  if(kind!=='booking_v1'||flowToken.length<16||!serviceId||!location||!preferredDate||!preferredTime)return {valid:false,reason:'FLOW_RESPONSE_REQUIRED_FIELD_MISSING'};
+  if(kind!=='booking_v1'||flowToken.length<16||!serviceId||!preferredDate||!preferredTime)return {valid:false,reason:'FLOW_RESPONSE_REQUIRED_FIELD_MISSING'};
   return {valid:true,kind,flowToken,serviceId,location,preferredDate,preferredTime};
 }
 export async function persistBookingFlowReply(event){

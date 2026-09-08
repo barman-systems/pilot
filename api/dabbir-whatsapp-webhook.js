@@ -186,6 +186,7 @@ export function extractWhatsAppEvents(payload = {}) {
             contactName: contactNames.get(String(message.from || '')) || null,
             timestamp: message.timestamp || null,
             messageType: message.type || null,
+            location: message.type==='location' && typeof message.location?.latitude==='number' && typeof message.location?.longitude==='number' && locationText(message) ? {lat:message.location.latitude,lng:message.location.longitude,label:String(message.location.name||message.location.address||'').slice(0,180)} : null,
             text: String(messageText(message) || '').slice(0, 4000),
             mediaId: message.audio?.id || null,
             mediaMimeType: message.audio?.mime_type || null,

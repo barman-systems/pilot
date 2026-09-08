@@ -82,7 +82,7 @@ export async function persistSignedInbound(event) {
     error.status = 400;
     throw error;
   }
-  const row = oneRow(await serviceRpc('dabbir_whatsapp_persist_inbound', {
+  const row = oneRow(await serviceRpc(event.messageType==='location'&&event.location?'dabbir_whatsapp_persist_location_inbound_v1':'dabbir_whatsapp_persist_inbound', {
     p_phone_number_id: clean(event.phoneNumberId, 160),
     p_provider_message_id: clean(event.messageId, 320),
     p_sender_handle: clean(event.from, 160),
@@ -90,6 +90,7 @@ export async function persistSignedInbound(event) {
     p_body: clean(event.text, 4000),
     p_intent: clean(event.classification, 120) || null,
     p_occurred_at: occurredAt(event.timestamp),
+    ...(event.messageType==='location'&&event.location?{p_location:event.location}:{}),
   }));
   if (!row?.conversation_id || !row?.message_id) {
     const error = new Error('WHATSAPP_INBOUND_PERSISTENCE_UNVERIFIED');
