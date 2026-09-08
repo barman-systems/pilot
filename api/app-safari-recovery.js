@@ -2,7 +2,7 @@ import './_sentry-runtime.js';
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
-const UI_CACHE_BUST = '20260908-booking-owner-scope-v1';
+const UI_CACHE_BUST = '20260908-owner-knowledge-draft-v4';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
 const SENTRY_BROWSER_MONITOR = `/api/ui-sentry?v=${UI_CACHE_BUST}`;
 const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});`;

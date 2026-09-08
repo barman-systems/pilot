@@ -86,3 +86,17 @@ test('knowledge approval opens in the browser modal top layer above onboarding o
   assert.equal(modal.attrs['aria-labelledby'],'dabbirMemoryTitle');
   modal.oncancel({preventDefault(){}});assert.equal(modal.open,false);assert.equal(modal.connected,false);
 });
+
+test('refresh retains an owner draft in the same tenant and a successful save clears it',async()=>{
+  let writes=0;const ui=harness(async(url,options={})=>{if(options.method==='POST')writes++;return response(url.includes('understanding')?payload:{})});
+  await ui.refresh();ui.open();ui.input('alias').value='VIP';ui.input('alias').oninput?.();ui.input('service').value='service-A';ui.input('service').onchange?.();
+  await ui.refresh();assert.equal(ui.input('alias').value,'VIP');assert.equal(ui.input('service').value,'service-A');
+  await ui.form().onsubmit({preventDefault(){}});assert.equal(writes,1);assert.equal(ui.input('alias').value,'');assert.equal(ui.input('service').value,'');
+});
+
+test('draft inputs cannot survive a tenant switch or be changed by detached tenant controls',async()=>{
+  const ui=harness(async url=>response(url.includes('understanding')?payload:{}));await ui.refresh();ui.open();
+  const alias=ui.input('alias');alias.value='Tenant A private draft';alias.oninput?.();
+  ui.workspace.business.id='B';await ui.refresh();ui.open();alias.oninput?.();
+  assert.equal(ui.input('alias').value,'');assert.equal(ui.input('service').value,'');
+});
