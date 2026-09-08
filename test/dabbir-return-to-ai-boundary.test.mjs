@@ -44,7 +44,9 @@ before(async()=>{
  const start=repair.indexOf('create or replace function public.dabbir_return_conversation_to_ai');
  const live=repair.slice(start,repair.indexOf('-- Repair only',start));
  await db.exec(live);await reset();await login(u);await assert.rejects(resume(),/permission denied for table dabbir_ai_conversation_state/);
- await db.exec('reset role');await db.exec(fs.readFileSync('supabase/migrations/20260908063300_dabbir_return_to_ai_state_boundary_v3.sql','utf8'));
+ await db.exec('reset role');
+ await db.exec(fs.readFileSync('supabase/migrations/20260908064401_dabbir_return_to_ai_state_boundary_v3.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260908064658_dabbir_return_to_ai_state_boundary_v4.sql','utf8'));
 });
 after(()=>db.close());
 test('return boundary: owner resumes, clears handoff only, preserves verified facts and invalidates old decision',async()=>{
@@ -69,4 +71,9 @@ test('return boundary: low-risk owner observation remains inactive and idempoten
 });
 test('return boundary: human replies and sensitive reasons do not produce learned observations',async()=>{
  for(const sensitive of [true,false]){await reset();await q("update dabbir_handoffs set route_class='OWNER_DECISION',priority=30,reason=$1",[sensitive?'payment.approve':'routine_followup']);if(!sensitive)await q("insert into dabbir_messages values($1,$2,'human',now()+interval '1 second')",[b,c]);await login(u);await resume();await db.exec('reset role');assert.equal((await q('select count(*)::int n from dabbir_owner_decision_observations')).rows[0].n,0)}
+});
+test('final return function uses per-call wall-clock identity instead of transaction-start now()',()=>{
+ const sql=fs.readFileSync('supabase/migrations/20260908064658_dabbir_return_to_ai_state_boundary_v4.sql','utf8');
+ assert.match(sql,/v_now timestamptz:=clock_timestamp\(\)/);
+ assert.doesNotMatch(sql,/v_now timestamptz:=now\(\)/);
 });
