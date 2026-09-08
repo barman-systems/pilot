@@ -19,6 +19,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'vercel-ignore-if-unaffected.sh'
+      - 'docs/audits/DABBIR_*PRODUCTION_SMOKE.sql'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/run-ai-full-customer-journey-en.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'

@@ -14,7 +14,8 @@ set -u
 #    in that range. Database schema is part of the Production artifact contract;
 #    a migration must not leave main SHA ahead of the deployed SHA.
 # 3) Executable exact-SHA Production verification contracts are deployment-
-#    affecting even when their source files live under .github/, test/ or config/.
+#    affecting even when their source files live under .github/, test/, config/
+#    or docs/audits (executable Production SQL smoke proofs).
 #    Static BAR-12 evidence snapshots under docs/evidence are different: they are
 #    bound to the authoritative runtime SHA inside the evidence and must never
 #    manufacture a new Production runtime merely by recording that proof.
@@ -83,6 +84,7 @@ while IFS= read -r path; do
     test/dabbir-capacity-load.mjs|\
     test/dabbir-activity-regression.test.mjs|\
     test/dabbir-bar12-*|\
+    docs/audits/DABBIR_*PRODUCTION_SMOKE.sql|\
     config/barman-integration-contract.json|\
     config/dabbir-release*.json)
       echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
