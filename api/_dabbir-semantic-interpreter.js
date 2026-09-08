@@ -2,6 +2,22 @@ import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
 
+function groundedServiceName(x,message,context) {
+  // Catalog membership proves existence, never customer selection. Missing
+  // evidence drops the proposal; existing verified state/memory stays in the
+  // semantic engine. Owner aliases are also resolved there, before AI.
+  const norm=v=>String(v||'').normalize('NFKC').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/[\u064b-\u065f\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+  const name=typeof x.service_name==='string'?x.service_name.trim():'';
+  const names=(Array.isArray(context?.services)?context.services:[]).map(s=>s?.name).filter(n=>typeof n==='string');
+  if(!name || !names.some(n=>norm(n)===norm(name)))return null;
+  const text=sanitizeSemanticText(message);
+  const evidence=typeof x.service_evidence==='string'?x.service_evidence.trim():name;
+  if(!evidence || evidence.length>180 || !text.includes(evidence))return null;
+  const mention=norm(evidence),label=norm(name);
+  if(mention.length<2 || !(` ${label} `.includes(` ${mention} `)||` ${mention} `.includes(` ${label} `)))return null;
+  return name;
+}
+
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -17,7 +33,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
   const x=JSON.parse(result.reply);
   const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName:x.service_name,knowledgeKey:x.knowledge_key,entities:x.entities,
+    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   return {proposal,provider:result.provider,model:result.model};
 }

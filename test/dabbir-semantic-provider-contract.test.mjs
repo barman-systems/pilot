@@ -53,3 +53,28 @@ test('contract refuses prose envelopes and unsupported execution data',()=>{
   assert.equal(validSemanticContract('```json\n'+JSON.stringify(proposal)+'\n```'),false);
   assert.equal(validSemanticContract(JSON.stringify({...proposal,action:'RUN_SQL'})),false);
 });
+
+test('a sole catalog service is not a customer selection without message evidence',async()=>{
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:'فاضين'}))});
+  assert.equal(result.proposal.serviceName,null);
+  assert.equal(result.proposal.intent,'BOOKING');assert.equal(result.proposal.entities[1].value,'09:00');
+});
+
+for(const evidence of [null,'غسيل كامل','بكره'])test('unsubstantiated service evidence is rejected: '+evidence,async()=>{
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:evidence}))});
+  assert.equal(result.proposal.serviceName,null);
+});
+
+test('explicit service mention in the current message can select a supplied catalog name',async()=>{
+  const result=await interpretSemanticMessage({message:'أبا VIP باجر',context:{services:[{name:'VIP Wash'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
+  assert.equal(result.proposal.serviceName,'VIP Wash');
+});
+
+test('a quoted service absent from the scoped catalog is rejected',async()=>{
+  const result=await interpretSemanticMessage({message:'أبا VIP',context:{services:[{name:'Haircut'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
+  assert.equal(result.proposal.serviceName,null);
+});
