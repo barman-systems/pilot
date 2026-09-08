@@ -349,7 +349,16 @@ export function clarification(s,c) {
   }
   if(key==='worker')return en?'Which staff member would you prefer?':'أي موظف تفضل؟';
   if(key==='delivery_mode'||ref==='delivery_mode') {const modes=arr(s.activity_requirements?.contract?.delivery_modes);return en?'Where would you like this service: '+modes.join(' / ')+'?':'وين تبا الخدمة: '+modes.map(m=>({AT_BUSINESS:'في الفرع',AT_CUSTOMER:'عندك',MOBILE:'عندك',REMOTE:'عن بعد',PICKUP:'استلام',DELIVERY:'توصيل'}[m]||m)).join(' / ')+'؟';}
-  if(['location','vehicle','property_details'].includes(key)) {const f=s.entities[key];if(f?.source==='AI_INFERENCE')return en?'Please confirm: '+String(f.value)+'?':'للتأكيد، تقصد '+String(f.value)+'؟';const definition=s.activity_requirements?.contract?.entity_definitions?.[key];return definition?.[en?'question_en':'question_ar']||(en?'Please provide '+key:'ما تفاصيل '+key+'؟');}
+  if(['location','vehicle','property_details'].includes(key)) {
+    const f=s.entities[key];if(f?.source==='AI_INFERENCE')return en?'Please confirm: '+String(f.value)+'?':'للتأكيد، تقصد '+String(f.value)+'؟';
+    const definition=s.activity_requirements?.contract?.entity_definitions?.[key];
+    const question=definition?.[en?'question_en':'question_ar']||(en?'Please provide '+key:'ما تفاصيل '+key+'؟');
+    // Compose acknowledgement only from grounded facts; the question itself
+    // stays bound to the resolver's next entity, never a provider's invented one.
+    const service=scoped(c.services,c).find(x=>x.id===valueOf(s,'service'));
+    const known=[service?nameOf(service):null,supported(s.entities.date)?valueOf(s,'date'):null,supported(s.entities.time)?(en?'at ':'الساعة ')+valueOf(s,'time'):null].filter(Boolean);
+    return known.length?(en?'Got it: ':'تمام، ')+known.join('، ')+'. '+question:question;
+  }
   return en?'Which detail should I use?':'أي تفصيل تقصد؟';
 }
 

@@ -35,12 +35,13 @@ test('car wash cannot reach availability until vehicle and location are grounded
   assert.deepEqual(first.state.business_constraints,['vehicle','location']);
   assert.deepEqual(first.state.missing_fields,['vehicle','location']);
   assert.equal(first.decision.action,'CLARIFY');
-  assert.equal(first.decision.reply,'السيارة صالون ولا ستيشن/SUV؟');
+  assert.match(first.decision.reply,/السيارة صالون ولا ستيشن\/SUV؟$/);
+  assert.match(first.decision.reply,/Vip.*17:00/);
 
   const second=understandConversation({context:context({batch_messages:[{body:'صالون'}]}),previous:first.state,now});
   assert.equal(second.state.entities.vehicle.value,'saloon');
   assert.deepEqual(second.state.missing_fields,['location']);
-  assert.equal(second.decision.reply,'أرسل موقع الخدمة من خيار «الموقع» في واتساب.');
+  assert.ok(second.decision.reply.endsWith('أرسل موقع الخدمة من خيار «الموقع» في واتساب.'));
 
   const third=understandConversation({context:context({batch_messages:[{id:'pin-1',body:'📍 موقع واتساب: 24.453884, 54.377343 — أبوظبي'}],location_receipts:[{message_id:'pin-1',business_id:ids.business,conversation_id:ids.conversation,value:{lat:24.453884,lng:54.377343,label:'أبوظبي'}}]}),previous:second.state,now});
   assert.deepEqual(third.state.entities.location.value,{lat:24.453884,lng:54.377343,label:'أبوظبي'});

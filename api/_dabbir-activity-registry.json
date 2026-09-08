@@ -179,7 +179,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "car_wash": {
       "version": 1,
@@ -283,7 +295,20 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "vehicle": "vehicle",
+        "package": "service",
+        "team": "worker"
+      }
     },
     "salon": {
       "version": 1,
@@ -375,7 +400,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "staff": "worker",
+        "branch": "branch"
+      }
     },
     "home_cleaning": {
       "version": 1,
@@ -481,7 +518,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "property": "property_details",
+        "team": "worker"
+      }
     },
     "clinic": {
       "version": 1,
@@ -573,7 +622,21 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "patient": "customer",
+        "appointment_type": "service",
+        "doctor": "worker",
+        "branch": "branch"
+      }
     },
     "maintenance": {
       "version": 1,
@@ -665,7 +728,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "property": "property_details",
+        "team": "worker"
+      }
     },
     "delivery": {
       "version": 1,
@@ -757,7 +832,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "consulting": {
       "version": 1,
@@ -849,7 +936,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "repair_shop": {
       "version": 1,
@@ -941,7 +1040,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "pet_grooming": {
       "version": 1,
@@ -1033,7 +1144,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "barber": {
       "version": 1,
@@ -1125,7 +1248,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "staff": "worker",
+        "branch": "branch"
+      }
     },
     "spa": {
       "version": 1,
@@ -1217,7 +1352,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "staff": "worker",
+        "branch": "branch"
+      }
     },
     "laundry": {
       "version": 1,
@@ -1309,7 +1456,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "tutoring": {
       "version": 1,
@@ -1401,7 +1560,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "photography": {
       "version": 1,
@@ -1493,7 +1664,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     },
     "mobile_services": {
       "version": 1,
@@ -1585,7 +1768,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "property": "property_details",
+        "team": "worker"
+      }
     },
     "other": {
       "version": 1,
@@ -1677,7 +1872,19 @@
         "provider_presented_slot",
         "customer_confirmation",
         "appointment_readback"
-      ]
+      ],
+      "ontology": {
+        "customer": "customer",
+        "service": "service",
+        "slot": "slot",
+        "booking": "appointment",
+        "price": "price",
+        "duration": "duration",
+        "location": "location",
+        "service_area": "service_area",
+        "worker": "worker",
+        "branch": "branch"
+      }
     }
   }
 }

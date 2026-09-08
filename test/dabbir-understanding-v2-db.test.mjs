@@ -74,6 +74,16 @@ test('activity SQL: defaults, service overrides, revocation and rollback have di
  const rolled=await configureActivity({},'ROLLBACK',configured.version);assert.equal(rolled.contract.activity_type,'car_wash');assert.ok(rolled.version>revoked.version);
  const rows=(await db.query('select action from dabbir_activity_service_versions order by version')).rows;assert.ok(rows.some(r=>r.action==='REVOKE'));assert.ok(rows.some(r=>r.action==='ROLLBACK'));
 });
+test('activity SQL: profile exposes scoped ontology, requirements and configured resource truth',async()=>{
+ await reset();await configureActivity({activity_type:'car_wash',activity_instance_id:'mobile_wash',delivery_modes:['MOBILE'],service_area:{type:'CIRCLE',center:{lat:24.4,lng:54.3},radius_km:10}});
+ const p=(await load()).activity_profile;
+ assert.deepEqual(p.delivery_modes,['MOBILE']);assert.equal(p.activity_instances[0].id,'mobile_wash');
+ assert.equal(p.services[0].ontology.vehicle,'vehicle');assert.equal(p.services[0].ontology.booking,'appointment');
+ assert.deepEqual(new Set(p.required_customer_facts[0].fields),new Set(['service','date','time','vehicle','location']));
+ assert.equal(p.service_areas[0].branch_id,ids.branch);assert.equal(p.service_areas[0].service_id,ids.service);
+ assert.deepEqual(p.teams,[]);assert.deepEqual(p.assets,[]);assert.equal(p.resource_configuration.teams,'NOT_CONFIGURED');
+ assert.equal(p.operational_constraints.inference_mutation_allowed,false);assert.equal(p.owner_policies[0].version,p.services[0].owner_version);
+});
 test('activity SQL: owner cannot disable platform safety or save unknown requirements',async()=>{
  for(const config of [{optional_entities:['location']},{required_entities:['diagnosis']},{delivery_modes:['HYBRID']},{disable_tenant_check:true},{service_area:{type:'CIRCLE',center:{lat:91,lng:54},radius_km:5}}])await assert.rejects(configureActivity(config),/ACTIVITY_/);
  await db.exec('reset role');
