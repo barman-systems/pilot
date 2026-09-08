@@ -40,9 +40,9 @@ before(async()=>{
  await db.exec('revoke all on function dabbir_private.dabbir_record_owner_decision(uuid,text,text,text,text,jsonb,text,uuid) from public,anon,authenticated');
  await q('insert into auth.users(id) values($1),($2)',[u,employee]);await q('insert into dabbir_businesses values($1),($2)',[b,foreign]);await q("insert into dabbir_memberships(business_id,user_id,role,status) values($1,$2,'owner','active'),($1,$3,'employee','active')",[b,u,employee]);
  // Reproduce the live invoker function's direct write to the private state table.
- const start=original.indexOf('create or replace function public.dabbir_return_conversation_to_ai');
- const end=original.indexOf('comment on table',start);
- const live=original.slice(start,end).replace("  update public.dabbir_conversations set state='waiting_customer'", "  update public.dabbir_ai_conversation_state set pending_action='none' where business_id=p_business_id and conversation_id=p_conversation_id and pending_action='handoff';\n  update public.dabbir_conversations set state='waiting_customer'");
+ const repair=fs.readFileSync('supabase/migrations/20260908062836_dabbir_whatsapp_service_menu_state_repair_v1.sql','utf8');
+ const start=repair.indexOf('create or replace function public.dabbir_return_conversation_to_ai');
+ const live=repair.slice(start,repair.indexOf('-- Repair only',start));
  await db.exec(live);await reset();await login(u);await assert.rejects(resume(),/permission denied for table dabbir_ai_conversation_state/);
  await db.exec('reset role');await db.exec(fs.readFileSync('supabase/migrations/20260908063300_dabbir_return_to_ai_state_boundary_v3.sql','utf8'));
 });
