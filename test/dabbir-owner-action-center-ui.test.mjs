@@ -26,7 +26,7 @@ test('owner action center keeps top three priorities and surfaces verified handl
   assert.match(result.body, /Handled by DABBIR/);
   assert.match(result.body, /handledAvailable=data\?\.handled\?\.available===true/);
   assert.match(result.body, /handledAvailable\?\(data\?\.handled\?\.verified_autonomous_today\?\?0\):'—'/);
-  assert.match(result.body, /metric\(t\.handled,handledValue,'handled'\)/);
+  assert.match(result.body, /metric\([^\n]+handledValue,'handled'\)/);
   assert.match(result.body, /عرض بقية الأولويات/);
   assert.match(result.body, /Show top 3 only/);
   assert.match(result.body, /aria-expanded/);

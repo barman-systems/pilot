@@ -36,10 +36,10 @@ const script=String.raw`(()=>{
 
   function copy(){return ar()?{
     title:'جهّز دَبِّر ليعمل عنك',readyTitle:'اكتمل الإعداد الأساسي',desc:'راجع ما اكتمل من إعداد نشاطك وما يحتاج خطوة منك.',readyDesc:'اكتملت معلومات النشاط وربط واتساب وإعداد الردود. تابع النتائج الفعلية وما يحتاج قرارك من أولويات اليوم.',score:'اكتمال الإعداد',next:'الخطوة الأفضل الآن',proof:'نشاطك بالأرقام',intentTitle:'ماذا تريد من دَبِّر الآن؟',readError:'تعذر التحقق من إعداد هذا النشاط الآن. أعد المحاولة؛ لم نغيّر إعداداتك.',retry:'إعادة المحاولة',
-    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
+    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',firstAppointment:'سجّل أول موعد',firstAppointmentBody:'أضف موعد عميل ليظهر في جدول نشاطك. يمكنك إكمال معلومات النشاط وربط واتساب لاحقًا.',firstAppointmentAction:'إضافة أول موعد',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
   }:{
     title:'Get DABBIR working for you',readyTitle:'Basic setup is complete',desc:'Review what is set up for your business and what needs your next step.',readyDesc:'Business information, WhatsApp and reply configuration are set up. Review actual outcomes and decisions in today’s priorities.',score:'Setup completion',next:'Best next step',proof:'Business counts',intentTitle:'What do you want DABBIR to do now?',readError:'We could not verify this business’s setup. Try again; your settings were not changed.',retry:'Try again',
-    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
+    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',firstAppointment:'Record your first appointment',firstAppointmentBody:'Add a customer appointment to your business schedule. You can finish business information and connect WhatsApp later.',firstAppointmentAction:'Add first appointment',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
   }}
 
   function profileReady(){
@@ -93,14 +93,35 @@ const script=String.raw`(()=>{
     return panel;
   }
 
+  function firstWorkStep(){
+    // These activities use the existing manual appointment flow; specialized
+    // salon, car-wash and commerce setup retain their own prerequisites.
+    const type=String(workspace?.business?.business_type||'').toLowerCase();
+    if(!['clinic','services','real_estate','creator','other'].includes(type))return null;
+    if(workspace?.membership?.role!=='owner'||exactMetric('customers')!==0)return null;
+    const control=q('#newApptBtn');
+    if(!control||control.disabled||typeof control.click!=='function')return null;
+    const t=copy();
+    return {title:t.firstAppointment,body:t.firstAppointmentBody,action:t.firstAppointmentAction,screen:'appointments',control:'#newApptBtn'};
+  }
+
+  function bindNextStep(next,id){
+    const button=q('#daNextAction');
+    if(button)button.onclick=()=>{
+      if(workspace?.business?.id!==id)return;
+      openScreen(next.screen);
+      if(next.control){const control=q(next.control);if(control&&!control.disabled)control.click()}
+      if(next.target)setTimeout(()=>q(next.target)?.scrollIntoView({behavior:'smooth',block:'start'}),30);
+    };
+  }
+
   function nextStep(){
     const t=copy();
+    const first=firstWorkStep();if(first)return first;
     if(!profileReady())return {title:t.profileTodo,body:t.profileBody,action:t.profileAction,screen:'settings'};
     if(!whatsappLinked())return {title:t.channelTodo,body:t.channelBody,action:t.channelAction,screen:'integrations'};
     if(!whatsappReady())return {title:t.channelVerifyTodo,body:t.channelVerifyBody,action:t.channelVerifyAction,screen:'integrations'};
     if(!aiReady())return {title:t.aiTodo,body:t.aiBody,action:t.aiAction,screen:'integrations'};
-    const chats=exactMetric('active_chats');
-    if(chats===0)return {title:t.testTodo,body:t.testBody,action:t.testAction,screen:'conversations'};
     return {title:t.priorities,body:t.readyDesc,action:t.priorities,screen:'dashboard',target:'#dabbirActionCenter'};
   }
 
@@ -121,6 +142,13 @@ const script=String.raw`(()=>{
     const panel=ensure();if(!panel)return;
     if(!id){panel.innerHTML='';return}
     const t=copy();
+    const first=firstWorkStep();
+    if(first&&(loading||!loadedAt||loadError)){
+      panel.innerHTML='<div class="daHead"><div><h2>'+esc(first.title)+'</h2><p>'+esc(first.body)+'</p></div></div><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(first.action)+'</button></div><div class="daLoading" role="status">'+esc(loadError?t.readError:t.loading)+'</div>'+(loadError?'<div class="daActions"><button type="button" class="daSecondary" id="daRetry">'+esc(t.retry)+'</button></div>':'');
+      bindNextStep(first,id);
+      const retry=q('#daRetry');if(retry)retry.onclick=()=>load(true);
+      return;
+    }
     if(loading||!loadedAt){panel.innerHTML='<div class="daLoading" role="status">'+esc(t.loading)+'</div>';return}
     if(loadError){
       panel.innerHTML='<div class="daLoading" role="status">'+esc(t.readError)+'</div><div class="daActions"><button type="button" class="daSecondary" id="daRetry">'+esc(t.retry)+'</button></div>';
@@ -139,7 +167,7 @@ const script=String.raw`(()=>{
     const step=(label,value)=>'<span class="daStep '+(value?'done':'')+'">'+esc(label)+'</span>';
     const intentButtons=intents().map(item=>'<button type="button" class="daIntent" data-da-screen="'+esc(item.screen)+'">'+esc(item.label)+'</button>').join('');
     panel.innerHTML='<div class="daHead"><div><h2>'+esc(ready?t.readyTitle:t.title)+'</h2><p>'+esc(ready?t.readyDesc:t.desc)+'</p></div><div class="daScore"><strong>'+score+'%</strong><span>'+esc(t.score)+'</span></div></div><div class="daProgress" aria-label="'+esc(t.score)+' '+score+'%"><i style="width:'+score+'%"></i></div><div class="daGrid"><div class="daNext"><span class="daLabel">'+esc(t.next)+'</span><b>'+esc(next.title)+'</b><p>'+esc(next.body)+'</p><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(next.action)+'</button><button type="button" class="daSecondary" id="daPriorities">'+esc(t.priorities)+'</button></div><div class="daSteps">'+step(t.profile,states[0])+step(t.channel,states[1])+step(t.ai,states[2])+'</div></div><div class="daProof"><span class="daLabel">'+esc(t.proof)+'</span><div class="daProofGrid">'+metric(customers,t.customers)+metric(chats,t.chats)+metric(aiReplies,t.aiReplies)+'</div></div></div><div class="daIntentWrap"><div class="daIntentTitle">'+esc(t.intentTitle)+'</div><div class="daIntentGrid">'+intentButtons+'</div></div>';
-    const nextButton=q('#daNextAction');if(nextButton)nextButton.onclick=()=>{openScreen(next.screen);if(next.target)setTimeout(()=>q(next.target)?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
+    bindNextStep(next,id);
     const priorities=q('#daPriorities');if(priorities)priorities.onclick=()=>{openScreen('dashboard');setTimeout(()=>q('#dabbirActionCenter')?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
     panel.querySelectorAll('[data-da-screen]').forEach(button=>button.onclick=()=>openScreen(button.dataset.daScreen));
   }

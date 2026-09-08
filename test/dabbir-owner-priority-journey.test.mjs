@@ -33,7 +33,7 @@ function browser() {
 }
 
 function priorities(business='A',count=12,handled=7) {
-  return {ok:true,business_id:business,status:'needs_attention',handled:{available:handled!==null,verified_autonomous_today:handled},metrics:{urgent:count,warning:0},brief:{ar:'أولويات '+business,en:'Priorities '+business},items:Array.from({length:count},(_,i)=>({id:'conversation:'+business+i,type:'conversation',target:'conversations',entity_id:business+i,title_ar:'عميل '+business+i,title_en:'Customer '+business+i,severity:'critical',due_at:'2026-09-08T08:00:00Z'}))};
+  return {ok:true,business_id:business,branch_scope:{mode:'all',branch_id:null},status:'needs_attention',handled:{available:handled!==null,verified_autonomous_today:handled},metrics:{urgent:count,warning:0},brief:{ar:'أولويات '+business,en:'Priorities '+business},items:Array.from({length:count},(_,i)=>({id:'conversation:'+business+i,type:'conversation',target:'conversations',entity_id:business+i,title_ar:'عميل '+business+i,title_en:'Customer '+business+i,severity:'critical',due_at:'2026-09-08T08:00:00Z'}))};
 }
 
 test('owner expands every priority beyond eight and keeps verified DABBIR work visible',async()=>{
@@ -155,4 +155,49 @@ test('the same business under a different owner session cannot accept old priori
   assert.equal(b.nodes.get('#dacItems').children.length,0);
   b.complete(b.requests[1],priorities('A',1));await next;
   assert.equal(b.nodes.get('#dacItems').children.length,1);
+});
+
+test('branch changes request the selected branch and reject a late response from the previous branch',async()=>{
+  const b=browser();
+  const scope=id=>({mode:'selected',branch_id:id});
+  b.context.workspace.branch_scope=scope('first');
+  const first=b.center.refresh();
+  assert.match(b.requests[0].url,/branch_id=first/);
+  b.context.workspace.branch_scope=scope('second');
+  const second=b.center.refresh();
+  assert.match(b.requests[1].url,/branch_id=second/);
+  const data={...priorities('A',1),branch_scope:scope('second')};
+  data.items[0].title_ar='عميل الفرع الثاني';data.items[0].scope='business';
+  b.complete(b.requests[1],data);await second;
+  b.complete(b.requests[0],{...priorities(),branch_scope:scope('first')});await first;
+  assert.match(b.nodes.get('#dacItems').textContent,/عميل الفرع الثاني/);
+  assert.match(b.nodes.get('#dacItems').textContent,/على مستوى النشاط/);
+  assert.match(b.nodes.get('#dacMetrics').textContent,/في النشاط/);
+});
+
+test('wrong or missing branch scope is an error, never a cacheable dashboard',async()=>{
+  for(const branch_scope of [undefined,{mode:'all',branch_id:null},{mode:'selected',branch_id:'wrong'}]){
+    const b=browser();b.context.workspace.branch_scope={mode:'selected',branch_id:'expected'};
+    const pending=b.center.refresh();b.complete(b.requests[0],{...priorities(),branch_scope});await pending;
+    assert.equal(b.nodes.get('#dabbirActionCenter').dataset.state,'error');
+    assert.equal(b.context.workspace.owner_action_center,undefined);
+    assert.equal(b.nodes.get('#dacMetrics').children.length,0);
+  }
+});
+
+test('an old unresolved appointment loads its review day and opens the exact editor',async()=>{
+  const b=browser();let view,loaded=false;const opened=[];
+  b.context.__dabbirBookingReader={find:()=>loaded?{id:'old',business_id:'A'}:null,ensureRecord:async(w,id)=>{assert.equal(id,'old');assert.equal(view.scope,'review');assert.equal(view.followToday,false);loaded=true}};
+  b.context.__dabbirBookingLifecycle={dayKey:()=> '2026-09-01',setView:(w,next)=>{view=next},inContext:()=>true};
+  b.context.__dabbirAppointmentManagement={open:id=>opened.push(id)};
+  assert.equal(await b.center.open({type:'appointment',entity_id:'old',due_at:'2026-09-01T08:00:00Z',lifecycle_scope:'review'},'A'),true);
+  assert.equal(view.day,'2026-09-01');assert.deepEqual(opened,['old']);
+});
+
+test('conversation drill-down validates the selected branch in both query and response',async()=>{
+  const b=browser();b.context.workspace.branch_scope={mode:'selected',branch_id:'branch'};
+  let query;
+  b.context.api=async url=>{query=url;return {r:{ok:true},j:{...b.workspace('A'),ok:true,branch_scope:{mode:'selected',branch_id:'wrong'},selected_conversation_id:'A0',conversations:[{id:'A0',business_id:'A',branch_id:'wrong'}]}}};
+  assert.equal(await b.center.open(priorities().items[0],'A'),false);
+  assert.match(query,/branch_id=branch/);assert.deepEqual(b.routes,[]);
 });

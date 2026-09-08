@@ -168,22 +168,33 @@ async function listAppointments(req,ctx){
   if(!businessId)throw Object.assign(new Error('BUSINESS_ID_REQUIRED'),{status:400});
   const membership=membershipFor(ctx.memberships,businessId);
   if(!membership)throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'),{status:403});
+  const recordValues=new URL(String(req?.url||'/'),'https://dabbir.invalid').searchParams.getAll('appointment_id');
+  const appointmentId=recordValues.length===1?safeId(recordValues[0]):null;
+  if(recordValues.length&&!appointmentId)throw Object.assign(new Error('INVALID_APPOINTMENT_ID'),{status:400});
   const scope=await resolveBranchScope({businessId,membership,userId:ctx.user.id,requestedBranch:singleQueryValue(req,'branch_id'),fetchRows:(path,code)=>rest(ctx.token,path,{},code)});
   const business=(await rest(ctx.token,'dabbir_businesses?select=id,timezone,country_code,locale&id=eq.'+encodeURIComponent(businessId)+'&limit=1'))?.[0];
   if(!business)throw Object.assign(new Error('BUSINESS_NOT_FOUND'),{status:404});
   const offsetText=singleQueryValue(req,'offset')||'0';
   if(!/^\d{1,7}$/.test(offsetText))throw Object.assign(new Error('INVALID_BOOKING_OFFSET'),{status:400});
-  const offset=Number(offsetText),limit=50,now=Date.now(),view=singleQueryValue(req,'scope')||'current';
+  const offset=Number(offsetText),limit=appointmentId?1:50,now=Date.now(),view=singleQueryValue(req,'scope')||'current';
+  if(appointmentId&&offset!==0)throw Object.assign(new Error('INVALID_BOOKING_OFFSET'),{status:400});
   const filter=bookingQuery({business,scope:view,from:singleQueryValue(req,'from'),to:singleQueryValue(req,'to'),now});
   const fields='id,business_id,branch_id,customer_id,service_id,worker_id,starts_at,ends_at,status,simulated,created_at,updated_at,quoted_price_aed,discount_aed,payment_status,notes,booking_source';
-  const path='dabbir_appointments?select='+fields+'&business_id=eq.'+encodeURIComponent(businessId)+branchFilter(scope)+'&'+filter+'&order=starts_at.'+(view==='current'?'asc':'desc')+'.nullslast,id.asc&limit='+limit+'&offset='+offset;
+  const recordFilter=appointmentId?'&id=eq.'+encodeURIComponent(appointmentId):'';
+  const path='dabbir_appointments?select='+fields+'&business_id=eq.'+encodeURIComponent(businessId)+branchFilter(scope)+recordFilter+'&'+filter+'&order=starts_at.'+(view==='current'?'asc':'desc')+'.nullslast,id.asc&limit='+limit+'&offset='+offset;
   const response=await supabaseRest(path,ctx.token,{headers:{prefer:'count=exact'}});
   const contentRange=response.headers.get('content-range')||'';
   const appointments=await readData(response,'APPOINTMENTS_LOOKUP_FAILED');
   if(!Array.isArray(appointments))throw Object.assign(new Error('APPOINTMENTS_LOOKUP_FAILED'),{status:502});
+  if(appointmentId){
+    if(!appointments.length)throw Object.assign(new Error('APPOINTMENT_NOT_FOUND'),{status:404});
+    const row=appointments[0];
+    if(appointments.length!==1||row?.id!==appointmentId||row.business_id!==businessId||(scope.mode==='selected'&&row.branch_id!==scope.branch_id))throw Object.assign(new Error('BOOKING_CONTEXT_MISMATCH'),{status:502});
+  }
   const countPart=contentRange.split('/')[1],total=/^\d+$/.test(countPart||'')?Number(countPart):null;
   const customerIds=[...new Set(appointments.map(row=>safeId(row.customer_id)).filter(Boolean))];
   const customers=customerIds.length?await rest(ctx.token,'dabbir_customers?select=id,display_name&business_id=eq.'+encodeURIComponent(businessId)+'&id=in.('+customerIds.join(',')+')'):[];
+  if(appointmentId)return {ok:true,business_id:businessId,branch_id:scope.branch_id,scope:view,appointment:appointments[0],customers,evaluated_at:new Date(now).toISOString()};
   return {ok:true,business_id:businessId,branch_id:scope.branch_id,scope:view,appointments,customers,total,next_offset:offset+appointments.length,has_more:total===null?appointments.length===limit:offset+appointments.length<total,evaluated_at:new Date(now).toISOString()};
 }
 

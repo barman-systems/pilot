@@ -41,7 +41,7 @@ export function fixtureActionCenter(key='a',mode='normal'){
     detail_ar:index===0?'نص عربي طويل للتحقق من الالتفاف: العميل ينتظر تأكيد موعد الخدمة في مدينة أبوظبي مع توضيح مدة العمل واسم الفريق المكلف، ويريد معرفة الخطوة التالية قبل تأكيد حضوره.':'افتح المحادثة المقصودة مباشرة؛ هذا سجل صناعي للتحقق فقط.',
     detail_en:'Open this exact synthetic conversation and verify the selected record after navigation.',
   }));
-  return {ok:true,business_id:w.business.id,status:items.length?'needs_attention':'clear',
+  return {ok:true,business_id:w.business.id,branch_scope:{mode:'all',branch_id:null},status:items.length?'needs_attention':'clear',
     brief:{ar:items.length?'سبع أولويات صناعية لاختبار العرض والوصول إلى السجل الصحيح.':'لا توجد أولويات في السيناريو الصناعي الحالي.',en:items.length?'Seven synthetic priorities for layout and record-navigation verification.':'No priorities in this synthetic scenario.'},
     handled:{available:true,verified_autonomous_today:key==='b'?2:4},
     metrics:{urgent:items.filter(x=>x.severity==='critical').length,warning:items.filter(x=>x.severity==='warning').length},items};

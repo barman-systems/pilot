@@ -1210,11 +1210,16 @@
     syncAuthorities();
     appointmentForm.querySelector('#adaptiveApptFields')?.remove();
     const wrap=document.createElement('div');wrap.id='adaptiveApptFields';
+    const optional=document.createElement('details');optional.id='adaptiveApptDetails';optional.className='field';
+    const summary=document.createElement('summary');summary.textContent=isArabic()?'تفاصيل الموعد (اختياري)':'Appointment details (optional)';
+    summary.style.cssText='cursor:pointer;min-height:44px;padding-block:12px;font-size:14px';
+    optional.append(summary);
     const fields=appointmentFields[businessType()]||appointmentFields.other;
     const geo=businessGeo();
     for(const [key,type,arLabel,enLabel] of fields){
       const field=document.createElement('div');field.className='field';
       const label=document.createElement('label');label.textContent=fieldLabel(key,arLabel,enLabel);
+      if(key==='phone')label.textContent+=isArabic()?' (اختياري)':' (optional)';
       let input;
       if(type==='select'){
         input=document.createElement('select');
@@ -1227,8 +1232,12 @@
         if(type==='tel'){input.maxLength=40;input.placeholder=(geo.prefix||'+')+' …';input.inputMode='tel';}
         if(type==='number'){input.min='0';input.step=key==='price'?(geo.minorUnits===0?'1':'0.'+'0'.repeat(Math.max(0,geo.minorUnits-1))+'1'):'5';}
       }
-      input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
+      input.id='apptDetail-'+key;label.htmlFor=input.id;
+      if(type==='tel'||type==='number')input.dir='ltr';
+      input.dataset.apptKey=key;field.append(label,input);
+      if(key==='phone')wrap.append(field);else optional.append(field);
     }
+    wrap.append(optional);
     appointmentTime.closest('.field')?.after(wrap);
   }
 
@@ -1291,9 +1300,34 @@
 
   if(appointmentForm&&!appointmentForm.dataset.dabbirBusinessTime){
     appointmentForm.dataset.dabbirBusinessTime='v4-market';
+    let appointmentSubmitting=false;
+    let formRevision=0;
+    const formObserver=appointmentModal?new MutationObserver(records=>{formRevision+=records.length;}):null;
+    formObserver?.observe(appointmentModal,{attributes:true,attributeFilter:['class']});
+    for(const eventName of ['input','change','reset'])appointmentForm.addEventListener(eventName,()=>{formRevision++;});
+    const appointmentIntents=new Map();
+    function currentContext(){
+      const w=typeof workspace!=='undefined'?workspace:null;
+      const scope=window.dabbirBranchContext?.scope?.()||w?.branch_scope||null;
+      const actorId=String(w?.user?.id||'');
+      const businessId=w?.business?.id||null;
+      const branchId=scope?.mode==='all'?'all':scope?.branch_id||null;
+      return {actorId,businessId,branchId,scope,key:JSON.stringify([actorId,businessId,branchId||'all',scope?.business_id||businessId])};
+    }
+    function draftState(){
+      formRevision+=formObserver?.takeRecords().length||0;
+      return JSON.stringify([formRevision,appointmentModal?.classList.contains('open')===true,
+        document.querySelector('#apptCustomer')?.value,document.querySelector('#apptTime')?.value,
+        [...appointmentForm.querySelectorAll('[data-appt-key]')].map(node=>[node.dataset.apptKey,node.value])]);
+    }
+    function saveError(payload){
+      const message=isArabic()?payload?.message_ar:payload?.message_en;
+      return typeof message==='string'&&message.length<=300?message:(isArabic()?'تعذر تأكيد حفظ الموعد. حاول مجددًا من النموذج نفسه.':'The save could not be confirmed. Retry from the same form.');
+    }
     appointmentForm.addEventListener('submit',async event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
+      if(appointmentSubmitting)return;
       const input=document.querySelector('#apptTime');
       const customer=document.querySelector('#apptCustomer');
       const startsAt=businessLocalToIso(input&&input.value);
@@ -1301,32 +1335,81 @@
         try{if(typeof toast==='function')toast(typeof T==='function'?T().invalid:'Invalid time')}catch{}
         return;
       }
+      const button=document.querySelector('#saveApptBtn');
+      const idleLabel=button?.textContent;
+      const wasDisabled=button?.disabled;
+      const previousBusy=appointmentForm.getAttribute('aria-busy');
+      let stillCurrent=null,busyLabel=null;
+      appointmentSubmitting=true;
+      appointmentForm.setAttribute('aria-busy','true');
       try{
-        const businessId=typeof workspace!=='undefined'&&workspace&&workspace.business?workspace.business.id:null;
+        if(button){
+          button.disabled=true;
+          busyLabel=typeof T==='function'?T().savingWorking:(isArabic()?'جارٍ الحفظ…':'Saving…');
+          button.textContent=busyLabel;
+        }
+        const context=currentContext();
+        const businessId=context.businessId;
         if(!businessId)return;
-        const details={};
-        appointmentForm.querySelectorAll('[data-appt-key]').forEach(node=>{details[node.dataset.apptKey]=node.value});
-        const response=await fetch('/api/adaptive-appointment',{
-          method:'POST',cache:'no-store',headers:{'content-type':'application/json'},
-          body:JSON.stringify({
-            business_id:businessId,
-            business_type:businessType(),
-            customer_name:String(customer&&customer.value||'').trim(),
-            starts_at:startsAt,
-            details,
-          })
-        });
-        const payload=await response.json().catch(()=>({}));
-        if(!response.ok||!payload.ok){
-          try{if(typeof toast==='function')toast(payload.error||(typeof T==='function'?T().invalid:'Save failed'))}catch{}
+        const branchScope=context.scope;
+        if(branchScope?.business_id&&branchScope.business_id!==businessId){
+          try{if(typeof toast==='function')toast(isArabic()?'تغيّر النشاط. حدّث الصفحة واختر الفرع قبل الحفظ.':'The business changed. Refresh the page and select the branch before saving.')}catch{}
           return;
         }
+        const submittedDraft=draftState();
+        const sameContext=()=>currentContext().key===context.key&&document.querySelector('#appointmentForm')===appointmentForm&&document.querySelector('#appointmentModal')===appointmentModal;
+        stillCurrent=()=>sameContext()&&draftState()===submittedDraft;
+        const details={};
+        appointmentForm.querySelectorAll('[data-appt-key]').forEach(node=>{details[node.dataset.apptKey]=node.value});
+        const booking={
+          business_id:businessId,
+          branch_id:context.branchId,
+          business_type:businessType(),
+          customer_name:String(customer&&customer.value||'').trim(),
+          starts_at:startsAt,
+          details,
+        };
+        const intent=JSON.stringify({actor_id:context.actorId,...booking});
+        let requestKey=appointmentIntents.get(intent);
+        if(!requestKey){
+          requestKey=window.crypto?.randomUUID?.();
+          if(!requestKey){
+            try{if(typeof toast==='function')toast(isArabic()?'تعذر تجهيز طلب الحفظ. حدّث الصفحة وحاول مجددًا.':'The save request could not be prepared. Refresh the page and try again.')}catch{}
+            return;
+          }
+          appointmentIntents.set(intent,requestKey);
+        }
+        const response=await fetch('/api/adaptive-appointment',{
+          method:'POST',cache:'no-store',headers:{'content-type':'application/json','x-dabbir-client':'web'},
+          body:JSON.stringify({...booking,idempotency_key:requestKey})
+        });
+        const payload=await response.json().catch(()=>({}));
+        // A late result belongs to the original draft. Keep its request key so
+        // returning to that draft can read back the saved result without a write.
+        if(!stillCurrent())return;
+        if(!response.ok||!payload?.ok||!payload.appointment?.id){
+          try{if(typeof toast==='function')toast(saveError(payload))}catch{}
+          return;
+        }
+        appointmentIntents.delete(intent);
         document.querySelector('#appointmentModal')?.classList.remove('open');
         appointmentForm.reset();
         try{if(typeof toast==='function')toast(typeof T==='function'?T().saved:'Saved')}catch{}
-        if(typeof loadRuntime==='function')await loadRuntime(businessId,typeof selectedConversationId!=='undefined'?selectedConversationId:null);
+        const refreshedDraft=draftState();
+        const conversationId=typeof selectedConversationId!=='undefined'?selectedConversationId:null;
+        stillCurrent=()=>sameContext()&&draftState()===refreshedDraft&&(typeof selectedConversationId!=='undefined'?selectedConversationId:null)===conversationId;
+        try{
+          if(typeof loadRuntime==='function')await loadRuntime(businessId,conversationId,{isCurrent:stillCurrent});
+        }catch{
+          try{if(stillCurrent()&&typeof toast==='function')toast(isArabic()?'تم حفظ الموعد، لكن تعذر تحديث القائمة. حدّث الصفحة لعرضه.':'The appointment was saved, but the list could not refresh. Refresh the page to view it.')}catch{}
+        }
       }catch{
-        try{if(typeof toast==='function')toast(typeof T==='function'?T().invalid:'Save failed')}catch{}
+        try{if((!stillCurrent||stillCurrent())&&typeof toast==='function')toast(saveError())}catch{}
+      }finally{
+        appointmentSubmitting=false;
+        if(button){button.disabled=wasDisabled;if(button.textContent===busyLabel)button.textContent=idleLabel;}
+        if(previousBusy===null)appointmentForm.removeAttribute('aria-busy');
+        else appointmentForm.setAttribute('aria-busy',previousBusy);
       }
     },true);
   }
@@ -1383,7 +1466,7 @@
   async function deleteBusiness(businessId){var t=text();if(!window.confirm(t.deleteBusinessConfirm))return;var out=await req('/api/business-portfolio',{method:'POST',body:JSON.stringify({action:'delete_business',business_id:businessId})});if(!out.r.ok||!out.j.ok){tell(out.j.error==='CANCEL_SUBSCRIPTION_BEFORE_BUSINESS_DELETE'?t.billingDeleteBlocked:(out.j.error||t.failed));return}var wasCurrent=businessId===activeId();portfolio=null;await getPortfolio(true);tell(t.businessDeleted);if(wasCurrent){var next=(portfolio?.businesses||[])[0]?.id||null;if(next){try{localStorage.setItem(ACTIVE_KEY,next)}catch{}if(typeof loadRuntime==='function')await loadRuntime(next)}else{try{localStorage.removeItem(ACTIVE_KEY)}catch{};window.location.reload();return}}refresh()}
 
   async function restore(){var saved=null;try{saved=localStorage.getItem(ACTIVE_KEY)}catch{}if(!saved||saved===activeId())return;if((portfolio&&portfolio.businesses||[]).some(function(b){return b.id===saved}))await switchBusiness(saved)}
-  function patchRuntime(){try{if(typeof loadRuntime!=='function'||loadRuntime.__dbw)return;var original=loadRuntime;var wrapped=async function(businessId,conversationId){var result=await original(businessId,conversationId);var id=activeId();if(id){try{localStorage.setItem(ACTIVE_KEY,id)}catch{}}setTimeout(function(){renderSwitch();renderPortfolio()},0);return result};wrapped.__dbw=true;loadRuntime=wrapped}catch{}}
+  function patchRuntime(){try{if(typeof loadRuntime!=='function'||loadRuntime.__dbw)return;var original=loadRuntime;var wrapped=async function(businessId,conversationId){var result=await original.apply(this,arguments);var id=activeId();if(id){try{localStorage.setItem(ACTIVE_KEY,id)}catch{}}setTimeout(function(){renderSwitch();renderPortfolio()},0);return result};wrapped.__dbw=true;loadRuntime=wrapped}catch{}}
   async function init(){addDictionary();ensureEntry();ensureSwitch();ensureScreen();patchRuntime();await getPortfolio(true);await restore();refresh()}
   document.addEventListener('click',function(ev){if(menuOpen&&!ev.target?.closest?.('#dbwSwitch')){menuOpen=false;renderSwitch()}},true);
   new MutationObserver(function(){requestAnimationFrame(function(){ensureEntry();ensureSwitch()})}).observe(document.body,{childList:true,subtree:true});
@@ -2712,12 +2795,14 @@
 })();const style=document.createElement('style');style.textContent='.dabbirBookingScopes{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.dabbirBookingScopes button{min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel,#15181b);color:inherit}.dabbirBookingScopes button[aria-pressed="true"]{border-color:var(--accent,#6366f1);font-weight:800}.dabbirBookingScopeHint{color:var(--muted);font-size:11px;line-height:1.6;margin:8px 0}';document.head.append(style);const tick=()=>{if(!document.hidden&&document.querySelector('#screen-appointments.active'))window.dispatchEvent(new Event('dabbir:booking-view-changed'))};setInterval(tick,60000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);})();
 (()=>{if(!window.__dabbirBookingReader)window.__dabbirBookingReader=(function installBookingReader(lifecycle) {
   const cache=new Map();
+  const recordRequests=new Map();
+  const validId=value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''));
   const emit=()=>window.dispatchEvent(new Event('dabbir:booking-data-changed'));
   const key=w=>lifecycle.contextKey(w)+'|'+JSON.stringify(lifecycle.getView(w));
-  function entry(w) { const k=key(w); if(!cache.has(k))cache.set(k,{rows:[],customers:[],ready:false,loading:false,error:null,has_more:false,next_offset:0,total:null,loadedAt:0,epoch:0}); return cache.get(k); }
+  function entry(w) { const k=key(w); if(!cache.has(k))cache.set(k,{rows:[],customers:[],records:new Map(),recordCustomers:new Map(),ready:false,loading:false,error:null,has_more:false,next_offset:0,total:null,loadedAt:0,epoch:0}); return cache.get(k); }
   async function ensure(w, more=false, force=false) {
     if(!w?.business?.id)return;
-    const item=entry(w);
+    const viewKey=key(w),item=entry(w);
     if(item.loading||(!force&&!more&&item.ready&&Date.now()-item.loadedAt<60000)||(!force&&!more&&item.error&&Date.now()-item.loadedAt<60000))return;
     const state=lifecycle.getView(w),range=lifecycle.period(state),epoch=item.epoch;
     const params=new URLSearchParams({business_id:w.business.id,scope:state.scope,offset:String(more?item.next_offset:0)});
@@ -2734,9 +2819,49 @@
       const merge=(a,b)=>[...new Map([...a,...b].map(row=>[row.id,row])).values()];
       item.rows=merge(more?item.rows:[],body.appointments);
       item.customers=merge(more?item.customers:[],body.customers||[]);
+      // A successful refresh supersedes direct reads, including ones still in
+      // flight. Pagination supersedes only the records in its accepted page.
+      // Failed reads retain the last verified data and never advance this fence.
+      item.epoch++;
+      for(const requestKey of recordRequests.keys())if(requestKey.startsWith(viewKey+'|record:'))recordRequests.delete(requestKey);
+      if(!more){item.records.clear();item.recordCustomers.clear()}
+      else {
+        for(const row of body.appointments)item.records.delete(row.id);
+        for(const customer of body.customers||[])item.recordCustomers.delete(customer.id);
+      }
       item.ready=true;item.has_more=body.has_more;item.next_offset=body.next_offset;item.total=body.total;
     } catch(error) { if(item.epoch===epoch)item.error=String(error?.message||error); }
     finally { item.loading=false;item.loadedAt=Date.now();emit(); }
+  }
+  function ensureRecord(w,id) {
+    if(!validId(id)||!validId(w?.business?.id))return Promise.reject(new Error('INVALID_APPOINTMENT_ID'));
+    const viewKey=key(w),requestKey=viewKey+'|record:'+id,item=entry(w),epoch=item.epoch;
+    if(recordRequests.has(requestKey))return recordRequests.get(requestKey);
+    const businessId=w.business.id,branchId=w.branch_scope?.branch_id||null;
+    const state=lifecycle.getView(w),range=lifecycle.period(state);
+    const context={business:{...w.business},branch_scope:{...w.branch_scope}};
+    const current=()=>cache.get(viewKey)===item&&item.epoch===epoch&&key(w)===viewKey;
+    const params=new URLSearchParams({business_id:businessId,appointment_id:id,scope:state.scope});
+    if(branchId)params.set('branch_id',branchId);
+    else if(w.branch_scope?.mode==='all')params.set('branch_id','all');
+    if(range){params.set('from',range.from);params.set('to',range.to)}
+    const request=(async()=>{
+      const response=await fetch('/api/appointment-management?'+params,{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+      const body=await response.json();
+      if(!current())throw new Error('BOOKING_CONTEXT_CHANGED');
+      if(!response.ok||!body?.ok)throw new Error(body?.error||'BOOKING_READ_FAILED');
+      const row=body.appointment;
+      if(body.business_id!==businessId||body.branch_id!==branchId||body.scope!==state.scope||row?.id!==id||row?.business_id!==businessId||!lifecycle.inContext(row,context)||!Array.isArray(body.customers))throw new Error('BOOKING_CONTEXT_MISMATCH');
+      // A direct record must not advance or replace the paginated collection.
+      item.records.set(id,row);
+      for(const customer of body.customers)if(customer.id===row.customer_id)item.recordCustomers.set(customer.id,customer);
+      emit();return row;
+    })();
+    recordRequests.set(requestKey,request);
+    // Rejections are passed to the caller; no failed read is cached as success.
+    const cleanup=()=>{if(recordRequests.get(requestKey)===request)recordRequests.delete(requestKey)};
+    request.then(cleanup,cleanup);
+    return request;
   }
   function rows(w) {
     const item=entry(w),state=lifecycle.getView(w);
@@ -2755,11 +2880,14 @@
   function invalidate(w) {
     const prefix=lifecycle.contextKey(w)+'|';
     for(const [k,item] of cache)if(k.startsWith(prefix)){item.epoch++;cache.delete(k)}
+    for(const k of recordRequests.keys())if(k.startsWith(prefix))recordRequests.delete(k);
     emit();
   }
-  const customer=(w,id)=>entry(w).customers.find(row=>row.id===id);
-  const find=(w,id)=>entry(w).rows.find(row=>row.id===id)||(w.appointments||[]).find(row=>row.id===id);
-  return {entry,ensure,rows,status,bind,invalidate,customer,find};
+  const customer=(w,id)=>entry(w).recordCustomers.get(id)||entry(w).customers.find(row=>row.id===id);
+  // Once the scoped reader is ready, a stale workspace snapshot cannot restore
+  // a booking absent from its cache. The caller can request that exact ID again.
+  const find=(w,id)=>{const item=entry(w);return item.records.get(id)||item.rows.find(row=>row.id===id)||(!item.ready?(w.appointments||[]).find(row=>row.id===id):undefined)};
+  return {entry,ensure,ensureRecord,rows,status,bind,invalidate,customer,find};
 })(window.__dabbirBookingLifecycle)})();
 (()=>{
   if(window.__dabbirActivityProfile)return;
@@ -3255,16 +3383,16 @@
   }
   function businessType(){return String(ws()?.business?.business_type||'').toLowerCase()}
   function genericCalendarEnabled(){return !window.__dabbirActivityProfile?.ownsCalendar&&!['store','creator','real_estate','salon'].includes(businessType())}
-  function calendarDayKey(value){const raw=dubaiLocalMinute(value instanceof Date?value:new Date(value));return raw.slice(0,10)}
-  function calendarWallDate(value){const key=calendarDayKey(value);const d=new Date(key+'T12:00:00');return Number.isNaN(d.getTime())?new Date(value):d}
-  function startDay(value){const d=calendarWallDate(value);d.setHours(12,0,0,0);return d}
-  function addDays(value,n){const d=new Date(value);d.setDate(d.getDate()+n);return d}
-  function startWeek(value){const d=startDay(value),dow=(d.getDay()+6)%7;return addDays(d,-dow)}
-  function startMonth(value){const d=startDay(value);d.setDate(1);return d}
+  function calendarDayKey(value){return lifecycle.dayKey(value,ws()?.business)}
+  function calendarWallDate(value){return lifecycle.wallDate(calendarDayKey(value))}
+  function startDay(value){return calendarWallDate(value)}
+  function addDays(value,n){const d=new Date(value);d.setUTCDate(d.getUTCDate()+n);return d}
+  function startWeek(value){const d=startDay(value),dow=(d.getUTCDay()+6)%7;return addDays(d,-dow)}
+  function startMonth(value){const d=startDay(value);d.setUTCDate(1);return d}
   function sameDay(a,b){return calendarDayKey(a)===calendarDayKey(b)}
-  function dayLabel(value,weekday=true){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{weekday:weekday?'short':undefined,month:'short',day:'numeric'}).format(value)}catch{return calendarDayKey(value)}}
-  function monthLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{month:'long',year:'numeric'}).format(value)}catch{return calendarDayKey(value).slice(0,7)}}
-  function timeLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
+  function dayLabel(value,weekday=true){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:'UTC',weekday:weekday?'short':undefined,month:'short',day:'numeric'}).format(value)}catch{return calendarDayKey(value)}}
+  function monthLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:'UTC',month:'long',year:'numeric'}).format(value)}catch{return calendarDayKey(value).slice(0,7)}}
+  function timeLabel(value){try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{timeZone:lifecycle.timezone(ws()?.business),hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return ''}}
   function activeRows(){return reader.rows(ws())}
   function eventClass(a){const s=String(a.status||'requested').toLowerCase();return s==='completed'?' completed':(s==='cancelled'||s==='canceled'?' cancelled':'')}
   function eventButton(a,compact=false){const name=customerName(a.customer_id),meta=timeLabel(a.starts_at)+' · '+statusLabel(a.status);return '<button type="button" class="'+(compact?'dabbirGenericMonthEvent':'dabbirGenericEvent'+eventClass(a))+'" data-calendar-appt="'+esc(a.id)+'" title="'+esc(fmt(a.starts_at))+'"><b>'+esc(name)+'</b>'+(compact?'':'<small>'+esc(meta)+'</small>')+'</button>'}
@@ -3277,7 +3405,7 @@
   }
   function renderDayCalendar(rows){const c=copy(),key=calendarDayKey(calendarCursor),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key);return dayRows.length?'<div class="dabbirGenericDay">'+dayRows.map(a=>'<div class="dabbirGenericTimelineRow"><div class="dabbirGenericTimelineTime">'+esc(timeLabel(a.starts_at))+'</div>'+eventButton(a)+'</div>').join('')+'</div>':'<div class="dabbirGenericEmpty">'+esc(c.noBookings)+'</div>'}
   function renderWeekCalendar(rows){const c=copy(),start=startWeek(calendarCursor),days=Array.from({length:7},(_,i)=>addDays(start,i));return '<div class="dabbirGenericWeekWrap"><div class="dabbirGenericWeek">'+days.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key);return '<div class="dabbirGenericWeekDay"><div class="dabbirGenericWeekHead">'+esc(dayLabel(day))+'</div><div class="dabbirGenericWeekEvents">'+(dayRows.length?dayRows.map(a=>eventButton(a)).join(''):'<div class="dabbirGenericEmpty">'+esc(c.noBookings)+'</div>')+'</div></div>'}).join('')+'</div></div>'}
-  function renderMonthCalendar(rows){const c=copy(),month=startMonth(calendarCursor),gridStart=startWeek(month),todayKey=calendarDayKey(new Date());const cells=Array.from({length:42},(_,i)=>addDays(gridStart,i));return '<div class="dabbirGenericMonthWrap"><div class="dabbirGenericMonth">'+cells.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key),outside=day.getMonth()!==month.getMonth(),shown=dayRows.slice(0,3),more=Math.max(0,dayRows.length-shown.length);return '<div class="dabbirGenericMonthDay'+(outside?' out':'')+(key===todayKey?' today':'')+'"><div class="dabbirGenericMonthDate">'+esc(String(day.getDate()))+'</div>'+shown.map(a=>eventButton(a,true)).join('')+(more?'<div class="dabbirGenericRange">+'+more+' '+esc(c.more)+'</div>':'')+'</div>'}).join('')+'</div></div>'}
+  function renderMonthCalendar(rows){const c=copy(),month=startMonth(calendarCursor),gridStart=startWeek(month),todayKey=calendarDayKey(new Date());const cells=Array.from({length:42},(_,i)=>addDays(gridStart,i));return '<div class="dabbirGenericMonthWrap"><div class="dabbirGenericMonth">'+cells.map(day=>{const key=calendarDayKey(day),dayRows=rows.filter(a=>calendarDayKey(a.starts_at)===key),outside=day.getUTCMonth()!==month.getUTCMonth(),shown=dayRows.slice(0,3),more=Math.max(0,dayRows.length-shown.length);return '<div class="dabbirGenericMonthDay'+(outside?' out':'')+(key===todayKey?' today':'')+'"><div class="dabbirGenericMonthDate">'+esc(String(day.getUTCDate()))+'</div>'+shown.map(a=>eventButton(a,true)).join('')+(more?'<div class="dabbirGenericRange">+'+more+' '+esc(c.more)+'</div>':'')+'</div>'}).join('')+'</div></div>'}
   function calendarRangeLabel(){if(calendarView==='day')return dayLabel(calendarCursor);if(calendarView==='month')return monthLabel(calendarCursor);const start=startWeek(calendarCursor),end=addDays(start,6);return dayLabel(start,false)+' – '+dayLabel(end,false)}
   function moveCalendar(direction){lifecycle.move(ws(),direction)}
   function renderCalendar(rows){
@@ -3332,7 +3460,7 @@
   }
   function openEdit(id){
     const w=ws(),a=reader.find(w,id);if(!a||!lifecycle.inContext(a,w))return;
-    editingId=id;editingContext={key:lifecycle.contextKey(w),business_id:w.business.id,branch_id:a.branch_id,starts_at:a.starts_at,history:lifecycle.terminal(a)};
+    editingId=id;editingContext={key:lifecycle.contextKey(w),business_id:w.business.id,branch_id:a.branch_id,starts_at:a.starts_at,local_start:a.starts_at?dubaiLocalMinute(new Date(a.starts_at)):'',history:lifecycle.terminal(a)};
     const c=copy(),modal=ensureModal(),readonly=editingContext.history;
     modal.innerHTML='<form class="dabbirApptModalBox" id="dabbirApptEditForm"><h3>'+esc(readonly?c.details:c.editTitle)+'</h3><div class="dabbirApptField"><label>'+esc(c.customer)+'</label><input value="'+esc(customerName(a.customer_id))+'" disabled></div><div class="dabbirApptField"><label for="dabbirApptEditTime">'+esc(c.time)+'</label><input id="dabbirApptEditTime" type="datetime-local" dir="ltr" value="'+esc(a.starts_at?dubaiLocalMinute(new Date(a.starts_at)):'')+'" '+(readonly?'disabled':'required')+'></div><div class="dabbirApptField"><label for="dabbirApptEditStatus">'+esc(c.status)+'</label><select id="dabbirApptEditStatus" '+(readonly?'disabled':'')+'>'+['requested','new','confirmed','rescheduled','arrived','in_progress','completed','cancelled','no_show'].map(status=>'<option value="'+status+'" '+(lifecycle.status(a)===status?'selected':'')+'>'+esc(c[status])+'</option>').join('')+'</select></div><div class="dabbirApptModalActions"><button type="button" class="cancel" id="dabbirApptEditCancel">'+esc(c.cancel)+'</button>'+(!readonly?'<button type="submit" class="save">'+esc(c.save)+'</button>':'')+'</div></form>';
     q('#dabbirApptEditCancel').onclick=closeModal;
@@ -3342,7 +3470,7 @@
   }
   function closeModal(){q('#dabbirApptEditModal')?.classList.remove('open');editingId=null;editingContext=null}
   async function request(body){
-    const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body)});
+    const response=await fetch('/api/appointment-management',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',accept:'application/json','x-dabbir-client':'web'},body:JSON.stringify(body)});
     const data=await response.json().catch(()=>({}));return {response,data};
   }
   function applySaved(w,id,row){
@@ -3354,10 +3482,12 @@
     event.preventDefault();if(busy||!editingId||!editingContext||editingContext.history)return;
     const w=ws(),context={...editingContext},id=editingId;
     if(lifecycle.contextKey(w)!==context.key){closeModal();return}
-    const start=isoFromDubaiLocal(q('#dabbirApptEditTime')?.value),status=q('#dabbirApptEditStatus')?.value;if(!start)return;
+    const localStart=q('#dabbirApptEditTime')?.value,start=isoFromDubaiLocal(localStart),status=q('#dabbirApptEditStatus')?.value;if(!start)return;
     const body={action:'update',business_id:context.business_id,appointment_id:id,status};
     if(context.branch_id)body.branch_id=context.branch_id;
-    if(new Date(start).getTime()!==new Date(context.starts_at).getTime())body.starts_at=start;
+    // datetime-local displays minutes. A status-only edit must preserve the
+    // original seconds and must not accidentally reschedule historical work.
+    if(localStart!==context.local_start&&new Date(start).getTime()!==new Date(context.starts_at).getTime())body.starts_at=start;
     busy=true;const submit=event.submitter;if(submit)submit.disabled=true;
     try{
       const {response,data}=await request(body);
@@ -3760,6 +3890,11 @@
   let expanded=false;
 
   const workspaceNow=()=>{try{return typeof workspace!=='undefined'?workspace:window.workspace}catch{return window.workspace||null}};
+  const branchScope=()=>window.dabbirBranchContext?.scope?.()||workspaceNow()?.branch_scope||{mode:'all'};
+  const scopeMatches=data=>{
+    const expected=branchScope();
+    return data?.branch_scope?.mode===(expected.mode||'all')&&(expected.mode!=='selected'||data.branch_scope.branch_id===expected.branch_id);
+  };
   const scopeKey=()=>{
     const w=workspaceNow();
     const scope=window.dabbirBranchContext?.scope?.()||w?.branch_scope||{};
@@ -3772,9 +3907,9 @@
   };
 
   const text=()=>lang==='ar'?{
-    title:'اليوم في دَبِّر',refresh:'تحديث',loading:'دَبِّر يراجع النشاط…',handled:'عالجها دَبِّر',urgent:'يحتاج تدخلك',warning:'راقب اليوم',empty:'كل شيء تحت السيطرة الآن',open:'فتح',error:'تعذر تحميل مركز الأولويات',showLess:'عرض الأهم فقط'
+    title:'اليوم في دَبِّر',refresh:'تحديث',loading:'دَبِّر يراجع النشاط…',handled:'عالجها دَبِّر',urgent:'يحتاج تدخلك',warning:'راقب اليوم',empty:'لا توجد أولويات في البيانات المتاحة',open:'فتح',error:'تعذر تحميل مركز الأولويات',showLess:'عرض الأهم فقط'
   }:{
-    title:'Today in DABBIR',refresh:'Refresh',loading:'DABBIR is reviewing the business…',handled:'Handled by DABBIR',urgent:'Needs you',warning:'Watch today',empty:'Everything is under control right now',open:'Open',error:'Could not load action center',showLess:'Show top 3 only'
+    title:'Today in DABBIR',refresh:'Refresh',loading:'DABBIR is reviewing the business…',handled:'Handled by DABBIR',urgent:'Needs you',warning:'Watch today',empty:'No priorities in the available data',open:'Open',error:'Could not load action center',showLess:'Show top 3 only'
   };
 
   function ensurePanel(){
@@ -3822,7 +3957,7 @@
   }
 
   function render(data){
-    if(!data?.business_id||data.business_id!==workspaceNow()?.business?.id)return;
+    if(!data?.business_id||data.business_id!==workspaceNow()?.business?.id||!scopeMatches(data))return;
     const panel=ensurePanel();
     if(!panel)return;
     panel.dataset.businessId=data.business_id;
@@ -3840,12 +3975,13 @@
     status.textContent=effectiveStatus==='needs_attention'?(lang==='ar'?'هناك عناصر حرجة':'Critical items need attention'):effectiveStatus==='watch'?(lang==='ar'?'هناك أمور تحتاج متابعة':'Some items need monitoring'):(lang==='ar'?'لا توجد عناصر حرجة':'No critical items');
     const top=rows.slice(0,DEFAULT_VISIBLE).map(item=>lang==='ar'?item.title_ar:item.title_en).filter(Boolean);
     panel.querySelector('#dacBrief').textContent=filtered?(top.join(lang==='ar'?'، ':', ')||t.empty):(lang==='ar'?data?.brief?.ar:data?.brief?.en)||t.empty;
+    if(filtered&&data?.truth?.source_limits_reached)panel.querySelector('#dacBrief').textContent+=(lang==='ar'?' قد توجد سجلات إضافية؛ راجع القسم المعني للقائمة الكاملة.':' Additional records may exist; open the relevant section for its full list.');
 
     const handledAvailable=data?.handled?.available===true;
     const handledValue=handledAvailable?(data?.handled?.verified_autonomous_today??0):'—';
     const metrics=panel.querySelector('#dacMetrics');
     metrics.replaceChildren(
-      metric(t.handled,handledValue,'handled'),
+      metric(branchScope().mode==='selected'?(lang==='ar'?'عالجها دَبِّر في النشاط':'Handled across the business'):t.handled,handledValue,'handled'),
       metric(t.urgent,urgent,'critical'),
       metric(t.warning,warning,'warning')
     );
@@ -3874,7 +4010,7 @@
       const detail=document.createElement('span');
       detail.textContent=lang==='ar'?item.detail_ar:item.detail_en;
       const when=document.createElement('small');
-      when.textContent=formatWhen(item.due_at);
+      when.textContent=(item.scope==='business'&&branchScope().mode==='selected'?(lang==='ar'?'على مستوى النشاط · ':'Across the business · '):'')+formatWhen(item.due_at);
       body.append(title,detail,when);
       const button=document.createElement('button');
       button.type='button';
@@ -3911,10 +4047,12 @@
       if(['conversation','handoff','followup'].includes(type)){
         if(!id||typeof api!=='function'){unavailable();return false}
         const params=new URLSearchParams({business_id:businessId,conversation_id:id});
+        const scope=branchScope();
+        if(scope.mode==='selected')params.set('branch_id',scope.branch_id);
         const {r,j}=await api('/api/dabbir-runtime-fast?'+params.toString());
         if(!stillCurrent())return false;
         const conversation=(j?.conversations||[]).find(row=>row.id===id);
-        if(!r?.ok||!j?.ok||j.business?.id!==businessId||j.selected_conversation_id!==id||!conversation||(conversation.business_id&&conversation.business_id!==businessId)){unavailable();return false}
+        if(!r?.ok||!j?.ok||j.business?.id!==businessId||j.selected_conversation_id!==id||!conversation||(conversation.business_id&&conversation.business_id!==businessId)||(scope.mode==='selected'&&(conversation.branch_id!==scope.branch_id||j.branch_scope?.branch_id!==scope.branch_id))){unavailable();return false}
         workspace=j;
         selectedConversationId=id;
         if(typeof renderAll==='function')renderAll();
@@ -3926,8 +4064,8 @@
         if(!id||!reader||!lifecycle){unavailable();return false}
         if(!reader.find(w,id)){
           const day=lifecycle.dayKey(item.due_at,w.business);
-          if(day)lifecycle.setView(w,{day,view:'day',scope:'current',allDates:false});
-          await reader.ensure(w);
+          if(day)lifecycle.setView(w,{day,view:'day',scope:item.lifecycle_scope==='review'?'review':'current',allDates:false,followToday:false});
+          await reader.ensureRecord(w,id);
         }
         if(!stillCurrent())return false;
         const row=reader?.find?.(w,id);
@@ -3965,7 +4103,7 @@
     const key=scopeKey();
     if(!businessId){requestGeneration++;pending=null;clearPanel(document.querySelector('#dabbirActionCenter'),'unavailable','');return}
     if(pending?.key===key)return pending.promise;
-    if(lastBusinessId&&businessId!==lastBusinessId)expanded=false;
+    if(lastScopeKey&&key!==lastScopeKey)expanded=false;
     const now=Date.now();
     if(!force&&key===lastScopeKey&&businessId===lastBusinessId&&now-lastLoadedAt<CACHE_MS&&w?.owner_action_center){
       render(w.owner_action_center);
@@ -3980,11 +4118,13 @@
       clearPanel(panel,'loading',t.loading);
     }
     const promise=(async()=>{try{
-      const response=await fetch('/api/owner-action-center?business_id='+encodeURIComponent(businessId),{credentials:'same-origin',headers:{accept:'application/json'},cache:'no-store'});
+      const scope=branchScope();
+      const params=new URLSearchParams({business_id:businessId,branch_id:scope.mode==='selected'?scope.branch_id:'all'});
+      const response=await fetch('/api/owner-action-center?'+params.toString(),{credentials:'same-origin',headers:{accept:'application/json','x-dabbir-client':'web'},cache:'no-store'});
       const data=await response.json().catch(()=>null);
       if(generation!==requestGeneration||scopeKey()!==key)return;
       if(!response.ok||!data?.ok||!Array.isArray(data.items))throw new Error(data?.error||('ACTION_CENTER_'+response.status));
-      if(data.business_id!==businessId)throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');
+      if(data.business_id!==businessId||!scopeMatches(data))throw new Error('ACTION_CENTER_CONTEXT_MISMATCH');
       const live=workspaceNow();
       if(live&&live.business?.id===businessId)live.owner_action_center=data;
       lastBusinessId=businessId;
@@ -4024,6 +4164,7 @@
   }
 
   window.__dabbirUiLifecycle?.on?.('afterRender','owner-action-center-context',()=>loadActionCenter(false));
+  window.addEventListener?.('dabbir:branch-scope-changed',()=>loadActionCenter(true));
   window.__dabbirUiLifecycle?.on?.('afterLanguage','owner-action-center-language',()=>{const w=workspaceNow();if(w?.owner_action_center)render(w.owner_action_center)});
   window.__dabbirOwnerActionCenter={refresh:()=>loadActionCenter(true),open:openItem,render,version:'owner-action-center-v3'};
 })();
@@ -5396,10 +5537,10 @@
 
   function copy(){return ar()?{
     title:'جهّز دَبِّر ليعمل عنك',readyTitle:'اكتمل الإعداد الأساسي',desc:'راجع ما اكتمل من إعداد نشاطك وما يحتاج خطوة منك.',readyDesc:'اكتملت معلومات النشاط وربط واتساب وإعداد الردود. تابع النتائج الفعلية وما يحتاج قرارك من أولويات اليوم.',score:'اكتمال الإعداد',next:'الخطوة الأفضل الآن',proof:'نشاطك بالأرقام',intentTitle:'ماذا تريد من دَبِّر الآن؟',readError:'تعذر التحقق من إعداد هذا النشاط الآن. أعد المحاولة؛ لم نغيّر إعداداتك.',retry:'إعادة المحاولة',
-    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',testTodo:'جرّب أول محادثة',testBody:'أرسل محادثة اختبار حقيقية داخل دَبِّر وشاهد الرد والحفظ قبل الاعتماد اليومي.',testAction:'فتح المحادثات',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
+    profile:'معلومات النشاط',channel:'واتساب',ai:'ذكاء دَبِّر',profileTodo:'أكمل معلومات نشاطك',profileBody:'أضف الساعات وبيانات التواصل والسياسات الأساسية حتى يرد دَبِّر بمعلومات صحيحة.',profileAction:'إكمال المعلومات',channelTodo:'اربط واتساب',channelBody:'اربط رقم WhatsApp Business من داخل دَبِّر حتى تنتقل من التجربة الداخلية إلى قناة العميل الحقيقية.',channelAction:'ربط واتساب',channelVerifyTodo:'تحقق من تشغيل واتساب',channelVerifyBody:'الرقم مرتبط بـ Meta، لكن دَبِّر لن يعتبره جاهزًا حتى يستقبل رسالة WhatsApp حقيقية ويسجل ردًا حقيقيًا بنتيجة خارجية موثقة.',channelVerifyAction:'اختبار واتساب',aiTodo:'تحقق من جاهزية الذكاء',aiBody:'دَبِّر يحتاج AI تشغيليًا قبل أن يعتمد عليه في الردود والمتابعة.',aiAction:'فتح الحالة',firstAppointment:'سجّل أول موعد',firstAppointmentBody:'أضف موعد عميل ليظهر في جدول نشاطك. يمكنك إكمال معلومات النشاط وربط واتساب لاحقًا.',firstAppointmentAction:'إضافة أول موعد',priorities:'راجع أولويات اليوم',customers:'عملاء',chats:'محادثات',aiReplies:'ردود AI',unverified:'—',loading:'دَبِّر يتحقق من التجهيز الفعلي…',complete:'مكتمل',reply:'الرد على العملاء',follow:'المتابعات',customerRecords:'العملاء',settings:'معلومات النشاط',appointments:'المواعيد',operations:'الطلبات والمخزون',viewings:'المعاينات',schedule:'الجدول'
   }:{
     title:'Get DABBIR working for you',readyTitle:'Basic setup is complete',desc:'Review what is set up for your business and what needs your next step.',readyDesc:'Business information, WhatsApp and reply configuration are set up. Review actual outcomes and decisions in today’s priorities.',score:'Setup completion',next:'Best next step',proof:'Business counts',intentTitle:'What do you want DABBIR to do now?',readError:'We could not verify this business’s setup. Try again; your settings were not changed.',retry:'Try again',
-    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',testTodo:'Try the first conversation',testBody:'Run a real in-app conversation and verify the reply and persistence before daily use.',testAction:'Open conversations',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
+    profile:'Business info',channel:'WhatsApp',ai:'DABBIR AI',profileTodo:'Complete business information',profileBody:'Add hours, contact details and key policies so DABBIR can answer accurately.',profileAction:'Complete info',channelTodo:'Connect WhatsApp',channelBody:'Connect your WhatsApp Business number inside DABBIR to move from internal testing to the real customer channel.',channelAction:'Connect WhatsApp',channelVerifyTodo:'Verify WhatsApp operation',channelVerifyBody:'The number is linked to Meta, but DABBIR will not mark it ready until a real WhatsApp inbound and a real externally verified reply are recorded.',channelVerifyAction:'Test WhatsApp',aiTodo:'Verify AI readiness',aiBody:'DABBIR needs operational AI before replies and follow-ups can be trusted.',aiAction:'Open status',firstAppointment:'Record your first appointment',firstAppointmentBody:'Add a customer appointment to your business schedule. You can finish business information and connect WhatsApp later.',firstAppointmentAction:'Add first appointment',priorities:'Review today’s priorities',customers:'Customers',chats:'Conversations',aiReplies:'AI replies',unverified:'—',loading:'DABBIR is checking verified setup…',complete:'Complete',reply:'Reply to customers',follow:'Follow-ups',customerRecords:'Customers',settings:'Business info',appointments:'Appointments',operations:'Orders & inventory',viewings:'Viewings',schedule:'Schedule'
   }}
 
   function profileReady(){
@@ -5453,14 +5594,35 @@
     return panel;
   }
 
+  function firstWorkStep(){
+    // These activities use the existing manual appointment flow; specialized
+    // salon, car-wash and commerce setup retain their own prerequisites.
+    const type=String(workspace?.business?.business_type||'').toLowerCase();
+    if(!['clinic','services','real_estate','creator','other'].includes(type))return null;
+    if(workspace?.membership?.role!=='owner'||exactMetric('customers')!==0)return null;
+    const control=q('#newApptBtn');
+    if(!control||control.disabled||typeof control.click!=='function')return null;
+    const t=copy();
+    return {title:t.firstAppointment,body:t.firstAppointmentBody,action:t.firstAppointmentAction,screen:'appointments',control:'#newApptBtn'};
+  }
+
+  function bindNextStep(next,id){
+    const button=q('#daNextAction');
+    if(button)button.onclick=()=>{
+      if(workspace?.business?.id!==id)return;
+      openScreen(next.screen);
+      if(next.control){const control=q(next.control);if(control&&!control.disabled)control.click()}
+      if(next.target)setTimeout(()=>q(next.target)?.scrollIntoView({behavior:'smooth',block:'start'}),30);
+    };
+  }
+
   function nextStep(){
     const t=copy();
+    const first=firstWorkStep();if(first)return first;
     if(!profileReady())return {title:t.profileTodo,body:t.profileBody,action:t.profileAction,screen:'settings'};
     if(!whatsappLinked())return {title:t.channelTodo,body:t.channelBody,action:t.channelAction,screen:'integrations'};
     if(!whatsappReady())return {title:t.channelVerifyTodo,body:t.channelVerifyBody,action:t.channelVerifyAction,screen:'integrations'};
     if(!aiReady())return {title:t.aiTodo,body:t.aiBody,action:t.aiAction,screen:'integrations'};
-    const chats=exactMetric('active_chats');
-    if(chats===0)return {title:t.testTodo,body:t.testBody,action:t.testAction,screen:'conversations'};
     return {title:t.priorities,body:t.readyDesc,action:t.priorities,screen:'dashboard',target:'#dabbirActionCenter'};
   }
 
@@ -5481,6 +5643,13 @@
     const panel=ensure();if(!panel)return;
     if(!id){panel.innerHTML='';return}
     const t=copy();
+    const first=firstWorkStep();
+    if(first&&(loading||!loadedAt||loadError)){
+      panel.innerHTML='<div class="daHead"><div><h2>'+esc(first.title)+'</h2><p>'+esc(first.body)+'</p></div></div><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(first.action)+'</button></div><div class="daLoading" role="status">'+esc(loadError?t.readError:t.loading)+'</div>'+(loadError?'<div class="daActions"><button type="button" class="daSecondary" id="daRetry">'+esc(t.retry)+'</button></div>':'');
+      bindNextStep(first,id);
+      const retry=q('#daRetry');if(retry)retry.onclick=()=>load(true);
+      return;
+    }
     if(loading||!loadedAt){panel.innerHTML='<div class="daLoading" role="status">'+esc(t.loading)+'</div>';return}
     if(loadError){
       panel.innerHTML='<div class="daLoading" role="status">'+esc(t.readError)+'</div><div class="daActions"><button type="button" class="daSecondary" id="daRetry">'+esc(t.retry)+'</button></div>';
@@ -5499,7 +5668,7 @@
     const step=(label,value)=>'<span class="daStep '+(value?'done':'')+'">'+esc(label)+'</span>';
     const intentButtons=intents().map(item=>'<button type="button" class="daIntent" data-da-screen="'+esc(item.screen)+'">'+esc(item.label)+'</button>').join('');
     panel.innerHTML='<div class="daHead"><div><h2>'+esc(ready?t.readyTitle:t.title)+'</h2><p>'+esc(ready?t.readyDesc:t.desc)+'</p></div><div class="daScore"><strong>'+score+'%</strong><span>'+esc(t.score)+'</span></div></div><div class="daProgress" aria-label="'+esc(t.score)+' '+score+'%"><i style="width:'+score+'%"></i></div><div class="daGrid"><div class="daNext"><span class="daLabel">'+esc(t.next)+'</span><b>'+esc(next.title)+'</b><p>'+esc(next.body)+'</p><div class="daActions"><button type="button" class="daPrimary" id="daNextAction">'+esc(next.action)+'</button><button type="button" class="daSecondary" id="daPriorities">'+esc(t.priorities)+'</button></div><div class="daSteps">'+step(t.profile,states[0])+step(t.channel,states[1])+step(t.ai,states[2])+'</div></div><div class="daProof"><span class="daLabel">'+esc(t.proof)+'</span><div class="daProofGrid">'+metric(customers,t.customers)+metric(chats,t.chats)+metric(aiReplies,t.aiReplies)+'</div></div></div><div class="daIntentWrap"><div class="daIntentTitle">'+esc(t.intentTitle)+'</div><div class="daIntentGrid">'+intentButtons+'</div></div>';
-    const nextButton=q('#daNextAction');if(nextButton)nextButton.onclick=()=>{openScreen(next.screen);if(next.target)setTimeout(()=>q(next.target)?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
+    bindNextStep(next,id);
     const priorities=q('#daPriorities');if(priorities)priorities.onclick=()=>{openScreen('dashboard');setTimeout(()=>q('#dabbirActionCenter')?.scrollIntoView({behavior:'smooth',block:'start'}),30)};
     panel.querySelectorAll('[data-da-screen]').forEach(button=>button.onclick=()=>openScreen(button.dataset.daScreen));
   }
@@ -5969,6 +6138,64 @@
     },60);
   }
 
+  function whatsAppLabel(){
+    try{return String(T()?.whatsapp||'WhatsApp').trim()}catch{return 'WhatsApp'}
+  }
+  function navigationNotice(message){try{if(typeof toast==='function')toast(message)}catch{}}
+  function openWhatsAppSettings(expectedBusinessId){
+    if(!expectedBusinessId||String(currentWorkspace()?.business?.id||'')!==expectedBusinessId){
+      navigationNotice(ar()?'تغيّر النشاط. افتح تنبيهات النشاط الحالي وحاول مجددًا.':'The business changed. Open its current notifications and try again.');
+      return;
+    }
+    if(typeof showScreen!=='function')return;
+    showScreen('integrations');
+    setTimeout(()=>{
+      if(String(currentWorkspace()?.business?.id||'')!==expectedBusinessId||!q('#screen-integrations.active'))return;
+      const wanted=whatsAppLabel();
+      const card=qa('#integrationGrid .integration').find(node=>String(node.querySelector('h3')?.textContent||'').trim()===wanted);
+      if(!card||!card.getClientRects().length){
+        navigationNotice(ar()?'تعذر عرض إعداد واتساب. حدّث الصفحة وحاول مجددًا.':'WhatsApp settings could not be shown. Refresh the page and try again.');
+        return;
+      }
+      card.scrollIntoView({behavior:'auto',block:'start'});
+      const heading=card.querySelector('h3');
+      heading.setAttribute('tabindex','-1');
+      heading.focus({preventScroll:true});
+    },0);
+  }
+  let observedNoticeList=null;
+  let noticeListObserver=null;
+  function ensureWhatsAppNoticeAction(){
+    const host=q('#noticeList');
+    // The calendar refresh also replaces notice rows outside renderAll. Observe only
+    // direct row replacement; inserting a button inside a row cannot trigger a loop.
+    if(host!==observedNoticeList){
+      noticeListObserver?.disconnect();
+      noticeListObserver=null;
+      observedNoticeList=host;
+      if(host&&typeof MutationObserver==='function'){
+        noticeListObserver=new MutationObserver(ensureWhatsAppNoticeAction);
+        noticeListObserver.observe(host,{childList:true});
+      }
+    }
+    const businessId=String(currentWorkspace()?.business?.id||'');
+    for(const row of qa('#noticeList [data-notice-type="channel_issues"]')){
+      let button=row.querySelector('[data-dabbir-whatsapp-notice-action]');
+      if(!businessId||String(row.querySelector('b')?.textContent||'').trim()!==whatsAppLabel()){
+        button?.remove();continue;
+      }
+      if(!button){
+        button=document.createElement('button');button.type='button';button.className='secondary';
+        button.dataset.dabbirWhatsappNoticeAction='true';
+        button.style.marginBlockStart='8px';button.style.minHeight='44px';
+        button.addEventListener('click',()=>openWhatsAppSettings(button.dataset.businessId));
+        (row.querySelector('.grow')||row).append(button);
+      }
+      button.dataset.businessId=businessId;
+      button.textContent=ar()?'إعداد واتساب':'WhatsApp settings';
+    }
+  }
+
   function ensureMoreCard(){
     const grid=q('#screen-more .moreGrid');
     let card=q('#dabbirContextServices');
@@ -6095,6 +6322,7 @@
     adaptPrimaryActivitySlot();
     ensureMoreCard();
     ensureUtilityCards();
+    ensureWhatsAppNoticeAction();
     bindMobileMenuResync();
     bindApprovedSettings();
     syncApprovedSettings();

@@ -144,6 +144,64 @@ const script=String.raw`(()=>{
     },60);
   }
 
+  function whatsAppLabel(){
+    try{return String(T()?.whatsapp||'WhatsApp').trim()}catch{return 'WhatsApp'}
+  }
+  function navigationNotice(message){try{if(typeof toast==='function')toast(message)}catch{}}
+  function openWhatsAppSettings(expectedBusinessId){
+    if(!expectedBusinessId||String(currentWorkspace()?.business?.id||'')!==expectedBusinessId){
+      navigationNotice(ar()?'تغيّر النشاط. افتح تنبيهات النشاط الحالي وحاول مجددًا.':'The business changed. Open its current notifications and try again.');
+      return;
+    }
+    if(typeof showScreen!=='function')return;
+    showScreen('integrations');
+    setTimeout(()=>{
+      if(String(currentWorkspace()?.business?.id||'')!==expectedBusinessId||!q('#screen-integrations.active'))return;
+      const wanted=whatsAppLabel();
+      const card=qa('#integrationGrid .integration').find(node=>String(node.querySelector('h3')?.textContent||'').trim()===wanted);
+      if(!card||!card.getClientRects().length){
+        navigationNotice(ar()?'تعذر عرض إعداد واتساب. حدّث الصفحة وحاول مجددًا.':'WhatsApp settings could not be shown. Refresh the page and try again.');
+        return;
+      }
+      card.scrollIntoView({behavior:'auto',block:'start'});
+      const heading=card.querySelector('h3');
+      heading.setAttribute('tabindex','-1');
+      heading.focus({preventScroll:true});
+    },0);
+  }
+  let observedNoticeList=null;
+  let noticeListObserver=null;
+  function ensureWhatsAppNoticeAction(){
+    const host=q('#noticeList');
+    // The calendar refresh also replaces notice rows outside renderAll. Observe only
+    // direct row replacement; inserting a button inside a row cannot trigger a loop.
+    if(host!==observedNoticeList){
+      noticeListObserver?.disconnect();
+      noticeListObserver=null;
+      observedNoticeList=host;
+      if(host&&typeof MutationObserver==='function'){
+        noticeListObserver=new MutationObserver(ensureWhatsAppNoticeAction);
+        noticeListObserver.observe(host,{childList:true});
+      }
+    }
+    const businessId=String(currentWorkspace()?.business?.id||'');
+    for(const row of qa('#noticeList [data-notice-type="channel_issues"]')){
+      let button=row.querySelector('[data-dabbir-whatsapp-notice-action]');
+      if(!businessId||String(row.querySelector('b')?.textContent||'').trim()!==whatsAppLabel()){
+        button?.remove();continue;
+      }
+      if(!button){
+        button=document.createElement('button');button.type='button';button.className='secondary';
+        button.dataset.dabbirWhatsappNoticeAction='true';
+        button.style.marginBlockStart='8px';button.style.minHeight='44px';
+        button.addEventListener('click',()=>openWhatsAppSettings(button.dataset.businessId));
+        (row.querySelector('.grow')||row).append(button);
+      }
+      button.dataset.businessId=businessId;
+      button.textContent=ar()?'إعداد واتساب':'WhatsApp settings';
+    }
+  }
+
   function ensureMoreCard(){
     const grid=q('#screen-more .moreGrid');
     let card=q('#dabbirContextServices');
@@ -270,6 +328,7 @@ const script=String.raw`(()=>{
     adaptPrimaryActivitySlot();
     ensureMoreCard();
     ensureUtilityCards();
+    ensureWhatsAppNoticeAction();
     bindMobileMenuResync();
     bindApprovedSettings();
     syncApprovedSettings();

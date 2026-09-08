@@ -32,6 +32,11 @@ jobs:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
           BOOKING_BROWSER_OUTPUT: booking-browser-evidence
         run: node scripts/qa-booking-lifecycle-browser.mjs
+      - name: First appointment activation and retry on iPhone and iPad
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
+        run: node scripts/qa-activation-booking-browser.mjs
       - name: Owner knowledge modal with active onboarding overlay
         env:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright

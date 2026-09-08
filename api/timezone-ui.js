@@ -105,11 +105,16 @@ const script=String.raw`(()=>{
     syncAuthorities();
     appointmentForm.querySelector('#adaptiveApptFields')?.remove();
     const wrap=document.createElement('div');wrap.id='adaptiveApptFields';
+    const optional=document.createElement('details');optional.id='adaptiveApptDetails';optional.className='field';
+    const summary=document.createElement('summary');summary.textContent=isArabic()?'تفاصيل الموعد (اختياري)':'Appointment details (optional)';
+    summary.style.cssText='cursor:pointer;min-height:44px;padding-block:12px;font-size:14px';
+    optional.append(summary);
     const fields=appointmentFields[businessType()]||appointmentFields.other;
     const geo=businessGeo();
     for(const [key,type,arLabel,enLabel] of fields){
       const field=document.createElement('div');field.className='field';
       const label=document.createElement('label');label.textContent=fieldLabel(key,arLabel,enLabel);
+      if(key==='phone')label.textContent+=isArabic()?' (اختياري)':' (optional)';
       let input;
       if(type==='select'){
         input=document.createElement('select');
@@ -122,8 +127,12 @@ const script=String.raw`(()=>{
         if(type==='tel'){input.maxLength=40;input.placeholder=(geo.prefix||'+')+' …';input.inputMode='tel';}
         if(type==='number'){input.min='0';input.step=key==='price'?(geo.minorUnits===0?'1':'0.'+'0'.repeat(Math.max(0,geo.minorUnits-1))+'1'):'5';}
       }
-      input.dataset.apptKey=key;field.append(label,input);wrap.append(field);
+      input.id='apptDetail-'+key;label.htmlFor=input.id;
+      if(type==='tel'||type==='number')input.dir='ltr';
+      input.dataset.apptKey=key;field.append(label,input);
+      if(key==='phone')wrap.append(field);else optional.append(field);
     }
+    wrap.append(optional);
     appointmentTime.closest('.field')?.after(wrap);
   }
 
@@ -186,9 +195,34 @@ const script=String.raw`(()=>{
 
   if(appointmentForm&&!appointmentForm.dataset.dabbirBusinessTime){
     appointmentForm.dataset.dabbirBusinessTime='v4-market';
+    let appointmentSubmitting=false;
+    let formRevision=0;
+    const formObserver=appointmentModal?new MutationObserver(records=>{formRevision+=records.length;}):null;
+    formObserver?.observe(appointmentModal,{attributes:true,attributeFilter:['class']});
+    for(const eventName of ['input','change','reset'])appointmentForm.addEventListener(eventName,()=>{formRevision++;});
+    const appointmentIntents=new Map();
+    function currentContext(){
+      const w=typeof workspace!=='undefined'?workspace:null;
+      const scope=window.dabbirBranchContext?.scope?.()||w?.branch_scope||null;
+      const actorId=String(w?.user?.id||'');
+      const businessId=w?.business?.id||null;
+      const branchId=scope?.mode==='all'?'all':scope?.branch_id||null;
+      return {actorId,businessId,branchId,scope,key:JSON.stringify([actorId,businessId,branchId||'all',scope?.business_id||businessId])};
+    }
+    function draftState(){
+      formRevision+=formObserver?.takeRecords().length||0;
+      return JSON.stringify([formRevision,appointmentModal?.classList.contains('open')===true,
+        document.querySelector('#apptCustomer')?.value,document.querySelector('#apptTime')?.value,
+        [...appointmentForm.querySelectorAll('[data-appt-key]')].map(node=>[node.dataset.apptKey,node.value])]);
+    }
+    function saveError(payload){
+      const message=isArabic()?payload?.message_ar:payload?.message_en;
+      return typeof message==='string'&&message.length<=300?message:(isArabic()?'تعذر تأكيد حفظ الموعد. حاول مجددًا من النموذج نفسه.':'The save could not be confirmed. Retry from the same form.');
+    }
     appointmentForm.addEventListener('submit',async event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
+      if(appointmentSubmitting)return;
       const input=document.querySelector('#apptTime');
       const customer=document.querySelector('#apptCustomer');
       const startsAt=businessLocalToIso(input&&input.value);
@@ -196,32 +230,81 @@ const script=String.raw`(()=>{
         try{if(typeof toast==='function')toast(typeof T==='function'?T().invalid:'Invalid time')}catch{}
         return;
       }
+      const button=document.querySelector('#saveApptBtn');
+      const idleLabel=button?.textContent;
+      const wasDisabled=button?.disabled;
+      const previousBusy=appointmentForm.getAttribute('aria-busy');
+      let stillCurrent=null,busyLabel=null;
+      appointmentSubmitting=true;
+      appointmentForm.setAttribute('aria-busy','true');
       try{
-        const businessId=typeof workspace!=='undefined'&&workspace&&workspace.business?workspace.business.id:null;
+        if(button){
+          button.disabled=true;
+          busyLabel=typeof T==='function'?T().savingWorking:(isArabic()?'جارٍ الحفظ…':'Saving…');
+          button.textContent=busyLabel;
+        }
+        const context=currentContext();
+        const businessId=context.businessId;
         if(!businessId)return;
-        const details={};
-        appointmentForm.querySelectorAll('[data-appt-key]').forEach(node=>{details[node.dataset.apptKey]=node.value});
-        const response=await fetch('/api/adaptive-appointment',{
-          method:'POST',cache:'no-store',headers:{'content-type':'application/json'},
-          body:JSON.stringify({
-            business_id:businessId,
-            business_type:businessType(),
-            customer_name:String(customer&&customer.value||'').trim(),
-            starts_at:startsAt,
-            details,
-          })
-        });
-        const payload=await response.json().catch(()=>({}));
-        if(!response.ok||!payload.ok){
-          try{if(typeof toast==='function')toast(payload.error||(typeof T==='function'?T().invalid:'Save failed'))}catch{}
+        const branchScope=context.scope;
+        if(branchScope?.business_id&&branchScope.business_id!==businessId){
+          try{if(typeof toast==='function')toast(isArabic()?'تغيّر النشاط. حدّث الصفحة واختر الفرع قبل الحفظ.':'The business changed. Refresh the page and select the branch before saving.')}catch{}
           return;
         }
+        const submittedDraft=draftState();
+        const sameContext=()=>currentContext().key===context.key&&document.querySelector('#appointmentForm')===appointmentForm&&document.querySelector('#appointmentModal')===appointmentModal;
+        stillCurrent=()=>sameContext()&&draftState()===submittedDraft;
+        const details={};
+        appointmentForm.querySelectorAll('[data-appt-key]').forEach(node=>{details[node.dataset.apptKey]=node.value});
+        const booking={
+          business_id:businessId,
+          branch_id:context.branchId,
+          business_type:businessType(),
+          customer_name:String(customer&&customer.value||'').trim(),
+          starts_at:startsAt,
+          details,
+        };
+        const intent=JSON.stringify({actor_id:context.actorId,...booking});
+        let requestKey=appointmentIntents.get(intent);
+        if(!requestKey){
+          requestKey=window.crypto?.randomUUID?.();
+          if(!requestKey){
+            try{if(typeof toast==='function')toast(isArabic()?'تعذر تجهيز طلب الحفظ. حدّث الصفحة وحاول مجددًا.':'The save request could not be prepared. Refresh the page and try again.')}catch{}
+            return;
+          }
+          appointmentIntents.set(intent,requestKey);
+        }
+        const response=await fetch('/api/adaptive-appointment',{
+          method:'POST',cache:'no-store',headers:{'content-type':'application/json','x-dabbir-client':'web'},
+          body:JSON.stringify({...booking,idempotency_key:requestKey})
+        });
+        const payload=await response.json().catch(()=>({}));
+        // A late result belongs to the original draft. Keep its request key so
+        // returning to that draft can read back the saved result without a write.
+        if(!stillCurrent())return;
+        if(!response.ok||!payload?.ok||!payload.appointment?.id){
+          try{if(typeof toast==='function')toast(saveError(payload))}catch{}
+          return;
+        }
+        appointmentIntents.delete(intent);
         document.querySelector('#appointmentModal')?.classList.remove('open');
         appointmentForm.reset();
         try{if(typeof toast==='function')toast(typeof T==='function'?T().saved:'Saved')}catch{}
-        if(typeof loadRuntime==='function')await loadRuntime(businessId,typeof selectedConversationId!=='undefined'?selectedConversationId:null);
+        const refreshedDraft=draftState();
+        const conversationId=typeof selectedConversationId!=='undefined'?selectedConversationId:null;
+        stillCurrent=()=>sameContext()&&draftState()===refreshedDraft&&(typeof selectedConversationId!=='undefined'?selectedConversationId:null)===conversationId;
+        try{
+          if(typeof loadRuntime==='function')await loadRuntime(businessId,conversationId,{isCurrent:stillCurrent});
+        }catch{
+          try{if(stillCurrent()&&typeof toast==='function')toast(isArabic()?'تم حفظ الموعد، لكن تعذر تحديث القائمة. حدّث الصفحة لعرضه.':'The appointment was saved, but the list could not refresh. Refresh the page to view it.')}catch{}
+        }
       }catch{
-        try{if(typeof toast==='function')toast(typeof T==='function'?T().invalid:'Save failed')}catch{}
+        try{if((!stillCurrent||stillCurrent())&&typeof toast==='function')toast(saveError())}catch{}
+      }finally{
+        appointmentSubmitting=false;
+        if(button){button.disabled=wasDisabled;if(button.textContent===busyLabel)button.textContent=idleLabel;}
+        if(previousBusy===null)appointmentForm.removeAttribute('aria-busy');
+        else appointmentForm.setAttribute('aria-busy',previousBusy);
       }
     },true);
   }
