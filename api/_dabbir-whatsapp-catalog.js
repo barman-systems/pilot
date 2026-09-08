@@ -148,8 +148,7 @@ export async function syncMetaCatalogForConnection({connection,businessId,respec
   }
 }
 
-export async function catalogMenuForContext({context,connection}){
-  if(!context?.business?.id||!context?.conversation?.id||!connection?.id)return null;
+async function readCatalogMenu(context,connection){
   const payload=await serviceRpc('dabbir_whatsapp_catalog_menu',{
     p_business_id:context.business.id,
     p_connection_id:connection.id,
@@ -161,6 +160,30 @@ export async function catalogMenuForContext({context,connection}){
   const catalogId=clean(payload?.catalog_id,80);
   if(!META_ID.test(catalogId)||!items.length)return null;
   return {catalogId,catalogName:clean(payload?.catalog_name,300)||null,items};
+}
+
+export async function catalogMenuForContext({context,connection}){
+  if(!context?.business?.id||!context?.conversation?.id||!connection?.id)return null;
+  let menu=await readCatalogMenu(context,connection);
+  if(menu)return menu;
+
+  try{
+    const sync=await syncMetaCatalogForConnection({
+      connection,
+      businessId:context.business.id,
+      respectBackoff:true,
+      conversationId:context.conversation.id,
+    });
+    if(sync?.synced===true)menu=await readCatalogMenu(context,connection);
+  }catch(error){
+    console.warn('dabbir_whatsapp_catalog_lazy_sync_failed',{
+      error:clean(error?.code||error?.message,180)||'CATALOG_LAZY_SYNC_FAILED',
+      provider_status:error?.providerStatus||null,
+      provider_code:error?.providerCode||null,
+      permission_required:catalogPermissionLikelyMissing(error),
+    });
+  }
+  return menu;
 }
 
 export async function resolveCatalogService({businessId,conversationId,catalogId,productRetailerId}){
