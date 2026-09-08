@@ -1,3 +1,4 @@
+import { wantsServiceMenu } from './_dabbir-whatsapp-understanding.js';
 // Pure semantic reducer. Provider output is a proposal, never execution authority.
 export const SEMANTIC_VERSION = 2;
 export const TRUST = Object.freeze({ PROVIDER_VERIFIED: 100, DATABASE_FACT: 95, OWNER_POLICY: 95,
@@ -164,7 +165,9 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     const cancel=/(?:^|\s)(?:الغ|الغيه|الغي|الغاء|تلغي|cancel)(?:\s|$)/.test(positive);
     const reschedule=/غير(?:ه|ي)?|بدل(?:ه|ي)?|تعديل|اجل|reschedule|change (?:it|my|the) (?:appointment|booking|time)/.test(positive);
     const booking=/(?:ابا|ابي|ابغي|ابغى|اريد|احجز|حجز|book\b|booking|same .*tomorrow)/.test(t);
-    const discovery=/شوعندكم|شو عندكم|وشعندكم|وش عندكم|خدماتكم|what do you offer|services|service menu/.test(t);
+    // Share the existing production classifier. Separate phrase lists here caused
+    // ordinary GCC catalog questions to fall through to the model and handoff.
+    const discovery=wantsServiceMenu(raw);
     const pricing=/بكم|كم السعر|كم سعر|how much|price|pricing/.test(t);
     if(/فرع|\bbranch\b/.test(t)) {
       const named=arr(c.branches).filter(b=>includesName(t,b.name));
@@ -218,6 +221,9 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     s.sub_intent=clean(proposal.intent,60)||null;
     s.planner_proposal={action:clean(proposal.action,40),source:'AI_INFERENCE',confidence:Math.min(.89,Math.max(0,Number(proposal.confidence)||0))};
     if(proposal.riskLevel==='HIGH')return route('HANDOFF','HIGH_RISK_INTERPRETATION');
+    // A model may select a read-only intent, never supply the catalog or prices.
+    // All returned facts still come from the branch-scoped database snapshot.
+    if(s.goal==='UNKNOWN' && Number(proposal.confidence)>=.8 && ['SERVICE_DISCOVERY','PRICING'].includes(proposal.intent))s.intent=proposal.intent;
     const knowledge=arr(c.knowledge).find(k=>k.key===proposal.knowledgeKey && k.source==='owner_approved' && Number(k.confidence)>=.95);
     if(knowledge && s.goal==='UNKNOWN') {
       const answer=typeof knowledge.value==='object'?(s.language==='en'?knowledge.value.answer_en||knowledge.value.answer_ar:knowledge.value.answer_ar||knowledge.value.answer_en):null;
