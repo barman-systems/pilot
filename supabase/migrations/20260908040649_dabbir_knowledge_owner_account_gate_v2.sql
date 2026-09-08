@@ -1,6 +1,6 @@
 -- Preserve owner-only approval and tenant checks while enforcing the canonical
 -- account/membership suspension gate inside both privileged RPCs.
--- CREATE OR REPLACE preserves existing function ownership and EXECUTE grants.
+-- CREATE OR REPLACE preserves ownership; restate the reviewed EXECUTE boundary.
 -- The already-applied Understanding V2 migration remains immutable.
 
 create or replace function public.dabbir_knowledge_propose_v2(p_business_id uuid,p_conversation_id uuid,p_correction_id uuid,p_entity_type text,p_alias text,p_target_id uuid) returns jsonb
@@ -22,6 +22,8 @@ begin
     values(p_business_id,p_conversation_id,pid,'PROPOSED',1,u);
   return jsonb_build_object('id',pid,'status','PROPOSED','active',false);
 end $$;
+revoke all on function public.dabbir_knowledge_propose_v2(uuid,uuid,uuid,text,text,uuid) from public,anon;
+grant execute on function public.dabbir_knowledge_propose_v2(uuid,uuid,uuid,text,text,uuid) to authenticated;
 
 create or replace function public.dabbir_knowledge_review_v2(p_business_id uuid,p_proposal_id uuid,p_action text) returns jsonb
 language plpgsql security definer set search_path='pg_catalog','public','auth' as $$
@@ -57,3 +59,5 @@ begin
     values(p_business_id,k.source_conversation_id,k.id,case when p_action='rollback' then 'ROLLBACK' else st end,v,u);
   return jsonb_build_object('id',k.id,'status',st,'version',v,'active',st='OWNER_APPROVED');
 end $$;
+revoke all on function public.dabbir_knowledge_review_v2(uuid,uuid,text) from public,anon;
+grant execute on function public.dabbir_knowledge_review_v2(uuid,uuid,text) to authenticated;
