@@ -73,12 +73,22 @@ async function workspace(req,ctx){
   const business=businessRows?.[0]||null;
   if(!business)throw Object.assign(new Error('BUSINESS_NOT_FOUND'),{status:404});
 
+  const requestedConversationValue=singleQueryValue(req,'conversation_id');
+  const requestedConversation=safeId(requestedConversationValue);
+  if(requestedConversationValue&&!requestedConversation)throw Object.assign(new Error('INVALID_CONVERSATION_ID'),{status:400});
+  if(!Array.isArray(conversations))throw Object.assign(new Error('CONVERSATIONS_LOOKUP_FAILED'),{status:502});
+  if(requestedConversation&&!conversations.some(row=>row.id===requestedConversation)){
+    const rows=await rest(ctx.token,`dabbir_conversations?select=id,branch_id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${enc(businessId)}${suffix}&id=eq.${enc(requestedConversation)}&channel_type=in.(web,whatsapp,instagram)&limit=1`,'CONVERSATION_LOOKUP_FAILED');
+    const exact=Array.isArray(rows)?rows.find(row=>row.id===requestedConversation):null;
+    if(!exact)throw Object.assign(new Error('CONVERSATION_NOT_FOUND'),{status:404});
+    conversations.unshift(exact);
+  }
+
   const conversationIds=idsFilter((conversations||[]).map(row=>row.id));
   const customerIds=idsFilter([
     ...(conversations||[]).map(row=>row.customer_id),
     ...(appointments||[]).map(row=>row.customer_id),
   ]);
-  const requestedConversation=safeId(singleQueryValue(req,'conversation_id'));
   let selectedConversationId=requestedConversation&&conversations?.some(row=>row.id===requestedConversation)?requestedConversation:null;
   if(!selectedConversationId)selectedConversationId=conversations?.[0]?.id||null;
 

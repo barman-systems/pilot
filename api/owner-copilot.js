@@ -29,6 +29,19 @@ async function readData(response,fallback){
 
 const rest=(token,path,fallback)=>supabaseRest(path,token).then(response=>readData(response,fallback));
 
+async function requiredSnapshotRows(token,path,fallback){
+  try{
+    const rows=await rest(token,path,fallback);
+    if(!Array.isArray(rows))throw new Error(fallback+'_UNVERIFIED');
+    return rows;
+  }catch(error){
+    // Missing business facts are not an empty business. Stop before building
+    // financial/inventory claims or sending an incomplete snapshot to AI.
+    if([401,403].includes(Number(error?.status)))throw error;
+    throw Object.assign(new Error('OWNER_SNAPSHOT_UNAVAILABLE'),{status:503});
+  }
+}
+
 async function restCount(token,path,fallback){
   const response=await supabaseRest(path,token,{headers:{prefer:'count=exact'}});
   if(!response.ok)return readData(response,fallback);
@@ -194,10 +207,10 @@ async function buildSnapshot(token,businessId){
     rest(token,`dabbir_handoffs?select=customer_id,state,priority,reason,summary,updated_at&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&order=updated_at.desc&limit=20`,'HANDOFFS_LOOKUP_FAILED'),
     rest(token,`dabbir_appointments?select=customer_id,starts_at,status,simulated&business_id=eq.${b}&starts_at=gte.${enc(nowIso)}&starts_at=lte.${enc(next24)}&simulated=eq.false&status=not.in.(cancelled,completed)&order=starts_at.asc&limit=20`,'APPOINTMENTS_LOOKUP_FAILED'),
     rest(token,`dabbir_customers?select=id,display_name&business_id=eq.${b}&limit=200`,'CUSTOMERS_LOOKUP_FAILED'),
-    rest(token,`dabbir_products?select=id,name,sku,price_aed,active&business_id=eq.${b}&active=eq.true&order=name.asc&limit=200`,'STORE_PRODUCTS_LOOKUP_FAILED').catch(()=>[]),
-    rest(token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${b}&limit=200`,'STORE_INVENTORY_LOOKUP_FAILED').catch(()=>[]),
-    rest(token,`dabbir_orders?select=id,status,total_aed,paid_aed,payment_method,simulated,completed_at,created_at&business_id=eq.${b}&simulated=eq.false&status=in.(confirmed,completed)&completed_at=gte.${enc(day.start)}&completed_at=lt.${enc(day.end)}&order=completed_at.desc&limit=200`,'STORE_ORDERS_LOOKUP_FAILED').catch(()=>[]),
-    rest(token,`dabbir_expenses?select=id,amount_aed,category,occurred_on&business_id=eq.${b}&occurred_on=eq.${enc(day.dateKey)}&order=created_at.desc&limit=200`,'STORE_EXPENSES_LOOKUP_FAILED').catch(()=>[]),
+    requiredSnapshotRows(token,`dabbir_products?select=id,name,sku,price_aed,active&business_id=eq.${b}&active=eq.true&order=name.asc&limit=200`,'STORE_PRODUCTS_LOOKUP_FAILED'),
+    requiredSnapshotRows(token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${b}&limit=200`,'STORE_INVENTORY_LOOKUP_FAILED'),
+    requiredSnapshotRows(token,`dabbir_orders?select=id,status,total_aed,paid_aed,payment_method,simulated,completed_at,created_at&business_id=eq.${b}&simulated=eq.false&status=in.(confirmed,completed)&completed_at=gte.${enc(day.start)}&completed_at=lt.${enc(day.end)}&order=completed_at.desc&limit=200`,'STORE_ORDERS_LOOKUP_FAILED'),
+    requiredSnapshotRows(token,`dabbir_expenses?select=id,amount_aed,category,occurred_on&business_id=eq.${b}&occurred_on=eq.${enc(day.dateKey)}&order=created_at.desc&limit=200`,'STORE_EXPENSES_LOOKUP_FAILED'),
     Promise.all([
       restCount(token,`dabbir_customers?select=id&business_id=eq.${b}&limit=1`,'CUSTOMERS_COUNT_FAILED'),
       restCount(token,`dabbir_conversations?select=id&business_id=eq.${b}&channel_type=eq.web&state=neq.closed&limit=1`,'ACTIVE_CHATS_COUNT_FAILED'),
@@ -310,6 +323,9 @@ export default async function handler(req,res){
       truth:{tenant_rls:true,exact_counts:true,owner_only:true,unverified_numbers_forbidden:true,simulated_appointments_excluded:true,store_metrics_are_business_day_facts:true,legacy_aed_field_names_are_storage_compatibility:true,accounting_profit_not_asserted:true},
     });
   }catch(error){
+    if(error?.message==='OWNER_SNAPSHOT_UNAVAILABLE'){
+      return json(res,503,{ok:false,error:'OWNER_SNAPSHOT_UNAVAILABLE',retryable:true,external_side_effects:false});
+    }
     const status=Number(error?.status||500);
     const safe=[400,401,403,404,409,413].includes(status)?status:500;
     console.error('dabbir_owner_copilot_failed',{status:safe,error:String(error?.message||'OWNER_COPILOT_FAILED').slice(0,140)});
