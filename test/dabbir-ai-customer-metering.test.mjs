@@ -23,6 +23,17 @@ test('meter preserves paid fallback and attributes Vercel spend to the business'
   assert.doesNotMatch(meter,/actualCostUsd==null\?0/);
 });
 
+test('failed provider attempts keep privacy-safe diagnostics without customer content or tenant identity',()=>{
+  assert.match(meter,/dabbir_whatsapp_ai_provider_chain_failed/);
+  assert.match(meter,/outcome:error\?\.name==='AbortError'\?'timeout':'network_error'/);
+  const failureLog=meter.match(/console\.warn\('dabbir_whatsapp_ai_provider_chain_failed',[\s\S]*?\n\s*\}\);/)?.[0]||'';
+  assert.match(failureLog,/state:/);
+  assert.match(failureLog,/error:/);
+  assert.match(failureLog,/provider:/);
+  assert.match(failureLog,/attempts:/);
+  assert.doesNotMatch(failureLog,/businessId|conversationId|args\.message|customer|body|token/i);
+});
+
 test('authoritative ledger exposes per-business channel provider model and explicit unpriced operations',()=>{
   for(const field of ['ai_channel','ai_provider','ai_model','ai_input_tokens','ai_output_tokens','ai_reasoning_tokens','ai_cost_source'])assert.match(migration,new RegExp(field));
   assert.match(migration,/dabbir_ai_customer_cost_monthly_v1/);
