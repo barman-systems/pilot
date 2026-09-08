@@ -107,11 +107,11 @@ test('a request for a human retains precedence over service discovery',async()=>
   const h=session();assert.equal((await h.turn('ابا اكلم المدير عن الخدمات')).action,'HANDOFF');assert.equal(h.modelCalls,0);assert.equal(h.replies.length,0);
 });
 test('provider recovery does not send or mutate an uncommitted interpretation',async()=>{
-  let delivered=false,committed=false;
+  let delivered=false,committed=false,checkpointed=false;
   const result=await runUnderstandingTurn({claim:{batch_id:'b',lock_token:'l',attempt_count:1},context:context({batch_messages:[{body:'Please help me with something suitable'}]}),now:()=>now,
-    rpc:async(name)=>{if(name==='dabbir_semantic_load_v2')return {version:0,message_revision:1};if(name==='dabbir_semantic_commit_v2'){committed=true;return {version:1};}throw Error('UNEXPECTED_RPC');},
+    rpc:async(name)=>{if(name==='dabbir_semantic_load_v2')return {version:0,message_revision:1};if(name==='dabbir_semantic_checkpoint_failure_v1'){checkpointed=true;return {executable:false};}if(name==='dabbir_semantic_commit_v2'){committed=true;return {version:1};}throw Error('UNEXPECTED_RPC');},
     planner:async()=>{throw Object.assign(Error('unavailable'),{code:'AI_PLANNER_UNAVAILABLE'});},
     deliver:async()=>{delivered=true;},finish:async()=>{},handoff:async()=>{},
   });
-  assert.equal(result.action,'RETRY');assert.equal(committed,false);assert.equal(delivered,false);
+  assert.equal(result.action,'RETRY');assert.equal(committed,false);assert.equal(delivered,false);assert.equal(checkpointed,true);
 });

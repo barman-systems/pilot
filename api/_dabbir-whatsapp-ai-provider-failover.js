@@ -9,7 +9,7 @@ import { loadConversationConnectionWithServiceKey } from './_whatsapp-service-co
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ARABIC=/[\u0600-\u06ff]/;
-const PROVIDER_FAILURE=/^(?:gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|empty_ai_response)/i;
+const PROVIDER_FAILURE=/^(?:gateway_|gemini_|groq_|cloudflare_|ai_planner_unavailable|ai_planner_contract_invalid|ai_provider_failed_twice|semantic_provider_budget|empty_ai_response)/i;
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const one=value=>Array.isArray(value)?value[0]??null:value??null;
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
@@ -36,11 +36,17 @@ async function reserveContinuityMessage(result,body){
   return row;
 }
 
+export function verifiedContinuityReplay(reservation){
+  const providerMessageId=clean(reservation?.provider_message_id,320);
+  const verified=['SENT','DELIVERED','READ','COMPLETED'].includes(String(reservation?.reservation_state||'').toUpperCase())&&!!providerMessageId;
+  return {delivered:verified,deduplicated:true,provider_message_id:verified?providerMessageId:null,...(!verified?{error:'AI_PROVIDER_FAILOVER_DELIVERY_UNVERIFIED'}:{})};
+}
+
 async function deliverContinuityMessage(result){
   const body=continuityMessage(result.customer_body);
   const reservation=await reserveContinuityMessage(result,body);
   if(reservation.should_send!==true){
-    return {delivered:true,deduplicated:true,provider_message_id:clean(reservation.provider_message_id,320)||null};
+    return verifiedContinuityReplay(reservation);
   }
 
   const serviceKey=clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);

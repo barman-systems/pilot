@@ -9,7 +9,8 @@ function harness({text='ابا غسيل باجر',extra={},fail=null,resolveProd
  const rpc=async(name,args)=>{calls.push({name,args});
   if(fail?.name===name)throw Object.assign(new Error(fail.code),{code:fail.code});
   if(name==='dabbir_semantic_load_v2')return {semantic_state:persisted||{},version,message_revision:1};
-  if(name==='dabbir_semantic_commit_v2'){persisted=args.p_state;version++;return {version,state:persisted,replay:false};}
+  if(name==='dabbir_semantic_checkpoint_failure_v1')return {ok:true,version:1,executable:false};
+    if(name==='dabbir_semantic_commit_v2'){persisted=args.p_state;version++;return {version,state:persisted,replay:false};}
   if(name==='dabbir_semantic_assert_current_v2'){if(stale)throw Object.assign(new Error('SEMANTIC_SUPERSEDED'),{code:'SEMANTIC_SUPERSEDED'});return true;}
   if(name==='dabbir_semantic_execute_v2'){mutations++;return {verified:true,appointment_id:'a',status:'confirmed',starts_at:slots[1].starts_at,timezone:'Asia/Dubai'};}
   if(name==='dabbir_whatsapp_ai_check_availability')return {slots};

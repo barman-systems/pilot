@@ -91,3 +91,23 @@ test('an expired menu ordinal after an idle session cannot become an old service
   assert.equal(result.action,'REPLY');assert.equal(h.committed.entities.service,undefined);assert.equal(h.committed.entities.time,undefined);
   assert.match(h.replies[0],/انتهت|expired/i);assert.equal(h.plannerCalls,0);
 });
+
+test('incident regression: greeting after interrupted request keeps context beyond idle timeout without executing',async()=>{
+  const interrupted=previous();interrupted.intent='BOOKING';interrupted.recovery_required=true;interrupted.planner_failure_code='AI_PLANNER_UNAVAILABLE';interrupted.pending_action='RETRY';
+  const h=harness({text:'هلا',semantic:interrupted,pending:null});const result=await h.run();
+  assert.equal(result.action,'CLARIFY');assert.match(h.replies[0],/طلبك السابق ما اكتمل/);assert.equal(h.plannerCalls,0);
+  assert.equal(h.committed.entities.service.value,ids.carpet);assert.equal(h.committed.intent_confirmed,false);assert.equal(h.committed.operational_confidence,0);
+  assert.equal(h.committed.clarification_entity,'intent_confirmation');assert.ok(!h.calls.some(x=>x.name==='dabbir_semantic_execute_v2'));
+});
+test('incident regression: expired interrupted request cannot be restored by a greeting',async()=>{
+  const interrupted=previous();interrupted.recovery_required=true;interrupted.expires_at='2026-09-08T09:00:00Z';
+  const h=harness({text:'هلا',semantic:interrupted,pending:null});await h.run();assert.equal(h.committed.recovery_required,undefined);assert.match(h.replies[0],/كيف أقدر أساعدك/);
+});
+
+test('incident regression: resuming after requested time elapsed clears that time but preserves the service',async()=>{
+  const interrupted=previous();interrupted.intent='BOOKING';interrupted.recovery_required=true;
+  interrupted.entities.date={value:'2026-09-08',source:'CUSTOMER_STATED',status:'active',confidence:1};
+  interrupted.entities.time={value:'13:00',source:'CUSTOMER_STATED',status:'active',confidence:1};
+  const h=harness({text:'هلا',semantic:interrupted,pending:null});await h.run();
+  assert.equal(h.committed.entities.time,undefined);assert.equal(h.committed.entities.date.value,'2026-09-08');assert.equal(h.committed.entities.service.value,ids.carpet);
+});
