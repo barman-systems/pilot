@@ -32,6 +32,11 @@ jobs:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
           BOOKING_BROWSER_OUTPUT: booking-browser-evidence
         run: node scripts/qa-booking-lifecycle-browser.mjs
+      - name: Owner knowledge modal with active onboarding overlay
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
+        run: node scripts/qa-understanding-knowledge-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

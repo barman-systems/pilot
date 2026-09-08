@@ -16,6 +16,8 @@ function harness(fetch,lang='en',lateDashboard=false){
     setAttribute(k,v){this.attrs[k]=v}
     addEventListener(k,v){this['on'+k]=v}
     focus(){document.activeElement=this}
+    showModal(){this.open=true;this.nativeModal=true}
+    close(){this.open=false}
     get connected(){return this===document.documentElement||Boolean(this.parentNode?.connected)}
     querySelector(){return null}
     querySelectorAll(){return this.children.flatMap(n=>[n,...n.querySelectorAll()]).filter(n=>['button','input','select'].includes(n.tag))}
@@ -74,4 +76,13 @@ test('a control mounted in hidden automations moves to the dashboard once its ho
   await ui.refresh();const button=ui.button('DABBIR Policies');assert.equal(button.parentNode,ui.autoHost);
   ui.mountDashboard();await flush();assert.equal(ui.button('DABBIR Policies'),button);assert.equal(button.parentNode,ui.host);
   ui.observe();await flush();assert.equal(ui.host.children.filter(n=>n===button).length,1);
+});
+
+
+test('knowledge approval opens in the browser modal top layer above onboarding overlays',async()=>{
+  const ui=harness(async url=>response(url.includes('understanding')?payload:{}));
+  await ui.refresh();ui.open();const modal=ui.nodes().find(n=>n.id==='dabbirMemoryOverlay');
+  assert.equal(modal.tag,'dialog');assert.equal(modal.nativeModal,true);assert.equal(modal.open,true);
+  assert.equal(modal.attrs['aria-labelledby'],'dabbirMemoryTitle');
+  modal.oncancel({preventDefault(){}});assert.equal(modal.open,false);assert.equal(modal.connected,false);
 });
