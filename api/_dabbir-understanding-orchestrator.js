@@ -1,4 +1,4 @@
-import { BUDGET, understandConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
+import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -8,6 +8,45 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
   tool_selection:d.reasonCode,model_calls:s.model_calls||0});
+const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
+const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
+function exactServiceByText(c,raw,allowedIds=null){
+  const wanted=normalizeSemanticText(raw);if(!wanted)return null;
+  const allowed=allowedIds?new Set(allowedIds):null;
+  const matches=scopedServices(c).filter(s=>(!allowed||allowed.has(s.id))&&[s?.name_ar,s?.name,s?.name_en].some(name=>name&&normalizeSemanticText(name)===wanted));
+  return matches.length===1?matches[0]:null;
+}
+function liveServicePresentation(c,at){
+  const pending=c?.pending_state,payload=pending?.payload||{};
+  if(pending?.pending_action!=='choose_service'||payload.presented!==true||!payload.provider_message_id||!pending.expires_at||Date.parse(pending.expires_at)<=at.getTime())return null;
+  const offered=arr(payload.services).slice(0,10).filter(x=>x?.id&&scopedServices(c).some(s=>s.id===x.id));
+  return offered.length?offered:null;
+}
+function groundedServiceChoice(c,raw,previous,at){
+  const offered=liveServicePresentation(c,at);
+  if(offered){
+    const ordinal=resolveOrdinal(raw);
+    if(!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
+      const selected=scopedServices(c).find(s=>s.id===offered[ordinal.index].id);
+      if(selected)return selected;
+    }
+    const exact=exactServiceByText(c,raw,offered.map(x=>x.id));
+    if(exact)return exact;
+  }
+  // Recovery for conversations affected before choose_service existed: an exact,
+  // active service name after a service-discovery turn is sufficient database grounding.
+  if(previous?.intent==='SERVICE_DISCOVERY')return exactServiceByText(c,raw);
+  return null;
+}
+function previousForGroundedService(previous,grounded){
+  if(!grounded||!previous||previous.intent!=='SERVICE_DISCOVERY')return previous;
+  const next=structuredClone(previous);
+  // A bare menu ordinal such as "2" used to leak into time parsing. It was never
+  // operationally supported, so discard only that unresolved artifact while repairing.
+  const time=next?.entities?.time;
+  if(time?.status==='unresolved'&&time?.source==='CUSTOMER_STATED'&&Number(time?.confidence)<.9&&time?.part==='am_pm')delete next.entities.time;
+  return next;
+}
 
 // One bounded orchestrator owns Understanding -> Policy -> Tool -> Verification.
 // Adapter injection makes provider/retry/concurrency tests exercise the real runtime path.
@@ -15,11 +54,15 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const started=Date.now();let steps=0;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
-  const c={...context,...load};
-  // Product markers originate in the signed webhook. They are still customer
-  // selections; only the scoped catalog RPC can ground their service identity.
+  const c={...context,...load},turnNow=now();
+  let semanticPrevious=load.semantic_state,groundedMenuSelection=false;
+  // Product markers originate in the signed webhook. Text-menu choices are accepted
+  // only from a provider-verified, unexpired ordered service presentation. Both paths
+  // reduce to the same scoped catalog_service_id contract.
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');
+    const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
+    if(selected){groundedMenuSelection=true;return {...message,body:serviceLabel(selected),catalog_service_id:selected.id};}
     const product=body.match(/\[DABBIR_CATALOG_PRODUCT catalog_id=([0-9]{5,40}) product_retailer_id=([^\]\s]+)\]/);
     const order=body.match(/\[DABBIR_CATALOG_ORDER catalog_id=([0-9]{5,40}) items=([^\]]+)\]/);
     if(!product&&!order)return message;
@@ -31,14 +74,15 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     if(!mapped?.service_id||!arr(c.services).some(s=>s.id===mapped.service_id)){c.catalog_error='CATALOG_UNMAPPED';return message;}
     return {...message,body:body.replace(/\[DABBIR_CATALOG_(?:PRODUCT|ORDER)[^\]]*\]/g,'').trim(),catalog_service_id:mapped.service_id};
   }));
-  let {state,decision}=understandConversation({context:c,previous:load.semantic_state,now:now()});
+  semanticPrevious=previousForGroundedService(semanticPrevious,groundedMenuSelection);
+  let {state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow});
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   // A model is needed only when deterministic evidence does not resolve the request.
   // It receives bounded, de-identified context; its result must pass the same reducer.
   if(decision.reasonCode==='NO_OPERATIONAL_AUTHORITY' && planner && arr(c.batch_messages).some(x=>String(x.body||'').length>12)) {
     budget();
     const proposal=await planner(c,semanticPlannerContext(c,state));
-    ({state,decision}=understandConversation({context:c,previous:load.semantic_state,now:now(),proposal}));
+    ({state,decision}=understandConversation({context:c,previous:semanticPrevious,now:turnNow,proposal}));
     state.model_calls=1;
   }
   budget();
@@ -94,11 +138,13 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     }
   }
   if(decision.action==='PRICING'||decision.action==='SERVICE_MENU') {
-    if(decision.action==='SERVICE_MENU'&&deliverMenu){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}
+    if(decision.action==='SERVICE_MENU'&&deliverMenu){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}
     const services=arr(c.services).filter(x=>decision.action==='SERVICE_MENU'||!val(state,'service')||x.id===val(state,'service')).slice(0,10);
-    decision.reply=services.map((x,i)=>`${i+1}) ${x.name_ar||x.name||x.name_en} — ${Number(x.price)} ${c.business.currency_code}`).join('\n')||(lang==='ar'?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
+    if(services.length){c.servicePresentation={services:services.map(x=>({id:x.id,label:serviceLabel(x)})),presented:false};await setPending('choose_service',c.servicePresentation);}
+    decision.reply=services.map((x,i)=>`${i+1}) ${serviceLabel(x)} — ${Number(x.price)} ${c.business.currency_code}`).join('\n')||(lang==='ar'?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
   }
   const sent=await send(decision.reply|| (lang==='ar'?'أي خدمة تحتاج؟':'Which service do you need?'),decision.action==='CLARIFY'?'clarify':'reply');
   if(c.appointmentPresentation&&sent?.providerMessageId)await setPending('choose_appointment',{...c.appointmentPresentation,presented:true,provider_message_id:sent.providerMessageId});
+  if(c.servicePresentation){if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_service',{...c.servicePresentation,presented:true,provider_message_id:sent.providerMessageId});}
   await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,semantic_version:version};
 }
