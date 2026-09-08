@@ -35,7 +35,7 @@ begin
     from public.dabbir_whatsapp_connections c
     where c.waba_id = trim(new.waba_id)
       and c.business_id <> new.business_id
-      and c.id <> new.id
+      and c.id is distinct from new.id
   ) then
     raise exception 'DABBIR_WHATSAPP_WABA_CROSS_BUSINESS_FORBIDDEN';
   end if;
