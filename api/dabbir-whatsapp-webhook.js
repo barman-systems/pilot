@@ -2,7 +2,7 @@ import { singleQueryValue } from './_request-query.js';
 import crypto from 'node:crypto';
 import { classifyClinicMessage, classifyCelebrityMessage } from './dabbir-runtime.js';
 import { attachCorrelation, correlationId, logEvent } from './_observability.js';
-import { applySignedStatus, persistSignedInbound } from './_whatsapp-live-core.js';
+import { applySignedStatus, persistSignedInbound, serviceRpc } from './_whatsapp-live-core.js';
 import { persistSignedVoiceInbound } from './_dabbir-whatsapp-voice.js';
 
 export const config = {
@@ -93,6 +93,13 @@ function safeRetailerId(value) {
   return String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255);
 }
 
+function providerOccurredAt(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const date = new Date(seconds * 1000);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function catalogEnvelope(message = {}) {
   const referred = message?.context?.referred_product || null;
   const referredCatalogId = safeMetaId(referred?.catalog_id);
@@ -160,6 +167,24 @@ export function extractWhatsAppEvents(payload = {}) {
       const value = change.value || {};
       const phoneNumberId = value.metadata?.phone_number_id || value.phone_number_id || null;
       const displayPhoneNumber = value.metadata?.display_phone_number || value.display_phone_number || null;
+
+      if (change.field === 'account_update') {
+        const wabaId = safeMetaId(value?.waba_info?.waba_id || value?.waba_id || entry?.id);
+        const eventName = String(value?.event || '').trim().toUpperCase().slice(0, 80);
+        if (wabaId && eventName) {
+          events.push({
+            type: 'account_update',
+            sourceField: 'account_update',
+            wabaId,
+            accountEvent: eventName,
+            phoneNumber: String(value?.phone_number || value?.business_phone || '').replace(/[^0-9]/g, '').slice(0, 40) || null,
+            reason: String(value?.disconnection_info?.reason || '').trim().slice(0, 120) || null,
+            initiatedBy: String(value?.disconnection_info?.initiated_by || '').trim().slice(0, 40) || null,
+            timestamp: value?.time || value?.timestamp || entry?.time || null,
+          });
+        }
+        continue;
+      }
 
       if (change.field === 'messages') {
         const contactNames = new Map((Array.isArray(value.contacts) ? value.contacts : [])
@@ -303,12 +328,16 @@ export default async function handler(req, res) {
   const catalogMessageCount = routed.filter(e => e.type === 'message' && e.catalogId).length;
   const statusCount = routed.filter(e => e.type === 'status').length;
   const coexistenceCount = routed.filter(e => ['app_message_echo', 'history_message', 'app_state_sync', 'coexistence_sync'].includes(e.type)).length;
+  const accountUpdateCount = routed.filter(e => e.type === 'account_update').length;
   const classifications = [...new Set(routed.map(e => e.classification).filter(Boolean))].slice(0, 20);
   let persistedMessages = 0;
   let duplicateMessages = 0;
   let matchedStatuses = 0;
   let providerVerifiedStatuses = 0;
   let unlinkedMessages = 0;
+  let accountUpdatesProcessed = 0;
+  let accountUpdatesMatched = 0;
+  let accountUpdatesTerminal = 0;
 
   try {
     for (const event of routed) {
@@ -330,6 +359,18 @@ export default async function handler(req, res) {
         const result = await applySignedStatus(event);
         if (result.matched) matchedStatuses += 1;
         if (result.providerVerified) providerVerifiedStatuses += 1;
+      } else if (event.type === 'account_update') {
+        const result = await serviceRpc('dabbir_whatsapp_apply_account_update', {
+          p_waba_id: event.wabaId,
+          p_event: event.accountEvent,
+          p_phone_number: event.phoneNumber,
+          p_reason: event.reason,
+          p_initiated_by: event.initiatedBy,
+          p_occurred_at: providerOccurredAt(event.timestamp),
+        });
+        accountUpdatesProcessed += 1;
+        if (result?.matched === true) accountUpdatesMatched += 1;
+        if (result?.terminal === true) accountUpdatesTerminal += 1;
       }
     }
   } catch (error) {
@@ -347,6 +388,7 @@ export default async function handler(req, res) {
       catalog_message_count: catalogMessageCount,
       status_count: statusCount,
       coexistence_event_count: coexistenceCount,
+      account_update_count: accountUpdateCount,
     });
     return json(res, status, {
       ok: false,
@@ -360,10 +402,15 @@ export default async function handler(req, res) {
     }, cid);
   }
 
-  const persistenceVerified = messageCount === 0 || persistedMessages === messageCount - unlinkedMessages;
-  const state = unlinkedMessages > 0 && persistedMessages === 0
-    ? 'TENANT_NOT_LINKED'
-    : (persistedMessages > 0 || matchedStatuses > 0 ? 'LIVE_EVENT_PERSISTED' : (coexistenceCount > 0 ? 'COEXISTENCE_EVENT_ACCEPTED' : 'SIGNED_EVENT_NO_ACTION'));
+  const persistenceVerified = (messageCount === 0 || persistedMessages === messageCount - unlinkedMessages)
+    && accountUpdatesProcessed === accountUpdateCount;
+  const state = accountUpdatesMatched > 0
+    ? 'ACCOUNT_UPDATE_APPLIED'
+    : (unlinkedMessages > 0 && persistedMessages === 0
+      ? 'TENANT_NOT_LINKED'
+      : (persistedMessages > 0 || matchedStatuses > 0
+        ? 'LIVE_EVENT_PERSISTED'
+        : ((coexistenceCount > 0 || accountUpdateCount > 0) ? 'COEXISTENCE_EVENT_ACCEPTED' : 'SIGNED_EVENT_NO_ACTION')));
 
   logEvent('info', {
     correlation_id: cid,
@@ -378,6 +425,10 @@ export default async function handler(req, res) {
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
+    account_update_count: accountUpdateCount,
+    account_updates_processed: accountUpdatesProcessed,
+    account_updates_matched: accountUpdatesMatched,
+    account_updates_terminal: accountUpdatesTerminal,
     classifications,
     persisted_messages: persistedMessages,
     duplicate_messages: duplicateMessages,
@@ -400,8 +451,12 @@ export default async function handler(req, res) {
     status_count: statusCount,
     coexistence_event_count: coexistenceCount,
     coexistence_fields: [...new Set(routed.map(e => e.sourceField).filter(Boolean))].slice(0, 10),
+    account_update_count: accountUpdateCount,
+    account_updates_processed: accountUpdatesProcessed,
+    account_updates_matched: accountUpdatesMatched,
+    account_updates_terminal: accountUpdatesTerminal,
     classifications,
-    persisted: persistedMessages > 0,
+    persisted: persistedMessages > 0 || accountUpdatesMatched > 0,
     persistence_verified: persistenceVerified,
     duplicate_messages: duplicateMessages,
     matched_statuses: matchedStatuses,
