@@ -198,7 +198,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     }else{
       const conflict=proposalConflicts(state,proposal);const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
-      ({state,decision}=understandConversation({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
+      ({state,decision}=understandConversation({context:providerContext,previous:providerPrevious,now:turnNow,proposal}));
       state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
       if(conflict&&!state.semantic_ai_override)state.semantic_ai_override={from:deterministic.state.intent,to:normalizedProposalIntent(proposal),confidence:Number(proposal?.confidence)||0};
     }
