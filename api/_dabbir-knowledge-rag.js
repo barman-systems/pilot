@@ -3,6 +3,7 @@ const DEFAULT_MODEL='gemini-embedding-2';
 const DEFAULT_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clean=(value,max=16000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,max);
+const ragEnabled=env=>['1','true'].includes(String(env?.DABBIR_KNOWLEDGE_RAG_ENABLED||'').trim().toLowerCase());
 
 export function knowledgeDocumentInstruction({title,content}={}){
   return `title: ${clean(title,220)||'none'} | text: ${clean(content,15000)}`;
@@ -10,7 +11,6 @@ export function knowledgeDocumentInstruction({title,content}={}){
 export function knowledgeQueryInstruction(query){return `task: search result | query: ${clean(query,1200)}`}
 export function embeddingConfiguration(env=process.env){
   const key=clean(env.GEMINI_API_KEY,8192),model=clean(env.DABBIR_EMBEDDING_MODEL||DEFAULT_MODEL,120);
-  if(env.DABBIR_KNOWLEDGE_RAG_ENABLED==='0')return {ok:false,reason:'DISABLED'};
   if(!key)return {ok:false,reason:'GEMINI_API_KEY_MISSING'};
   if(model!==DEFAULT_MODEL)return {ok:false,reason:'EMBEDDING_MODEL_UNAPPROVED'};
   return {ok:true,key,model,endpoint:DEFAULT_ENDPOINT,dimensions:EMBEDDING_DIMENSIONS};
@@ -36,9 +36,10 @@ export function vectorSqlText(vector){
 }
 export async function retrieveDabbirKnowledge({businessId,query,rpc,env=process.env,fetchImpl=fetch,limit=5}={}){
   if(!UUID.test(String(businessId||''))||typeof rpc!=='function'||!clean(query,1200))return [];
+  if(!ragEnabled(env))return [];
   const config=embeddingConfiguration(env);if(!config.ok)return [];
   try{
-    const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl});
+    const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl,timeoutMs:2500});
     const rows=await rpc('dabbir_knowledge_hybrid_search_v1',{p_business_id:businessId,p_query:clean(query,1200),p_embedding_text:vectorSqlText(vector),p_limit:Math.min(8,Math.max(1,Number(limit)||5))});
     return (Array.isArray(rows)?rows:[]).slice(0,8).map(row=>({
       knowledge_key:clean(row?.knowledge_key,180),knowledge_type:clean(row?.knowledge_type,80),content:clean(row?.content,1400),
@@ -48,6 +49,7 @@ export async function retrieveDabbirKnowledge({businessId,query,rpc,env=process.
 }
 export async function indexApprovedKnowledge({rpc,env=process.env,fetchImpl=fetch,limit=12}={}){
   if(typeof rpc!=='function')throw new Error('RAG_RPC_REQUIRED');
+  if(!ragEnabled(env))return {ok:false,state:'SKIPPED',reason:'DISABLED',indexed:0,failed:0};
   const config=embeddingConfiguration(env);if(!config.ok)return {ok:false,state:'SKIPPED',reason:config.reason,indexed:0,failed:0};
   const queue=await rpc('dabbir_knowledge_embedding_queue_v1',{p_limit:Math.min(30,Math.max(1,Number(limit)||12))});
   const rows=Array.isArray(queue)?queue:[];let indexed=0,failed=0;
