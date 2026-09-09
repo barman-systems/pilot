@@ -247,7 +247,7 @@ test('daily worker stays fail-closed, scheduled at 09:15 Dubai, idempotent and h
   assert.deepEqual(vercel.crons.find(item => item.path === '/api/dabbir-daily-operator-cron'), { path: '/api/dabbir-daily-operator-cron', schedule: '15 5 * * *' });
   assert.equal(vercel.functions['api/dabbir-daily-operator-cron.js'].maxDuration, 60);
   const official = { headers: { 'user-agent': 'vercel-cron/1.0', 'x-vercel-cron-schedule': '15 5 * * *' } };
-  assert.equal(cronAuthMode(official, { VERCEL_ENV: 'production' }), 'vercel_schedule');
+  assert.equal(cronAuthMode(official, { VERCEL_ENV: 'production' }), null);
   assert.equal(cronAuthMode(official, { VERCEL_ENV: 'preview' }), null);
   assert.match(core, /IDEMPOTENT_REPLAY/);
   assert.match(core, /DAILY_OPERATOR_VERSION/);

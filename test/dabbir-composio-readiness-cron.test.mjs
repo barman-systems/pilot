@@ -18,9 +18,9 @@ const safeConfig=()=>({
   search:{enable:false},execute:{enable_multi_execute:false},
 });
 
-test('Composio readiness cron auth fails closed and accepts exact Vercel schedule',()=>{
+test('Composio readiness cron auth rejects forged schedule headers without a secret',()=>{
   assert.equal(cronAuthMode({headers:{}},env),null);
-  assert.equal(cronAuthMode({headers:{'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'}},env),'vercel_schedule');
+  assert.equal(cronAuthMode({headers:{'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'}},env),null);
   assert.equal(cronAuthMode({headers:{authorization:'Bearer s'}},{CRON_SECRET:'s'}),'secret');
   assert.equal(cronAuthMode({headers:{authorization:'Bearer x'}},{CRON_SECRET:'s'}),null);
 });

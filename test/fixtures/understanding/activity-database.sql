@@ -7,3 +7,4 @@ alter table public.dabbir_appointments add column booking_source text default 'w
 
 create table public.dabbir_whatsapp_flow_sessions(id uuid);
 create table public.dabbir_whatsapp_event_ledger(id uuid);
+create table public.dabbir_home_service_settings(business_id uuid primary key,enabled boolean default false);

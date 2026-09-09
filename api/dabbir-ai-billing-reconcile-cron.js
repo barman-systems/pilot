@@ -3,7 +3,6 @@ import { getVercelOidcToken } from '@vercel/oidc';
 import { json, SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
-const SCHEDULE='23 2 * * *';
 const SETTLEMENT_LAG_DAYS=0;
 const RECONCILE_DAYS=1;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,7 +11,7 @@ const num=value=>Number.isFinite(Number(value))?Number(value):0;
 const integer=value=>Math.max(0,Math.trunc(num(value)));
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 function sameSecret(left,right){const a=Buffer.from(String(left||''));const b=Buffer.from(String(right||''));return a.length===b.length&&a.length>0&&timingSafeEqual(a,b)}
-function authMode(req,env=process.env){const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;const userAgent=clean(req.headers?.['user-agent'],120).toLowerCase(),schedule=clean(req.headers?.['x-vercel-cron-schedule'],120);return clean(env.VERCEL_ENV,32)==='production'&&userAgent==='vercel-cron/1.0'&&schedule===SCHEDULE?'vercel_schedule':null}
+function authMode(req,env=process.env){const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;return null}
 function isoDate(offsetDays){const d=new Date(Date.now()+offsetDays*86400000);return d.toISOString().slice(0,10)}
 function nextDate(date){const d=new Date(`${date}T00:00:00.000Z`);d.setUTCDate(d.getUTCDate()+1);return d.toISOString().slice(0,10)}
 async function report(token,params){const response=await fetch(`https://ai-gateway.vercel.sh/v1/report?${new URLSearchParams(params)}`,{cache:'no-store',headers:{authorization:`Bearer ${token}`,accept:'application/json'},signal:AbortSignal.timeout(12000)});const payload=await response.json().catch(()=>null);if(!response.ok||!Array.isArray(payload?.results))throw Object.assign(new Error(`AI_GATEWAY_REPORT_HTTP_${response.status}`),{status:response.status});return payload.results}
