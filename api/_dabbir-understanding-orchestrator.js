@@ -205,8 +205,18 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     budget();let proposal,plannerFailure;
     try{proposal=await planner(c,aiFirstPlannerContext(c,state,semanticPrevious));observedProposal=proposal;}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
     if(plannerFailure){
+      // Until interpretation succeeds, the first parse is provisional. A
+      // catalog name in a side question must not replace the active booking
+      // while checkpointing a provider outage. The original batch is retried;
+      // SQL still strips slot authority and marks this state non-executable.
+      let checkpointState=state;
+      if(cognitive&&activeJourney(semanticPrevious)){
+        checkpointState=structuredClone(semanticPrevious);
+        checkpointState.revision=state.revision;checkpointState.updated_at=turnNow.toISOString();
+        if(checkpointState.cognition)checkpointState.cognition={...checkpointState.cognition,revision:state.revision,journey_stage:'RETRY',next_action:'WAIT',response_strategy:'RETRY_INTERPRETATION'};
+      }
       await rpc('dabbir_semantic_checkpoint_failure_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
-        p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_error:plannerFailure});
+        p_expected_version:load.version,p_message_revision:load.message_revision,p_state:checkpointState,p_error:plannerFailure});
       if(Number(claim.attempt_count||1)<2){await finish(claim,'RETRY',plannerFailure);return {state:'RETRY',action:'RETRY',error:plannerFailure};}
       await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
       await handoff(c,'AI_PROVIDER_FAILED_TWICE','AI interpretation failed twice','SUPPORT');
