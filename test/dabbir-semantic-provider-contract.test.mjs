@@ -154,6 +154,19 @@ test('slow direct providers preserve time for the configured final fallback',asy
  assert.equal(endpoints.some(x=>x.includes('cloudflare')),false);
  assert.equal(result.telemetry.request_count,3);
 });
+test('a valid structured fallback completing after six seconds is not cut off while budget remains',async()=>{
+ let calls=0;
+ const r=await interpretSemanticMessage({message:'بكره',context:{},env:{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'},fetchImpl:async(_url,options)=>{
+  calls++;
+  return new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>resolve(response()),6500);
+   options.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(new DOMException('aborted','AbortError'));},{once:true});
+  });
+ }});
+ assert.equal(r.provider,'vercel-ai-gateway');assert.equal(calls,1);
+ assert.equal(r.telemetry.request_count,1);
+ assert.ok(r.telemetry.latency_ms>=6000&&r.telemetry.latency_ms<18000);
+});
 
 test('provider schema refusal permits one metered compatibility attempt with identical validation',async()=>{
  const formats=[];
