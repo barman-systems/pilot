@@ -1,6 +1,7 @@
 import type { DabbirSession } from './session';
 
 const configuredBase = String(process.env.EXPO_PUBLIC_DABBIR_API_BASE_URL || '').trim().replace(/\/$/, '');
+type StorePlatform = 'ios' | 'android';
 
 function apiBase(): string {
   if (!configuredBase || !/^https:\/\//i.test(configuredBase)) {
@@ -89,15 +90,23 @@ export async function deleteDabbirAccount(accessToken: string): Promise<any> {
   return post('/api/mobile/account-delete', { confirmation: 'DELETE_DABBIR_ACCOUNT' }, accessToken);
 }
 
-export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
-  return post('/api/mobile/iap/verify', { purchase }, accessToken);
+export async function verifyStorePurchase(accessToken: string, purchase: unknown, platform: StorePlatform): Promise<any> {
+  return post('/api/mobile/iap/verify', { purchase, platform }, accessToken);
 }
 
-export async function loadAppleEntitlement(accessToken: string): Promise<any> {
-  const response = await fetch(`${apiBase()}/api/mobile/iap/status`, {
+export async function loadStoreEntitlement(accessToken: string, platform: StorePlatform): Promise<any> {
+  const response = await fetch(`${apiBase()}/api/mobile/iap/status?platform=${encodeURIComponent(platform)}`, {
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
   });
   return parseJson(response);
+}
+
+export async function verifyApplePurchase(accessToken: string, purchase: unknown): Promise<any> {
+  return verifyStorePurchase(accessToken, purchase, 'ios');
+}
+
+export async function loadAppleEntitlement(accessToken: string): Promise<any> {
+  return loadStoreEntitlement(accessToken, 'ios');
 }
 
 export async function loadOwnerOperations(accessToken: string, businessId?: string | null): Promise<any> {

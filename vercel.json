@@ -26,69 +26,29 @@
     { "path": "/api/dabbir-intelligence-maintenance-cron", "schedule": "17 * * * *" }
   ],
   "functions": {
-    "api/salon-reminders-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/calendar-outbox-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-whatsapp-ai-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-whatsapp-ai-worker.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/barman-executive-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-daily-operator-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-ai-billing-reconcile-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-composio-readiness-cron.js": {
-      "maxDuration": 30,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-intelligence-maintenance-cron.js": {
-      "maxDuration": 60,
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/app.js": {
-      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/app-recovery.js": {
-      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/app-safari-recovery.js": {
-      "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/car-wash-booking.js": {
-      "includeFiles": "{booking.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/dabbir-market-preview.js": {
-      "includeFiles": "{try.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/team-page.js": {
-      "includeFiles": "{team.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    },
-    "api/**/*.js": {
-      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
-    }
+    "api/salon-reminders-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/calendar-outbox-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-whatsapp-ai-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-whatsapp-ai-worker.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/barman-executive-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-daily-operator-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-ai-billing-reconcile-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-composio-readiness-cron.js": { "maxDuration": 30, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-intelligence-maintenance-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/app.js": { "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/app-recovery.js": { "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/app-safari-recovery.js": { "includeFiles": "{index.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/car-wash-booking.js": { "includeFiles": "{booking.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-market-preview.js": { "includeFiles": "{try.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/team-page.js": { "includeFiles": "{team.html,api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/**/*.js": { "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" }
   },
   "routes": [
     { "src": "^/api/dabbir-whatsapp-webhook/?$", "dest": "/api/dabbir-whatsapp-webhook-coexistence" },
     { "src": "^/privacy/?$", "dest": "/privacy.html" },
     { "src": "^/terms/?$", "dest": "/terms.html" },
     { "src": "^/support/?$", "dest": "/support.html" },
+    { "src": "^/delete-account/?$", "dest": "/delete-account.html" },
     { "src": "^/team/?$", "dest": "/api/team-page" },
     { "src": "^/team\\.html/?$", "dest": "/api/team-page" },
     { "src": "^/owner/?$", "dest": "/api/owner-login" },
@@ -102,6 +62,7 @@
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/terms.html" },
     { "source": "/support", "destination": "/support.html" },
+    { "source": "/delete-account", "destination": "/delete-account.html" },
     { "source": "/team", "destination": "/api/team-page" },
     { "source": "/owner", "destination": "/api/owner-login" },
     { "source": "/owner-dashboard", "destination": "/api/owner-dashboard-gateway" },
