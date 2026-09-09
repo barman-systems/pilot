@@ -25,13 +25,13 @@ const baseContext=extra=>activityContext({
   customer:{id:ids.customer},services,workers:[],upcoming_appointments:[],history:[],knowledge:[],
   ...extra,
 });
-async function runTurn({text,previous={},pending_state=null,deliverMenu=null}){
+async function runTurn({text,previous={},pending_state=null,deliverMenu=null,currentServices=services,verifiedPresentation=null}){
   const calls=[],replies=[];let committed=null,version=Number(previous?.semantic_version||0);
-  const context=baseContext({batch_messages:[{body:text}],pending_state});
+  const context=baseContext({batch_messages:[{body:text}],pending_state,services:currentServices});
   const claim={batch_id:'90000000-0000-4000-8000-000000000001',lock_token:'90000000-0000-4000-8000-000000000002',attempt_count:1};
   const rpc=async(name,args)=>{
     calls.push({name,args});
-    if(name==='dabbir_semantic_load_v2')return {semantic_state:previous?.state||previous||{},version,message_revision:1};
+    if(name==='dabbir_semantic_load_v2')return {semantic_state:previous?.state||previous||{},version,message_revision:1,verified_service_presentation:verifiedPresentation};
     if(name==='dabbir_semantic_commit_v2'){committed=args.p_state;version+=1;return {version,state:committed,replay:false};}
     if(name==='dabbir_semantic_assert_current_v2')return true;
     if(name==='dabbir_semantic_set_pending_v2')return {pending_action:args.p_action};
@@ -155,6 +155,24 @@ test('unverified, expired, out-of-range or ambiguous service ordinals never sele
     assert.notEqual(run.committed.entities.service?.value,ids.carpet,text);
     assert.notEqual(run.result.action,'CREATE_BOOKING',text);
   }
+});
+
+test('removed catalog entries never renumber an already displayed service list',async()=>{
+ const first=await runTurn({text:'شو خدماتكم'}),pending=pendingFromMenu(first);
+ const selected=await runTurn({text:'2',previous:first.committed,pending_state:pending,currentServices:services.slice(1)});
+ assert.equal(selected.committed.entities.service.value,ids.carpet);
+ const unavailable=await runTurn({text:'1',previous:first.committed,pending_state:pending,currentServices:services.slice(1)});
+ assert.equal(unavailable.committed.entities.service?.value,undefined);
+ assert.notEqual(unavailable.result.action,'CREATE_BOOKING');
+});
+
+test('next turn resolves the original ordinal from the database-proven superseded menu',async()=>{
+ const first=await runTurn({text:'شو خدماتكم'}),verified=pendingFromMenu(first);
+ const pending={...verified,payload:{...verified.payload,presented:false,provider_message_id:null}};
+ const selected=await runTurn({text:'3',previous:first.committed,pending_state:pending,verifiedPresentation:verified});
+ assert.equal(selected.committed.entities.service.value,ids.vip);
+ assert.equal(selected.committed.goal,'BOOK_SERVICE');assert.equal(selected.result.action,'CLARIFY');
+ assert.equal(selected.replies[0],'أي يوم يناسبك؟');
 });
 
 test('database repair adds choose_service and clears only stale handoff pending state on return to AI',()=>{

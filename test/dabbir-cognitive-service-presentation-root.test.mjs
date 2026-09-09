@@ -64,7 +64,7 @@ test('unverified numeric service reply cannot poison time while presentation pro
 });
 
 test('migration makes provider acceptance and pending option presentation one transaction without weakening semantic scope',()=>{
-  const sql=readFileSync(new URL('../supabase/migrations/20260909140000_dabbir_atomic_cognitive_presentation_v1.sql',import.meta.url),'utf8');
+  const sql=readFileSync(new URL('../supabase/migrations/20260909144318_dabbir_atomic_cognitive_presentation_v1.sql',import.meta.url),'utf8');
   assert.match(sql,/state='PROVIDER_ACCEPTED'/);
   assert.match(sql,/semantic_batch_id=v_understanding_batch/);
   assert.match(sql,/pending_action='choose_service' and v_purpose='reply'/);

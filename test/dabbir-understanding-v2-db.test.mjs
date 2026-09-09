@@ -4,12 +4,16 @@ import {resumeQueuedGoal} from '../api/_dabbir-goal-queue.js';
 const db=new PGlite();const batch='90000000-0000-4000-8000-000000000001',lock='90000000-0000-4000-8000-000000000002',message='90000000-0000-4000-8000-000000000003',owner='10000000-0000-4000-8000-000000000001',otherOwner='10000000-0000-4000-8000-000000000002';
 const rpc=async(name,args)=>{const r=await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args);return r.rows[0].result;};
 const load=()=>rpc('dabbir_semantic_load_v2',[batch,lock]);
-async function reset(){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.role','service_role',false)");await db.exec('delete from dabbir_whatsapp_outbound_reservations;delete from dabbir_ai_understanding_events;delete from dabbir_customer_memory;delete from dabbir_ai_action_ledger;delete from dabbir_appointments;delete from dabbir_ai_conversation_state;delete from dabbir_message_batch_items;delete from dabbir_messages;delete from dabbir_message_batches;delete from dabbir_handoffs;');
+async function reset(){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.role','service_role',false)");await db.exec('delete from dabbir_whatsapp_event_ledger;delete from dabbir_whatsapp_outbound_reservations;delete from dabbir_ai_understanding_events;delete from dabbir_customer_memory;delete from dabbir_ai_action_ledger;delete from dabbir_appointments;delete from dabbir_ai_conversation_state;delete from dabbir_message_batch_items;delete from dabbir_messages;delete from dabbir_message_batches;delete from dabbir_handoffs;');
  await db.query("update dabbir_conversations set state='ai_active',understanding_revision=0 where id=$1",[ids.conversation]);
  await db.query('insert into dabbir_messages(id,business_id,conversation_id) values($1,$2,$3)',[message,ids.business,ids.conversation]);
  await db.query('insert into dabbir_message_batches(id,business_id,conversation_id,customer_id,lock_token) values($1,$2,$3,$4,$5)',[batch,ids.business,ids.conversation,ids.customer,lock]);
  await db.query('insert into dabbir_message_batch_items(batch_id,business_id,message_id,ordinal) values($1,$2,$3,1)',[batch,ids.business,message]);
  await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,provider_message_id,state) values($1,$2,'verified-offer','SENT')",[ids.business,ids.conversation]);
+}
+async function finalizeReply(provider,purpose){
+ const r=await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,sender_type,body,state) values($1,$2,$3,'ai','Verified reply','SENDING') returning id",[ids.business,ids.conversation,'wa-understanding:'+batch+':'+purpose]);
+ return (await db.query('select * from public.dabbir_whatsapp_finalize_outbound($1,$2)',[r.rows[0].id,provider])).rows[0];
 }
 function bookingState(){return understandConversation({context:context({batch_messages:[{body:'الثاني'}],pending_state:offered}),now:evalNow}).state;}
 async function commit(state=bookingState(),expected=0){const l=await load();state.activity_contract_version=l.activity_profile.services[0].contract_version;return rpc('dabbir_semantic_commit_v2',[batch,lock,expected,l.message_revision,state,{action:'CREATE_BOOKING'}]);}
@@ -26,6 +30,14 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909121923_dabbir_cognitive_rollout_deny_clients_v1.sql',import.meta.url),'utf8'));
  await db.exec('alter table public.dabbir_whatsapp_outbound_reservations add column provider_verified boolean not null default false');
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909134020_dabbir_cognitive_delivery_progress_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909142432_dabbir_service_presentation_receipts_v1.sql',import.meta.url),'utf8'));
+ await db.exec(`alter table public.dabbir_whatsapp_outbound_reservations add column finalized_at timestamptz,add column provider_status text;
+ alter table public.dabbir_messages add column intent text;
+ alter table public.dabbir_whatsapp_event_ledger alter column id set default gen_random_uuid(),add column business_id uuid,add column connection_id uuid,add column event_key text,add column direction text,add column event_type text,add column provider_message_id text,add column conversation_id uuid,add column message_id uuid,add column provider_status text,add column provider_verified boolean,add column occurred_at timestamptz,add column evidence jsonb;`);
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260903105200_dabbir_whatsapp_ai_outbound_handoff_guard_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909143719_dabbir_cognitive_finalized_acceptance_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909144318_dabbir_atomic_cognitive_presentation_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909144913_dabbir_cognitive_receipt_reconciliation_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -47,13 +59,90 @@ test('cognitive SQL: previous question presentation needs a same-batch provider 
  await reset();const state=understandConversation({context:context({batch_messages:[{body:'أبي غسيل'}]}),now:evalNow}).state;
  await commit(state);const args=[batch,lock,1,'cognitive-receipt','date'];
  await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
- await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'cognitive-receipt','SENT')",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify']);
+ await finalizeReply('cognitive-receipt','clarify');
  assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
  const saved=(await load()).semantic_state.cognition;assert.equal(saved.pending_question.presentation,'PROVIDER_ACCEPTED');assert.equal(saved.pending_field,'date');
  await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',[batch,lock,0,'cognitive-receipt','date']),/SEMANTIC_VERSION_CONFLICT/);
  await db.exec('set role anon');await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/permission denied/);await db.exec('reset role');
 });
 test('database: semantic state persists once per batch with audited provenance',async()=>{await reset();const s=bookingState();const c=await commit(s);assert.equal(c.version,1);const again=await commit(s);assert.equal(again.replay,true);assert.equal((await load()).version,1);assert.equal((await db.query('select count(*) n from dabbir_ai_understanding_events')).rows[0].n,1);});
+test('database: next turn recovers an exact delivered menu without restoring superseded authority',async()=>{
+ await reset();await commit();
+ await rpc('dabbir_semantic_set_pending_v2',[batch,lock,1,'choose_service',{presented:false,services:[{id:ids.service,label:'Shown service'}],presentation_batch_id:'forged',presentation_branch_id:'forged'}]);
+ const staged=(await db.query('select payload,expires_at::text as expires_at from dabbir_ai_conversation_state')).rows[0];
+ assert.equal(staged.payload.presentation_batch_id,batch);assert.equal(staged.payload.presentation_branch_id,ids.branch);
+ const next='90000000-0000-4000-8000-000000000004',nextMessage='90000000-0000-4000-8000-000000000005';
+ await db.query('insert into dabbir_messages(id,business_id,conversation_id) values($1,$2,$3)',[nextMessage,ids.business,ids.conversation]);
+ await db.query("update dabbir_message_batches set state='CANCELLED' where id=$1",[batch]);
+ await db.query('insert into dabbir_message_batches(id,business_id,conversation_id,customer_id,lock_token) values($1,$2,$3,$4,$5)',[next,ids.business,ids.conversation,ids.customer,lock]);
+ await db.query('insert into dabbir_message_batch_items(batch_id,business_id,message_id,ordinal) values($1,$2,$3,1)',[next,ids.business,nextMessage]);
+ const nextLoad=()=>rpc('dabbir_semantic_load_v2',[next,lock]);
+ assert.equal((await nextLoad()).verified_service_presentation,null);
+ await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state,provider_verified) values($1,$2,$3,'menu-receipt','READ',true)",[ids.business,ids.conversation,'wa-understanding:'+batch+':reply']);
+ const verified=(await nextLoad()).verified_service_presentation;
+ assert.equal(verified.payload.presented,true);assert.equal(verified.payload.provider_message_id,'menu-receipt');
+ assert.deepEqual(verified.payload.services,staged.payload.services);
+ assert.equal(Date.parse(verified.expires_at),Date.parse(staged.expires_at),'recovery cannot refresh stale offers');
+ assert.equal((await db.query('select payload from dabbir_ai_conversation_state')).rows[0].payload.presented,false,'load only proves the old read result, without mutating it');
+ await assert.rejects(rpc('dabbir_semantic_execute_v2',[batch,lock,1,'CREATE_BOOKING']),/SEMANTIC_BATCH_LOCK_INVALID|SEMANTIC_SUPERSEDED/);
+ for(const [state,verified] of [['SENDING',true],['PROVIDER_ACCEPTED',true],['FAILED',true],['AMBIGUOUS',true],['DELIVERED',false],['READ',false]]){
+  await db.query("update dabbir_whatsapp_outbound_reservations set state=$1,provider_verified=$2 where provider_message_id='menu-receipt'",[state,verified]);
+  assert.equal((await nextLoad()).verified_service_presentation,null,state);
+ }
+ await db.query("update dabbir_whatsapp_outbound_reservations set state='SENT',provider_verified=false where provider_message_id='menu-receipt'");
+ assert.equal((await nextLoad()).verified_service_presentation.payload.presented,true);
+ await db.query('update dabbir_message_batches set customer_id=$1 where id=$2',[owner,batch]);assert.equal((await nextLoad()).verified_service_presentation,null);
+ await db.query('update dabbir_message_batches set customer_id=$1 where id=$2',[ids.customer,batch]);
+ await db.query("update dabbir_ai_conversation_state set payload=jsonb_set(payload,'{presentation_branch_id}',to_jsonb($1::text))",[ids.other]);assert.equal((await nextLoad()).verified_service_presentation,null);
+ await db.query("update dabbir_ai_conversation_state set payload=jsonb_set(payload,'{presentation_branch_id}',to_jsonb($1::text))",[ids.branch]);
+ for(const [column,value] of [['business_id',ids.other],['conversation_id',ids.other],['idempotency_key','wa-understanding:'+next+':reply']]){
+  const prior=(await db.query(`select ${column} from dabbir_whatsapp_outbound_reservations where provider_message_id='menu-receipt'`)).rows[0][column];
+  await db.query(`update dabbir_whatsapp_outbound_reservations set ${column}=$1 where provider_message_id='menu-receipt'`,[value]);
+  assert.equal((await nextLoad()).verified_service_presentation,null,column);
+  await db.query(`update dabbir_whatsapp_outbound_reservations set ${column}=$1 where provider_message_id='menu-receipt'`,[prior]);
+ }
+ await db.query("update dabbir_ai_conversation_state set pending_action='choose_slot'");assert.equal((await nextLoad()).verified_service_presentation,null);
+ await db.query("update dabbir_ai_conversation_state set pending_action='choose_service',expires_at=now()-interval '1 second'");assert.equal((await nextLoad()).verified_service_presentation,null);
+});
+
+test('canonical finalization atomically certifies its own service menu even when interpretation was superseded',async()=>{
+ await reset();await commit();
+ await rpc('dabbir_semantic_set_pending_v2',[batch,lock,1,'choose_service',{presented:false,services:[{id:ids.service,label:'Shown service'}]}]);
+ await db.query("update dabbir_message_batches set state='CANCELLED' where id=$1",[batch]);
+ const receipt=await finalizeReply('atomic-menu-receipt','reply');
+ const saved=(await db.query('select payload from dabbir_ai_conversation_state')).rows[0].payload;
+ assert.equal(saved.presented,true);assert.equal(saved.provider_message_id,'atomic-menu-receipt');
+ assert.equal(receipt.reservation_state,'PROVIDER_ACCEPTED');
+ assert.equal((await db.query('select provider_verified from dabbir_whatsapp_event_ledger where id=$1',[receipt.event_id])).rows[0].provider_verified,false);
+ await assert.rejects(rpc('dabbir_semantic_execute_v2',[batch,lock,1,'CREATE_BOOKING']),/SEMANTIC_BATCH_LOCK_INVALID|SEMANTIC_SUPERSEDED/);
+});
+
+test('canonical outbound finalization proves API acceptance immediately, without inventing delivery',async()=>{
+ await reset();await commit();
+ const reservation=(await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,sender_type,body,state) values($1,$2,$3,'ai','Which service?','SENDING') returning id",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify'])).rows[0].id;
+ const args=[batch,lock,1,'api-acceptance-receipt','service_question_target'];
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ const receipt=(await db.query('select * from public.dabbir_whatsapp_finalize_outbound($1,$2)',[reservation,'api-acceptance-receipt'])).rows[0];
+ assert.equal(receipt.reservation_state,'PROVIDER_ACCEPTED');assert.ok(receipt.message_id);assert.ok(receipt.event_id);
+ assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
+ const outbound=(await db.query('select * from dabbir_whatsapp_outbound_reservations where id=$1',[reservation])).rows[0];
+ assert.equal(outbound.provider_verified,false);assert.equal(outbound.state,'PROVIDER_ACCEPTED');
+ assert.equal((await load()).semantic_state.cognition.pending_question.presentation,'PROVIDER_ACCEPTED');
+ const event=(await db.query('select * from dabbir_whatsapp_event_ledger where id=$1',[receipt.event_id])).rows[0];
+ for(const [column,invalid] of [['business_id',ids.other],['conversation_id',ids.other],['connection_id',ids.other],['provider_message_id','unrelated'],['event_key','outbound:unrelated'],['direction','inbound'],['message_id',message],['evidence',{source:'meta_messages_api',provider_accepted:true,reservation_id:ids.other}]]){
+  await db.query(`update dabbir_whatsapp_event_ledger set ${column}=$1 where id=$2`,[invalid,receipt.event_id]);
+  await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/,column);
+  await db.query(`update dabbir_whatsapp_event_ledger set ${column}=$1 where id=$2`,[event[column],receipt.event_id]);
+ }
+ await db.query('update dabbir_messages set simulated=true where id=$1',[receipt.message_id]);
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ await db.query('update dabbir_messages set simulated=false where id=$1',[receipt.message_id]);
+ await db.query('update dabbir_whatsapp_outbound_reservations set finalized_at=null where id=$1',[reservation]);
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select dabbir_private.understanding_outbound_receipt_verified_v1($1)',[reservation]),/permission denied/);
+ await db.exec('reset role');
+});
 test('live receipt regression: verified DELIVERED/READ advances presentation while unsafe states stay denied',async()=>{
  await reset();await commit(understandConversation({context:context({batch_messages:[{body:'أبي غسيل'}]}),now:evalNow}).state);
  await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'progress-receipt','SENDING')",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify']);
@@ -62,6 +151,8 @@ test('live receipt regression: verified DELIVERED/READ advances presentation whi
   await db.query("update dabbir_whatsapp_outbound_reservations set state=$1,provider_verified=$2 where provider_message_id='progress-receipt'",[state,verified]);
   await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
  }
+ await db.query("update dabbir_whatsapp_outbound_reservations set state='SENDING' where provider_message_id='progress-receipt'");
+ await db.query("select * from public.dabbir_whatsapp_finalize_outbound((select id from dabbir_whatsapp_outbound_reservations where provider_message_id='progress-receipt'),'progress-receipt')");
  for(const state of ['SENT','DELIVERED','READ']){
   await db.query("update dabbir_whatsapp_outbound_reservations set state=$1,provider_verified=$2 where provider_message_id='progress-receipt'",[state,state!=='SENT']);
   assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
@@ -77,7 +168,7 @@ test('database: queued goal persists through real SQL execution and only resumes
  await commit(s);await rpc('dabbir_semantic_set_pending_v2',[batch,lock,1,'choose_slot',offered.payload]);
  const action=await rpc('dabbir_semantic_execute_v2',[batch,lock,1,'CREATE_BOOKING']);assert.equal(action.verified,true);
  const before=(await load()).semantic_state;assert.equal(before.goal_queue.length,1);assert.equal(resumeQueuedGoal(before,context(),new Date()).blocked,true);
- await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'queue-completion','SENT')",[ids.business,ids.conversation,'wa-understanding:'+batch+':create_booking']);
+ await finalizeReply('queue-completion','create_booking');
  await rpc('dabbir_cognitive_record_delivery_v1',[batch,lock,1,'queue-completion',null]);
  const after=(await load()).semantic_state;const next=resumeQueuedGoal(after,context(),new Date());assert.equal(next.resumed,true);assert.equal(next.previous.entities.time.value,'18:00');assert.equal(next.previous.entities.slot,undefined);assert.equal(next.previous.goal_queue.length,0);
  assert.equal((await db.query('select count(*) n from dabbir_appointments')).rows[0].n,1);assert.equal((await db.query('select octet_length(semantic_state::text) n from dabbir_ai_conversation_state')).rows[0].n<=32768,true);

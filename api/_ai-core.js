@@ -1,4 +1,4 @@
-import { SEMANTIC_SYSTEM_PROMPT, SEMANTIC_JSON_SCHEMA, validSemanticContract } from './_dabbir-semantic-contract.js';
+import { SEMANTIC_SYSTEM_PROMPT, SEMANTIC_JSON_SCHEMA, semanticContractViolation } from './_dabbir-semantic-contract.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -204,10 +204,10 @@ function finalizeReply({ reply, input, language, config, authMode, model, semant
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false }) {
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false, schemaFallback = false }) {
   // Capability is verified for this configured endpoint/model, not inferred from
   // OpenAI-compatible transport. Keep other providers' existing request contract.
-  const strictSemantic=semantic && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
+  const strictSemantic=semantic && !schemaFallback && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -227,8 +227,20 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
       }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (semantic && response.ok && (payload?.choices?.[0]?.finish_reason === 'length' || !validSemanticContract(payload?.choices?.[0]?.message?.content))) {
-      console.warn('dabbir_semantic_contract_rejected', { reason: payload?.choices?.[0]?.finish_reason === 'length' ? 'TRUNCATED' : 'INVALID_JSON_CONTRACT' });
+    const violation=semantic&&response.ok?(payload?.choices?.[0]?.finish_reason==='length'?'TRUNCATED':semanticContractViolation(payload?.choices?.[0]?.message?.content)):null;
+    if(violation)console.warn('dabbir_semantic_contract_rejected',{reason:violation,format:strictSemantic?'json_schema':'json_object'});
+    const formatCode=['json_validate_failed','schema_validation_failed','invalid_json_schema'].includes(payload?.error?.code);
+    const formatParam=['response_format','response_format.json_schema'].includes(payload?.error?.param);
+    const formatRejected=response.status===400&&(formatCode||formatParam);
+    if(semantic&&response.status===400)console.warn('dabbir_semantic_provider_rejected',{status:400,reason:formatCode?payload.error.code:formatParam?'RESPONSE_FORMAT_PARAM':'UNCLASSIFIED_REQUEST_ERROR',format:strictSemantic?'json_schema':'json_object'});
+    if(strictSemantic&&(formatRejected||(violation&&violation!=='TRUNCATED'))){
+      console.warn('dabbir_semantic_format_fallback',{reason:formatRejected?'PROVIDER_SCHEMA_REJECTED':violation});
+      // One compatibility attempt, through the SAME metered/bounded fetch and
+      // application validator. Never on quota/auth/network failure or truncation.
+      clearTimeout(timer);
+      return callOpenAiCompatible({endpoint,credential,model,messages,fetchImpl,timeoutMs,semantic,schemaFallback:true});
+    }
+    if (violation) {
       // A transport success is not an interpretation success. Try the next
       // configured provider within the existing shared attempt/deadline budget.
       return { response: { ok: false, status: 502 }, payload: {} };

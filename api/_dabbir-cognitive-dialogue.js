@@ -1,6 +1,7 @@
 import {normalizeSemanticText,clarification} from './_dabbir-semantic-engine-core.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {partitionGoalRequests} from './_dabbir-goal-queue.js';
+import {answerServiceQuestion} from './_dabbir-service-question.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const goals=new Set(['BOOK_SERVICE','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
@@ -72,7 +73,14 @@ export function situationSnapshot(c,s,previous){
 }
 
 export function cognitiveReduce(args,reduce){
- const c=args.context,now=args.now||new Date(),previous=scopedPrevious(args.previous,c,now),d=groundedDialogue(args.proposal,c);
+ const c=args.context,now=args.now||new Date(),previous=scopedPrevious(args.previous,c,now);
+ const continuation=c.service_inquiry_continuation;
+ const inquiryService=continuation&&arr(c.services).find(s=>s.id===continuation.service_id);
+ if(previous?.service_inquiry?.pending_field==='service'&&inquiryService&&continuation.field===previous.service_inquiry.field){
+  args={...args,proposal:{action:'SERVICE_MENU',intent:continuation.field==='price'?'PRICING':'SERVICE_DISCOVERY',confidence:1,riskLevel:'LOW',serviceName:name(inquiryService),serviceQuestion:{field:continuation.field,evidence:continuation.evidence,explicit_service:true},
+   dialogue:{message_role:activeJourney(previous)?'SIDE_QUESTION':'ANSWER_TO_PENDING_QUESTION',evidence:continuation.evidence,invalidated_fields:[]}}};
+ }
+ const d=groundedDialogue(args.proposal,c);
  let prepared=previous?structuredClone(previous):previous;
  // Invalidating a fact can only remove authority. The model cannot replace it
 // with business truth or invalidate an unrelated tenant's saved state.
@@ -82,8 +90,9 @@ export function cognitiveReduce(args,reduce){
    delete prepared.entities.slot;
   }
  }
- let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_message_role:d?.message_role||null}});
+ let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:d?.message_role||null}});
  let {state,decision}=result;
+ if(continuation&&previous?.language)state.language=previous.language;
  if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
  const partition=partitionGoalRequests(args,reduce);
  if(partition?.invalid){
@@ -99,11 +108,11 @@ export function cognitiveReduce(args,reduce){
  const side=wasActive&&(['PRICING','SERVICE_MENU'].includes(decision.action)||proposedRead||knowledge);
  let role=d?.message_role||(side?'SIDE_QUESTION':resolvesPending(previous,state)?'ANSWER_TO_PENDING_QUESTION':arr(state.user_corrections).length>arr(previous?.user_corrections).length?'CORRECTION':wasActive?'CONTINUATION':'NEW_REQUEST');
  if(side){
-  const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service')};
+  const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service'),service_verified:verifiedOperationalFact(state.entities?.service)};
   // Recompute the next business requirement from the retained goal. A pricing
 // target never overwrites the service being booked or reuses a slot approval.
   result=reduce({...args,proposal:null,previous:prepared,context:{...c,batch_messages:[],cognitive_message_role:'SIDE_QUESTION'}});
-  state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,resumeReply:result.decision.action==='CLARIFY'?result.decision.reply:null};
+  state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,queryServiceVerified:inquiry.service_verified,resumeReply:result.decision.action==='CLARIFY'?result.decision.reply:null};
   if(knowledge){const answer=state.language==='en'?knowledge.value?.answer_en||knowledge.value?.answer_ar:knowledge.value?.answer_ar||knowledge.value?.answer_en;if(typeof answer==='string')decision.reply=answer.slice(0,1400)+(decision.resumeReply?'\n'+decision.resumeReply:'');else decision=result.decision;}
   role='SIDE_QUESTION';
  }
@@ -111,6 +120,7 @@ export function cognitiveReduce(args,reduce){
   result=reduce({...args,proposal:null,previous:prepared});state=result.state;decision=result.decision;
  }
  state.cognitive_pending_resolved=resolvesPending(previous,state);
+ decision=answerServiceQuestion({context:c,state,decision,proposal:args.proposal});
  return decisionView(state,decision,previous,c,role);
 }
 
