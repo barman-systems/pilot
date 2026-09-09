@@ -3873,6 +3873,54 @@
 })();
 
 (()=>{
+ if(window.__dabbirActivityIntelligence)return;window.__dabbirActivityIntelligence=true;
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const ar=()=>document.documentElement.lang!=='en';const t=(a,e)=>ar()?a:e;
+ const business=()=>{try{if(typeof workspace!=='undefined'&&workspace?.business)return workspace.business}catch{}return window.workspace?.business||null};
+ const modes={AT_BUSINESS:['في الفرع','At the business'],AT_CUSTOMER:['عند العميل','At the customer'],MOBILE:['خدمة متنقلة','Mobile'],REMOTE:['عن بعد','Remote'],PICKUP:['استلام من العميل','Pickup'],DELIVERY:['توصيل','Delivery']};
+ const orderLabels={service:['الخدمة','Service'],delivery_mode:['مكان الخدمة','Delivery mode'],vehicle:['المركبة','Vehicle'],location:['الموقع','Location'],property_details:['تفاصيل العقار','Property details'],branch:['الفرع','Branch'],date:['اليوم','Date'],time:['الوقت','Time'],worker:['الموظف','Staff'],slot:['تأكيد الموعد','Slot confirmation']};
+ const labels={car_wash:'غسيل سيارات',salon:'صالون',home_cleaning:'تنظيف منازل',clinic:'حجوزات عيادة',maintenance:'صيانة',delivery:'توصيل',consulting:'استشارات',repair_shop:'ورشة إصلاح',pet_grooming:'عناية بالحيوانات',barber:'حلاقة',spa:'سبا',laundry:'مغسلة',tutoring:'تدريس',photography:'تصوير',mobile_services:'خدمات متنقلة',services:'خدمات',other:'نشاط آخر'};
+ let current='',branches=[],types=[],profile=null,audit=[],branch='',service='',epoch=0,busy=false;
+ const card=()=>document.getElementById('dabbirOperationalServices');
+ const selected=()=>profile?.services?.find(x=>x.service_id===service);
+ const api=async(data,post=false)=>{
+  const response=await fetch('/api/activity-intelligence'+(post?'':'?'+new URLSearchParams(data)),{method:post?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:{accept:'application/json',...(post?{'content-type':'application/json'}:{})},...(post?{body:JSON.stringify(data)}:{})});
+  const result=await response.json();if(!response.ok||!result.ok)throw Error(result.error||'REQUEST_FAILED');return result;
+ };
+ const msg=(value,error=false)=>{const node=card()?.querySelector('[data-message]');if(node){node.textContent=value;node.style.color=error?'#ff9b9b':''}};
+ function render(){
+  const node=card();if(!node)return;const c=selected();const versions=audit.filter(x=>x.service_id===service);const saved=versions.find(x=>x.version===c?.owner_version)?.config||{};
+  const ordering=(c?.collection_priority||Object.keys(orderLabels)).map((key,i)=>'<label class="dap-field">'+esc(orderLabels[key]?.[ar()?0:1]||key)+'<select name="priority_'+key+'">'+Object.keys(orderLabels).map((_,n)=>'<option value="'+n+'" '+(i===n?'selected':'')+'>'+(n+1)+'</option>').join('')+'</select></label>').join('');
+  const modeInputs=Object.entries(modes).map(([key,copy])=>'<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" name="mode" value="'+key+'" '+(c?.delivery_modes.includes(key)?'checked':'')+'>'+esc(copy[ar()?0:1])+'</label>').join('');
+  node.innerHTML='<div class="dap-head"><h2>'+t('متطلبات كل خدمة','Service requirements')+'</h2><p>'+t('حدد أين تقدم الخدمة والمعلومات التي يحتاجها دبّر قبل الحجز.','Choose where the service is delivered and the details needed before booking.')+'</p></div><form class="dap-form"><div class="dap-grid"><label class="dap-field">'+t('الفرع','Branch')+'<select name="branch"><option value="">'+t('اختر الفرع','Choose a branch')+'</option>'+branches.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===branch?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label><label class="dap-field">'+t('الخدمة','Service')+'<select name="service"><option value="">'+t('اختر الخدمة','Choose a service')+'</option>'+(profile?.services||[]).map(x=>'<option value="'+esc(x.service_id)+'" '+(x.service_id===service?'selected':'')+'>'+esc(x.service_name)+'</option>').join('')+'</select></label>'+(c?'<label class="dap-field">'+t('نوع النشاط لهذه الخدمة','Activity for this service')+'<select name="activity" required><option value="" '+(!c.activity_type?'selected':'')+'>'+t('اختر نوع النشاط','Choose an activity')+'</option>'+types.map(x=>'<option value="'+esc(x)+'" '+(c.activity_type===x?'selected':'')+'>'+esc(ar()?labels[x]||x:x.replaceAll('_',' '))+'</option>').join('')+'</select></label><div class="dap-field"><span>'+t('المدة والسعر','Duration and price')+'</span><span>'+esc(c.duration)+' '+t('دقيقة','minutes')+' · '+esc(c.price)+' '+esc(business()?.currency_code||'')+'</span></div><fieldset class="wide" style="border:0;padding:0"><legend>'+t('مكان تقديم الخدمة','Delivery modes')+'</legend>'+modeInputs+'</fieldset><label class="dap-field">'+t('المركبة','Vehicle')+'<select name="vehicle"><option value="default">'+t('حسب نوع الخدمة','Use service defaults')+'</option><option value="required" '+(saved.required_entities?.includes('vehicle')?'selected':'')+'>'+t('مطلوبة','Required')+'</option><option value="optional" '+(saved.optional_entities?.includes('vehicle')?'selected':'')+'>'+t('اختيارية','Optional')+'</option></select></label><label class="dap-field">'+t('اختيار الموظف','Staff selection')+'<select name="worker"><option value="optional">'+t('اختياري','Optional')+'</option><option value="required" '+(saved.required_entities?.includes('worker')?'selected':'')+'>'+t('مطلوب','Required')+'</option></select></label><label style="min-height:44px"><input type="checkbox" name="property" '+(saved.required_entities?.includes('property_details')?'checked':'')+'> '+t('جمع تفاصيل العقار','Collect property details')+'</label><label style="min-height:44px"><input type="checkbox" name="location" '+(saved.required_entities?.includes('location')?'checked':'')+'> '+t('الموقع مطلوب حتى للخدمة في الفرع','Require location for branch services too')+'</label><label style="min-height:44px"><input type="checkbox" name="approval" '+(c.owner_approval||!c.automatic_booking?'checked':'')+'> '+t('أحتاج مراجعة الطلب قبل الحجز','I need to review requests before booking')+'</label><p class="wide">'+t('الخدمات عند العميل تتطلب موقعًا موثقًا تلقائيًا. عدّل السعر والمدة من قائمة الخدمات.','Customer visits always require a verified location. Edit prices and duration in the service catalog.')+'</p><details class="wide"><summary>'+t('منطقة الخدمة','Service area')+'</summary><p>'+t('اتركها فارغة إن لم توجد حدود جغرافية.','Leave empty when there is no geographic restriction.')+'</p><div class="dap-grid"><label class="dap-field">'+t('خط العرض','Latitude')+'<input name="lat" type="number" step="any" min="-90" max="90" value="'+esc(c.service_area?.center?.lat??'')+'"></label><label class="dap-field">'+t('خط الطول','Longitude')+'<input name="lng" type="number" step="any" min="-180" max="180" value="'+esc(c.service_area?.center?.lng??'')+'"></label><label class="dap-field">'+t('نطاق الخدمة بالكيلومتر','Radius in kilometers')+'<input name="radius" type="number" step="any" min="0.1" max="500" value="'+esc(c.service_area?.radius_km??'')+'"></label></div></details><details class="wide"><summary>'+t('ترتيب جمع المعلومات','Question order')+'</summary><p>'+t('الأرقام الأقل تُسأل أولًا عند نقص المعلومة.','Lower numbers are asked first when a detail is missing.')+'</p><div class="dap-grid">'+ordering+'</div></details><div class="dap-actions wide"><button type="submit" class="primary dap-save">'+t('حفظ متطلبات الخدمة','Save requirements')+'</button><button type="button" data-revoke>'+t('استعادة الإعدادات الافتراضية','Restore defaults')+'</button></div><label class="dap-field wide">'+t('استعادة إعداد سابق','Restore a previous configuration')+'<select name="restore"><option value="">'+t('اختر نسخة محفوظة','Choose a saved version')+'</option>'+versions.map(x=>'<option value="'+x.version+'">'+x.version+' · '+esc(x.created_at.slice(0,10))+'</option>').join('')+'</select><button type="button" data-rollback>'+t('استعادة النسخة','Restore version')+'</button></label>':'')+'</div><p role="status" data-message></p></form>';
+  const form=node.querySelector('form');for(const el of form.querySelectorAll('select,input[type=number]')){el.style.minHeight='44px';el.style.fontSize='16px';el.style.maxWidth='100%';el.style.width='100%';}
+  form.elements.branch.onchange=async e=>{branch=e.target.value;service='';profile=null;render();if(branch)await loadProfile()};
+  form.elements.service.onchange=e=>{service=e.target.value;render()};
+  form.onsubmit=e=>{e.preventDefault();save('SAVE')};
+  node.querySelector('[data-revoke]')?.addEventListener('click',()=>save('REVOKE'));
+  node.querySelector('[data-rollback]')?.addEventListener('click',()=>save('ROLLBACK'));
+ }
+ async function loadProfile(){const revision=++epoch,b=current,br=branch;busy=true;msg(t('جارٍ التحميل…','Loading…'));try{const result=await api({business_id:b,branch_id:br});if(revision!==epoch||current!==b)return;profile=result.profile;audit=result.audit;types=result.activity_types;if(!profile.services.some(x=>x.service_id===service))service=profile.services.length===1?profile.services[0].service_id:'';render()}catch{msg(t('تعذر تحميل متطلبات الخدمة. حاول مجددًا.','Could not load requirements. Please retry.'),true)}finally{busy=false}}
+ async function save(action){
+  const c=selected(),form=card()?.querySelector('form');if(!c||busy)return;
+  const fields=new FormData(form),saved=audit.find(x=>x.service_id===c.service_id&&x.version===c.owner_version)?.config||{},config={...saved,activity_type:fields.get('activity'),delivery_modes:fields.getAll('mode'),required_entities:[],optional_entities:[],owner_approval:fields.has('approval'),automatic_booking:!fields.has('approval')};
+  config.collection_priority=Object.keys(orderLabels).sort((a,b)=>Number(fields.get('priority_'+a)??99)-Number(fields.get('priority_'+b)??99));
+  for(const key of ['vehicle','worker']){if(fields.get(key)==='required')config.required_entities.push(key);if(fields.get(key)==='optional')config.optional_entities.push(key)}
+  if(fields.has('property'))config.required_entities.push('property_details');if(fields.has('location'))config.required_entities.push('location');
+  if(action==='SAVE'&&(!types.includes(config.activity_type)||!config.delivery_modes.length)){msg(t('اختر نوع النشاط ومكان تقديم الخدمة.','Choose the activity and delivery mode.'),true);return}
+  const geo=['lat','lng','radius'].map(k=>String(fields.get(k)||''));
+  if(geo.some(Boolean)&&!geo.every(Boolean)){msg(t('أكمل بيانات منطقة الخدمة.','Complete the service area fields.'),true);return}
+  config.service_area=geo.every(Boolean)?{type:'CIRCLE',center:{lat:Number(geo[0]),lng:Number(geo[1])},radius_km:Number(geo[2])}:null;
+  if(action==='ROLLBACK'&&!fields.get('restore')){msg(t('اختر النسخة المطلوب استعادتها.','Choose a version to restore.'),true);return}
+  const b=current,br=branch;busy=true;for(const button of form.querySelectorAll('button'))button.disabled=true;
+  try{await api({business_id:b,branch_id:br,service_id:c.service_id,expected_version:c.owner_version,config,action,restore_version:Number(fields.get('restore'))||null},true);if(current===b&&branch===br){await loadProfile();msg(t('تم حفظ متطلبات الخدمة.','Service requirements saved.'))}}
+  catch{msg(t('تعذر الحفظ. أعد تحميل الإعدادات ثم حاول مجددًا.','Could not save. Reload settings and try again.'),true)}finally{busy=false;for(const button of form.querySelectorAll('button'))button.disabled=false}
+ }
+ async function mount(){const base=document.getElementById('dabbirActivityDetailsCard'),id=business()?.id;if(!base||!id)return;if(!card()){const node=document.createElement('section');node.className='dap-card';node.id='dabbirOperationalServices';base.after(node)}if(current===id)return;current=id;branch='';service='';profile=null;audit=[];branches=[];const revision=++epoch;render();try{const result=await api({business_id:id});if(revision!==epoch||current!==id)return;branches=result.branches;types=result.activity_types;branch=branches.length===1?branches[0].id:'';render();if(branch)await loadProfile()}catch{msg(t('إعدادات الخدمة متاحة لمالك النشاط بعد تحميلها.','Service settings are available to the business owner once loaded.'),true)}}
+ let pending=false;new MutationObserver(()=>{if(pending)return;pending=true;setTimeout(()=>{pending=false;mount()},100)}).observe(document.body,{subtree:true,childList:true});setTimeout(mount,0);
+})();
+
+(()=>{
   if(document.querySelector('style[data-dabbir-action-center]'))return;
   const style=document.createElement('style');
   style.dataset.dabbirActionCenter='v3';
@@ -5073,6 +5121,81 @@
   window.__dabbirBillingUi={version:'sandbox-v1',refresh:()=>{billingState=null;billingBusiness=null;return load()}};
 })();
 (()=>{
+  if(window.__dabbirPlatformPnlUi)return;window.__dabbirPlatformPnlUi=true;
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const ar=()=>document.documentElement.lang!=='en';
+  const T=()=>ar()?{
+    title:'أرباح وخسائر DABBIR',desc:'اقتصاد DABBIR نفسه فقط: الإيرادات والتكاليف ومساهمة كل نشاط. لا تشمل أموال زبائن الأنشطة.',month:'الشهر',refresh:'تحديث',
+    revenue:'الإيراد المؤكد',ai:'تكلفة AI',other:'تكاليف أخرى',total:'إجمالي التكلفة المؤكدة',known:'النتيجة التشغيلية المعروفة',net:'صافي الربح',
+    complete:'حساب مكتمل',partial:'حساب جزئي',missing:'مصادر تكلفة/إيراد غير مكتملة',owner:'تكلفة الموظفين: 0 — المالك يعمل منفردًا، ووقت المالك غير محمّل كمصروف.',
+    notFinal:'لا أعرض صافي ربح نهائي لأن بعض المصادر غير مكتملة. الرقم الظاهر هو النتيجة المعروفة فقط.',business:'النشاط',bRevenue:'الإيراد',bAi:'AI',bDirect:'تكاليف مباشرة',bShared:'حصة التكاليف المشتركة',contribution:'المساهمة المعروفة',unpriced:'AI غير مسعّر',
+    providers:'التكلفة حسب المزود',categories:'التكلفة حسب النوع',source:'المصدر',state:'الحالة',loading:'جارٍ تحميل الحساب المالي…',unavailable:'تعذر تحميل حساب الأرباح والخسائر.',none:'لا توجد بيانات لهذا الشهر.'
+  }:{
+    title:'DABBIR profit & loss',desc:'DABBIR economics only: revenue, operating cost and contribution by business. Tenant customer money is excluded.',month:'Month',refresh:'Refresh',
+    revenue:'Confirmed revenue',ai:'AI cost',other:'Other costs',total:'Total known cost',known:'Known operating result',net:'Net profit',
+    complete:'Complete accounting',partial:'Partial accounting',missing:'Incomplete cost/revenue sources',owner:'Employee cost: 0 — solo owner. Owner time is not charged as an operating expense.',
+    notFinal:'Final net profit is not shown while required sources are incomplete. The visible result is the known operating result only.',business:'Business',bRevenue:'Revenue',bAi:'AI',bDirect:'Direct other cost',bShared:'Allocated shared cost',contribution:'Known contribution',unpriced:'Unpriced AI',
+    providers:'Cost by provider',categories:'Cost by category',source:'Source',state:'State',loading:'Loading P&L…',unavailable:'P&L could not be loaded.',none:'No data for this month.'
+  };
+  const aed=v=>v===null||v===undefined||!Number.isFinite(Number(v))?'—':new Intl.NumberFormat(ar()?'ar-AE':'en-AE',{style:'currency',currency:'AED',minimumFractionDigits:2,maximumFractionDigits:6}).format(Number(v));
+  const num=v=>v===null||v===undefined||!Number.isFinite(Number(v))?'—':new Intl.NumberFormat(ar()?'ar-AE':'en-AE').format(Number(v));
+  const currentMonth=()=>new Date().toISOString().slice(0,7);
+  let selectedMonth=currentMonth(),data=null,error=false,denied=false,loading=false,capability='unknown',capabilityPromise=null,activeHost=null;
+  const style=document.createElement('style');style.dataset.dabbirPnl='v1';style.textContent='.dabbirPnl{border:1px solid var(--line,#2a3442);border-radius:16px;padding:14px;margin:12px 0;background:var(--card,#111820)}.dabbirPnlHead{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.dabbirPnlHead h2{margin:0;font-size:17px}.dabbirPnlHead p{margin:3px 0 0;color:var(--muted,#9aa7b8);font-size:11px}.dabbirPnlTools{display:flex;gap:7px;align-items:center}.dabbirPnlTools input{min-height:40px;border:1px solid var(--line,#2a3442);border-radius:9px;background:#0d131a;color:#fff;padding:6px 8px}.dabbirPnlGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.dabbirPnlStat{border:1px solid var(--line,#2a3442);border-radius:11px;padding:9px;background:#0d141c}.dabbirPnlStat span{display:block;color:var(--muted,#9aa7b8);font-size:9px}.dabbirPnlStat b{display:block;font-size:17px;margin-top:2px;overflow-wrap:anywhere}.dabbirPnlNotice{margin-top:10px;padding:9px;border-radius:10px;background:#191f28;font-size:10px}.dabbirPnlNotice.warn{background:#292214}.dabbirPnlTable{overflow:auto;margin-top:10px}.dabbirPnlTable table{width:100%;border-collapse:collapse;font-size:10px}.dabbirPnlTable th,.dabbirPnlTable td{text-align:start;padding:7px;border-bottom:1px solid var(--line,#2a3442);white-space:nowrap}.dabbirPnlNeg{font-weight:800}.dabbirPnl details{margin-top:8px}.dabbirPnl summary{cursor:pointer;min-height:36px;display:flex;align-items:center}@media(max-width:720px){.dabbirPnlGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dabbirPnlTools{width:100%}.dabbirPnlTools input{flex:1}}';document.head.appendChild(style);
+  function host(){
+    const platform=document.querySelector('#screen-platform-customers');if(platform)return{parent:platform,anchor:platform.querySelector('#pcBody')};
+    return null;
+  }
+  function resetView(){data=null;error=false;loading=false}
+  function ensure(){
+    const h=host(),existing=document.querySelector('#dabbirPnlPanel');
+    if(!h){if(existing)existing.remove();if(activeHost){activeHost=null;resetView()}return null}
+    if(activeHost!==h.parent){activeHost=h.parent;resetView()}
+    let el=existing;if(!el){el=document.createElement('section');el.id='dabbirPnlPanel';el.className='dabbirPnl panel';if(h.anchor)h.parent.insertBefore(el,h.anchor);else h.parent.appendChild(el)}return el;
+  }
+  function rows(items,kind){const t=T();if(!Array.isArray(items)||!items.length)return '<div class="dabbirPnlNotice">'+esc(t.none)+'</div>';if(kind==='business')return '<div class="dabbirPnlTable"><table><thead><tr><th>'+esc(t.business)+'</th><th>'+esc(t.bRevenue)+'</th><th>'+esc(t.bAi)+'</th><th>'+esc(t.bDirect)+'</th><th>'+esc(t.bShared)+'</th><th>'+esc(t.contribution)+'</th><th>'+esc(t.unpriced)+'</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+esc(r.name||r.business_id)+'</td><td>'+esc(aed(r.revenue_aed))+'</td><td>'+esc(aed(r.ai_cost_aed))+'</td><td>'+esc(aed(r.direct_other_cost_aed))+'</td><td>'+esc(aed(r.allocated_shared_cost_aed))+'</td><td class="'+(Number(r.known_contribution_aed)<0?'dabbirPnlNeg':'')+'">'+esc(aed(r.known_contribution_aed))+'</td><td>'+esc(num(r.unpriced_ai_operations))+'</td></tr>').join('')+'</tbody></table></div>';
+    return '<div class="dabbirPnlTable"><table><thead><tr><th>'+(kind==='provider'?esc(t.providers):esc(t.categories))+'</th><th>'+esc(t.total)+'</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+esc(kind==='provider'?r.provider:r.category)+'</td><td>'+esc(aed(r.amount_aed))+'</td></tr>').join('')+'</tbody></table></div>';
+  }
+  function render(){const el=ensure();if(!el)return;const t=T();if(denied||capability==='unknown'||capability==='probing'){el.hidden=true;return}el.hidden=false;if(loading){el.innerHTML='<div class="dabbirPnlNotice">'+esc(t.loading)+'</div>';return}if(capability==='error'||error||!data){el.innerHTML='<div class="dabbirPnlNotice warn">'+esc(t.unavailable)+'</div>';return}const p=data,c=p.costs||{},r=p.revenue||{},complete=p.measurement_state==='COMPLETE';const missing=Array.isArray(p.missing_sources)?p.missing_sources:[];
+    el.innerHTML='<div class="dabbirPnlHead"><div><h2>'+esc(t.title)+'</h2><p>'+esc(t.desc)+'</p></div><div class="dabbirPnlTools"><label>'+esc(t.month)+' <input id="dabbirPnlMonth" type="month" value="'+esc(selectedMonth)+'"></label><button id="dabbirPnlRefresh" type="button">'+esc(t.refresh)+'</button></div></div><div class="dabbirPnlGrid">'+
+      '<div class="dabbirPnlStat"><span>'+esc(t.revenue)+'</span><b>'+esc(aed(r.known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.ai)+'</span><b>'+esc(aed(c.ai_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.other)+'</span><b>'+esc(aed(c.other_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.total)+'</span><b>'+esc(aed(c.total_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.known)+'</span><b>'+esc(aed(p.known_operating_result_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.net)+'</span><b>'+esc(complete?aed(p.net_profit_aed):'—')+'</b></div></div>'+ 
+      '<div class="dabbirPnlNotice '+(complete?'':'warn')+'"><b>'+esc(complete?t.complete:t.partial)+'</b> · '+esc(t.owner)+(complete?'':'<br>'+esc(t.notFinal))+'</div>'+ 
+      (!complete&&missing.length?'<details open><summary>'+esc(t.missing)+' ('+missing.length+')</summary><div class="dabbirPnlTable"><table><thead><tr><th>'+esc(t.source)+'</th><th>'+esc(t.state)+'</th></tr></thead><tbody>'+missing.map(s=>'<tr><td>'+esc(s.provider||s.source_key)+'</td><td>'+esc(s.state)+'</td></tr>').join('')+'</tbody></table></div></details>':'')+
+      '<details open><summary>'+esc(t.business)+'</summary>'+rows(p.businesses,'business')+'</details><details><summary>'+esc(t.providers)+'</summary>'+rows(p.by_provider,'provider')+'</details><details><summary>'+esc(t.categories)+'</summary>'+rows(p.by_category,'category')+'</details>';
+    const input=document.querySelector('#dabbirPnlMonth');if(input)input.onchange=()=>{selectedMonth=input.value||currentMonth()};const btn=document.querySelector('#dabbirPnlRefresh');if(btn)btn.onclick=()=>load();
+  }
+  async function probeCapability(){
+    if(capability==='allowed')return true;
+    if(capability==='denied'||capability==='error')return false;
+    if(capabilityPromise)return capabilityPromise;
+    capability='probing';error=false;
+    capabilityPromise=(async()=>{
+      try{
+        const response=await fetch('/api/owner-finance?action=capability',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+        const payload=await response.json().catch(()=>null);
+        if(response.ok&&payload?.ok&&payload.allowed===true){capability='allowed';denied=false;error=false;return true}
+        if(response.ok&&payload?.ok&&payload.allowed===false){capability='denied';denied=true;error=false;data=null;return false}
+        capability='error';denied=false;error=true;data=null;return false;
+      }catch{capability='error';denied=false;error=true;data=null;return false}
+    })();
+    try{return await capabilityPromise}finally{capabilityPromise=null;render()}
+  }
+  async function load(){
+    if(loading||capability!=='allowed'||denied)return;
+    loading=true;error=false;render();
+    try{
+      const response=await fetch('/api/owner-finance?month='+encodeURIComponent(selectedMonth),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+      if(response.status===401||response.status===403){denied=true;capability='denied';data=null;return}
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'PNL_LOAD_FAILED');data=payload.pnl||null;denied=false;
+    }catch{error=true;data=null}finally{loading=false;render()}
+  }
+  async function maybeLoad(){const el=ensure();if(!el||loading||data||denied||error)return;if(capability!=='allowed'){const allowed=await probeCapability();if(!allowed)return}if(capability==='allowed'&&!loading&&!data&&!denied&&!error)await load()}
+  const observer=new MutationObserver(()=>{void maybeLoad()});observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['lang']});
+  window.__dabbirUiLifecycle?.on?.('afterNavigate','platform-pnl-v2',()=>{void maybeLoad()});
+  window.__dabbirUiLifecycle?.on?.('afterLanguage','platform-pnl-lang-v2',()=>render());
+  setTimeout(()=>{void maybeLoad()},0);
+})();
+(()=>{
   if (window.__dabbirPlatformCustomersUi) return;
   window.__dabbirPlatformCustomersUi = true;
 
@@ -5080,20 +5203,34 @@
   const qa = s => [...document.querySelectorAll(s)];
   const isAr = () => document.documentElement.lang !== 'en';
   const text = () => isAr() ? {
-    nav:'إدارة العملاء', title:'إدارة عملاء DABBIR', desc:'حسابات عملاء المنصة والدعم والتحكم والاسترجاع من مكان واحد.',
+    nav:'إدارة العملاء', title:'إدارة عملاء DABBIR', desc:'حسابات عملاء المنصة والمالية والدعم والتحكم والاسترجاع من مكان واحد.',
     search:'ابحث برقم DAB أو البريد أو الهاتف أو اسم النشاط', find:'بحث', accounts:'الحسابات', businesses:'الأنشطة', active:'نشط', blocked:'موقوف', suspended:'معلّق في DABBIR',
     lastLogin:'آخر دخول', created:'تاريخ التسجيل', phone:'الهاتف', noPhone:'غير مسجل', details:'فتح الحساب', back:'العودة للحسابات',
     customers:'عملاء النشاط', chats:'المحادثات', messages:'الرسائل', orders:'الطلبات', appointments:'المواعيد', tasks:'المهام',
+    finance:'مالية DABBIR', financeDesc:'تكلفة DABBIR واشتراك العميل فقط. لا تشمل أموال النشاط أو مدفوعات زبائنه.', month:'الشهر',
+    confirmedAiSpend:'مصروف AI المؤكد', unpricedAi:'عمليات AI غير المسعّرة', aiRequests:'طلبات AI', tokens:'التوكنز', subscriptionEvidence:'دليل الاشتراك',
+    webBilling:'سجلات اشتراك الويب', storeSubscriptions:'اشتراكات المتجر الفعالة', webBillingEnv:'بيئة فوترة الويب', revenue:'إيراد الاشتراك', margin:'هامش العميل',
+    revenueUnavailable:'غير متاح — لا يوجد سجل سعر/إيراد موثّق', partialCost:'القياس جزئي؛ العمليات غير المسعّرة ليست صفراً.', completeCost:'التكلفة المسعّرة مكتملة لهذا المصدر.', noMeteredAi:'لا يوجد استهلاك AI مقاس هذا الشهر.',
+    noFinancePermission:'لا توجد صلاحية لعرض البيانات المالية.', financeUnavailable:'تعذر تحميل البيانات المالية دون التأثير على إدارة الحساب.', subscriptionStatus:'حالة الاشتراك', noSubscriptionRecord:'لا يوجد سجل اشتراك', periodEnd:'نهاية الفترة', lastInvoice:'آخر فاتورة',
+    waCostPerConversation:'تكلفة واتساب / محادثة', providers:'تفصيل مزودي AI', provider:'المزود', cost:'التكلفة', unpriced:'غير مسعّر', storeEntitlements:'اشتراكات المتجر', none:'لا يوجد',
+    sandbox:'تجريبي فقط', liveEvidence:'دليل Live موجود', noProviderEvents:'لا توجد أحداث مزود', verifiedAt:'آخر تحقق', expires:'الانتهاء',
     access:'وصول DABBIR', accessDesc:'تعليق الحساب يوقف وصول هذا العميل إلى DABBIR فقط ولا يحظر هوية Supabase أو أي نظام آخر.',
     suspend:'تعليق الحساب', reactivate:'إعادة تفعيل الحساب', reason:'سبب التعليق', reasonPlaceholder:'مثال: طلب العميل، إساءة استخدام، مشكلة فوترة قيد المراجعة',
     suspendConfirm:'للتعليق اكتب', suspendedAt:'تم التعليق', accessUpdated:'تم تحديث وصول الحساب.', adminProtected:'لا يمكن تعليق حساب Platform Admin.', reasonRequired:'اكتب سببًا واضحًا للتعليق.', confirmRequired:'عبارة التأكيد غير مطابقة.',
     recovery:'استرجاع البيانات', recoveryDesc:'اختر وقتًا سابقًا لمساحة العمل. المعاينة تفصل الاسترجاع الآمن عن البيانات التي تحتاج مصالحة يدوية. يجب تعليق الحساب قبل إنشاء حالة الاسترجاع.', targetTime:'الوقت المراد الرجوع إليه', preview:'معاينة الاسترجاع', prepare:'إنشاء حالة استرجاع', events:'إجمالي التغييرات', safeEvents:'قابلة للاسترجاع الآمن', manualEvents:'تحتاج مصالحة يدوية', confirmLabel:'للتنفيذ اكتب', apply:'تنفيذ الاسترجاع', restored:'تم تنفيذ الاسترجاع.', danger:'سيبقى الحساب معلّقًا بعد الاسترجاع حتى تتم مراجعته وإعادة تفعيله يدويًا.', frozenRequired:'يجب تعليق حساب العميل أولًا قبل إنشاء أو تنفيذ الاسترجاع.', manualRequired:'المعاينة تحتوي بيانات دفع/رسائل/طلبات/خصوصية أو تكاملات. تم منع الاسترجاع التلقائي وتحتاج هذه البيانات مصالحة يدوية.', safeReady:'المعاينة آمنة للاسترجاع التلقائي.',
     empty:'لا توجد نتائج.', loading:'جارٍ التحميل...', failed:'تعذر تحميل لوحة إدارة العملاء.'
   } : {
-    nav:'Customer admin', title:'DABBIR customer administration', desc:'Platform customer accounts, support, access control and recovery in one place.',
+    nav:'Customer admin', title:'DABBIR customer administration', desc:'Platform customer accounts, finance, support, access control and recovery in one place.',
     search:'Search DAB number, email, phone, or business name', find:'Search', accounts:'Accounts', businesses:'Businesses', active:'Active', blocked:'Blocked', suspended:'Suspended in DABBIR',
     lastLogin:'Last sign-in', created:'Created', phone:'Phone', noPhone:'Not stored', details:'Open account', back:'Back to accounts',
     customers:'Business customers', chats:'Conversations', messages:'Messages', orders:'Orders', appointments:'Appointments', tasks:'Tasks',
+    finance:'DABBIR finance', financeDesc:'DABBIR subscription evidence and operating cost only. Business customer payments are excluded.', month:'Month',
+    confirmedAiSpend:'Confirmed AI spend', unpricedAi:'Unpriced AI operations', aiRequests:'AI requests', tokens:'Tokens', subscriptionEvidence:'Subscription evidence',
+    webBilling:'Web subscription records', storeSubscriptions:'Active store subscriptions', webBillingEnv:'Web billing environment', revenue:'Subscription revenue', margin:'Customer margin',
+    revenueUnavailable:'Unavailable — no authoritative price/revenue ledger', partialCost:'Measurement is partial; unpriced operations are not zero.', completeCost:'Priced cost is complete for this source.', noMeteredAi:'No metered AI usage this month.',
+    noFinancePermission:'You do not have permission to view financial data.', financeUnavailable:'Financial data could not be loaded; customer administration remains available.', subscriptionStatus:'Subscription status', noSubscriptionRecord:'No subscription record', periodEnd:'Period end', lastInvoice:'Last invoice',
+    waCostPerConversation:'WhatsApp cost / conversation', providers:'AI provider breakdown', provider:'Provider', cost:'Cost', unpriced:'Unpriced', storeEntitlements:'Store subscriptions', none:'None',
+    sandbox:'Sandbox only', liveEvidence:'Live evidence present', noProviderEvents:'No provider events', verifiedAt:'Last verified', expires:'Expires',
     access:'DABBIR access', accessDesc:'Suspension blocks this customer from DABBIR only. It does not ban the Supabase identity or other systems.',
     suspend:'Suspend account', reactivate:'Reactivate account', reason:'Suspension reason', reasonPlaceholder:'Example: customer request, abuse, billing review',
     suspendConfirm:'To suspend, type', suspendedAt:'Suspended', accessUpdated:'Account access updated.', adminProtected:'A Platform Admin account cannot be suspended.', reasonRequired:'Enter a clear suspension reason.', confirmRequired:'Confirmation phrase does not match.',
@@ -5105,6 +5242,17 @@
   const fmt = value => {
     if (!value) return '—';
     try { return new Intl.DateTimeFormat(isAr() ? 'ar-AE' : 'en-AE', {dateStyle:'medium', timeStyle:'short'}).format(new Date(value)); }
+    catch { return String(value); }
+  };
+  const fmtMonth = value => {
+    if (!value) return '—';
+    try { return new Intl.DateTimeFormat(isAr() ? 'ar-AE' : 'en-AE', {month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(value)); }
+    catch { return String(value); }
+  };
+  const num = value => value===null||value===undefined||!Number.isFinite(Number(value)) ? '—' : new Intl.NumberFormat(isAr()?'ar-AE':'en-AE').format(Number(value));
+  const aed = value => {
+    if (value===null||value===undefined||!Number.isFinite(Number(value))) return '—';
+    try { return new Intl.NumberFormat(isAr()?'ar-AE':'en-AE',{style:'currency',currency:'AED',minimumFractionDigits:Number(value)<1?4:2,maximumFractionDigits:6}).format(Number(value)); }
     catch { return String(value); }
   };
   const api = async (url, options={}) => {
@@ -5121,10 +5269,16 @@
   let selected = null;
   let recoveryPreview = null;
   let recoveryCase = null;
+  let financeOverview = null;
+  let financeOverviewDenied = false;
+  let financeOverviewError = false;
+  let selectedFinance = null;
+  let selectedFinanceDenied = false;
+  let selectedFinanceError = false;
 
   const style = document.createElement('style');
-  style.dataset.dabbirPlatformCustomers = 'v4';
-  style.textContent = '.pcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pcToolbar{display:flex;gap:8px;margin-bottom:12px}.pcToolbar input{flex:1;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;padding:10px}.pcAccount{border:1px solid var(--line);background:#131619;border-radius:16px;padding:13px}.pcAccount b{display:block;font-size:12px}.pcAccount small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.pcCode{direction:ltr;display:inline-block;font-weight:950;letter-spacing:.04em;color:var(--accent)}.pcBiz{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#121416}.pcCounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}.pcCount{background:#191c20;border-radius:10px;padding:8px}.pcCount span{font-size:8px;color:var(--muted);display:block}.pcCount b{font-size:15px}.pcDanger{border:1px solid #5b3030;background:#2b1717;border-radius:14px;padding:11px;margin-top:12px}.pcAccess{border:1px solid #3d4654;background:#151a20;border-radius:14px;padding:12px;margin-top:12px}.pcAccess.suspended{border-color:#6a4c2c;background:#261d12}.pcAccess input{width:100%;border:1px solid var(--line);background:#101316;color:#fff;border-radius:10px;padding:9px;margin-top:7px}.pcRecoveryResult{margin-top:9px;padding:9px;border:1px solid var(--line);border-radius:11px;font-size:10px}.pcRecoverySafe{border-color:#28583a;background:#12251a}.pcRecoveryBlocked{border-color:#6c4030;background:#2d1d15}.pcMetrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.pcMetric{border:1px solid var(--line);border-radius:14px;padding:12px;background:#131619}.pcMetric span{font-size:9px;color:var(--muted);display:block}.pcMetric strong{font-size:21px}.pcActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}@media(max-width:760px){.pcGrid{grid-template-columns:1fr}.pcMetrics{grid-template-columns:repeat(2,1fr)}.pcToolbar{flex-direction:column}.pcCounts{grid-template-columns:repeat(2,1fr)}}';
+  style.dataset.dabbirPlatformCustomers = 'v5';
+  style.textContent = '.pcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pcToolbar{display:flex;gap:8px;margin-bottom:12px}.pcToolbar input{flex:1;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;padding:10px}.pcAccount{border:1px solid var(--line);background:#131619;border-radius:16px;padding:13px}.pcAccount b{display:block;font-size:12px}.pcAccount small{display:block;color:var(--muted);font-size:9px;margin-top:3px}.pcCode{direction:ltr;display:inline-block;font-weight:950;letter-spacing:.04em;color:var(--accent)}.pcBiz{border:1px solid var(--line);border-radius:15px;padding:12px;margin-top:10px;background:#121416}.pcCounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}.pcCount{background:#191c20;border-radius:10px;padding:8px}.pcCount span{font-size:8px;color:var(--muted);display:block}.pcCount b{font-size:15px}.pcDanger{border:1px solid #5b3030;background:#2b1717;border-radius:14px;padding:11px;margin-top:12px}.pcAccess{border:1px solid #3d4654;background:#151a20;border-radius:14px;padding:12px;margin-top:12px}.pcAccess.suspended{border-color:#6a4c2c;background:#261d12}.pcAccess input{width:100%;border:1px solid var(--line);background:#101316;color:#fff;border-radius:10px;padding:9px;margin-top:7px}.pcRecoveryResult{margin-top:9px;padding:9px;border:1px solid var(--line);border-radius:11px;font-size:10px}.pcRecoverySafe{border-color:#28583a;background:#12251a}.pcRecoveryBlocked{border-color:#6c4030;background:#2d1d15}.pcMetrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.pcMetric{border:1px solid var(--line);border-radius:14px;padding:12px;background:#131619}.pcMetric span{font-size:9px;color:var(--muted);display:block}.pcMetric strong{font-size:21px}.pcActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.pcFinance{border:1px solid #344b73;background:#111a28;border-radius:16px;padding:13px;margin-bottom:12px}.pcFinanceHead{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}.pcFinanceHead b{font-size:13px}.pcFinanceHead small{display:block;color:var(--muted);font-size:9px;max-width:760px}.pcFinanceGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.pcFinanceStat{background:#172235;border:1px solid #263a58;border-radius:11px;padding:9px;min-width:0}.pcFinanceStat span{font-size:8px;color:var(--muted);display:block}.pcFinanceStat b{font-size:15px;overflow-wrap:anywhere}.pcFinanceNote{font-size:9px;margin-top:9px;padding:8px 9px;border-radius:9px;background:#1c2430;color:var(--muted)}.pcFinanceNote.warn{background:#2b2416;color:#e8c77c}.pcFinanceDetails{margin-top:9px}.pcFinanceDetails summary{cursor:pointer;font-size:10px;min-height:36px;display:flex;align-items:center}.pcProvider{display:grid;grid-template-columns:1fr auto auto auto;gap:7px;padding:6px 0;border-top:1px solid #27364a;font-size:9px;align-items:center}.pcProvider:first-child{border-top:0}.pcEntitlement{padding:7px;border:1px solid #29394f;border-radius:9px;margin-top:6px;font-size:9px}.pcEntitlement b{font-size:10px}@media(max-width:760px){.pcGrid{grid-template-columns:1fr}.pcMetrics{grid-template-columns:repeat(2,1fr)}.pcToolbar{flex-direction:column}.pcCounts{grid-template-columns:repeat(2,1fr)}.pcFinanceGrid{grid-template-columns:repeat(2,1fr)}}';
   document.head.appendChild(style);
 
   function ensureScreen(){
@@ -5179,22 +5333,58 @@
   function isSuspended(account){ return String(account?.access_status || account?.access?.status || 'active') === 'suspended'; }
   function accountLabel(account){ const t=text(); return isSuspended(account) ? t.suspended : (account.deleted_at || account.banned_until ? t.blocked : t.active); }
   function badgeClass(account){ return isSuspended(account) || account.deleted_at || account.banned_until ? 'red' : 'green'; }
+  function webEnvironmentLabel(value){ const t=text(); return value==='SANDBOX_ONLY'?t.sandbox:value==='LIVE_EVIDENCE_PRESENT'?t.liveEvidence:value==='NO_PROVIDER_EVENTS'?t.noProviderEvents:(value||'—'); }
+  function financeStateText(value){ const t=text(); return value==='PARTIAL'?t.partialCost:value==='COMPLETE'?t.completeCost:value==='NO_METERED_AI'?t.noMeteredAi:value||'—'; }
 
   async function loadAccounts(term){
     if (!enabled) return;
-    selected=null; recoveryPreview=null; recoveryCase=null; loading();
-    const {response,payload} = await api('/api/platform-customers?action=search&q='+encodeURIComponent(term||''));
-    if (!response.ok) return failed();
-    accounts = payload.accounts || [];
+    selected=null; recoveryPreview=null; recoveryCase=null; selectedFinance=null; selectedFinanceDenied=false; selectedFinanceError=false; loading();
+    financeOverview=null; financeOverviewDenied=false; financeOverviewError=false;
+    const [accountResult,financeResult]=await Promise.all([
+      api('/api/platform-customers?action=search&q='+encodeURIComponent(term||'')),
+      api('/api/platform-customers?action=finance_overview')
+    ]);
+    if (!accountResult.response.ok) return failed();
+    accounts = accountResult.payload.accounts || [];
+    if(financeResult.response.ok) financeOverview=financeResult.payload.finance||null;
+    else if(financeResult.response.status===403) financeOverviewDenied=true;
+    else financeOverviewError=true;
     renderAccounts();
   }
 
   async function openAccount(userId){
     loading();
-    const {response,payload} = await api('/api/platform-customers?action=detail&user_id='+encodeURIComponent(userId));
-    if (!response.ok) return failed();
-    selected=payload.customer; recoveryPreview=null; recoveryCase=null;
+    selectedFinance=null; selectedFinanceDenied=false; selectedFinanceError=false;
+    const [detailResult,financeResult]=await Promise.all([
+      api('/api/platform-customers?action=detail&user_id='+encodeURIComponent(userId)),
+      api('/api/platform-customers?action=finance&user_id='+encodeURIComponent(userId))
+    ]);
+    if (!detailResult.response.ok) return failed();
+    selected=detailResult.payload.customer; recoveryPreview=null; recoveryCase=null;
+    if(financeResult.response.ok) selectedFinance=financeResult.payload.finance||null;
+    else if(financeResult.response.status===403) selectedFinanceDenied=true;
+    else selectedFinanceError=true;
     renderDetail();
+  }
+
+  function renderFinanceOverview(){
+    const t=text();
+    if(financeOverviewDenied)return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.noFinancePermission)+'</small></div></div></div>';
+    if(financeOverviewError)return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.financeUnavailable)+'</small></div></div></div>';
+    if(!financeOverview)return '';
+    const ai=financeOverview.ai||{},subs=financeOverview.subscriptions||{};
+    const storeActive=Number(subs.apple_production_active||0)+Number(subs.google_production_active||0);
+    const note=ai.measurement_state==='PARTIAL'?t.partialCost:t.completeCost;
+    return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.financeDesc)+'</small></div><span class="badge gray">'+esc(t.month)+': '+esc(fmtMonth(financeOverview.month_start))+'</span></div><div class="pcFinanceGrid">'+
+      '<div class="pcFinanceStat"><span>'+esc(t.confirmedAiSpend)+'</span><b>'+esc(aed(ai.known_cost_aed))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.unpricedAi)+'</span><b>'+esc(num(ai.unpriced_operations))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.aiRequests)+'</span><b>'+esc(num(ai.ai_requests))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.tokens)+'</span><b>'+esc(num(ai.total_tokens))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.webBilling)+'</span><b>'+esc(num(subs.web_records))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.storeSubscriptions)+'</span><b>'+esc(num(storeActive))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.revenue)+'</span><b>—</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.margin)+'</span><b>—</b></div>'+
+      '</div><div class="pcFinanceNote '+(ai.measurement_state==='PARTIAL'?'warn':'')+'">'+esc(note)+' · '+esc(t.webBillingEnv)+': '+esc(webEnvironmentLabel(subs.web_billing_environment))+' · '+esc(t.revenueUnavailable)+'</div></div>';
   }
 
   function renderAccounts(){
@@ -5204,7 +5394,7 @@
     const cards=accounts.length ? accounts.map(a =>
       '<div class="pcAccount"><span class="pcCode">'+esc(a.customer_no)+'</span><b>'+esc(a.email||'—')+'</b><small>'+esc((a.businesses||[]).map(b=>b.name).join(' · ')||'—')+'</small><small>'+esc(t.lastLogin)+': '+esc(fmt(a.last_sign_in_at))+'</small><div class="pcActions"><span class="badge '+badgeClass(a)+'">'+esc(accountLabel(a))+'</span><button class="secondary" data-pc-user="'+esc(a.user_id)+'">'+esc(t.details)+'</button></div></div>'
     ).join('') : '<div class="empty">'+esc(t.empty)+'</div>';
-    body.innerHTML='<div class="pcMetrics"><div class="pcMetric"><span>'+esc(t.accounts)+'</span><strong>'+accounts.length+'</strong></div><div class="pcMetric"><span>'+esc(t.active)+'</span><strong>'+active+'</strong></div><div class="pcMetric"><span>'+esc(t.businesses)+'</span><strong>'+businesses+'</strong></div></div><div class="pcToolbar"><input id="pcSearch" placeholder="'+esc(t.search)+'"><button class="primary" id="pcSearchBtn">'+esc(t.find)+'</button></div><div class="pcGrid">'+cards+'</div>';
+    body.innerHTML='<div class="pcMetrics"><div class="pcMetric"><span>'+esc(t.accounts)+'</span><strong>'+accounts.length+'</strong></div><div class="pcMetric"><span>'+esc(t.active)+'</span><strong>'+active+'</strong></div><div class="pcMetric"><span>'+esc(t.businesses)+'</span><strong>'+businesses+'</strong></div></div>'+renderFinanceOverview()+'<div class="pcToolbar"><input id="pcSearch" placeholder="'+esc(t.search)+'"><button class="primary" id="pcSearchBtn">'+esc(t.find)+'</button></div><div class="pcGrid">'+cards+'</div>';
     q('#pcSearchBtn').onclick=()=>loadAccounts(q('#pcSearch').value);
     q('#pcSearch').onkeydown=event=>{ if(event.key==='Enter') loadAccounts(event.target.value); };
     qa('[data-pc-user]').forEach(button=>button.onclick=()=>openAccount(button.dataset.pcUser));
@@ -5217,6 +5407,43 @@
     }
     const phrase='SUSPEND '+String(account.customer_no||'');
     return '<div class="pcAccess"><div class="row space"><div><b>'+esc(t.access)+'</b><small>'+esc(t.accessDesc)+'</small></div><span class="badge green">'+esc(t.active)+'</span></div><label style="display:block;margin-top:9px;font-size:9px;color:var(--muted)">'+esc(t.reason)+'</label><input id="pcSuspendReason" maxlength="500" placeholder="'+esc(t.reasonPlaceholder)+'"><div style="margin-top:8px;font-size:9px;color:var(--muted)">'+esc(t.suspendConfirm)+' <span class="pcCode">'+esc(phrase)+'</span></div><input id="pcSuspendConfirm" autocomplete="off" placeholder="'+esc(phrase)+'"><div class="pcActions"><button class="danger" id="pcSuspend">'+esc(t.suspend)+'</button></div></div>';
+  }
+
+  function renderEntitlements(){
+    const t=text();
+    if(!selectedFinance)return '';
+    const subscriptions=selectedFinance.subscriptions||{};
+    const rows=[...(subscriptions.apple||[]).map(row=>({...row,provider:'Apple'})),...(subscriptions.google||[]).map(row=>({...row,provider:'Google'}))];
+    if(!rows.length)return '<div class="pcFinanceNote">'+esc(t.storeEntitlements)+': '+esc(t.none)+'</div>';
+    return '<details class="pcFinanceDetails"><summary>'+esc(t.storeEntitlements)+' ('+rows.length+')</summary>'+rows.map(row=>'<div class="pcEntitlement"><b>'+esc(row.provider)+' · '+esc(row.product_id||'—')+'</b><div>'+esc(row.status||row.subscription_state||'—')+' · '+esc(row.environment||'—')+'</div><small>'+esc(t.expires)+': '+esc(fmt(row.expires_at))+' · '+esc(t.verifiedAt)+': '+esc(fmt(row.verified_at))+'</small></div>').join('')+'</details>';
+  }
+
+  function renderCustomerFinance(){
+    const t=text();
+    if(selectedFinanceDenied)return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.noFinancePermission)+'</small></div></div></div>';
+    if(selectedFinanceError)return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.financeUnavailable)+'</small></div></div></div>';
+    if(!selectedFinance)return '';
+    return '<div class="pcFinance"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.financeDesc)+'</small></div><span class="badge gray">'+esc(t.month)+': '+esc(fmtMonth(selectedFinance.month_start))+'</span></div><div class="pcFinanceGrid"><div class="pcFinanceStat"><span>'+esc(t.webBillingEnv)+'</span><b>'+esc(webEnvironmentLabel(selectedFinance.web_billing_environment))+'</b></div><div class="pcFinanceStat"><span>'+esc(t.revenue)+'</span><b>—</b></div><div class="pcFinanceStat"><span>'+esc(t.margin)+'</span><b>—</b></div></div><div class="pcFinanceNote">'+esc(t.revenueUnavailable)+'</div>'+renderEntitlements()+'</div>';
+  }
+
+  function renderBusinessFinance(business){
+    const t=text();
+    if(!selectedFinance||selectedFinanceDenied||selectedFinanceError)return '';
+    const row=(selectedFinance.businesses||[]).find(item=>String(item.id)===String(business.id));
+    if(!row)return '';
+    const ai=row.ai||{},usage=row.usage||{},billing=row.billing||null,providers=Array.isArray(row.providers)?row.providers:[];
+    const state=financeStateText(ai.measurement_state);
+    const providerHtml=providers.length?'<details class="pcFinanceDetails"><summary>'+esc(t.providers)+'</summary>'+providers.map(p=>'<div class="pcProvider"><span>'+esc(p.provider||'—')+'</span><span>'+esc(num(p.ai_requests))+'</span><span>'+esc(aed(p.known_cost_aed))+'</span><span>'+esc(num(p.unpriced_operations))+'</span></div>').join('')+'</details>':'';
+    return '<div class="pcFinance" style="margin-top:10px;margin-bottom:0"><div class="pcFinanceHead"><div><b>'+esc(t.finance)+'</b><small>'+esc(t.financeDesc)+'</small></div><span class="badge '+(ai.measurement_state==='PARTIAL'?'orange':'gray')+'">'+esc(state)+'</span></div><div class="pcFinanceGrid">'+
+      '<div class="pcFinanceStat"><span>'+esc(t.confirmedAiSpend)+'</span><b>'+esc(aed(ai.known_cost_aed))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.unpricedAi)+'</span><b>'+esc(num(ai.unpriced_operations))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.aiRequests)+'</span><b>'+esc(num(ai.ai_requests))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.tokens)+'</span><b>'+esc(num(ai.total_tokens))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.waCostPerConversation)+'</span><b>'+esc(aed(usage.known_whatsapp_cost_per_conversation_aed))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.subscriptionStatus)+'</span><b>'+esc(billing?.status||t.noSubscriptionRecord)+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.periodEnd)+'</span><b>'+esc(fmt(billing?.current_period_ends_at))+'</b></div>'+
+      '<div class="pcFinanceStat"><span>'+esc(t.margin)+'</span><b>—</b></div>'+
+      '</div><div class="pcFinanceNote '+(ai.measurement_state==='PARTIAL'?'warn':'')+'">'+esc(state)+' · '+esc(t.revenueUnavailable)+(billing?.last_invoice_status?' · '+esc(t.lastInvoice)+': '+esc(billing.last_invoice_status):'')+'</div>'+providerHtml+'</div>';
   }
 
   function renderBusiness(business){
@@ -5232,15 +5459,15 @@
     const previewHtml=preview ? '<div class="pcRecoveryResult '+(blocked?'pcRecoveryBlocked':'pcRecoverySafe')+'"><b>'+esc(t.events)+': '+Number(preview.events_to_reverse||0)+'</b><div>'+esc(t.safeEvents)+': '+Number(preview.auto_restore_events||0)+' · '+esc(t.manualEvents)+': '+Number(preview.reconciliation_events||0)+'</div>'+(tableSummary?'<div>'+tableSummary+'</div>':'')+(blocked?'<small style="display:block;margin-top:6px;color:var(--red)">'+esc(t.manualRequired)+(reconcileSummary?' · '+reconcileSummary:'')+'</small>':'<small style="display:block;margin-top:6px">'+esc(t.safeReady)+'</small>')+(!accountSuspended?'<small style="display:block;margin-top:6px;color:var(--red)">'+esc(t.frozenRequired)+'</small>':'')+'</div>' : '';
     const canPrepare=preview && !blocked && accountSuspended;
     const caseHtml=caseId ? '<div class="pcRecoveryResult"><div>'+esc(t.confirmLabel)+' <span class="pcCode">RESTORE '+esc(selected.account.customer_no)+'</span></div><input style="width:100%;margin-top:7px" data-pc-confirm="'+esc(business.id)+'" placeholder="RESTORE '+esc(selected.account.customer_no)+'"><button style="margin-top:7px" class="primary" data-pc-apply="'+esc(business.id)+'">'+esc(t.apply)+'</button><small style="display:block;color:var(--red);margin-top:6px">'+esc(t.danger)+'</small></div>' : '';
-    return '<div class="pcBiz"><div class="row space"><div><b>'+esc(business.name)+'</b><small>'+esc(business.business_type)+' · '+esc(business.role)+' · '+esc(business.membership_status)+'</small></div><span class="badge gray">'+esc(business.locale||'')+'</span></div><div class="pcCounts">'+counters+'</div><div class="pcDanger"><b>'+esc(t.recovery)+'</b><small style="display:block;color:var(--muted);margin-top:4px">'+esc(t.recoveryDesc)+'</small><div class="field"><label>'+esc(t.targetTime)+'</label><input type="datetime-local" data-pc-time="'+esc(business.id)+'"></div><div class="pcActions"><button class="secondary" data-pc-preview="'+esc(business.id)+'">'+esc(t.preview)+'</button>'+(canPrepare?'<button class="primary" data-pc-open="'+esc(business.id)+'">'+esc(t.prepare)+'</button>':'')+'</div>'+previewHtml+caseHtml+'</div></div>';
+    return '<div class="pcBiz"><div class="row space"><div><b>'+esc(business.name)+'</b><small>'+esc(business.business_type)+' · '+esc(business.role)+' · '+esc(business.membership_status)+'</small></div><span class="badge gray">'+esc(business.locale||'')+'</span></div><div class="pcCounts">'+counters+'</div>'+renderBusinessFinance(business)+'<div class="pcDanger"><b>'+esc(t.recovery)+'</b><small style="display:block;color:var(--muted);margin-top:4px">'+esc(t.recoveryDesc)+'</small><div class="field"><label>'+esc(t.targetTime)+'</label><input type="datetime-local" data-pc-time="'+esc(business.id)+'"></div><div class="pcActions"><button class="secondary" data-pc-preview="'+esc(business.id)+'">'+esc(t.preview)+'</button>'+(canPrepare?'<button class="primary" data-pc-open="'+esc(business.id)+'">'+esc(t.prepare)+'</button>':'')+'</div>'+previewHtml+caseHtml+'</div></div>';
   }
 
   function renderDetail(){
     const t=text(), body=q('#pcBody'); if(!body) return;
     const user=selected.user||{}, account=selected.account||{}, businesses=selected.businesses||[];
     const statusObject={...user,access:selected.access};
-    body.innerHTML='<button class="secondary" id="pcBack">← '+esc(t.back)+'</button><div class="card" style="margin-top:10px"><div class="row space"><div><span class="pcCode">'+esc(account.customer_no||'')+'</span><h2 style="margin:5px 0">'+esc(user.email||'—')+'</h2></div><span class="badge '+badgeClass(statusObject)+'">'+esc(accountLabel(statusObject))+'</span></div><div class="pcGrid" style="margin-top:10px"><div class="pcAccount"><small>'+esc(t.phone)+'</small><b>'+esc(user.phone||t.noPhone)+'</b></div><div class="pcAccount"><small>'+esc(t.created)+'</small><b>'+esc(fmt(user.created_at))+'</b></div><div class="pcAccount"><small>'+esc(t.lastLogin)+'</small><b>'+esc(fmt(user.last_sign_in_at))+'</b></div></div>'+renderAccess()+'</div><div style="margin-top:12px">'+businesses.map(renderBusiness).join('')+'</div>';
-    q('#pcBack').onclick=()=>{selected=null;renderAccounts();};
+    body.innerHTML='<button class="secondary" id="pcBack">← '+esc(t.back)+'</button><div class="card" style="margin-top:10px"><div class="row space"><div><span class="pcCode">'+esc(account.customer_no||'')+'</span><h2 style="margin:5px 0">'+esc(user.email||'—')+'</h2></div><span class="badge '+badgeClass(statusObject)+'">'+esc(accountLabel(statusObject))+'</span></div><div class="pcGrid" style="margin-top:10px"><div class="pcAccount"><small>'+esc(t.phone)+'</small><b>'+esc(user.phone||t.noPhone)+'</b></div><div class="pcAccount"><small>'+esc(t.created)+'</small><b>'+esc(fmt(user.created_at))+'</b></div><div class="pcAccount"><small>'+esc(t.lastLogin)+'</small><b>'+esc(fmt(user.last_sign_in_at))+'</b></div></div>'+renderAccess()+'</div>'+renderCustomerFinance()+'<div style="margin-top:12px">'+businesses.map(renderBusiness).join('')+'</div>';
+    q('#pcBack').onclick=()=>{selected=null;selectedFinance=null;renderAccounts();};
     if(q('#pcSuspend')) q('#pcSuspend').onclick=suspendAccount;
     if(q('#pcReactivate')) q('#pcReactivate').onclick=reactivateAccount;
     qa('[data-pc-preview]').forEach(button=>button.onclick=()=>previewRecovery(button.dataset.pcPreview));
@@ -5317,6 +5544,7 @@
       enabled=false;
       capabilityDenied=false;
       capabilityProbePromise=null;
+      financeOverview=null; selectedFinance=null;
       removeScreen();
     }
     probeWhenReady();
@@ -5610,6 +5838,22 @@
   }
 
   function openScreen(screen){if(typeof showScreen==='function')showScreen(screen)}
+  let pressedBusiness=null,deferredRender=false;
+  function finishActivationPress(){
+    pressedBusiness=null;
+    if(deferredRender){deferredRender=false;setTimeout(render,0)}
+  }
+  // Keep the pointer target alive until its click is delivered. Background
+  // setup reads must not replace a button between pointerdown and click.
+  document.addEventListener?.('pointerdown',event=>{
+    if(event.button===0&&event.target.closest?.('#dabbirActivation'))pressedBusiness=workspace?.business?.id||null;
+  },true);
+  document.addEventListener?.('click',finishActivationPress);
+  document.addEventListener?.('pointercancel',finishActivationPress);
+  document.addEventListener?.('pointerup',event=>{
+    if(!event.target.closest?.('#dabbirActivation'))finishActivationPress();
+  });
+  window.addEventListener?.('blur',finishActivationPress);
   function ensure(){
     const dash=q('#screen-dashboard');
     if(!dash)return null;
@@ -5670,6 +5914,8 @@
     const id=workspace?.business?.id||null;
     syncBusinessScope(id);
     const panel=ensure();if(!panel)return;
+    if(pressedBusiness&&pressedBusiness===id){deferredRender=true;return}
+    pressedBusiness=null;
     if(!id){panel.innerHTML='';return}
     const t=copy();
     const first=firstWorkStep();
@@ -6582,6 +6828,11 @@
       const finish=(conversationRefresh=null)=>{
         if(epoch!==navigationEpoch) return;
         if(hit.name==='conversations'&&!workspace?.business?.id) return;
+        // paint() already completed the navigation and closed its menu. A menu
+        // open now is a newer user interaction, not stale navigation state.
+        // The canonical render must not undo it when a server refresh finishes.
+        const side=document.querySelector('#side');
+        const preserveMenu=Boolean(hit.screen.classList.contains('active')&&side?.classList.contains('open'));
         let error=null;
         try{
           if(typeof showScreen==='function') showScreen(hit.name);
@@ -6591,6 +6842,7 @@
         if(epoch!==navigationEpoch) return;
         if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
         else if(error) safeFallback(hit,source,error);
+        if(preserveMenu&&!error&&document.querySelector('#side')===side&&hit.screen.classList.contains('active')) side.classList.add('open');
         const finished=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
         window.__dabbirLastNavigationTiming={
           target:hit.name,
@@ -6740,6 +6992,7 @@
 
   function loadGlobalSupport(){
     const modules=[
+      {ready:'__dabbirCustomerNameEditor',dataset:'dabbirCustomerNameEditorUi',selector:'script[data-dabbir-customer-name-editor-ui="1"]',src:'/api/customer-name-ui?v=20260908-1',error:'dabbir_customer_name_ui_load_failed'},
       {ready:'__dabbirCustomerSupportUi',dataset:'dabbirCustomerSupportUi',selector:'script[data-dabbir-customer-support-ui="1"]',src:'/api/customer-support-ui?v=20260907-1',error:'dabbir_customer_support_ui_load_failed'},
       {ready:'__dabbirPlatformCustomerSupportThreadUi',dataset:'dabbirPlatformSupportThreadUi',selector:'script[data-dabbir-platform-support-thread-ui="1"]',src:'/api/platform-customer-support-thread-ui?v=20260907-1',error:'dabbir_platform_support_thread_ui_load_failed'},
     ];

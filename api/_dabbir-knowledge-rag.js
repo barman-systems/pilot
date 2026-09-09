@@ -6,7 +6,7 @@ const clean=(value,max=16000)=>String(value??'').trim().replace(/[\u0000-\u001f\
 const ragEnabled=env=>['1','true'].includes(String(env?.DABBIR_KNOWLEDGE_RAG_ENABLED||'').trim().toLowerCase());
 function failureCode(error){
   const code=String(error?.code||error?.message||'');
-  if(/^(?:EMBEDDING_PROVIDER_[45][0-9]{2}|EMBEDDING_CONTRACT_INVALID|EMBEDDING_TEXT_EMPTY|EMBEDDING_MODEL_UNAPPROVED|GEMINI_API_KEY_MISSING|KNOWLEDGE_ID_INVALID)$/.test(code))return code;
+  if(/^(?:EMBEDDING_PROVIDER_[45][0-9]{2}|EMBEDDING_CONTRACT_INVALID|EMBEDDING_TEXT_EMPTY|EMBEDDING_MODEL_UNAPPROVED|GEMINI_API_KEY_MISSING|KNOWLEDGE_ID_INVALID|KNOWLEDGE_SCOPE_INVALID|DABBIR_KNOWLEDGE_HASH_MISMATCH|KNOWLEDGE_UPSERT_UNVERIFIED)$/.test(code))return code;
   if(['AbortError','TimeoutError'].includes(error?.name))return 'RAG_TIMEOUT';
   return 'RAG_DEPENDENCY_FAILED';
 }
@@ -64,9 +64,13 @@ export async function indexApprovedKnowledge({rpc,env=process.env,fetchImpl=fetc
   for(const row of rows){
     try{
       if(!UUID.test(String(row?.knowledge_id||'')))throw new Error('KNOWLEDGE_ID_INVALID');
+      if(!UUID.test(String(row?.business_id||'')))throw new Error('KNOWLEDGE_SCOPE_INVALID');
       const instruction=knowledgeDocumentInstruction({title:row?.title,content:row?.content});
       const vector=await embedKnowledgeText(instruction,{env,fetchImpl});
-      await rpc('dabbir_knowledge_embedding_upsert_v1',{p_knowledge_id:row.knowledge_id,p_content:clean(row.content,16000),p_content_hash:clean(row.content_hash,64),p_embedding_text:vectorSqlText(vector),p_model:DEFAULT_MODEL});
+      // The queue hashes the original database content. Normalizing whitespace here
+      // changes those bytes and makes the database reject every multiline document.
+      const saved=await rpc('dabbir_knowledge_embedding_upsert_v1',{p_knowledge_id:row.knowledge_id,p_content:row.content,p_content_hash:row.content_hash,p_embedding_text:vectorSqlText(vector),p_model:DEFAULT_MODEL});
+      if(saved?.ok!==true||saved.knowledge_id!==row.knowledge_id||saved.business_id!==row.business_id||saved.content_hash!==row.content_hash)throw new Error('KNOWLEDGE_UPSERT_UNVERIFIED');
       indexed++;
     }catch(error){failed++;const code=failureCode(error);error_codes[code]=(error_codes[code]||0)+1;}
   }

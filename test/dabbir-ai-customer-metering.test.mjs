@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import {actualGatewayCost} from '../api/_dabbir-whatsapp-ai-meter.js';
+
+test('missing or malformed gateway cost remains unknown instead of verified zero',()=>{
+  const absent=new Response('{}');
+  assert.equal(actualGatewayCost({},absent),null);
+  for(const cost of [null,undefined,'','  ',false,true,[],{},'invalid',-1,Infinity]){
+    assert.equal(actualGatewayCost({usage:{cost}},absent),null);
+  }
+  assert.equal(actualGatewayCost({usage:{cost:null}},new Response('{}',{headers:{'x-vercel-ai-gateway-cost':'0.0012'}})),.0012);
+});
+test('explicit numeric zero is valid provider cost evidence',()=>{
+  assert.equal(actualGatewayCost({usage:{cost:0}},new Response('{}')),0);
+  assert.equal(actualGatewayCost({},new Response('{}',{headers:{'x-vercel-ai-gateway-cost':'0'}})),0);
+});
 
 const meter=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-meter.js',import.meta.url),'utf8');
 const whatsapp=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');

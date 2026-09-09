@@ -18,11 +18,13 @@ function uiHarness(language = 'ar') {
   let panel;
   const retry = {};
   const calls = [];
+  const listeners = {}, timers = [];
   const dashboard = { querySelector: () => null, prepend(node) { panel = node; } };
   const context = vm.createContext({
     window: { __dabbirUxFoundationV1: true },
     workspace: business('A'),
     document: {
+      addEventListener: (name, fn) => { listeners[name] = fn; },
       documentElement: { lang: language }, head: { append() {} },
       createElement: () => ({ dataset: {}, innerHTML: '', querySelectorAll: () => [] }),
       querySelector: selector => {
@@ -35,7 +37,7 @@ function uiHarness(language = 'ar') {
     renderDashboard() {},
     renderAll() {},
     fetch: (url, options) => new Promise(resolve => { calls.push({ url, options, resolve }); }),
-    setTimeout: () => 1,
+    setTimeout: (fn, delay) => { if (delay === 0) timers.push(fn); return 1; },
   });
   vm.runInContext(script, context);
   return {
@@ -44,6 +46,8 @@ function uiHarness(language = 'ar') {
     switchTo: id => { context.workspace = id ? business(id) : null; },
     render: () => context.renderDashboard(),
     retry: () => retry.onclick(),
+    press: () => listeners.pointerdown({button:0,target:{closest:()=>panel}}),
+    release: () => { listeners.click(); while(timers.length) timers.shift()(); },
     get html() { return panel?.innerHTML || ''; },
     complete(start, profile = readyProfile, whatsapp = readyWhatsApp, status = 200) {
       for (const [offset, body] of [[0, profile], [1, whatsapp]]) {
@@ -52,6 +56,27 @@ function uiHarness(language = 'ar') {
     },
   };
 }
+
+test('background setup completion preserves an active pointer target until click', async () => {
+  const ui = uiHarness();
+  const request = ui.refresh();
+  const before = ui.html;
+  ui.press();
+  ui.complete(0);
+  await request;
+  assert.equal(ui.html, before, 'the current button DOM must survive until click delivery');
+  ui.release();
+  assert.match(ui.html, /100%/);
+});
+
+test('an active pointer cannot retain another business setup after a scope change', async () => {
+  const ui = uiHarness();
+  const first = ui.refresh(); ui.complete(0); await first;
+  ui.press(); ui.switchTo('B'); ui.render();
+  assert.equal(ui.html.includes('100%'), false);
+  assert.match(ui.html, /يتحقق من التجهيز/);
+  ui.complete(2); await new Promise(setImmediate); ui.release();
+});
 
 test('switching activities immediately hides old setup state and ignores its delayed response', async () => {
   const ui = uiHarness();
