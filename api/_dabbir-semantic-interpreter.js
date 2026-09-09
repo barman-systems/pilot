@@ -1,6 +1,7 @@
 import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
+import { applyDeterministicSemanticIntentPolicy } from './_dabbir-semantic-intent-policy.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
@@ -34,9 +35,13 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
   const x=JSON.parse(result.reply);
-  const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
+  const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
+  // Provider output proposes semantics; application policy owns deterministic
+  // operational intent. Explicit availability + grounded temporal evidence is
+  // a booking-journey signal even if a stochastic provider says SERVICE_MENU.
+  const proposal=applyDeterministicSemanticIntentPolicy({message,proposal:providerProposal});
   return {proposal,provider:result.provider,model:result.model};
 }
 
