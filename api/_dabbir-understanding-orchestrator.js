@@ -243,10 +243,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
       return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
     }else{
-      // A first-turn goal resolved from a scoped service reference is already
-      // grounded. A generic provider intent cannot erase it merely because no
-      // previous conversation state existed. Safety/risk checks still run.
-      const goalAnchor=cognitive&&activeJourney(state)&&arr(state.context_resolution?.resolved).some(r=>r.field==='service')?state:semanticPrevious;
+      // A newly grounded service goal has the same continuity protection as
+      // a previous-turn goal, whether selected explicitly or by reference.
+      // A generic intent cannot discard current-message evidence. Grounded
+      // topic switches and the reducer's safety/risk checks still run.
+      const goalAnchor=cognitive&&activeJourney(state)&&verifiedOperationalFact(state.entities?.service)?state:semanticPrevious;
       const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(goalAnchor,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=reduce({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
