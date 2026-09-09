@@ -1,13 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {z} from 'zod';
 import {generateDABBIRAiReply} from '../api/_ai-core.js';
 import {interpretSemanticMessage, evaluateSemanticProbe} from '../api/_dabbir-semantic-interpreter.js';
-import {validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
+import {SEMANTIC_JSON_SCHEMA,validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
 
 const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk_level:'LOW',service_name:null,knowledge_key:null,
   entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},
     {entity:'time',value:'09:00',evidence:'9 الصبح',confidence:.99,correction:false}]};
 const response=(content=JSON.stringify(proposal),finish_reason='stop')=>new Response(JSON.stringify({choices:[{message:{content},finish_reason}]}),{status:200});
+
+test('live REQUEST_SPAN_COUNT regression: provider schema and application agree on bounded job cardinality',()=>{
+ const schema=z.fromJSONSchema(SEMANTIC_JSON_SCHEMA);
+ const complete={...proposal,service_evidence:null,service_question:null,dialogue:{message_role:'NEW_REQUEST',evidence:'book tomorrow',invalidated_fields:[]}};
+ for(const count of [0,1,2,3,4,8]){
+  const value={...complete,request_spans:Array.from({length:count},(_,i)=>'book independent service '+i)};
+  const expected=[0,2,3].includes(count);
+  assert.equal(validSemanticContract(JSON.stringify(value)),expected,'application count '+count);
+  assert.equal(schema.safeParse(value).success,expected,'provider schema count '+count);
+ }
+ for(const text of ['short','x'.repeat(501)]){
+  const value={...complete,request_spans:[text,'book another service']};
+  assert.equal(validSemanticContract(JSON.stringify(value)),false);
+  assert.equal(schema.safeParse(value).success,false,'provider evidence bounds');
+ }
+});
 
 test('actual semantic interpreter requests JSON under system authority and sanitizes data',async()=>{
   let body;
