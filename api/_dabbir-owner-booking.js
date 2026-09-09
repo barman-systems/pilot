@@ -7,7 +7,7 @@ const id=v=>UUID.test(String(v||''))?v:null;
 const fault=(code,status=409)=>Object.assign(new Error(code),{status});
 async function read(response){
  const data=await response.json().catch(()=>null);
- if(!response.ok){const code=String(data?.message||'');throw fault(/^(?:OWNER_REQUIRED|OWNER_BOOKING_[A-Z_]+|ACTIVITY_[A-Z_]+(?::[a-z_]+)?|ACTION_SLOT_UNAVAILABLE|BUSINESS_PROFILE_UNVERIFIED|VALID_IDEMPOTENCY_KEY_REQUIRED|IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BOOKING)$/.test(code)?code:'OWNER_BOOKING_REQUEST_FAILED',response.status===403?403:409);}
+ if(!response.ok){const code=String(data?.message||'');throw Object.assign(fault(/^(?:OWNER_REQUIRED|OWNER_BOOKING_[A-Z_]+|ACTIVITY_[A-Z_]+(?::[a-z_]+)?|ACTION_SLOT_UNAVAILABLE|BUSINESS_PROFILE_UNVERIFIED|VALID_IDEMPOTENCY_KEY_REQUIRED|IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BOOKING)$/.test(code)?code:'OWNER_BOOKING_REQUEST_FAILED',response.status===403?403:409),{database_error_code:/^[0-9A-Z]{5}$/.test(String(data?.code||''))?data.code:null});}
  if(!data)throw fault('OWNER_BOOKING_RESULT_UNVERIFIED',502);
  return data;
 }
@@ -37,7 +37,7 @@ export function approvedOwnerBooking(payload){
 async function bookingRpc(token,businessId,parameters,traceId){
  const started=Date.now(),base={operation:parameters.p_execute?'owner_booking_execute':'owner_booking_quote',correlation_id:traceId||randomUUID(),business_id:businessId,branch_id:parameters.p_request.branch_id,service_id:parameters.p_request.service_id,tool:'book_available_appointment'};
  try{const result=await read(await supabaseRpc('dabbir_owner_activity_booking_v1',token,{p_business_id:businessId,...parameters}));logEvent('info',{...base,outcome:'DATABASE_RETURNED',verified_by_database:result.verified===true,state:result.state||null,activity_type:result.quote?.activity_type||result.activity_intelligence?.activity_type,appointment_id:result.appointment_id||null,idempotent_replay:result.idempotent_replay===true,latency_ms:Date.now()-started});return result;}
- catch(error){logEvent('warn',{...base,outcome:'FAILED',failure_class:classifyFailure(error,'DATA'),error_code:/^[A-Z_]+(?::[a-z_]+)?$/.test(error.message)?error.message:'OWNER_BOOKING_REQUEST_FAILED',latency_ms:Date.now()-started});throw error;}
+ catch(error){logEvent('warn',{...base,outcome:'FAILED',failure_class:classifyFailure(error,'DATA'),error_code:/^[A-Z_]+(?::[a-z_]+)?$/.test(error.message)?error.message:'OWNER_BOOKING_REQUEST_FAILED',database_error_code:error.database_error_code||null,latency_ms:Date.now()-started});throw error;}
 }
 export async function prepareOwnerBooking(token,businessId,input,language='ar',traceId){
  const request=ownerBookingRequest(input);

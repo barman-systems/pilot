@@ -16,6 +16,7 @@ before(async()=>{
  await db.exec(sql('./fixtures/understanding/activity-database.sql'));
  for(const name of ['20260908155841_dabbir_activity_intelligence_v1.sql','20260909085635_dabbir_activity_action_authority_v1.sql','20260909091257_dabbir_activity_configuration_visibility_v1.sql'])await db.exec(sql('../supabase/migrations/'+name));
  await db.exec(`alter table dabbir_businesses add column currency_code text default 'AED';alter table dabbir_customers add column display_name text default 'Isolated Customer';
+ alter table dabbir_appointments alter column location_type set default 'business',alter column location_type set not null;
  alter table dabbir_worker_services add column duration_minutes integer,add column price_aed numeric;
  alter table dabbir_appointments add column ends_at timestamptz,add column quoted_price_aed numeric,add column discount_aed numeric,add column payment_status text,add column idempotency_key text,add column idempotency_fingerprint text;
  create unique index owner_booking_replay on dabbir_appointments(business_id,idempotency_key) where idempotency_key is not null;
@@ -28,6 +29,7 @@ before(async()=>{
  `);
  await db.exec(sql('./fixtures/understanding/owner-booking-slot-authority.sql'));
  await db.exec(sql('../supabase/migrations/20260909102912_dabbir_owner_activity_booking_adapter_v1.sql'));
+ await db.exec(sql('../supabase/migrations/20260909104717_dabbir_owner_booking_location_contract_v1.sql'));
  await db.query('insert into auth.users(id) values($1),($2)',[O,X]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[B,X]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($1,$3,'employee','active')",[B,O,X]);
@@ -42,6 +44,7 @@ before(async()=>{
 test('owner quote creates nothing; approval persists actual service terms and replays one appointment',async()=>{
  await reset();const r=request(),q=await call(r);assert.equal(await count(),0);assert.equal(q.quote.price,70);assert.equal(q.quote.duration_minutes,45);
  const result=await call(r,true,q.quote_hash);assert.equal(result.verified,true);assert.equal(result.activity_intelligence.activity_type,'services');assert.equal(result.activity_intelligence.source,'owner_ai');
+ assert.equal((await db.query('select location_type from dabbir_appointments')).rows[0].location_type,'business');
  assert.equal(new Date(result.starts_at).toISOString().slice(11),'08:30:37.000Z');assert.equal(new Date(result.ends_at)-new Date(result.starts_at),45*60000);
  const replay=await call(r,true,q.quote_hash);assert.equal(replay.appointment_id,result.appointment_id);assert.equal(replay.idempotent_replay,true);assert.equal(await count(),1);
  assert.equal((await db.query('select duration_minutes,unit_price_aed from dabbir_appointment_services')).rows[0].unit_price_aed,'70');
