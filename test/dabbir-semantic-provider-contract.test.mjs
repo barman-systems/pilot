@@ -21,6 +21,35 @@ test('actual semantic interpreter requests JSON under system authority and sanit
   assert.match(JSON.stringify(body.messages),/2026-09-08T18:10:11Z/);
 });
 
+test('explicit availability with grounded date/time is deterministic even when provider misclassifies it',async()=>{
+  const providerMistake={...proposal,action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.42};
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(providerMistake))});
+  assert.equal(result.proposal.intent,'BOOKING');
+  assert.equal(result.proposal.action,'CHECK_AVAILABILITY');
+  assert.equal(result.proposal.confidence,.96);
+  assert.equal(result.proposal.intentResolution,'DETERMINISTIC_AVAILABILITY_WITH_TEMPORAL_EVIDENCE');
+  const probe=evaluateSemanticProbe(result.proposal);
+  assert.equal(probe.passed,true);assert.equal(probe.policy_action,'CLARIFY');
+});
+
+test('deterministic availability policy also covers English temporal availability language',async()=>{
+  const providerMistake={action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.55,risk_level:'LOW',service_name:null,service_evidence:null,knowledge_key:null,
+    entities:[{entity:'date',value:'2026-09-09',evidence:'tomorrow',confidence:.99,correction:false},{entity:'time',value:'09:00',evidence:'9',confidence:.99,correction:false}]};
+  const result=await interpretSemanticMessage({message:'Any availability tomorrow at 9?',context:{},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(providerMistake))});
+  assert.equal(result.proposal.intent,'BOOKING');assert.equal(result.proposal.action,'CHECK_AVAILABILITY');
+  assert.equal(result.proposal.intentResolution,'DETERMINISTIC_AVAILABILITY_WITH_TEMPORAL_EVIDENCE');
+});
+
+test('service discovery without grounded temporal evidence is not promoted to booking',async()=>{
+  const discovery={action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.95,risk_level:'LOW',service_name:null,service_evidence:null,knowledge_key:null,entities:[]};
+  const result=await interpretSemanticMessage({message:'وش الخدمات المتوفرة؟',context:{},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(discovery))});
+  assert.equal(result.proposal.intent,'SERVICE_DISCOVERY');assert.equal(result.proposal.action,'SERVICE_MENU');
+  assert.equal(result.proposal.intentResolution,undefined);
+});
+
 for(const invalid of ['وعليكم السلام، كيف أساعدك؟','',JSON.stringify({...proposal,confidence:'high'}),JSON.stringify({...proposal,entities:[{entity:'location',value:'GPS'}]})]) {
   test('HTTP 200 with invalid semantic content falls through to another provider: '+invalid.slice(0,30),async()=>{
     let calls=0;
@@ -92,7 +121,7 @@ test('live probe still rejects a provider proposal that forces human handoff',()
   assert.equal(result.checks.operational_clarification,false);
 });
 
-test('live probe rejects low-confidence interpretation despite correctly shaped values',()=>{
+test('live probe rejects low-confidence interpretation despite correctly shaped values when policy boundary is bypassed',()=>{
   const result=evaluateSemanticProbe({...proposal,confidence:.5,riskLevel:'LOW',serviceName:null});
   assert.equal(result.passed,false);assert.equal(result.checks.booking_intent,false);
 });
