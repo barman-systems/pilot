@@ -8,7 +8,7 @@ export const OWNER_NAVIGATION=Object.freeze([
   ['operations','العمليات','Operations'],['support','الدعم','Support'],
   ['ceo','CEO','CEO'],['system','النظام','System'],
 ]);
-const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const scriptJson=value=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
 export function renderOwnerCommandCenter(identity={},language='ar'){
   const lang=language==='en'?'en':'ar',t=(ar,en)=>lang==='ar'?ar:en;
