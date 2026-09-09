@@ -845,13 +845,6 @@ async function runJourney() {
       assert(probe.ok&&probe.json?.ok===true&&probe.json?.cognitive_probe===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===12&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_GOAL_SEPARATION_FAILED:'+JSON.stringify(evidence));
       return {status:probe.status,detail:JSON.stringify(evidence)};
     });
-    await step('15e_cognitive_service_duration',async()=>{
-      const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'service_details'}});
-      const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
-      console.log('COGNITIVE_SERVICE_DETAILS='+JSON.stringify(evidence));
-      assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_SERVICE_DETAILS_FAILED:'+JSON.stringify(evidence));
-      return {status:probe.status,detail:JSON.stringify(evidence)};
-    });
     report.cognitive_model_comparison=[];
     for(const provider of ['google-gemini','groq','cloudflare-workers-ai']){
       await step('15c_compare_'+provider,async()=>{

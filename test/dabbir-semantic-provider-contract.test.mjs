@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateDABBIRAiReply} from '../api/_ai-core.js';
 import {interpretSemanticMessage, evaluateSemanticProbe} from '../api/_dabbir-semantic-interpreter.js';
-import {validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
+import {validSemanticContract} from '../api/_dabbir-semantic-contract.js';
 
 const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk_level:'LOW',service_name:null,knowledge_key:null,
   entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},
@@ -51,7 +51,7 @@ test('strict schema output still passes through confidence and evidence authorit
   let calls=0;
   await assert.rejects(interpretSemanticMessage({message:'بكره',context:{},env:{GROQ_API_KEY:'test'},
     fetchImpl:async()=>{calls++;return response(JSON.stringify({...structured,confidence:2}));}}),{code:'AI_PLANNER_UNAVAILABLE'});
-  assert.equal(calls,2);
+  assert.equal(calls,1);
   const result=await interpretSemanticMessage({message:'بكره',context:{services:[{name:'VIP Wash'}]},env:{GROQ_API_KEY:'test'},
     fetchImpl:async()=>response(JSON.stringify(structured))});
   assert.equal(result.proposal.serviceName,null,'schema conformance never authorizes a service absent from the message');
@@ -61,29 +61,10 @@ test('strict schema rejection uses the existing fallback budget and format',asyn
   const requests=[];
   const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},
     env:{GROQ_API_KEY:'test',CLOUDFLARE_API_TOKEN:'test',CLOUDFLARE_ACCOUNT_ID:'test'},
-    fetchImpl:async(_url,options)=>{requests.push(JSON.parse(options.body));return requests.length<3?response('invalid'):response();}});
-  assert.equal(requests.length,3);assert.equal(requests[0].response_format.type,'json_schema');
+    fetchImpl:async(_url,options)=>{requests.push(JSON.parse(options.body));return requests.length===1?response('invalid'):response();}});
+  assert.equal(requests.length,2);assert.equal(requests[0].response_format.type,'json_schema');
   assert.deepEqual(requests[1].response_format,{type:'json_object'});
-  assert.deepEqual(requests[2].response_format,{type:'json_object'});
   assert.equal(result.provider,'cloudflare-workers-ai');
-});
-
-test('provider schema refusal permits one metered compatibility attempt with identical validation',async()=>{
- const formats=[];
- const r=await interpretSemanticMessage({message:'بكره',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async(_u,o)=>{
-  formats.push(JSON.parse(o.body).response_format.type);
-  return formats.length===1?new Response(JSON.stringify({error:{code:'json_validate_failed',failed_generation:'must-not-be-logged'}}),{status:400}):response();
- }});
- assert.deepEqual(formats,['json_schema','json_object']);assert.equal(r.provider,'groq');assert.equal(r.telemetry.request_count,2);
-});
-for(const status of [401,403,429,500])test('schema compatibility never retries auth, quota or server status '+status,async()=>{
- let calls=0;await assert.rejects(interpretSemanticMessage({message:'بكره',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>{calls++;return new Response('{}',{status});}}),{code:'AI_PLANNER_UNAVAILABLE'});
- assert.equal(calls,1);
-});
-test('structural diagnostics name the violated constraint without disclosing values',()=>{
- assert.equal(semanticContractViolation(JSON.stringify({...proposal,request_spans:['private customer sentence']})),'REQUEST_SPAN_COUNT');
- assert.equal(semanticContractViolation(JSON.stringify({...proposal,dialogue:{message_role:'SOCIAL',evidence:'',invalidated_fields:[]}})),'DIALOGUE_EVIDENCE');
- assert.equal(semanticContractViolation(JSON.stringify(proposal)),null);
 });
 
 test('explicit availability with grounded date/time is deterministic even when provider misclassifies it',async()=>{

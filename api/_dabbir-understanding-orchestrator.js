@@ -1,7 +1,6 @@
 import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, understandLegacyConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
 import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGate} from './_dabbir-cognitive-dialogue.js';
 import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
-import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -22,8 +21,7 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   required_entities:s.required_entities||[],delivery_mode:s.delivery_mode||null,
   cognitive_version:s.cognition?.version||null,goal:s.cognition?.primary_goal||null,message_role:s.cognition?.message_role||null,
   pending_resolved:s.cognitive_pending_resolved===true,quality_violations:s.cognitive_quality_violations||[],
-  goal_retained:s.cognition?.do_not_reset===true,queued_goals:arr(s.goal_queue).length,queued_goal_resumed:!!s.goal_queue_resumed,shadow:s.cognitive_shadow||null,
-  service_question:d.serviceQuestion?{field:d.serviceQuestion.field,verified:d.serviceQuestion.verified,service_id:d.serviceQuestion.service_id}:null});
+  goal_retained:s.cognition?.do_not_reset===true,queued_goals:arr(s.goal_queue).length,queued_goal_resumed:!!s.goal_queue_resumed,shadow:s.cognitive_shadow||null});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
@@ -37,25 +35,21 @@ function exactServiceByText(c,raw,allowedIds=null){
 function liveServicePresentation(c,at){
   const pending=c?.pending_state,payload=pending?.payload||{};
   if(pending?.pending_action!=='choose_service'||payload.presented!==true||!payload.provider_message_id||!pending.expires_at||Date.parse(pending.expires_at)<=at.getTime())return null;
-  // A removed service leaves a hole; never shift a customer's displayed ordinal
-  // onto another service when the current catalog changes.
-  const offered=arr(payload.services).slice(0,10).map(x=>x?.id&&scopedServices(c).some(s=>s.id===x.id)?x:null);
-  return offered.some(Boolean)?offered:null;
+  const offered=arr(payload.services).slice(0,10).filter(x=>x?.id&&scopedServices(c).some(s=>s.id===x.id));
+  return offered.length?offered:null;
 }
 function groundedServiceChoice(c,raw,previous,at){
   const offered=liveServicePresentation(c,at);
   if(offered){
     const ordinal=resolveOrdinal(raw);
-    const currentQuestion=previous?.cognition?.pending_field||previous?.clarification_entity;
-    const menuCurrent=!(activeJourney(previous)&&verifiedOperationalFact(previous?.entities?.service)&&currentQuestion&&!['service','service_question_target'].includes(currentQuestion));
-    if(menuCurrent&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
+    if(!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
       const selected=scopedServices(c).find(s=>s.id===offered[ordinal.index].id);
       if(selected)return selected;
     }
-    const exact=exactServiceByText(c,raw,offered.filter(Boolean).map(x=>x.id));
+    const exact=exactServiceByText(c,raw,offered.map(x=>x.id));
     if(exact)return exact;
   }
-  if(previous?.intent==='SERVICE_DISCOVERY'||previous?.service_inquiry?.pending_field==='service')return exactServiceByText(c,raw);
+  if(previous?.intent==='SERVICE_DISCOVERY')return exactServiceByText(c,raw);
   return null;
 }
 function previousForGroundedService(previous,grounded){
@@ -175,7 +169,6 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   const c={...context,...load},turnNow=now();
-  if(load.verified_service_presentation)c.pending_state=load.verified_service_presentation;
   const mode=cognitiveMode==='policy'?(load.cognitive_policy?.mode||'shadow'):cognitiveMode;
   const cognitive=mode==='active'||mode==='canary';
   const reduce=cognitive?understandConversation:understandLegacyConversation;
@@ -186,14 +179,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   if(cognitive&&Array.isArray(semanticPrevious?.goal_queue_target_ids))c.upcoming_appointments=arr(c.upcoming_appointments).filter(a=>semanticPrevious.goal_queue_target_ids.includes(a.id));
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
-    if(selected){
-      groundedMenuSelection=true;
-      if(cognitive&&semanticPrevious?.service_inquiry?.pending_field==='service'){
-        c.service_inquiry_continuation={field:semanticPrevious.service_inquiry.field,service_id:selected.id,evidence:body};
-        return {...message,language_body:body,body:serviceLabel(selected)};
-      }
-      return {...message,language_body:body,body:serviceLabel(selected),catalog_service_id:selected.id};
-    }
+    if(selected){groundedMenuSelection=true;return {...message,language_body:body,body:serviceLabel(selected),catalog_service_id:selected.id};}
     const product=body.match(/\[DABBIR_CATALOG_PRODUCT catalog_id=([0-9]{5,40}) product_retailer_id=([^\]\s]+)\]/);
     const order=body.match(/\[DABBIR_CATALOG_ORDER catalog_id=([0-9]{5,40}) items=([^\]]+)\]/);
     if(!product&&!order)return message;const items=order?order[2].split(','):[];
@@ -237,7 +223,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
       return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
     }else{
-      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
+      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&arr(proposal.requestSpans).length>=2)&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=reduce({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
       state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
@@ -266,7 +252,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const recordDelivery=async(sent,field)=>{if(cognitive&&state.cognition){if(!sent?.providerMessageId)throw Object.assign(new Error('COGNITIVE_PRESENTATION_UNVERIFIED'),{code:'COGNITIVE_PRESENTATION_UNVERIFIED'});await rpc('dabbir_cognitive_record_delivery_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_provider_message_id:sent.providerMessageId,p_next_field:field||null});}};
   const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
-  if(c.pending_state?.pending_action==='choose_service'&&(groundedMenuSelection||(activeJourney(state)&&verifiedOperationalFact(state.entities?.service))))await setPending('none',{});
+  if(groundedMenuSelection&&c.pending_state?.pending_action==='choose_service')await setPending('none',{});
   if(decision.reasonCode==='MULTI_REQUEST_SCOPE_UNRESOLVED')await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
   if(decision.action==='HANDOFF'){await assertCurrent();await handoff(c,decision.reasonCode,'Understanding V2 requires human assistance','SUPPORT');await finish(claim,'HUMAN_REQUIRED',decision.reasonCode);return {state:'HUMAN_REQUIRED',action:'HANDOFF'};}

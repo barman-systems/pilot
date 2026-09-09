@@ -35,13 +35,9 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   const x=JSON.parse(result.reply);
-  const serviceQuestion=x.service_question&&x.confidence>=.8&&sanitizeSemanticText(message).includes(x.service_question.evidence)
-    ? {...x.service_question,explicit_service:x.service_name!=null}:null;
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:x.request_spans||[],
-    serviceQuestion,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
-  if(serviceQuestion){providerProposal.intent=serviceQuestion.field==='price'?'PRICING':'SERVICE_DISCOVERY';providerProposal.action=serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU';}
   // Provider output proposes semantics; application policy owns deterministic
   // operational intent. Explicit availability + grounded temporal evidence is
   // a booking-journey signal even if a stochastic provider says SERVICE_MENU.
