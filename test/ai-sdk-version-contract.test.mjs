@@ -4,22 +4,35 @@ import fs from 'node:fs';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
-
 const packages = lock.packages || {};
-const compatible = packages['node_modules/@ai-sdk/openai-compatible'];
-const rootProvider = packages['node_modules/@ai-sdk/provider'];
-const nestedProvider = packages['node_modules/@ai-sdk/openai-compatible/node_modules/@ai-sdk/provider'];
 
-const major = version => Number(String(version || '').split('.')[0]);
-
-test('OpenAI-compatible provider stays on the AI SDK v6 compatibility line', () => {
-  assert.equal(pkg.dependencies?.ai, '6.0.270');
-  assert.equal(pkg.dependencies?.['@ai-sdk/openai-compatible'], '2.0.74');
-  assert.equal(compatible?.version, '2.0.74');
+test('DABBIR stays on the stable AI SDK 7 + Workflow 4 production line', () => {
+  const expected={
+    ai:'7.0.62',
+    '@ai-sdk/openai-compatible':'3.0.44',
+    '@ai-sdk/otel':'1.0.62',
+    '@ai-sdk/workflow':'1.0.62',
+    workflow:'4.8.5',
+    zod:'4.5.4',
+  };
+  for (const [name,version] of Object.entries(expected)) {
+    assert.equal(pkg.dependencies?.[name],version);
+    assert.equal(packages[`node_modules/${name}`]?.version,version);
+  }
 });
 
-test('direct Gemini/Groq model adapters do not reintroduce a provider protocol major mismatch', () => {
-  assert.equal(major(rootProvider?.version), 3);
-  assert.equal(major(compatible?.dependencies?.['@ai-sdk/provider']), 3);
-  if (nestedProvider) assert.equal(major(nestedProvider.version), 3);
+test('OpenAI-compatible adapter resolves a single provider protocol line', () => {
+  const compatible=packages['node_modules/@ai-sdk/openai-compatible'];
+  const rootProvider=packages['node_modules/@ai-sdk/provider'];
+  assert.ok(compatible);
+  assert.ok(rootProvider);
+  assert.ok(compatible.dependencies?.['@ai-sdk/provider']);
+  assert.equal(packages['node_modules/@ai-sdk/openai-compatible/node_modules/@ai-sdk/provider'], undefined);
+});
+
+test('WorkflowAgent remains on stable Workflow 4 rather than Workflow 5 beta', () => {
+  const workflowAgent=packages['node_modules/@ai-sdk/workflow'];
+  assert.ok(workflowAgent);
+  assert.equal(packages['node_modules/workflow']?.version,'4.8.5');
+  assert.equal(packages['node_modules/workflow']?.version.includes('beta'),false);
 });
