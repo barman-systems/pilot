@@ -6,13 +6,10 @@ const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.ur
 const lock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 const packages = lock.packages || {};
 
-test('DABBIR stays on the stable AI SDK 7 + Workflow 4 production line', () => {
+test('DABBIR stays on the stable AI SDK 7 production line', () => {
   const expected={
     ai:'7.0.62',
     '@ai-sdk/openai-compatible':'3.0.44',
-    '@ai-sdk/otel':'1.0.62',
-    '@ai-sdk/workflow':'1.0.62',
-    workflow:'4.8.5',
     zod:'4.5.4',
   };
   for (const [name,version] of Object.entries(expected)) {
@@ -30,9 +27,14 @@ test('OpenAI-compatible adapter resolves a single provider protocol line', () =>
   assert.equal(packages['node_modules/@ai-sdk/openai-compatible/node_modules/@ai-sdk/provider'], undefined);
 });
 
-test('WorkflowAgent remains on stable Workflow 4 rather than Workflow 5 beta', () => {
-  const workflowAgent=packages['node_modules/@ai-sdk/workflow'];
-  assert.ok(workflowAgent);
-  assert.equal(packages['node_modules/workflow']?.version,'4.8.5');
-  assert.equal(packages['node_modules/workflow']?.version.includes('beta'),false);
+test('WorkflowAgent is not shipped until its stable dependency graph passes the production audit', () => {
+  assert.equal(pkg.dependencies?.['@ai-sdk/workflow'],undefined);
+  assert.equal(pkg.dependencies?.workflow,undefined);
+  assert.equal(packages['node_modules/@ai-sdk/workflow'],undefined);
+  assert.equal(packages['node_modules/workflow'],undefined);
+});
+
+test('unused AI telemetry integration is not shipped as a dead production dependency', () => {
+  assert.equal(pkg.dependencies?.['@ai-sdk/otel'],undefined);
+  assert.equal(packages['node_modules/@ai-sdk/otel'],undefined);
 });
