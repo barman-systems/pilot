@@ -1,5 +1,6 @@
 import {normalizeSemanticText,clarification} from './_dabbir-semantic-engine-core.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
+import {partitionGoalRequests} from './_dabbir-goal-queue.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const goals=new Set(['BOOK_SERVICE','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
@@ -15,7 +16,8 @@ export function pendingField(s){return s?.cognition?.pending_field||s?.clarifica
 // The same rule applies to every field. A changed grounded value or a parsed
 // incomplete answer (e.g. hour without AM/PM) outranks a generic intent label.
 export function resolvesPending(previous,state){
- const field=pendingField(previous);if(!activeJourney(previous)||!field)return false;
+ const field=pendingField(previous);if(!activeJourney(previous)||!field||state.goal!==previous.goal)return false;
+ if(field!=='service'&&value(previous,'service')!==value(state,'service'))return false;
  const before=previous.entities?.[field],after=state.entities?.[field];
  return !!(after&&after.source!=='AI_INFERENCE'&&
   (verifiedOperationalFact(after)||after.hour!=null||after.part)&&
@@ -38,14 +40,14 @@ function decisionView(state,decision,previous,c,role){
  const pending=decision.action==='CLARIFY'||decision.resumeReply?state.clarification_entity:null;
  const primary=activeJourney(state)?state.goal:null;
  const old=previous?.cognition;
- state.cognition={version:1,revision:state.revision,primary_goal:primary,secondary_goals:arr(old?.secondary_goals).slice(-4),
+ state.cognition={version:1,revision:state.revision,primary_goal:primary,secondary_goals:arr(state.goal_queue).map(f=>({goal:f.state?.goal,activity:f.state?.service_type,service:f.state?.entities?.service?.value||null,missing:arr(f.state?.missing_fields)})),
   active_journey:primary,journey_stage:decision.action==='HANDOFF'?'NEEDS_ATTENTION':decision.action==='CLARIFY'?'COLLECTING':decision.action==='CHECK_AVAILABILITY'?'CHECKING_AVAILABILITY':['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(decision.action)?'AWAITING_RECEIPT':primary?'CONTINUING':'INQUIRY',
   current_activity:state.service_type||c.business?.business_type||null,current_service:value(state,'service'),delivery_mode:state.delivery_mode||null,
   customer_confirmed_facts:confirmed.filter(([,f])=>!['DATABASE_FACT','OWNER_POLICY'].includes(f.source)).map(([k])=>k),
   business_confirmed_facts:confirmed.filter(([,f])=>['DATABASE_FACT','OWNER_POLICY'].includes(f.source)).map(([k])=>k),
   inferred_facts:facts.filter(([,f])=>f.source==='AI_INFERENCE').map(([k])=>k),unverified_facts:facts.filter(([,f])=>!verifiedOperationalFact(f)).map(([k])=>k),
   missing_requirements:arr(state.missing_fields),pending_field:pending,pending_question:pending?{field:pending,text:decision.resumeReply||decision.reply||null,presentation:'PENDING_DELIVERY'}:null,
-  message_role:role,last_system_action:old?.next_action||null,last_tool_result:state.last_verified_outcome?{verified:state.last_verified_outcome.verified===true,action:state.last_verified_action?.action||null}:null,
+  message_role:role,last_system_action:old?.next_action||null,last_tool_result:state.last_verified_outcome?{verified:state.last_verified_outcome.source==='DATABASE_FACT'&&state.last_verified_action?.source==='DATABASE_FACT',action:state.last_verified_action?.action||null}:null,
   last_customer_correction:arr(state.user_corrections).at(-1)?.entity||null,interrupted_goal:role==='SIDE_QUESTION'?primary:null,resumable_goal:primary,
   goal_confidence:primary?(state.intent_confirmed===true?1:.5):0,next_action:decision.action,response_strategy:decision.action==='CLARIFY'?'ASK_NEXT_REQUIREMENT':role==='SIDE_QUESTION'?'ANSWER_AND_RESUME':'REPORT_VERIFIED_RESULT',
   do_not_ask:confirmed.map(([k])=>k),do_not_reset:!!primary};
@@ -65,6 +67,7 @@ export function situationSnapshot(c,s,previous){
   requirements:arr(s.required_entities),missing:arr(s.missing_fields),delivery_mode:s.delivery_mode,
   allowed_actions:arr(s.supported_actions),field_definitions:contract?.entity_definitions||{},
   owner_approval:contract?.owner_approval===true,automatic_booking:contract?.automatic_booking===true,
+  queued_goals:arr(p?.goal_queue).map(f=>({goal:f.state?.goal,missing:arr(f.state?.missing_fields)})),
   verified_memory_fields:arr(c.verified_memory).filter(m=>m.status==='verified').map(m=>m.memory_key).slice(0,12)};
 }
 
@@ -82,6 +85,14 @@ export function cognitiveReduce(args,reduce){
  let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_message_role:d?.message_role||null}});
  let {state,decision}=result;
  if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
+ const partition=partitionGoalRequests(args,reduce);
+ if(partition?.invalid){
+  state.intent_confirmed=false;delete state.entities.slot;delete state.entities.appointment;
+  state.pending_action='CLARIFY';state.clarification_entity='request';state.missing_fields=['request'];
+  decision={...decision,action:'CLARIFY',missingFields:['request'],reasonCode:'MULTI_REQUEST_SCOPE_UNRESOLVED',reply:state.language==='en'?'Which request should we handle first?':'أي طلب تبانا نبدأ فيه؟'};
+  return decisionView(state,decision,previous,c,'NEW_REQUEST');
+ }
+ if(partition)return decisionView(partition.state,partition.decision,previous,c,'NEW_REQUEST');
  const wasActive=activeJourney(previous);
  const knowledge=d?.message_role==='SIDE_QUESTION'?arr(c.knowledge).find(k=>k.key===args.proposal?.knowledgeKey&&k.source==='owner_approved'&&Number(k.confidence)>=.95):null;
  const proposedRead=d?.message_role==='SIDE_QUESTION'?({PRICING:'PRICING',SERVICE_DISCOVERY:'SERVICE_MENU'}[args.proposal?.intent]||null):null;

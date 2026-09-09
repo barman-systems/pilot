@@ -1,5 +1,6 @@
 import test,{before,after} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {PGlite} from '@electric-sql/pglite';
 import {understandConversation} from '../api/_dabbir-semantic-engine.js';import {context,ids,offered,now as evalNow} from './fixtures/understanding/cases.mjs';
+import {resumeQueuedGoal} from '../api/_dabbir-goal-queue.js';
 const db=new PGlite();const batch='90000000-0000-4000-8000-000000000001',lock='90000000-0000-4000-8000-000000000002',message='90000000-0000-4000-8000-000000000003',owner='10000000-0000-4000-8000-000000000001',otherOwner='10000000-0000-4000-8000-000000000002';
 const rpc=async(name,args)=>{const r=await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args);return r.rows[0].result;};
 const load=()=>rpc('dabbir_semantic_load_v2',[batch,lock]);
@@ -51,6 +52,18 @@ test('cognitive SQL: previous question presentation needs a same-batch provider 
  await db.exec('set role anon');await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/permission denied/);await db.exec('reset role');
 });
 test('database: semantic state persists once per batch with audited provenance',async()=>{await reset();const s=bookingState();const c=await commit(s);assert.equal(c.version,1);const again=await commit(s);assert.equal(again.replay,true);assert.equal((await load()).version,1);assert.equal((await db.query('select count(*) n from dabbir_ai_understanding_events')).rows[0].n,1);});
+test('database: queued goal persists through real SQL execution and only resumes after verified delivery',async()=>{
+ await reset();const s=bookingState();const stamp=new Date();s.updated_at=stamp.toISOString();s.expires_at=new Date(stamp.getTime()+86400000).toISOString();
+ const queued=understandConversation({context:context({batch_messages:[{body:'أبي أحجز غسيل كامل بكره الساعة 6 م'}]}),now:stamp}).state;
+ s.goal_queue=[{version:1,id:'queued-job-1',state:queued}];s.goal_queue_seen=['queued-job-1'];s.goal_queue_version=1;
+ await commit(s);await rpc('dabbir_semantic_set_pending_v2',[batch,lock,1,'choose_slot',offered.payload]);
+ const action=await rpc('dabbir_semantic_execute_v2',[batch,lock,1,'CREATE_BOOKING']);assert.equal(action.verified,true);
+ const before=(await load()).semantic_state;assert.equal(before.goal_queue.length,1);assert.equal(resumeQueuedGoal(before,context(),new Date()).blocked,true);
+ await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'queue-completion','SENT')",[ids.business,ids.conversation,'wa-understanding:'+batch+':create_booking']);
+ await rpc('dabbir_cognitive_record_delivery_v1',[batch,lock,1,'queue-completion',null]);
+ const after=(await load()).semantic_state;const next=resumeQueuedGoal(after,context(),new Date());assert.equal(next.resumed,true);assert.equal(next.previous.entities.time.value,'18:00');assert.equal(next.previous.entities.slot,undefined);assert.equal(next.previous.goal_queue.length,0);
+ assert.equal((await db.query('select count(*) n from dabbir_appointments')).rows[0].n,1);assert.equal((await db.query('select octet_length(semantic_state::text) n from dabbir_ai_conversation_state')).rows[0].n<=32768,true);
+});
 test('database: cross-tenant state and mismatched customer are rejected',async()=>{await reset();const s=bookingState();s.scope.business_id=ids.other;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);s.scope.business_id=ids.business;s.scope.customer_id=owner;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);});
 test('database: compound conversation foreign key rejects cross-business insert',async()=>{await reset();await assert.rejects(db.query('insert into dabbir_ai_conversation_state(business_id,conversation_id) values($1,$2)',[ids.other,ids.conversation]),/foreign key/);});
 test('database: stale worker cannot commit after a new inbound at equal timestamp',async()=>{await reset();const l=await load();await db.query('insert into dabbir_messages(business_id,conversation_id,created_at) select business_id,conversation_id,created_at from dabbir_messages where id=$1',[message]);await assert.rejects(rpc('dabbir_semantic_commit_v2',[batch,lock,0,l.message_revision,bookingState(),{}]),/SEMANTIC_SUPERSEDED/);});

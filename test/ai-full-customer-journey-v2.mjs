@@ -838,6 +838,13 @@ async function runJourney() {
   // A failed candidate is recorded as FAIL; the existing required primary
   // continuity gate above is unchanged. No model priority is changed here.
   if(REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
+    await step('15d_cognitive_independent_goals',async()=>{
+      const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'multiple_requests'}});
+      const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
+      console.log('COGNITIVE_GOAL_SEPARATION='+JSON.stringify(evidence));
+      assert(probe.ok&&probe.json?.ok===true&&probe.json?.cognitive_probe===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===12&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_GOAL_SEPARATION_FAILED:'+JSON.stringify(evidence));
+      return {status:probe.status,detail:JSON.stringify(evidence)};
+    });
     report.cognitive_model_comparison=[];
     for(const provider of ['google-gemini','groq','cloudflare-workers-ai']){
       await step('15c_compare_'+provider,async()=>{

@@ -335,7 +335,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   return route('REPLY','NO_OPERATIONAL_AUTHORITY',s.language==='ar'?'أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟':'I can help with services, prices, bookings or changing your appointment. What do you need?');
 }
 
-export function clarification(s,c) {
+export function clarification(s,c,{acknowledge=true}={}) {
   const en=s.language==='en',ref=s.unresolved_references[0],key=s.missing_fields[0];
   if(['date','time'].includes(key)&&s.entities[key]?.source==='AI_INFERENCE')return en?`Please confirm ${s.entities[key].value}?`:`للتأكيد، تقصد ${s.entities[key].value}؟`;
   if(key==='intent_confirmation')return s.intent==='CANCEL_BOOKING'?(en?'Do you want to cancel an appointment?':'تقصد تبا تلغي موعد؟'):s.intent==='RESCHEDULE_BOOKING'?(en?'Do you want to change an appointment?':'تقصد تبا تعدل موعد؟'):(en?'Do you want to book a service?':'تقصد تبا تحجز خدمة؟');
@@ -366,7 +366,7 @@ export function clarification(s,c) {
     // stays bound to the resolver's next entity, never a provider's invented one.
     const service=scoped(c.services,c).find(x=>x.id===valueOf(s,'service'));
     const known=[service?nameOf(service):null,supported(s.entities.date)?valueOf(s,'date'):null,supported(s.entities.time)?(en?'at ':'الساعة ')+valueOf(s,'time'):null].filter(Boolean);
-    return known.length?(en?'Got it: ':'تمام، ')+known.join('، ')+'. '+question:question;
+    return acknowledge&&known.length?(en?'Got it: ':'تمام، ')+known.join('، ')+'. '+question:question;
   }
   return en?'Which detail should I use?':'أي تفصيل تقصد؟';
 }
