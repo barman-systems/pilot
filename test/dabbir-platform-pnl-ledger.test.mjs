@@ -7,6 +7,7 @@ const api=fs.readFileSync(new URL('../api/owner-finance.js',import.meta.url),'ut
 const client=fs.readFileSync(new URL('../api/_platform-finance.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/platform-pnl-ui.js',import.meta.url),'utf8');
 const billingUi=fs.readFileSync(new URL('../api/dabbir-billing-ui.js',import.meta.url),'utf8');
+const platformCustomersUi=fs.readFileSync(new URL('../api/platform-customers-ui.js',import.meta.url),'utf8');
 const bundles=fs.readFileSync(new URL('../config/dabbir-ui-bundles.json',import.meta.url),'utf8');
 
 test('canonical P&L ledger is DABBIR-only and append-only for service role',()=>{
@@ -59,4 +60,11 @@ test('owner UI shows known result, final net profit and source gaps separately',
   assert.match(billingUi,/\.\/platform-pnl-ui\.js/);
   assert.match(bundles,/\/api\/dabbir-billing-ui/);
   assert.doesNotMatch(bundles,/\/api\/platform-pnl-ui/);
+});
+
+test('root P&L stays inert in a normal tenant owner shell',()=>{
+  assert.match(ui,/querySelector\('#screen-platform-customers'\)/);
+  assert.doesNotMatch(ui,/querySelector\('#home'\)/);
+  assert.match(platformCustomersUi,/enabled\s*=\s*true;\s*ensureScreen\(\)/s);
+  assert.match(platformCustomersUi,/action=capability/);
 });
