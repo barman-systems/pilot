@@ -8,7 +8,7 @@ export const OWNER_NAVIGATION=Object.freeze([
   ['operations','العمليات','Operations'],['support','الدعم','Support'],
   ['ceo','CEO','CEO'],['system','النظام','System'],
 ]);
-const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const scriptJson=value=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
 export function renderOwnerCommandCenter(identity={},language='ar'){
   const lang=language==='en'?'en':'ar',t=(ar,en)=>lang==='ar'?ar:en;
@@ -40,7 +40,7 @@ export default function handler(req,res){
 
 export function ownerDashboardClient(identity,lang,mountTeam){
   const $=id=>document.getElementById(id),t=(ar,en)=>lang==='ar'?ar:en;
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number=v=>!['number','string'].includes(typeof v)||String(v).trim()===''||!Number.isFinite(Number(v))?'—':new Intl.NumberFormat(lang).format(Number(v));
   const date=v=>{if(!v||!Number.isFinite(Date.parse(v)))return'—';return new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short'}).format(new Date(v))};
   const month=v=>{if(!v||!Number.isFinite(Date.parse(v)))return'—';return new Intl.DateTimeFormat(lang,{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(v))};
@@ -140,13 +140,15 @@ export function ownerDashboardClient(identity,lang,mountTeam){
     const runtime5xx=runtimeState==='NEEDS_INSTRUMENTATION'||reliability.runtime_5xx_24h===null||reliability.runtime_5xx_24h===undefined?t('غير مقاس','Unmeasured'):number(reliability.runtime_5xx_24h);
     const apiP95=reliability.api_p95_ms===null||reliability.api_p95_ms===undefined?t('غير مقاس','Unmeasured'):number(reliability.api_p95_ms)+' ms';
     const gaps=Array.isArray(risk.telemetry_gaps)?risk.telemetry_gaps:[];
+    const whatsappHealth=reliability.whatsapp_degraded===null||reliability.whatsapp_degraded===undefined?t('غير مقاس','Unmeasured'):Number(reliability.whatsapp_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation');
+    const calendarHealth=reliability.calendar_degraded===null||reliability.calendar_degraded===undefined?t('غير مقاس','Unmeasured'):Number(reliability.calendar_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation');
     $('reliabilityTruth').innerHTML=(gaps.length?'<div class="notice">'+t('فجوات قياس مفتوحة: ','Open telemetry gaps: ')+esc(gaps.join(' · '))+'. '+t('غياب القياس لا يُعرض كصفر أو كحالة سليمة.','Missing telemetry is not shown as zero or healthy.')+'</div>':'')+details([
       [t('أخطاء Runtime خلال 24 ساعة','Runtime 5xx in 24h'),runtime5xx],
       ['API p95',apiP95],
       [t('عينات الأداء 24 ساعة','Performance samples 24h'),number(reliability.sample_count_24h??state.overview?.system?.sample_count_24h)],
       [t('زمن Database RPC','Database RPC latency'),reliability.database_rpc_latency_ms===null||reliability.database_rpc_latency_ms===undefined?t('غير مقاس','Unmeasured'):number(reliability.database_rpc_latency_ms)+' ms'],
-      ['WhatsApp',Number(reliability.whatsapp_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation')],
-      [t('التقويم','Calendar'),Number(reliability.calendar_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation')],
+      ['WhatsApp',whatsappHealth],
+      [t('التقويم','Calendar'),calendarHealth],
       [t('اختبار الاستعادة','Restore test'),reliability.restore_test_state||'—'],
     ]);
   }
