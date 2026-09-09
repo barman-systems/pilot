@@ -7,12 +7,18 @@ const duration=service=>{const value=Number(service?.duration_minutes);return Nu
 
 const DURATION_SIGNAL=/(?:^|\s)(?:كم\s+(?:مده|وقت)|كم\s+(?:ياخذ|تاخذ|تاخذون|يستغرق|تستغرق)(?:\s+وقت)?|مده\s+(?:الخدمه|الغسيل|التنظيف)|how\s+long|how\s+much\s+time|duration)(?:\s|$)/i;
 
+function nameVariants(service){
+  const name=normalize(label(service));
+  if(!name)return [];
+  const variants=[name];
+  if(/[\u0600-\u06ff]/.test(name)){
+    variants.push(name.split(' ').map(token=>token.startsWith('ال')?token:`ال${token}`).join(' '));
+  }
+  return [...new Set(variants)];
+}
 function mentionedService(services,text){
   const haystack=` ${normalize(text)} `;
-  const matches=arr(services).filter(service=>{
-    const name=normalize(label(service));
-    return name.length>=2&&haystack.includes(` ${name} `);
-  });
+  const matches=arr(services).filter(service=>nameVariants(service).some(name=>name.length>=2&&haystack.includes(` ${name} `)));
   return matches.length===1?matches[0]:null;
 }
 
