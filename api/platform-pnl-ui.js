@@ -1,6 +1,6 @@
 export const platformPnlScript=String.raw`(()=>{
   if(window.__dabbirPlatformPnlUi)return;window.__dabbirPlatformPnlUi=true;
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ar=()=>document.documentElement.lang!=='en';
   const T=()=>ar()?{
     title:'أرباح وخسائر DABBIR',desc:'اقتصاد DABBIR نفسه فقط: الإيرادات والتكاليف ومساهمة كل نشاط. لا تشمل أموال زبائن الأنشطة.',month:'الشهر',refresh:'تحديث',
