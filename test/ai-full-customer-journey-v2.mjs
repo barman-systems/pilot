@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
+import {runOwnerAiBookingJourney} from '../.github/scripts/dabbir-owner-ai-booking-journey.mjs';
 import { runBookingOwnerJourney } from '../.github/scripts/dabbir-booking-owner-journey.mjs';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
@@ -959,10 +960,12 @@ async function runJourney() {
 
   await step('25_mobile_webkit_owner_journey', browserJourney);
 
-  await step('25b_owner_booking_create_replay_complete', () => runBookingOwnerJourney({
+  const ownerBookingProof=await step('25b_owner_booking_create_replay_complete', () => runBookingOwnerJourney({
     ownerSession, employeeSession, runLabel: RUN_LABEL,
     registerBusinessCleanup: id => { bookingQaBusinessIds.add(id); },
   }));
+
+  await step('25c_owner_ai_activity_booking',()=>runOwnerAiBookingJourney({ownerSession,employeeSession,context:ownerBookingProof?.qa_context,browserContext,origin:ORIGIN}));
 
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });

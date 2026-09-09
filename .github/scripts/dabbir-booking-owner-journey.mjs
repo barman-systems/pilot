@@ -168,6 +168,7 @@ export async function runBookingOwnerJourney({
 
   return {
     status: 200,
+    qa_context: {business_id:business.id,branch_id:business.branch.id,customer_id:customerId,foreign_branch_id:foreign.branch.id,run_label:runLabel},
     detail: 'Disposable services booking: one appointment/customer after replay; employee and foreign branch denied; both priority scopes verified; confirm, start and complete persisted without changing seconds or duration; history date filter verified and completed priority removed.',
     checks: {
       idempotency: 'PASS', tenant_and_branch_isolation: 'PASS', priorities_all_and_selected: 'PASS',

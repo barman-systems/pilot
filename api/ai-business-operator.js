@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import {approvedOwnerBooking,executeOwnerBooking,prepareOwnerBooking,loadOwnerBookingContext} from './_dabbir-owner-booking.js';
 import { accessTokenFromRequest, getBusinessMemberships, getVerifiedUser, json, readJsonBody, requireSameOrigin, supabaseRest, supabaseRpc } from './_auth-core.js';
 import { generateDABBIRAiReply } from './_ai-core.js';
 import { OPERATOR_VERSION, describeApproval, planAutonomousRun, runDeterministicReadGoal, verifyApproval } from './_dabbir-autonomous-agent.js';
@@ -104,6 +105,7 @@ export function validate(plan){
   if(plan.tool==='create_product'){const sku=clean(a.sku,80),name=clean(a.name,160),price=num(a.price_aed),quantity=Math.trunc(num(a.quantity)??-1);if(!sku||!name||price==null||price<0||quantity<0)return null;return {action:'create_product',sku,name,price_aed:price,quantity}}
   if(plan.tool==='set_inventory'||plan.tool==='receive_stock'){const product_id=safeId(a.product_id),quantity=Math.trunc(num(a.quantity)??-1);if(!product_id||quantity<0)return null;return {action:plan.tool,product_id,quantity,note:clean(a.note,240)}}
   if(plan.tool==='create_expense'){const amount=num(a.amount_aed),category=clean(a.category||'other',24).toLowerCase();if(amount==null||amount<=0)return null;return {action:'create_expense',amount_aed:amount,category:['rent','utilities','supplies','salaries','marketing','transport','other'].includes(category)?category:'other',note:clean(a.note,240),occurred_on:clean(a.occurred_on,10)}}
+  if(plan.tool==='book_available_appointment'&&a.booking_request)return approvedOwnerBooking(a);
   if(plan.tool==='book_available_appointment'){const customer_name=clean(a.customer_name,120),day=clean(a.day||'today',20).toLowerCase(),period=clean(a.period||'afternoon',20).toLowerCase(),exact_time=clean(a.exact_time,5),duration=Math.trunc(num(a.duration_minutes)??30);if(!customer_name||!['today','tomorrow'].includes(day)||!['afternoon','exact'].includes(period)||duration<15||duration>180||period==='exact'&&!/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(exact_time))return null;return {action:'book_available_appointment',customer_name,day,period,...(period==='exact'?{exact_time}:{}),duration_minutes:duration}}
   return null;
 }
@@ -117,8 +119,8 @@ function requireOwnerBookingContext() {
 }
 function ownerBookingContextResult(language) {
   return {ok:false,state:'needs_information',executed:false,error:'OWNER_BOOKING_CONTEXT_REQUIRED',
-    missing_fields:['customer_id','service_id','branch_id','activity_contract'],next_step:'appointments',
-    summary:language==='ar'?'لم يُنشأ حجز. افتح المواعيد وحدد العميل والخدمة والفرع ومتطلبات الخدمة قبل الحفظ.':'No booking was created. Open appointments and select the customer, service, branch and service requirements before saving.'};
+    missing_fields:['customer_id','service_id','branch_id','activity_contract'],next_step:'owner_booking_context',booking_context_available:true,
+    summary:language==='ar'?'حدد العميل والخدمة والفرع والوقت لإعداد الحجز ومراجعته قبل الموافقة.':'Select the customer, service, branch and time to review the booking before approval.'};
 }
 function validateOwnerWrite(plan) {
   const payload=validate(plan);
@@ -133,12 +135,12 @@ export async function executeTool(token,businessId,payload){
   if(payload.action==='set_inventory')return await rpc(token,'dabbir_owner_set_inventory',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity},'INVENTORY_UPDATE_FAILED');
   if(payload.action==='receive_stock'){if(key){const replay=await rest(token,`dabbir_inventory_movements?select=id,product_id,quantity_delta,quantity_after,reference_note,created_at&business_id=eq.${businessId}&product_id=eq.${payload.product_id}&reference_note=like.*${encodeURIComponent(key)}*&limit=1`,{},'STOCK_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}return await rpc(token,'dabbir_owner_receive_stock',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity,p_note:key?`${payload.note||''} [${key}]`.trim():payload.note||''},'STOCK_RECEIPT_FAILED')}
   if(payload.action==='create_expense'){if(key){const replay=await rest(token,`dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at&business_id=eq.${businessId}&note=like.*${encodeURIComponent(key)}*&limit=1`,{},'EXPENSE_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}const rows=await rest(token,'dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,amount_aed:Number(payload.amount_aed.toFixed(2)),category:payload.category,note:key?`${payload.note||''} [${key}]`.trim():payload.note||'',occurred_on:/^\d{4}-\d{2}-\d{2}$/.test(payload.occurred_on)?payload.occurred_on:todayDubai()})},'EXPENSE_CREATE_FAILED');const result=rows?.[0];if(!result?.id)throw Object.assign(new Error('EXPENSE_CREATE_UNVERIFIED'),{status:502});return result}
-  if(payload.action==='book_available_appointment')requireOwnerBookingContext();
+  if(payload.action==='book_available_appointment')return executeOwnerBooking(token,businessId,payload);
   throw Object.assign(new Error('UNSUPPORTED_TOOL'),{status:400});
 }
 async function executeApproved(ctx,businessId,approvalToken){
   const approved=verifyApproval(ctx.token,approvalToken,businessId,ctx.user.id);if(!approved)throw Object.assign(new Error('APPROVAL_INVALID_EXPIRED_OR_TAMPERED'),{status:403});
-  for(const raw of approved.plan.slice(0,6))validateOwnerWrite({tool:raw.action,args:raw});
+  for(const raw of approved.plan.slice(0,6)){if(raw.action==='book_available_appointment')approvedOwnerBooking(raw);else validateOwnerWrite({tool:raw.action,args:raw});}
   const receipts=[],transitions=[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()}];
   for(const raw of approved.plan.slice(0,6)){const payload=validate({tool:raw.action,args:raw});if(!payload)throw Object.assign(new Error('APPROVED_PLAN_INVALID'),{status:400});payload.idempotency_key=raw.idempotency_key;try{const before=payload.action==='set_inventory'||payload.action==='receive_stock'?(await rest(ctx.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&product_id=eq.${payload.product_id}&limit=1`,{},'BEFORE_READ_FAILED'))?.[0]||null:null;const result=await executeTool(ctx.token,businessId,payload);transitions.push({state:'verifying',step:raw.step,at:new Date().toISOString()});receipts.push({step:raw.step,tool:payload.action,business_id:businessId,idempotency_key:payload.idempotency_key,verified_by:'TENANT_RLS_WRITE_RETURNING_OR_READ_AFTER_WRITE',before,result})}catch(error){const state=receipts.length?'partially_completed':'failed';transitions.push({state,step:raw.step,at:new Date().toISOString()});return {ok:false,state,executed:receipts.length>0,version:OPERATOR_VERSION,goal:approved.goal,receipts,error:clean(error?.message||'TOOL_EXECUTION_FAILED',140),transitions}}}
   transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:true,version:OPERATOR_VERSION,goal:approved.goal,receipts,transitions};
@@ -175,6 +177,13 @@ export default async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
   const body=await readJsonBody(req,32768).catch(()=>null),businessId=safeId(body?.business_id),action=clean(body?.action||'plan',24).toLowerCase();if(!businessId)return json(res,400,{ok:false,error:'BUSINESS_ID_REQUIRED'});
   const ctx=await auth(req,res,businessId);if(!ctx)return;const language=String(body?.language||'ar').toLowerCase()==='en'?'en':'ar';
+  if(action==='booking_context'||action==='booking_quote'){
+    try {
+      if(action==='booking_context')return json(res,200,await loadOwnerBookingContext(ctx.token,businessId,body.branch_id,body.customer_id));
+      const prepared=await prepareOwnerBooking(ctx.token,businessId,body.booking,language);
+      return json(res,200,{...deterministicApproval(ctx,businessId,language==='ar'?'حجز موعد':'Book appointment',language,prepared),booking_quote:prepared.quote});
+    }catch(error){return json(res,[400,403,409,502].includes(error.status)?error.status:409,{ok:false,state:'needs_information',executed:false,error:clean(error.message,140),booking_context_available:true,summary:language==='ar'?'تعذر إعداد الحجز بهذه البيانات. راجع متطلبات الخدمة والوقت والموقع.':'The booking could not be prepared. Check the service requirements, time and location.'});}
+  }
   if(action==='cancel')return json(res,200,{ok:true,state:'cancelled',executed:false,version:OPERATOR_VERSION,transitions:[{state:'received',at:new Date().toISOString()},{state:'cancelled',at:new Date().toISOString()}]});
   if(action==='approve'){try{return json(res,200,await executeApproved(ctx,businessId,clean(body?.approval_token,16000)))}catch(error){if(error?.message==='OWNER_BOOKING_CONTEXT_REQUIRED')return json(res,409,ownerBookingContextResult(language));const status=[400,403,409].includes(Number(error?.status))?Number(error.status):500;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'APPROVAL_EXECUTION_FAILED',140)})}}
   if(action!=='plan')return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});const message=clean(body?.message,800);if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
