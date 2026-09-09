@@ -21,7 +21,7 @@ export function renderOwnerCommandCenter(identity={},language='ar'){
 <div class="sectionHeading"><h1 id="pageTitle">${t('نظرة عامة','Overview')}</h1><small id="updatedAt"></small></div>
 <div id="workspaceContext" class="context" hidden><span id="contextText"></span><button id="clearContext">${t('تغيير العميل','Change customer')}</button></div>
 ${status('page')}
-<section id="home" class="screen" aria-labelledby="pageTitle"><div id="overviewMetrics" class="metrics"></div><section id="aiUsagePanel" class="panel" hidden><div class="recordTitle"><div><h2>${t('استهلاك AI والمحادثات','AI usage and conversations')}</h2><small id="aiUsagePeriod"></small></div><span id="aiUsageBadge" class="status"></span></div><div id="aiUsageMetrics" class="metrics"></div><div id="aiUsageNotice"></div><details><summary>${t('التفصيل حسب مزود AI','Breakdown by AI provider')}</summary><div id="aiUsageProviders"></div></details></section><div class="grid"><section class="panel"><h2>${t('يحتاج انتباهك','Needs your attention')}</h2><div id="ownerAttention"></div></section><section class="panel"><h2>${t('حالة التشغيل','Operational health')}</h2><div id="overviewHealth"></div></section></div></section>
+<section id="home" class="screen" aria-labelledby="pageTitle"><div id="overviewMetrics" class="metrics"></div><section id="executiveDeckPanel" class="panel" hidden><div class="recordTitle"><div><h2>${t('نبض DABBIR التنفيذي','DABBIR executive pulse')}</h2><small>${t('حالة تفعيل واعتمادية مبنية على البيانات المقاسة؛ البيانات المفقودة لا تُعد سليمة.','Activation and reliability status based on measured evidence; missing telemetry is not treated as healthy.')}</small></div><span id="executiveStatusBadge" class="status"></span></div><div id="activationMilestones" class="metrics"></div><div id="activationNote" class="hint"></div></section><div class="grid"><section id="customerHealthPanel" class="panel" hidden><h2>${t('صحة الأنشطة','Business health')}</h2><div id="customerHealthSummary"></div><div id="customerHealthRisks"></div></section><section id="reliabilityPanel" class="panel" hidden><h2>${t('حقيقة الاعتمادية','Reliability truth')}</h2><div id="reliabilityTruth"></div></section></div><section id="aiUsagePanel" class="panel" hidden><div class="recordTitle"><div><h2>${t('استهلاك AI والمحادثات','AI usage and conversations')}</h2><small id="aiUsagePeriod"></small></div><span id="aiUsageBadge" class="status"></span></div><div id="aiUsageMetrics" class="metrics"></div><div id="aiUsageNotice"></div><details><summary>${t('التفصيل حسب مزود AI','Breakdown by AI provider')}</summary><div id="aiUsageProviders"></div></details></section><div class="grid"><section class="panel"><h2>${t('يحتاج انتباهك','Needs your attention')}</h2><div id="ownerAttention"></div></section><section class="panel"><h2>${t('حالة التشغيل','Operational health')}</h2><div id="overviewHealth"></div></section></div></section>
 <section id="customers" class="screen" hidden><form id="customerSearchForm" class="searchForm"><label class="sr" for="customerQuery">${t('البحث عن عميل','Find a customer')}</label><input id="customerQuery" maxlength="160" placeholder="${t('رقم العميل، الاسم أو البريد','Customer number, name or email')}" autocomplete="off"><button class="primary" type="submit">${t('بحث','Search')}</button></form>${status('customers')}<div id="customerResults"></div><div id="customerDetail" class="panel" hidden></div></section>
 <section id="operations" class="screen" hidden><div class="panel"><label for="businessPicker">${t('النشاط المحدد','Selected business')}</label><select id="businessPicker"><option value="">${t('اختر نشاطًا','Choose a business')}</option></select></div>${subnav('operations',[['ORDER','الطلبات','Orders'],['BOOKING','الحجوزات','Bookings'],['PRODUCT','المنتجات','Products'],['SERVICE','الخدمات','Services'],['BRANCH','الفروع','Branches'],['WHATSAPP','واتساب','WhatsApp'],['CALENDAR','التقاويم','Calendars']])}${status('operations')}<div id="operationNotice" class="notice" hidden></div><div id="operationEntities"></div></section>
 <section id="support" class="screen" hidden>${subnav('support',[['cases','القضايا','Cases'],['incidents','الحوادث','Incidents'],['feedback','الملاحظات','Feedback']])}<div class="row" style="margin-bottom:14px"><button id="newSupportCase" class="primary">${t('قضية دعم جديدة','New support case')}</button><button id="newIncident">${t('تسجيل حادث','Record incident')}</button></div>${status('support')}<div id="supportContent"></div></section>
@@ -108,26 +108,73 @@ export function ownerDashboardClient(identity,lang,mountTeam){
     const providers=Array.isArray(a.providers)?a.providers:[];
     $('aiUsageProviders').innerHTML=list([t('المزود','Provider'),t('طلبات AI','AI requests'),t('الصرف المؤكد','Confirmed spend'),t('غير مسعّر','Unpriced')],providers.map(row=>[esc(row.provider),esc(number(row.ai_requests)),esc(aed(row.known_cost_aed)),esc(number(row.unpriced_operations))]));
   }
+  function riskReason(value){
+    const key=String(value||'');const ar={inactive_7d:'غير نشط منذ 7 أيام',no_first_value:'لم يصل إلى أول قيمة',catalog_empty:'الكتالوج فارغ',integration_degraded:'تكامل متدهور',failed_payment:'فشل دفع'};const en={inactive_7d:'Inactive for 7 days',no_first_value:'No first value yet',catalog_empty:'Catalog is empty',integration_degraded:'Integration degraded',failed_payment:'Failed payment'};
+    return (lang==='ar'?ar:en)[key]||key.replaceAll('_',' ');
+  }
+  function renderExecutiveDeck(){
+    const deck=$('executiveDeckPanel'),healthPanel=$('customerHealthPanel'),reliabilityPanel=$('reliabilityPanel');
+    if(!root||!state.executive){deck.hidden=true;healthPanel.hidden=true;reliabilityPanel.hidden=true;return}
+    const e=state.executive,f=e.funnel||{},pulse=e.executive_pulse||{},health=e.customer_health||{},risk=e.risk_register||{},reliability=e.reliability||{};
+    deck.hidden=false;healthPanel.hidden=false;reliabilityPanel.hidden=false;
+    const status=String(pulse.overall_status||'').toLowerCase();
+    $('executiveStatusBadge').textContent=status==='red'?t('تحتاج تدخل','Needs attention'):status==='yellow'?t('تحتاج مراقبة','Watch'):status==='green'?t('مستقرة','Healthy'):t('غير محسومة','Unknown');
+    $('executiveStatusBadge').className='status '+(status==='red'?'bad':status==='yellow'?'warn':status==='green'?'good':'');
+    $('activationMilestones').innerHTML=[
+      stat(t('حسابات مسجلة','Signup accounts'),number(f.signup_accounts),t('حسابات وصلت للتسجيل','Accounts that reached signup')),
+      stat(t('أنشطة منشأة','Businesses created'),number(f.created_business),t('مؤشر تفعيل مستقل','Independent activation milestone')),
+      stat(t('كتالوج جاهز','Catalog ready'),number(f.catalog_ready),t('أنشطة لها كتالوج جاهز','Businesses with ready catalog')),
+      stat(t('أول قيمة','First value'),number(f.first_value),t('وصلت لنتيجة تشغيلية أولى','Reached a first operational value')),
+      stat(t('واتساب مربوط','WhatsApp connected'),number(f.whatsapp_connected),t('ربط مثبت للقناة','Verified channel connection')),
+      stat(t('مشترك','Subscribed'),number(f.subscribed),t('ضمن بيئة الاشتراك المسجلة','Within the recorded subscription environment')),
+    ].join('');
+    $('activationNote').textContent=t('هذه مؤشرات تفعيل مستقلة وليست Funnel خطيًا؛ أول قيمة قد تتحقق من مسار لا يتطلب WhatsApp. متوسط وقت الوصول لأول قيمة: ','These are independent activation milestones, not a strict linear funnel; first value may come from a path that does not require WhatsApp. Average time to first value: ')+number(f.avg_time_to_first_value_hours)+' '+t('ساعة.','hours.');
+    $('customerHealthSummary').innerHTML='<div class="metrics">'+[
+      stat(t('أحمر','Red'),number(health.red),t('يتطلب تدخلاً','Needs intervention')),
+      stat(t('أصفر','Yellow'),number(health.yellow),t('يحتاج متابعة','Needs monitoring')),
+      stat(t('أخضر','Green'),number(health.green),t('سليم حسب نموذج القياس','Healthy under the scoring model')),
+    ].join('')+'</div>';
+    const risky=(Array.isArray(health.items)?health.items:[]).filter(row=>['red','yellow'].includes(String(row.health||'').toLowerCase())).sort((a,b)=>(Number(a.score)||999)-(Number(b.score)||999)).slice(0,5);
+    $('customerHealthRisks').innerHTML=risky.length?'<div class="stack">'+risky.map(row=>'<article class="record"><div class="recordTitle"><b>'+esc(row.business_name||row.business_type||t('نشاط','Business'))+'</b><span class="status '+(row.health==='red'?'bad':'warn')+'">'+esc(String(row.score??'—'))+'/100</span></div><small>'+esc(row.business_type||'—')+'</small><p>'+esc((Array.isArray(row.risk_reasons)?row.risk_reasons:[]).map(riskReason).join(' · ')||t('لا توجد أسباب مخاطرة مسجلة.','No recorded risk reasons.'))+'</p></article>').join('')+'</div>':empty(t('لا توجد أنشطة حمراء أو صفراء في النموذج الحالي.','No red or yellow businesses in the current model.'));
+    const runtimeState=reliability.runtime_5xx_state||state.overview?.system?.runtime_5xx_state;
+    const runtime5xx=runtimeState==='NEEDS_INSTRUMENTATION'||reliability.runtime_5xx_24h===null||reliability.runtime_5xx_24h===undefined?t('غير مقاس','Unmeasured'):number(reliability.runtime_5xx_24h);
+    const apiP95=reliability.api_p95_ms===null||reliability.api_p95_ms===undefined?t('غير مقاس','Unmeasured'):number(reliability.api_p95_ms)+' ms';
+    const gaps=Array.isArray(risk.telemetry_gaps)?risk.telemetry_gaps:[];
+    const whatsappHealth=reliability.whatsapp_degraded===null||reliability.whatsapp_degraded===undefined?t('غير مقاس','Unmeasured'):Number(reliability.whatsapp_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation');
+    const calendarHealth=reliability.calendar_degraded===null||reliability.calendar_degraded===undefined?t('غير مقاس','Unmeasured'):Number(reliability.calendar_degraded)>0?t('متدهور','Degraded'):t('لا يوجد تدهور مسجل','No recorded degradation');
+    $('reliabilityTruth').innerHTML=(gaps.length?'<div class="notice">'+t('فجوات قياس مفتوحة: ','Open telemetry gaps: ')+esc(gaps.join(' · '))+'. '+t('غياب القياس لا يُعرض كصفر أو كحالة سليمة.','Missing telemetry is not shown as zero or healthy.')+'</div>':'')+details([
+      [t('أخطاء Runtime خلال 24 ساعة','Runtime 5xx in 24h'),runtime5xx],
+      ['API p95',apiP95],
+      [t('عينات الأداء 24 ساعة','Performance samples 24h'),number(reliability.sample_count_24h??state.overview?.system?.sample_count_24h)],
+      [t('زمن Database RPC','Database RPC latency'),reliability.database_rpc_latency_ms===null||reliability.database_rpc_latency_ms===undefined?t('غير مقاس','Unmeasured'):number(reliability.database_rpc_latency_ms)+' ms'],
+      ['WhatsApp',whatsappHealth],
+      [t('التقويم','Calendar'),calendarHealth],
+      [t('اختبار الاستعادة','Restore test'),reliability.restore_test_state||'—'],
+    ]);
+  }
   function renderOverview(){
-    const o=state.overview||{},e=state.executive||{},pulse=e.executive_pulse||{},revenue=e.revenue||{};
+    const o=state.overview||{},e=state.executive||{},pulse=e.executive_pulse||{},revenue=e.revenue||{},health=e.customer_health||{};
     const realRevenue=String(revenue.environment||'').toLowerCase()==='live';
     const sandbox=t('الفوترة تجريبية؛ لا يُحسب كإيراد فعلي','Sandbox billing; excluded from real revenue');
     $('updatedAt').textContent=o.generated_at?t('آخر تحديث: ','Updated: ')+date(o.generated_at):'';
     $('overviewMetrics').innerHTML=[
       metric(t('عملاء نشطون','Active customers'),number(pulse.active_customers),t('دخول خلال آخر 7 أيام','Signed in during the last 7 days'),'customers'),
       metric(t('العملاء المسجلون','Registered customers'),number(o.customers?.accounts),'','customers'),
-      metric(t('فترات التجربة','Trials'),number(pulse.trialing),realRevenue?'':sandbox,'system/billing'),
+      metric(t('أنشطة مباشرة','Live businesses'),number(o.customers?.live_businesses),'','operations'),
+      metric(t('أنشطة حمراء','Red health'),number(health.red),t('حسب نموذج صحة التفعيل والاعتمادية','Activation/reliability health model'),'customers'),
+      metric(t('مهام CEO محجوبة','Blocked CEO missions'),number(o.ceo?.blocked),'','ceo/commands'),
       metric(t('مشتركون دافعون','Paying customers'),realRevenue?number(pulse.paid_subscribers):'—',realRevenue?'':sandbox,'system/billing'),
       metric('MRR',realRevenue?number(revenue.mrr_aed):'—',realRevenue?'AED':sandbox,'system/billing'),
-      metric(t('مدفوعات فاشلة','Failed payments'),number(o.payments?.failed),o.payments?.environment==='SANDBOX_ONLY'?sandbox:'','system/billing'),
       metric(t('حوادث حرجة','Critical incidents'),number(o.incidents?.critical),'','support/incidents'),
-      metric(t('قضايا دعم مفتوحة','Open support cases'),number(o.support?.open),'','support/cases'),
     ].join('');
-    const actions=[['support/cases',t('قضايا تجاوزت وقت الاستجابة','Support cases past SLA'),o.support?.sla_breached],['support/incidents',t('حوادث مفتوحة','Open incidents'),o.incidents?.open],['ceo/commands',t('مهام CEO محجوبة','Blocked CEO missions'),o.ceo?.blocked],['ceo/decisions',t('قرارات بانتظار المالك','Decisions awaiting owner'),o.ceo?.decisions_waiting],['operations/WHATSAPP',t('اتصالات واتساب بها أخطاء','WhatsApp connections with errors'),o.whatsapp?.error]];
-    $('ownerAttention').innerHTML='<ul class="actionsList">'+actions.map(([href,label,value])=>'<li><a href="#'+href+'"><span>'+esc(label)+'</span><b>'+number(value)+'</b></a></li>').join('')+'</ul>';
-    const wa=o.whatsapp,sys=o.system;
+    renderExecutiveDeck();
+    const gaps=Array.isArray(e.risk_register?.telemetry_gaps)?e.risk_register.telemetry_gaps:[];
+    const actions=[['customers',t('أنشطة حمراء تحتاج تدخلاً','Red businesses needing intervention'),health.red],['system/health',t('فجوات قياس مفتوحة','Open telemetry gaps'),gaps.length],['system/health',t('عمليات AI غير مسعّرة','Unpriced AI operations'),state.aiUsage?.unpriced_operations],['support/cases',t('قضايا تجاوزت وقت الاستجابة','Support cases past SLA'),o.support?.sla_breached],['support/incidents',t('حوادث مفتوحة','Open incidents'),o.incidents?.open],['ceo/commands',t('مهام CEO محجوبة','Blocked CEO missions'),o.ceo?.blocked],['ceo/decisions',t('قرارات بانتظار المالك','Decisions awaiting owner'),o.ceo?.decisions_waiting],['operations/WHATSAPP',t('اتصالات واتساب بها أخطاء','WhatsApp connections with errors'),o.whatsapp?.error]].filter(([, ,value])=>Number.isFinite(Number(value))&&Number(value)>0);
+    $('ownerAttention').innerHTML=actions.length?'<ul class="actionsList">'+actions.map(([href,label,value])=>'<li><a href="#'+href+'"><span>'+esc(label)+'</span><b>'+number(value)+'</b></a></li>').join('')+'</ul>':empty(t('لا توجد عناصر عاجلة مثبتة ضمن المصادر الحالية.','No urgent items are proven by the current sources.'));
+    const wa=o.whatsapp,cal=o.calendar,sys=o.system;
     $('overviewHealth').innerHTML=details([
       ['WhatsApp',wa?.configured===0?t('غير مربوط','Not connected'):wa?.configured===undefined?'—':number(wa.verified_recent)+' / '+number(wa.configured)+' '+t('تم التحقق خلال 24 ساعة','verified within 24 hours')],
+      [t('التقويم','Calendar'),cal?.configured===0?t('غير مربوط','Not connected'):cal?.configured===undefined?'—':number(cal.verified_recent)+' / '+number(cal.configured)+' '+t('تم التحقق خلال 24 ساعة','verified within 24 hours')],
       [t('أخطاء الرسائل','Message failures'),t('غير مقاسة بهذا المصدر','Not measured by this source')],
       [t('أخطاء إنشاء الحجوزات','Booking creation failures'),t('غير مقاسة بهذا المصدر','Not measured by this source')],
       [t('أخطاء الخادم خلال 24 ساعة','Server errors in 24 hours'),sys?.runtime_5xx_state==='NEEDS_INSTRUMENTATION'?t('القياس غير متاح','Measurement unavailable'):number(sys?.runtime_5xx_24h)],
