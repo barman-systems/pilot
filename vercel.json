@@ -12,7 +12,9 @@
     "CLOUDFLARE_ACCOUNT_ID": "5d3fa7dfe0b6a38bb4f2b526279fb380",
     "DABBIR_AI_GATEWAY_MODEL": "google/gemini-3.7-flash",
     "DABBIR_AI_GATEWAY_FALLBACK_MODELS": "google/gemini-3.7-flash",
-    "DABBIR_DAILY_OPERATOR_MODEL": "google/gemini-3.7-flash"
+    "DABBIR_DAILY_OPERATOR_MODEL": "google/gemini-3.7-flash",
+    "DABBIR_KNOWLEDGE_RAG_ENABLED": "1",
+    "DABBIR_EMBEDDING_MODEL": "gemini-embedding-2"
   },
   "crons": [
     { "path": "/api/salon-reminders-cron", "schedule": "*/5 * * * *" },
@@ -21,7 +23,8 @@
     { "path": "/api/barman-executive-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/dabbir-daily-operator-cron", "schedule": "15 5 * * *" },
     { "path": "/api/dabbir-ai-billing-reconcile-cron", "schedule": "*/5 * * * *" },
-    { "path": "/api/dabbir-composio-readiness-cron", "schedule": "*/5 * * * *" }
+    { "path": "/api/dabbir-composio-readiness-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/dabbir-intelligence-maintenance-cron", "schedule": "17 * * * *" }
   ],
   "functions": {
     "api/salon-reminders-cron.js": {
@@ -54,6 +57,10 @@
     },
     "api/dabbir-composio-readiness-cron.js": {
       "maxDuration": 30,
+      "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
+    },
+    "api/dabbir-intelligence-maintenance-cron.js": {
+      "maxDuration": 60,
       "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}"
     },
     "api/app.js": {
