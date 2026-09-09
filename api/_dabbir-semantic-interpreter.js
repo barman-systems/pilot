@@ -2,7 +2,61 @@ import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
+import { wantsServiceMenu } from './_dabbir-whatsapp-understanding.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
+
+const HIGH_CONFIDENCE_INTENT=.96;
+
+function normalizedIntentText(value='') {
+  return String(value||'').normalize('NFKC').toLowerCase()
+    .replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه')
+    .replace(/[٠-٩]/g,n=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(n)))
+    .replace(/[^\p{L}\p{N}:]+/gu,' ').replace(/\s+/g,' ').trim();
+}
+
+function hasTemporalBookingEvidence(text) {
+  return /(?:^|\s)(?:اليوم|باجر|باكر|بكره|غدا|عقب باجر|بعد باجر|بعد بكره|today|tomorrow|day after tomorrow)(?:\s|$)/.test(text)
+    || /(?:^|\s)(?:الصبح|صباح|صباحا|الفجر|الظهر|العصر|المسا|المساء|المغرب|الليل|morning|noon|afternoon|evening|night)(?:\s|$)/.test(text)
+    || /(?:الساعه|الساع|at)\s*(?:[01]?\d|2[0-3])(?::[0-5]\d)?/.test(text)
+    || /(?:^|\s)(?:0?[1-9]|1[0-2])(?::[0-5]\d)?\s*(?:ص|م|am|pm)(?:\s|$)/.test(text)
+    || /\b20\d{2}-\d{2}-\d{2}\b/.test(text);
+}
+
+function hasConflictingExplicitIntent(text,message) {
+  if(wantsServiceMenu(message))return true;
+  return /(?:^|\s)(?:بكم|السعر|سعر|price|pricing|how much)(?:\s|$)/.test(text)
+    || /(?:^|\s)(?:الغ|الغيه|الغي|الغاء|تلغي|cancel|reschedule)(?:\s|$)/.test(text)
+    || /(?:تعديل|اجل|change (?:it|my|the) (?:appointment|booking|time))/.test(text)
+    || /(?:المدير|المالك|موظف|انسان|manager|human|speak to staff|talk to the owner)/.test(text);
+}
+
+export function deterministicSemanticInvariant(message='') {
+  const text=normalizedIntentText(message);
+  if(!text||hasConflictingExplicitIntent(text,message))return null;
+  if(/(?:لا|مب|مو|مش|not|dont|don't|do not)\s+(?:تحجز|احجز|حجز|book|booking)/.test(text))return null;
+  const temporal=hasTemporalBookingEvidence(text);
+  const availability=/(?:^|\s)(?:فاضي|فاضيين|فاضين|متوفر|متوفرين|متاح|متاحين)(?:\s|$)/.test(text)
+    || /(?:^|\s)(?:عندكم|في|فيه)\s+(?:وقت|موعد|مجال)(?:\s|$)/.test(text)
+    || /(?:^|\s)(?:available|availability|free|open slot|open slots|any slot|any slots)(?:\s|$)/.test(text);
+  if(availability&&temporal)return {kind:'AVAILABILITY_BOOKING',intent:'BOOKING',action:'CHECK_AVAILABILITY',confidence:HIGH_CONFIDENCE_INTENT};
+  const explicitBooking=/(?:^|\s)(?:احجز|حجز|booking|book)(?:\s|$)/.test(text)
+    || /(?:^|\s)(?:ابا|ابي|ابغي|ابغى|اريد|احتاج|want|need)\s+(?:احجز|حجز|موعد|book|booking|appointment)(?:\s|$)/.test(text);
+  if(explicitBooking)return {kind:'EXPLICIT_BOOKING',intent:'BOOKING',action:temporal?'CHECK_AVAILABILITY':'CLARIFY',confidence:HIGH_CONFIDENCE_INTENT};
+  return null;
+}
+
+export function reconcileSemanticProposal(rawProposal,message='') {
+  const invariant=deterministicSemanticInvariant(message);
+  if(!invariant||rawProposal?.risk_level==='HIGH')return {proposal:rawProposal,reconciliation:null};
+  const original={intent:rawProposal?.intent||null,action:rawProposal?.action||null,confidence:Number(rawProposal?.confidence)||0};
+  const actionUnsafe=invariant.intent==='BOOKING'&&['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(String(rawProposal?.action||''));
+  const mismatch=rawProposal?.intent!==invariant.intent||rawProposal?.action!==invariant.action||Number(rawProposal?.confidence)<invariant.confidence||actionUnsafe;
+  if(!mismatch)return {proposal:rawProposal,reconciliation:null};
+  return {
+    proposal:{...rawProposal,intent:invariant.intent,action:invariant.action,confidence:Math.max(invariant.confidence,Number(rawProposal?.confidence)||0)},
+    reconciliation:{reason:invariant.kind,from_intent:original.intent,to_intent:invariant.intent,from_action:original.action,to_action:invariant.action,provider_confidence:original.confidence}
+  };
+}
 
 function groundedServiceName(x,message,context) {
   // Catalog membership proves existence, never customer selection. Missing
@@ -33,11 +87,13 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     history:[],fetchImpl:fetchBounded,env,meteringContext});
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
-  const x=JSON.parse(result.reply);
+  const providerProposal=JSON.parse(result.reply);
+  const {proposal:x,reconciliation}=reconcileSemanticProposal(providerProposal,message);
   const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
-    missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
-  return {proposal,provider:result.provider,model:result.model};
+    missingFields:[],reasonCode:reconciliation?'SEMANTIC_RECONCILED':'SEMANTIC_INTERPRETATION'};
+  return {proposal,provider:result.provider,model:result.model,reconciliation,
+    provider_alignment:!reconciliation,provider_intent:providerProposal.intent,provider_action:providerProposal.action};
 }
 
 // Fixed, authenticated synthetic case exercises the SAME interpreter used by
@@ -78,5 +134,6 @@ export async function probeSemanticInterpreter() {
   const {passed,checks,policy_action,proposed_action,proposed_risk}=evaluateSemanticProbe(result.proposal);
   return {ok:passed,state:passed?'SUCCESS':'PROVIDER_ERROR',error:passed?null:'SEMANTIC_PROBE_FAILED',
     provider:result.provider,model:result.model,semantic_probe:true,case_id:'gcc_availability_tomorrow_morning',
-    checks,policy_action,proposed_action,proposed_risk};
+    checks,policy_action,proposed_action,proposed_risk,provider_alignment:result.provider_alignment,
+    reconciliation:result.reconciliation?.reason||null,provider_intent:result.provider_intent,provider_action:result.provider_action};
 }
