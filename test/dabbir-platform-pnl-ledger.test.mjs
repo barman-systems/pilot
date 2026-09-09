@@ -49,6 +49,21 @@ test('owner P&L API is root-owner gated and month-scoped',()=>{
   assert.match(api,/INVALID_MONTH/);
 });
 
+test('P&L capability probe is quiet while real financial data remains fail-closed',()=>{
+  assert.match(api,/action==='capability'/);
+  assert.match(api,/quietCapability\(res,\{reason:'OWNER_SESSION_REQUIRED'\}\)/);
+  assert.match(api,/quietCapability\(res,\{authenticated:true,reason:'ROOT_OWNER_REQUIRED'\}\)/);
+  assert.match(api,/return json\(res,401,\{ok:false,error:'OWNER_SESSION_REQUIRED'\}\)/);
+  assert.match(api,/ROOT_OWNER_REQUIRED/);
+  assert.match(ui,/\/api\/owner-finance\?action=capability/);
+  assert.match(ui,/capabilityChecked/);
+  assert.match(ui,/capabilityAllowed/);
+  assert.match(ui,/response\.status===401\|\|response\.status===403/);
+  const capabilityIndex=ui.indexOf('/api/owner-finance?action=capability');
+  const dataIndex=ui.indexOf('/api/owner-finance?month=');
+  assert.ok(capabilityIndex>=0&&dataIndex>capabilityIndex,'capability probe must precede the protected P&L data fetch');
+});
+
 test('owner UI shows known result, final net profit and source gaps separately',()=>{
   assert.match(ui,/known_operating_result_aed/);
   assert.match(ui,/net_profit_aed/);
@@ -67,4 +82,6 @@ test('root P&L stays inert in a normal tenant owner shell',()=>{
   assert.doesNotMatch(ui,/querySelector\('#home'\)/);
   assert.match(platformCustomersUi,/enabled\s*=\s*true;\s*ensureScreen\(\)/s);
   assert.match(platformCustomersUi,/action=capability/);
+  assert.match(ui,/if\(!capabilityChecked\|\|denied\)\{el\.hidden=true;return\}/);
+  assert.match(ui,/!data&&!loading&&!denied&&!capabilityPromise/);
 });
