@@ -1,6 +1,6 @@
 {
   "project_ref": "fphpoysqdsceniwduxjq",
-  "captured_at": "2026-09-09T05:51:50Z",
+  "captured_at": "2026-09-09T06:26:31Z",
   "policy": {
     "fail_on_new_warning_or_error": true,
     "fail_on_warning_or_error_count_increase": true,
@@ -31,11 +31,11 @@
   "performance": {
     "unindexed_foreign_keys": {
       "level": "INFO",
-      "count": 26
+      "count": 0
     },
     "unused_index": {
       "level": "INFO",
-      "count": 130
+      "count": 156
     },
     "auth_db_connections_absolute": {
       "level": "INFO",
