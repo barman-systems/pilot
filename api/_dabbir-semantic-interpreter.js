@@ -1,6 +1,6 @@
 import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
-import { validSemanticContract } from './_dabbir-semantic-contract.js';
+import { validSemanticContract, semanticRequestSpans } from './_dabbir-semantic-contract.js';
 import { applyDeterministicSemanticIntentPolicy } from './_dabbir-semantic-intent-policy.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
@@ -38,7 +38,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   const serviceQuestion=x.service_question&&x.confidence>=.8&&sanitizeSemanticText(message).includes(x.service_question.evidence)
     ? {...x.service_question,explicit_service:x.service_name!=null}:null;
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:x.request_spans||[],
+    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:semanticRequestSpans(x.request_spans),
     serviceQuestion,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   if(serviceQuestion){providerProposal.intent=serviceQuestion.field==='price'?'PRICING':'SERVICE_DISCOVERY';providerProposal.action=serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU';}
