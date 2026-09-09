@@ -1,6 +1,7 @@
 import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, understandLegacyConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
 import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGate} from './_dabbir-cognitive-dialogue.js';
 import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
+import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -45,7 +46,9 @@ function groundedServiceChoice(c,raw,previous,at){
   const offered=liveServicePresentation(c,at);
   if(offered){
     const ordinal=resolveOrdinal(raw);
-    if(!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
+    const currentQuestion=previous?.cognition?.pending_field||previous?.clarification_entity;
+    const menuCurrent=!(activeJourney(previous)&&verifiedOperationalFact(previous?.entities?.service)&&currentQuestion&&!['service','service_question_target'].includes(currentQuestion));
+    if(menuCurrent&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
       const selected=scopedServices(c).find(s=>s.id===offered[ordinal.index].id);
       if(selected)return selected;
     }
@@ -263,7 +266,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const recordDelivery=async(sent,field)=>{if(cognitive&&state.cognition){if(!sent?.providerMessageId)throw Object.assign(new Error('COGNITIVE_PRESENTATION_UNVERIFIED'),{code:'COGNITIVE_PRESENTATION_UNVERIFIED'});await rpc('dabbir_cognitive_record_delivery_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_provider_message_id:sent.providerMessageId,p_next_field:field||null});}};
   const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
-  if(groundedMenuSelection&&c.pending_state?.pending_action==='choose_service')await setPending('none',{});
+  if(c.pending_state?.pending_action==='choose_service'&&(groundedMenuSelection||(activeJourney(state)&&verifiedOperationalFact(state.entities?.service))))await setPending('none',{});
   if(decision.reasonCode==='MULTI_REQUEST_SCOPE_UNRESOLVED')await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
   if(decision.action==='HANDOFF'){await assertCurrent();await handoff(c,decision.reasonCode,'Understanding V2 requires human assistance','SUPPORT');await finish(claim,'HUMAN_REQUIRED',decision.reasonCode);return {state:'HUMAN_REQUIRED',action:'HANDOFF'};}

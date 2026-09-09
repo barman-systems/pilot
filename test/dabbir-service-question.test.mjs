@@ -30,6 +30,15 @@ test('duration side question preserves original service, goal and pending requir
  assert.equal(h.calls.some(x=>x.name==='dabbir_semantic_execute_v2'),false);
 });
 
+test('a full booking request consumes the old menu before later numeric answers',async()=>{
+ const h=harness();await h.turn('شو خدماتكم',{action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.98,riskLevel:'LOW',entities:[]});
+ await h.turn('أبا غسيل عادي',{action:'CREATE_BOOKING',intent:'BOOKING',confidence:.98,riskLevel:'MEDIUM',entities:[]});
+ await h.turn('ستيشن');await h.turn('بكره');
+ const r=await h.turn('2');
+ assert.equal(r.state.entities.service.value,ids.service,'the old menu cannot reinterpret a numeric continuation as VIP');
+ assert.equal(r.state.goal,'BOOK_SERVICE');assert.equal(r.state.entities.vehicle.value,'station');
+});
+
 test('unknown target asks one question and an exact short answer continues the inquiry, not a booking',async()=>{
  const h=harness();const r=await h.turn('كم مدته؟',question('duration_minutes','كم مدته'));
  assert.equal(r.reply,'أي خدمة تقصد؟');assert.equal(r.state.service_inquiry.pending_field,'service');

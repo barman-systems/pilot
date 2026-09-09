@@ -12,6 +12,8 @@ Production validation of #674 did not establish strict-format reliability: Groq 
 
 **Verification and regression prevention:** Reproduce the superseded-after-delivery race with real SQL and a second batch. Deny unverified/foreign/expired/wrong-key receipts and unrelated pending actions; prove an old batch still cannot execute. Exercise service removal without ordinal renumbering, duration/price inquiries, missing values and active-booking side questions. Production diagnostics must use the actual interpreter and disclose their synthetic scope; live customer delivery is a separate evidence level.
 
+A further regression reproduced a stale menu overriding the current question: after a full natural-language booking request selected a service, `choose_service` remained alive because only exact/ordinal catalog selections consumed it. A later numeric answer selected a different service from the old menu. Consume the menu whenever a scoped active journey has a verified service, and prevent an older menu ordinal from outranking an active non-service question. Exact service corrections still pass the normal catalog/contract path. This is tested as a five-turn conversation before and after the change.
+
 ## Baseline and root cause
 
 Live GitHub main and production at 11:54 UTC: `9b949c37d3f3ff2d6a01c2d565e6502c5e6da189`, deployment `dpl_ASBm8dcpLqp6iKRiSyDzkNCdUHXA`.
