@@ -52,6 +52,18 @@ test('a recoverable live provider failure retains bounded diagnostics and stops 
  assert.deepEqual(r.providers[0].telemetry,telemetry);assert.equal(r.providers[0].error,'AI_PLANNER_UNAVAILABLE');
 });
 
+test('a provider failure during a side question cannot checkpoint an unvalidated replacement service',async()=>{
+ let calls=0;
+ const r=await probeCognitiveDialogue({scenario:'correction_side_question',interpret:async({message})=>{
+  if(++calls===3)throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
+  return {provider:'test-provider',model:'test-model',proposal:proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':'BOOKING')};
+ }});
+ assert.equal(r.ok,false);assert.equal(r.turns.at(-1).action,'RETRY');
+ assert.equal(r.turns.at(-1).service_preserved,true);assert.equal(r.turns.at(-1).goal,'BOOK_SERVICE');
+ assert.equal(r.turns.at(-1).vehicle,'station');assert.equal(r.turns.at(-1).pending_field,'location');
+ assert.equal(r.checks.no_execution,true);
+});
+
 test('comparison isolates only the selected configured provider and cannot report fallback as success',async()=>{
  const env={GEMINI_API_KEY:'gemini-test',GROQ_API_KEY:'groq-test',DABBIR_AI_MODEL:'existing-model',VERCEL_ENV:'production',SUPABASE_SERVICE_ROLE_KEY:'private-test'};
  const selected=cognitiveEvaluationEnvironment('groq',env);
