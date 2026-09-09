@@ -22,6 +22,12 @@ First reproduce the exact three-turn failure through the real orchestrator with 
 
 ## Acceptance limits
 
+## Live receipt advancement regression
+
+At 2026-09-09 13:30 UTC an actual WhatsApp greeting was understood and its reply delivered with provider_verified=true. The cognitive presentation gate accepted only reservation state SENT. A signed delivery webhook advanced the row to DELIVERED, so the same-batch presentation check rejected stronger evidence and left the batch retrying with COGNITIVE_PRESENTATION_UNVERIFIED. Synthetic delivery stubs and a SQL fixture fixed at SENT missed this race.
+
+Accept SENT or provider-verified DELIVERED/READ while retaining the exact business, conversation, batch, provider ID, lock, state-version and idempotency checks. SENDING, unfinalized PROVIDER_ACCEPTED, FAILED, AMBIGUOUS and unverified terminal states remain denied. SQL regressions cover advancement, negative states, wrong-batch receipts and idempotent presentation; then observe recovery through the existing worker. This fixes delivery state progression for every activity without changing booking authority or manufacturing an inbound message.
+
 ## Bounded multi-goal continuation
 
 Root cause: one mutable entity map and one intent cannot represent two independently requested jobs. Parsing an entire multi-request message can bind the second job's date or service to the first. The existing secondary_goals array has no runtime owner.
