@@ -1,5 +1,3 @@
-import { platformPnlScript } from './platform-pnl-ui.js';
-
 const script=String.raw`(()=>{
   if(window.__dabbirBillingUiLoaded)return;
   window.__dabbirBillingUiLoaded=true;
@@ -24,4 +22,4 @@ const script=String.raw`(()=>{
   setTimeout(()=>{renderCard();load()},250);
   window.__dabbirBillingUi={version:'sandbox-v1',refresh:()=>{billingState=null;billingBusiness=null;return load()}};
 })();`;
-export default function handler(req,res){if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');res.statusCode=200;res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');res.setHeader('x-dabbir-billing-ui','sandbox-v1');return res.end(script+'\n'+platformPnlScript)}
+export default function handler(req,res){if(req.method!=='GET')return res.status(405).setHeader('allow','GET').end('Method Not Allowed');res.statusCode=200;res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');res.setHeader('x-dabbir-billing-ui','sandbox-v1');return res.end(script)}
