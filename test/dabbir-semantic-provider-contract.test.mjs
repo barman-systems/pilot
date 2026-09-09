@@ -79,6 +79,31 @@ test('a quoted service absent from the scoped catalog is rejected',async()=>{
   assert.equal(result.proposal.serviceName,null);
 });
 
+test('explicit scheduling availability corrects a valid provider service-discovery drift before the reducer',async()=>{
+  const drift={...proposal,action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.93};
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(drift))});
+  assert.equal(result.proposal.intent,'BOOKING');
+  assert.equal(result.proposal.action,'CHECK_AVAILABILITY');
+  assert.equal(result.proposal.reasonCode,'DETERMINISTIC_SCHEDULING_AVAILABILITY');
+  assert.equal(result.proposal.riskLevel,'LOW');
+  assert.equal(result.proposal.serviceName,null);
+  const checked=evaluateSemanticProbe(result.proposal);
+  assert.equal(checked.passed,true);
+  assert.equal(checked.policy_action,'CLARIFY');
+});
+
+test('deterministic availability correction never downgrades a high-risk provider proposal',async()=>{
+  const drift={...proposal,action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.93,risk_level:'HIGH'};
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
+    fetchImpl:async()=>response(JSON.stringify(drift))});
+  assert.equal(result.proposal.intent,'BOOKING');
+  assert.equal(result.proposal.riskLevel,'HIGH');
+  const checked=evaluateSemanticProbe(result.proposal);
+  assert.equal(checked.passed,false);
+  assert.equal(checked.policy_action,'HANDOFF');
+});
+
 for(const risk of ['LOW','MEDIUM'])test('live probe requires safe actual clarification for '+risk+' proposal',()=>{
   const p={...proposal,riskLevel:risk,serviceName:null};
   const result=evaluateSemanticProbe(p);
