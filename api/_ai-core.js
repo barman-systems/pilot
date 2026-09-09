@@ -1,4 +1,4 @@
-import { SEMANTIC_SYSTEM_PROMPT, SEMANTIC_JSON_SCHEMA, validSemanticContract } from './_dabbir-semantic-contract.js';
+import { SEMANTIC_SYSTEM_PROMPT, validSemanticContract } from './_dabbir-semantic-contract.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -205,9 +205,6 @@ function finalizeReply({ reply, input, language, config, authMode, model, semant
 }
 
 async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false }) {
-  // Capability is verified for this configured endpoint/model, not inferred from
-  // OpenAI-compatible transport. Keep other providers' existing request contract.
-  const strictSemantic=semantic && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -220,9 +217,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         messages,
         temperature: 0.15,
         max_tokens: semantic ? 1600 : 320,
-        ...(semantic ? { response_format: strictSemantic
-          ? {type:'json_schema',json_schema:{name:'dabbir_semantic_interpretation',strict:true,schema:SEMANTIC_JSON_SCHEMA}}
-          : {type:'json_object'}, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
+        ...(semantic ? { response_format: { type: 'json_object' }, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
         stream: false,
       }),
     });

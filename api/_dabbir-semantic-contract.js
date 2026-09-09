@@ -4,25 +4,6 @@ const ACTIONS = new Set(['REPLY','CLARIFY','SERVICE_MENU','PRICING','CHECK_AVAIL
 const INTENTS = new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const ENTITIES = new Set(['delivery_mode','vehicle','property_details','date','time']);
 const MESSAGE_ROLES=new Set(['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORRECTION','CONFIRMATION','DENIAL','SIDE_QUESTION','TOPIC_SWITCH','CONTINUATION','CANCELLATION','REFERENCE','SOCIAL']);
-// Generation shape only. Evidence, bounds, scope and action authority are still
-// checked by the application; a structurally valid proposal is not a fact.
-const strictObject=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
-const choice=values=>({type:'string',enum:[...values]});
-const nullableText={type:['string','null']};
-export const SEMANTIC_JSON_SCHEMA=strictObject({
-  action:choice(ACTIONS),intent:choice(INTENTS),confidence:{type:'number'},
-  risk_level:choice(['LOW','MEDIUM','HIGH']),
-  service_name:nullableText,service_evidence:nullableText,knowledge_key:nullableText,
-  entities:{type:'array',items:strictObject({
-    entity:choice(ENTITIES),value:{type:'string'},evidence:{type:'string'},
-    confidence:{type:'number'},correction:{type:'boolean'},
-  })},
-  dialogue:strictObject({
-    message_role:choice(MESSAGE_ROLES),evidence:{type:'string'},
-    invalidated_fields:{type:'array',items:choice([...ENTITIES,'service','worker','location'])},
-  }),
-  request_spans:{type:'array',items:{type:'string'}},
-});
 export const SEMANTIC_SYSTEM_PROMPT = `You are DABBIR's semantic interpreter, not a customer reply generator. Return exactly one JSON object, no prose or markdown.
 Required keys: action, intent, confidence (number 0..1), risk_level (LOW/MEDIUM/HIGH), service_name (string or null), service_evidence (exact current-message quote naming the service, or null), knowledge_key (string or null), entities (array), dialogue (object).
 For two or three independently requested business jobs, also provide request_spans: an array of non-overlapping exact current-message quotes, each containing one explicit request. Otherwise use an empty array. Do not split corrections, answers, side questions or alternatives into extra jobs. Never rewrite a quote or assign one job's service/date to another. The application separately grounds each span and controls the sequence.

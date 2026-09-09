@@ -55,12 +55,3 @@ The five-turn comparative case exposed a remaining dialogue defect: answering a 
 The first CI advisor gate rejected the private rollout table's implicit RLS default deny as `rls_enabled_no_policy`. Add an explicit restrictive deny-all policy, retaining revoked client ACLs and the postgres-owned loader. This documents and preserves the actual access boundary; it does not raise the advisor baseline or weaken a gate.
 
 The requested 98–99.5% SLOs need measured denominators; small test suites cannot establish population reliability. A live external WhatsApp journey requires an authorized test recipient and verified delivery receipts. Pending source work and missing evidence are not automatically external blockers.
-# Provider contract enforcement — 2026-09-09
-
-**Root cause:** Production QA on main `7637a8c` recorded HTTP 200 from Groq followed by `INVALID_JSON_CONTRACT`; the bounded chain then exhausted other configured providers (429/timeouts). The adapter only requested `json_object`, which constrains JSON syntax but leaves the interpretation schema to the prompt. Raw customer/model content was not logged, so the individual invalid field is unknown.
-
-**Why the architecture failed:** The application correctly rejects malformed interpretation, but the existing provider's constrained-decoding capability was never connected to that same contract. An avoidable malformed proposal consumes a provider attempt and customer latency. This is separate from quota failures and semantic mistakes.
-
-**Change and generalization:** Publish the shared interpretation shape as a strict JSON schema to the existing Groq `openai/gpt-oss-20b` endpoint only. All activities use the same contract constants. Other endpoints/models retain their existing format until their compatibility is verified. The model, budget, provider order, timeouts, grounded-entity validation and execution authority stay unchanged. This improves structural conformance; it does not prove understanding or resolve 429s.
-
-**Testing and regression prevention:** Assert the actual interpreter request carries the strict schema, exercise schema-conforming but ungrounded proposals through the real interpreter, retain malformed/truncated response fallback tests, and run the required production cognitive conversation gates on the exact deployed SHA. Source: [Groq Structured Outputs](https://console.groq.com/docs/structured-outputs), checked 2026-09-09.

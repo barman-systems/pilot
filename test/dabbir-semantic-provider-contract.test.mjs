@@ -15,56 +15,10 @@ test('actual semantic interpreter requests JSON under system authority and sanit
     context:{business:{timezone:'Asia/Dubai'},secret:'must-not-leak',history:'Bearer private-value'},env:{GROQ_API_KEY:'test'},
     fetchImpl:async(_url,options)=>{body=JSON.parse(options.body);return response();}});
   assert.equal(result.proposal.intent,'BOOKING');
-  assert.equal(body.response_format.type,'json_schema');assert.equal(body.max_tokens,1600);
-  assert.equal(body.response_format.json_schema.strict,true);
-  assert.equal(body.response_format.json_schema.name,'dabbir_semantic_interpretation');
-  const schema=body.response_format.json_schema.schema;
-  for(const object of [schema,schema.properties.dialogue,schema.properties.entities.items]){
-    assert.equal(object.additionalProperties,false);
-    assert.deepEqual([...object.required].sort(),Object.keys(object.properties).sort());
-  }
-  assert.ok(schema.required.includes('dialogue'));assert.ok(schema.required.includes('request_spans'));
-  assert.ok(schema.properties.dialogue.properties.message_role.enum.includes('ANSWER_TO_PENDING_QUESTION'));
-  assert.ok(schema.properties.entities.items.properties.entity.enum.includes('property_details'));
-  assert.equal(schema.properties.action.enum.includes('RUN_SQL'),false);
+  assert.equal(body.response_format.type,'json_object');assert.equal(body.max_tokens,1600);
   assert.match(body.messages[0].content,/semantic interpreter/);assert.doesNotMatch(body.messages[0].content,/25 words|one short, direct sentence/);
   assert.doesNotMatch(JSON.stringify(body.messages),/must-not-leak|private-value/);
   assert.match(JSON.stringify(body.messages),/2026-09-08T18:10:11Z/);
-});
-
-for(const [provider,env] of [
-  ['gemini',{GEMINI_API_KEY:'test'}],
-  ['cloudflare',{CLOUDFLARE_API_TOKEN:'test',CLOUDFLARE_ACCOUNT_ID:'test'}],
-  ['gateway',{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'}],
-  ['unverified Groq override',{GROQ_API_KEY:'test',DABBIR_AI_MODEL:'configured-model-without-verified-schema-support'}],
-])test('schema capability is not assumed for '+provider,async()=>{
-  let body;
-  await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},env,
-    fetchImpl:async(_url,options)=>{body=JSON.parse(options.body);return response();}});
-  assert.deepEqual(body.response_format,{type:'json_object'});
-  assert.equal(body.max_tokens,1600);assert.equal(body.stream,false);
-});
-
-test('strict schema output still passes through confidence and evidence authority',async()=>{
-  const structured={...proposal,service_name:'VIP Wash',service_evidence:'VIP',
-    dialogue:{message_role:'NEW_REQUEST',evidence:'بكره',invalidated_fields:[]},request_spans:[]};
-  let calls=0;
-  await assert.rejects(interpretSemanticMessage({message:'بكره',context:{},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>{calls++;return response(JSON.stringify({...structured,confidence:2}));}}),{code:'AI_PLANNER_UNAVAILABLE'});
-  assert.equal(calls,1);
-  const result=await interpretSemanticMessage({message:'بكره',context:{services:[{name:'VIP Wash'}]},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify(structured))});
-  assert.equal(result.proposal.serviceName,null,'schema conformance never authorizes a service absent from the message');
-});
-
-test('strict schema rejection uses the existing fallback budget and format',async()=>{
-  const requests=[];
-  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{},
-    env:{GROQ_API_KEY:'test',CLOUDFLARE_API_TOKEN:'test',CLOUDFLARE_ACCOUNT_ID:'test'},
-    fetchImpl:async(_url,options)=>{requests.push(JSON.parse(options.body));return requests.length===1?response('invalid'):response();}});
-  assert.equal(requests.length,2);assert.equal(requests[0].response_format.type,'json_schema');
-  assert.deepEqual(requests[1].response_format,{type:'json_object'});
-  assert.equal(result.provider,'cloudflare-workers-ai');
 });
 
 test('explicit availability with grounded date/time is deterministic even when provider misclassifies it',async()=>{
