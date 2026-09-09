@@ -2,6 +2,7 @@ import { generateDABBIRAiReply } from './_dabbir-whatsapp-ai-meter.js';
 import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semantic-privacy.js';
 import { validSemanticContract } from './_dabbir-semantic-contract.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
+import { looksLikeBookingAvailability } from './_dabbir-whatsapp-understanding.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
 function groundedServiceName(x,message,context) {
@@ -20,6 +21,18 @@ function groundedServiceName(x,message,context) {
   return name;
 }
 
+function normalizeOperationalIntent(x,message){
+  // Common Gulf scheduling availability is deterministic application semantics,
+  // not execution authority. Correct only read/support misclassification; never
+  // override cancellation, rescheduling or human-assistance intent. Risk, service
+  // selection and provider-extracted entities remain untouched and are still
+  // grounded by the reducer before any action can be authorized.
+  if(!looksLikeBookingAvailability(message))return x;
+  if(!['SUPPORT','SERVICE_DISCOVERY','PRICING'].includes(x.intent))return x;
+  return {...x,action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:Math.max(.96,Number(x.confidence)||0),
+    _dabbir_intent_source:'DETERMINISTIC_SCHEDULING_AVAILABILITY'};
+}
+
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -33,10 +46,10 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     history:[],fetchImpl:fetchBounded,env,meteringContext});
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
-  const x=JSON.parse(result.reply);
+  const x=normalizeOperationalIntent(JSON.parse(result.reply),message);
   const proposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
-    missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
+    missingFields:[],reasonCode:x._dabbir_intent_source||'SEMANTIC_INTERPRETATION'};
   return {proposal,provider:result.provider,model:result.model};
 }
 
