@@ -10,6 +10,8 @@ const read=name=>fs.readFileSync(path.join(root,'supabase','migrations',name),'u
 const extensions=read('20260909040933_activate_dabbir_platform_extensions_v1.sql');
 const realtime=read('20260909041004_activate_dabbir_realtime_core_v1.sql');
 const pgauditHardening=read('20260909041418_harden_pgaudit_schema_v1.sql');
+const pgauditRehardening=read('20260909052127_reharden_pgaudit_client_execute_v2.sql');
+const pgauditIsolation=read('20260909052258_isolate_pgaudit_private_schema_v1.sql');
 
 test('platform extensions include the intended server capabilities with scoped audit logging',()=>{
   for(const extension of ['vector','pgtap','postgis','pgaudit']){
@@ -19,11 +21,15 @@ test('platform extensions include the intended server capabilities with scoped a
   assert.doesNotMatch(extensions,/pgaudit\.log\s+to\s+'all'/i);
 });
 
-test('PGAudit is moved out of public and its internal hooks are not client executable',()=>{
+test('PGAudit is moved out of public and then isolated from client schemas',()=>{
   assert.match(pgauditHardening,/alter extension pgaudit set schema extensions/i);
   for(const fn of ['pgaudit_ddl_command_end','pgaudit_sql_drop']){
     assert.match(pgauditHardening,new RegExp(`revoke execute on function extensions\\.${fn}\\(\\) from public, anon, authenticated`,'i'));
+    assert.match(pgauditRehardening,new RegExp(`revoke execute on function extensions\\.${fn}\\(\\) from public, anon, authenticated`,'i'));
   }
+  assert.match(pgauditIsolation,/create schema if not exists dabbir_pgaudit/i);
+  assert.match(pgauditIsolation,/alter extension pgaudit set schema dabbir_pgaudit/i);
+  assert.match(pgauditIsolation,/revoke all on schema dabbir_pgaudit from public, anon, authenticated/i);
 });
 
 test('Realtime publication is limited to RLS-protected operational surfaces',()=>{
