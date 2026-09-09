@@ -12,7 +12,7 @@ const response=(content=JSON.stringify(proposal),finish_reason='stop')=>new Resp
 
 test('live REQUEST_SPAN_COUNT regression: portable generation and legacy decoding preserve bounded job cardinality',()=>{
  const schema=z.fromJSONSchema(SEMANTIC_JSON_SCHEMA);
- const complete={...proposal,service_evidence:null,service_question:null,dialogue:{message_role:'NEW_REQUEST',evidence:'book tomorrow',invalidated_fields:[]}};
+ const complete={...proposal,service_evidence:null,service_question:null,context_reference:null,dialogue:{message_role:'NEW_REQUEST',evidence:'book tomorrow',invalidated_fields:[]}};
  for(const count of [0,1,2,3,4,8]){
   const quotes=Array.from({length:count},(_,i)=>'book independent service '+i);
   const value={...complete,request_spans:quotes};

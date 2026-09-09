@@ -1,0 +1,707 @@
+{
+  "generated_at": "2026-09-09T17:58:51.785Z",
+  "baseline_sha": "9bafdcbd08467b9e2f5f42cddd53bbc860513cf7",
+  "candidate_sha": "9bafdcbd08467b9e2f5f42cddd53bbc860513cf7",
+  "candidate_dirty": true,
+  "scope": "120 labeled deterministic state-transition cases: 30 situations across four activity/language/timezone profiles. Empty transcript at every turn. No LLM, actual outbound, or database execution is claimed by these metrics.",
+  "baseline": {
+    "all_cases": {
+      "passed": 80,
+      "total": 120,
+      "percent": 66.67
+    },
+    "goal_understanding": {
+      "passed": 24,
+      "total": 28,
+      "percent": 85.71
+    },
+    "entity_resolution": {
+      "passed": 136,
+      "total": 156,
+      "percent": 87.18
+    },
+    "correct_next_action": {
+      "passed": 100,
+      "total": 120,
+      "percent": 83.33
+    },
+    "context_carryover": {
+      "passed": 0,
+      "total": 20,
+      "percent": 0
+    },
+    "unnecessary_clarification": {
+      "passed": 20,
+      "total": 32,
+      "percent": 62.5
+    },
+    "unconfirmed_mutations": 0,
+    "failures": [
+      {
+        "id": "salon_ar_dubai/known_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/known_service_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/yesterday_not_last_week",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/actual_yesterday",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          },
+          {
+            "field": "goal",
+            "pass": false,
+            "expected": "BOOK_SERVICE",
+            "actual": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/yesterday_new_date",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/latest_completed",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000002",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/memory_conflicting",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000002"
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/worker_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "worker"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/after_five_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_ar_dubai/after_twenty_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/known_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/known_service_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/yesterday_not_last_week",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/actual_yesterday",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          },
+          {
+            "field": "goal",
+            "pass": false,
+            "expected": "BOOK_SERVICE",
+            "actual": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/yesterday_new_date",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/latest_completed",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000002",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/memory_conflicting",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000002"
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/worker_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "worker"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/after_five_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "salon_en_dubai/after_twenty_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/known_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/known_service_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/yesterday_not_last_week",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/actual_yesterday",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          },
+          {
+            "field": "goal",
+            "pass": false,
+            "expected": "BOOK_SERVICE",
+            "actual": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/yesterday_new_date",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/latest_completed",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000002",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/memory_conflicting",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000002"
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/worker_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "worker"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/after_five_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_ar_riyadh/after_twenty_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/known_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/known_service_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/yesterday_not_last_week",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/actual_yesterday",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          },
+          {
+            "field": "goal",
+            "pass": false,
+            "expected": "BOOK_SERVICE",
+            "actual": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/yesterday_new_date",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000001",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/latest_completed",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": "60000000-0000-4000-8000-000000000002",
+            "actual": null
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/memory_conflicting",
+        "checks": [
+          {
+            "field": "service",
+            "pass": false,
+            "expected": null,
+            "actual": "60000000-0000-4000-8000-000000000002"
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/worker_reference",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "worker"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/after_five_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "services_en_la/after_twenty_turns",
+        "checks": [
+          {
+            "field": "action",
+            "pass": false,
+            "expected": "CHECK_AVAILABILITY",
+            "actual": "CLARIFY"
+          },
+          {
+            "field": "unresolved",
+            "pass": false,
+            "expected": [],
+            "actual": [
+              "verified_history"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "candidate": {
+    "all_cases": {
+      "passed": 120,
+      "total": 120,
+      "percent": 100
+    },
+    "goal_understanding": {
+      "passed": 28,
+      "total": 28,
+      "percent": 100
+    },
+    "entity_resolution": {
+      "passed": 156,
+      "total": 156,
+      "percent": 100
+    },
+    "correct_next_action": {
+      "passed": 120,
+      "total": 120,
+      "percent": 100
+    },
+    "context_carryover": {
+      "passed": 20,
+      "total": 20,
+      "percent": 100
+    },
+    "unnecessary_clarification": {
+      "passed": 0,
+      "total": 32,
+      "percent": 0
+    },
+    "unconfirmed_mutations": 0,
+    "failures": []
+  },
+  "unmeasured": [
+    "Live-model goal accuracy",
+    "Real WhatsApp hallucinated-action rate",
+    "Production duplicate execution rate",
+    "Production cross-tenant error rate",
+    "Durable persistence accuracy (covered separately by SQL tests)"
+  ]
+}

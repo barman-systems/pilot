@@ -15,7 +15,7 @@ export function cognitiveEvaluationEnvironment(provider,env=process.env){
 
 export async function probeCognitiveDialogue({interpret=interpretSemanticMessage,provider=null,scenario='critical',env=process.env}={}){
  const evaluationEnv=cognitiveEvaluationEnvironment(provider,env);
- if(!['critical','correction_side_question','multiple_requests','service_details'].includes(scenario))throw new Error('COGNITIVE_SCENARIO_NOT_ALLOWED');
+ if(!['critical','correction_side_question','multiple_requests','service_details','context_references'].includes(scenario))throw new Error('COGNITIVE_SCENARIO_NOT_ALLOWED');
  const details=scenario==='service_details';
  const b='10000000-0000-4000-8000-000000000001',branch='20000000-0000-4000-8000-000000000001',service='30000000-0000-4000-8000-000000000001';
  const c={business:{id:b,business_type:'car_wash',timezone:'Asia/Dubai',currency_code:'AED'},conversation:{id:'40000000-0000-4000-8000-000000000001',branch_id:branch,state:'ai_active'},customer:{id:'50000000-0000-4000-8000-000000000001'},
@@ -24,7 +24,9 @@ export async function probeCognitiveDialogue({interpret=interpretSemanticMessage
  c.activity_profile={version:1,source:'DATABASE_FACT',business_id:b,branch_id:branch,workers:[],services:c.services.map(s=>({business_id:b,branch_id:branch,service_id:s.id,activity_type:'car_wash',schema_version:1,contract_version:'synthetic-cognitive-v1',delivery_modes:['MOBILE'],mode_requirements:registry.activities.car_wash.mode_requirements,collection_priority:registry.platform.collection_priority,entity_definitions:registry.platform.entity_definitions,supported_actions:registry.activities.car_wash.supported_actions,automatic_booking:true,owner_approval:false}))};
  let state={},version=0,pending=null;const results=[],providers=[];let forbiddenCalls=0;
  const multiple=scenario==='multiple_requests';
- const messages=details?['شو خدماتكم','غسيل عادي كم الوقت؟','3']:multiple?['أبي أحجز خارجي اليوم الساعة 5 م وبعدين أبي أحجز VIP بكره الساعة 6 م','ستيشن','كم VIP','لا قصدي الساعة 7 م']:['شو خدماتكم','أبا غسيل خارجي','ستيشن',...(scenario==='correction_side_question'?['كم VIP','لا قصدي خارجي']:[])];
+ const references=scenario==='context_references';
+ if(references)c.operational_history=[{id:'60000000-0000-4000-8000-000000000001',business_id:b,customer_id:c.customer.id,branch_id:branch,service_id:service,status:'completed',simulated:false,starts_at:new Date(Date.now()-86400000).toISOString()}];
+ const messages=references?['نفس أمس','ستيشن','نفس السيارة','نفس اللي قلت لك','خلها باجر عقب المغرب']:details?['شو خدماتكم','غسيل عادي كم الوقت؟','3']:multiple?['أبي أحجز خارجي اليوم الساعة 5 م وبعدين أبي أحجز VIP بكره الساعة 6 م','ستيشن','كم VIP','لا قصدي الساعة 7 م']:['شو خدماتكم','أبا غسيل خارجي','ستيشن',...(scenario==='correction_side_question'?['كم VIP','لا قصدي خارجي']:[])];
  for(const [index,message] of messages.entries()){
   const now=new Date(Date.now()+index*1000),claim={batch_id:'synthetic-'+index,lock_token:'synthetic',attempt_count:1};let reply=null;
   const rpc=async(name,a)=>{
@@ -52,6 +54,7 @@ export async function probeCognitiveDialogue({interpret=interpretSemanticMessage
   checks.first_job_time=results[0]?.time==='17:00';checks.correction_scoped=last.time==='19:00'&&last.queued?.[0]?.time==='18:00';
   checks.side_question_price=/VIP.*100/.test(results[2]?.reply||'');
  }
+ if(references)checks={history_resolved:results[0]?.service_preserved===true,goal_retained:results.every(r=>r.goal==='BOOK_SERVICE'),vehicle_retained:results.slice(1).every(r=>r.vehicle==='station'),known_service_not_asked:results.every(r=>r.pending_field!=='service'),known_vehicle_not_asked:results.slice(1).every(r=>r.pending_field!=='vehicle'),next_requirement:last.pending_field==='location',no_generic_reply:checks.no_generic_reply,no_execution:checks.no_execution,real_provider:checks.real_provider};
  const ok=Object.values(checks).every(Boolean);
- return {ok,state:ok?'SUCCESS':'FAILED',cognitive_probe:true,case_id:details?'service_duration_and_ordinal':multiple?'independent_booking_goals':scenario==='critical'?'exterior_station_continuity':'exterior_price_and_correction',checks,turns:results,providers,requested_provider:provider,external_side_effects:false,evidence_scope:'REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY'};
+ return {ok,state:ok?'SUCCESS':'FAILED',cognitive_probe:true,case_id:references?'verified_context_references':details?'service_duration_and_ordinal':multiple?'independent_booking_goals':scenario==='critical'?'exterior_station_continuity':'exterior_price_and_correction',checks,turns:results,providers,requested_provider:provider,external_side_effects:false,evidence_scope:'REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY'};
 }

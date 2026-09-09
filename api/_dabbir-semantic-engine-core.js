@@ -1,5 +1,6 @@
 import { applyActivityRequirements, normalizeDeliveryMode, validLocation, detectRequirementLoop, activityActionAuthority } from './_dabbir-activity-intelligence.js';
 import { wantsServiceMenu } from './_dabbir-whatsapp-understanding.js';
+import { resolveContextReferences } from './_dabbir-context-resolver.js';
 // Pure semantic reducer. Provider output is a proposal, never execution authority.
 export const SEMANTIC_VERSION = 2;
 export const TRUST = Object.freeze({ PROVIDER_VERIFIED: 100, DATABASE_FACT: 95, OWNER_POLICY: 95,
@@ -43,6 +44,7 @@ function freshState(c,now) {
 // are removed before resolution; two affirmative options require clarification.
 export function resolveOrdinal(raw) {
   let t=normalizeSemanticText(raw);
+  t=t.replace(/(?:^|\s)(الاولى|الاولي|الثانيه|الثالثه)(?=\s|$)/g,(_,word)=>' '+({الاولى:'الاول',الاولي:'الاول',الثانيه:'الثاني',الثالثه:'الثالث'}[word]));
   t=t.replace(/(?:لا\s+)?(?:مو|مب)\s+(?:هذا|هذي)\s+/g,' ');
   t=t.replace(/(?:لا|مب|مو|مش|not|dont|don't)\s+(?:(?:تلغي|تلغ|cancel|هذا|هذي|the)\s+)*(?:الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|[123])(?=\s|$)/g,' ');
   const matches=[...t.matchAll(/(?:^|\s)(?:the\s+)?(الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|[123])(?=\s|$)/g)];
@@ -114,7 +116,19 @@ function resolveCatalog(s,c,text,now,source) {
   if(ws.length===1)fact(s,'worker',ws[0].id,source,.98,now,{label:nameOf(ws[0]),grounded_by:'DATABASE_FACT'});
   else if(ws.length>1)fact(s,'worker',null,source,.5,now);
 }
-function reuseMemory(s,c,t,now) {
+function reuseMemory(s,c,t,now,proposal) {
+  if(c.cognitive_active){
+    const resolution=resolveContextReferences({state:s,context:c,raw:t,now,proposal});
+    if(!resolution)return;
+    s.context_resolution={source:resolution.request.source,resolved:resolution.resolved,unresolved:resolution.unresolved};
+    for(const [key,f] of Object.entries(resolution.facts)){
+      if(key==='service'&&valueOf(s,'service')!==f.value){invalidate(s,'slot',now);invalidate(s,'worker',now);}
+      fact(s,key,f.value,f.source,f.confidence,now,f);
+    }
+    for(const key of resolution.unresolved)s.unresolved_references.push(key==='service'?'verified_history':key);
+    return;
+  }
+  t=normalizeSemanticText(t);
   if(!/(?:نفس|اللي قبل|المرة اللي طافت|same|last time)/.test(t))return;
   const onlyVehicle=/سيار|vehicle|car\b/.test(t),onlyWorker=/عامل|موظف|worker|staff/.test(t),onlyLocation=/مكان|موقع|location|place|address/.test(t),onlyService=/خدم|service/.test(t);
   const allowed=onlyVehicle?['vehicle']:onlyWorker?['worker']:onlyLocation?['location']:onlyService?['service']:['service','worker','vehicle','location'];
@@ -147,6 +161,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   const completed=previous?.last_verified_action?.at && Date.parse(previous.last_verified_action.at)>=Date.parse(previous.updated_at);
   const s=same&&!completed?structuredClone(previous):{...fresh,last_verified_action:same?previous?.last_verified_action||null:null,last_verified_outcome:same?previous?.last_verified_outcome||null:null};
   s.updated_at=stamp;s.revision=(previous?.revision||0)+1;s.missing_fields=[];s.unresolved_references=[];s.pending_action=null;s.sub_intent=null;
+  delete s.context_resolution;
   // Read-only intents describe one customer turn. They must not leak into the
   // next message and turn a grounded service detail into another catalog menu.
   if(s.goal==='UNKNOWN'&&['SERVICE_DISCOVERY','PRICING'].includes(s.intent))s.intent='SUPPORT';
@@ -207,7 +222,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     else if(discovery)s.intent='SERVICE_DISCOVERY';
     else if(booking){s.goal='BOOK_SERVICE';s.intent='BOOKING';s.intent_confirmed=true;}
     else if(s.goal==='BOOK_SERVICE' && !/^(?:شكرا|thanks|thank you)$/.test(t))s.intent='BOOKING';
-    resolveCatalog(s,c,t,stamp,source);reuseMemory(s,c,t,stamp);
+    resolveCatalog(s,c,t,stamp,source);reuseMemory(s,c,raw,stamp,proposal);
     const contract=arr(c.activity_profile?.services).find(x=>x.service_id===valueOf(s,'service'));
     const allowedEntities=Object.keys(contract?.entity_definitions||{});
     if(allowedEntities.includes('vehicle')) {
@@ -224,7 +239,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
       else {fact(s,'delivery_mode',explicitMode,'AI_INFERENCE',.5,stamp,{service_id:valueOf(s,'service')});s.unresolved_references.push('delivery_mode');}
     }
     if(previous?.clarification_entity==='property_details' && raw.trim().length>=2 && raw.length<=300)fact(s,'property_details',raw.trim(),source,.99,stamp);
-    if(/^(?:هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(t)) {
+    if(/^(?:هي|هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(t)) {
       if(previous?.clarification_entity==='intent_confirmation')s.intent_confirmed=true;
       const confirmedKey=previous?.clarification_entity;
       if(['delivery_mode','vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp,{...(confirmedKey==='delivery_mode'?{service_id:valueOf(s,'service')}:{})});

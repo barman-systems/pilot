@@ -48,7 +48,8 @@ function decisionView(state,decision,previous,c,role){
   business_confirmed_facts:confirmed.filter(([,f])=>['DATABASE_FACT','OWNER_POLICY'].includes(f.source)).map(([k])=>k),
   inferred_facts:facts.filter(([,f])=>f.source==='AI_INFERENCE').map(([k])=>k),unverified_facts:facts.filter(([,f])=>!verifiedOperationalFact(f)).map(([k])=>k),
   missing_requirements:arr(state.missing_fields),pending_field:pending,pending_question:pending?{field:pending,text:decision.resumeReply||decision.reply||null,presentation:'PENDING_DELIVERY'}:null,
-  message_role:role,last_system_action:old?.next_action||null,last_tool_result:state.last_verified_outcome?{verified:state.last_verified_outcome.source==='DATABASE_FACT'&&state.last_verified_action?.source==='DATABASE_FACT',action:state.last_verified_action?.action||null}:null,
+  message_role:role,last_system_action:old?.next_action||null,last_tool_result:state.last_tool_result||(state.last_verified_outcome?{verified:state.last_verified_outcome.source==='DATABASE_FACT'&&state.last_verified_action?.source==='DATABASE_FACT',action:state.last_verified_action?.action||null}:null),
+  context_resolution:state.context_resolution||null,handoff_state:c.conversation?.state||null,
   last_customer_correction:arr(state.user_corrections).at(-1)?.entity||null,interrupted_goal:role==='SIDE_QUESTION'?primary:null,resumable_goal:primary,
   goal_confidence:primary?(state.intent_confirmed===true?1:.5):0,next_action:decision.action,response_strategy:decision.action==='CLARIFY'?'ASK_NEXT_REQUIREMENT':role==='SIDE_QUESTION'?'ANSWER_AND_RESUME':'REPORT_VERIFIED_RESULT',
   do_not_ask:confirmed.map(([k])=>k),do_not_reset:!!primary};

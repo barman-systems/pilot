@@ -38,6 +38,7 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909143719_dabbir_cognitive_finalized_acceptance_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909144318_dabbir_atomic_cognitive_presentation_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909144913_dabbir_cognitive_receipt_reconciliation_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909180619_dabbir_conversational_brain_context_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -368,4 +369,58 @@ test('database: an owner can configure and revoke an unregistered business servi
   await assert.rejects(db.query('select dabbir_private.activity_assert_action_v1($1,$2,$3,$4)',[ids.business,ids.branch,ids.service,'CREATE_BOOKING']),/ACTIVITY_TYPE_UNCONFIGURED/);
   assert.equal((await db.query('select count(*)::int n from dabbir_appointments')).rows[0].n,0);
  } finally {await db.exec('reset role');await db.query("update dabbir_businesses set business_type='services' where id=$1",[ids.business]);await configureActivity({});}
+});
+
+test('brain SQL: operational history is completed, recent, real and scoped to customer and branch',async()=>{
+ await reset();
+ await db.query("insert into dabbir_appointments(business_id,branch_id,customer_id,service_id,starts_at,status,booking_source) values($1,$2,$3,$4,now()-interval '1 day','completed','internal')",[ids.business,ids.branch,ids.customer,ids.service]);
+ const valid=(await load()).operational_history;
+ assert.equal(valid.length,1);assert.equal(valid[0].service_id,ids.service);assert.equal(valid[0].customer_id,ids.customer);
+ for(const [column,bad] of [['business_id',ids.other],['branch_id',ids.other],['customer_id',ids.other],['status','cancelled'],['simulated',true],['starts_at','2020-01-01T00:00:00Z']]){
+  const original=valid[0][column];
+  await db.query(`update dabbir_appointments set ${column}=$1`,[bad]);
+  assert.equal((await load()).operational_history.length,0,column);
+  await db.query(`update dabbir_appointments set ${column}=$1`,[original]);
+ }
+});
+
+test('brain SQL: historical selection is rechecked before a real mutation transaction',async()=>{
+ await activityBooking();
+ const history=(await db.query("insert into dabbir_appointments(business_id,branch_id,customer_id,service_id,starts_at,status,booking_source) values($1,$2,$3,$4,now()-interval '1 day','completed','internal') returning id",[ids.business,ids.branch,ids.customer,ids.service])).rows[0].id;
+ await db.query("update dabbir_ai_conversation_state set semantic_state=jsonb_set(semantic_state,'{entities,service,historical_appointment_id}',to_jsonb($1::text))",[history]);
+ await db.query("update dabbir_appointments set status='cancelled' where id=$1",[history]);
+ await assert.rejects(executeActivity(),/ACTIVITY_HISTORICAL_REFERENCE_STALE/);
+ assert.equal((await db.query('select count(*)::int n from dabbir_ai_action_ledger')).rows[0].n,0);
+ await db.query("update dabbir_appointments set status='completed' where id=$1",[history]);
+ assert.equal((await executeActivity()).verified,true);
+});
+
+test('brain SQL: availability loads identifiers from canonical state and persists the tool result',async()=>{
+ await reset();
+ // The downstream availability query has its own live suite; here the real SQL
+ // authority wrapper is exercised against a deterministic database adapter.
+ await db.exec(`create or replace function public.dabbir_whatsapp_ai_check_availability(b uuid,c uuid,s uuid,w uuid,t timestamp without time zone) returns jsonb language sql as $$select jsonb_build_object('slots','[]'::jsonb,'observed_service',s,'observed_conversation',c)$$;`);
+ const state=understandConversation({context:context({batch_messages:[{body:'أبي غسيل كامل باجر الساعة 18:00'}]}),now:evalNow}).state;
+ await commit(state);
+ const result=await rpc('dabbir_semantic_check_availability_v1',[batch,lock,1]);
+ assert.equal(result.observed_service,ids.service);assert.equal(result.observed_conversation,ids.conversation);
+ const saved=(await load()).semantic_state;
+ assert.equal(saved.last_tool_call.action,'CHECK_AVAILABILITY');assert.equal(saved.last_tool_result.slot_count,0);assert.equal(saved.last_tool_result.source,'DATABASE_FACT');
+ assert.equal((await db.query('select count(*)::int n from dabbir_ai_action_ledger')).rows[0].n,0);
+ await assert.rejects(rpc('dabbir_semantic_check_availability_v1',[batch,ids.other,1]),/SEMANTIC_BATCH_LOCK_INVALID/);
+ await assert.rejects(rpc('dabbir_semantic_check_availability_v1',[batch,lock,2]),/SEMANTIC_VERSION_CONFLICT/);
+ await db.exec('set role authenticated');
+ await assert.rejects(rpc('dabbir_semantic_check_availability_v1',[batch,lock,1]),/permission denied/);
+ await db.exec('reset role');
+ await db.query("update dabbir_ai_conversation_state set semantic_state=jsonb_set(semantic_state,'{missing_fields}','[\"time\"]')");
+ await assert.rejects(rpc('dabbir_semantic_check_availability_v1',[batch,lock,1]),/SEMANTIC_AVAILABILITY_NOT_AUTHORIZED/);
+});
+
+test('brain SQL: malformed availability rolls back result persistence',async()=>{
+ await reset();
+ await db.exec(`create or replace function public.dabbir_whatsapp_ai_check_availability(b uuid,c uuid,s uuid,w uuid,t timestamp without time zone) returns jsonb language sql as $$select '{}'::jsonb$$;`);
+ const state=understandConversation({context:context({batch_messages:[{body:'أبي غسيل كامل باجر الساعة 18:00'}]}),now:evalNow}).state;
+ await commit(state);
+ await assert.rejects(rpc('dabbir_semantic_check_availability_v1',[batch,lock,1]),/SEMANTIC_AVAILABILITY_RESULT_INVALID/);
+ assert.equal((await load()).semantic_state.last_tool_result,undefined);
 });

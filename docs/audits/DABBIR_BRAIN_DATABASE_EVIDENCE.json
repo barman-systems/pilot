@@ -1,0 +1,29 @@
+{
+  "migration": "20260909180619_dabbir_conversational_brain_context_v1",
+  "project": "fphpoysqdsceniwduxjq",
+  "verification_time": "2026-09-09T18:09:00Z",
+  "scope": "Production SQL in rollback-only isolated synthetic transaction. No real Meta transport claimed.",
+  "checks": {
+    "suite": "brain-production-rollback-only",
+    "commit": true,
+    "context": true,
+    "availability": true,
+    "gps_readback": true,
+    "semantic_load": true,
+    "cancel_readback": true,
+    "verified_memory": true,
+    "booking_readback": true,
+    "duplicate_replay": true,
+    "provider_evidence": "SYNTHETIC_FIXTURE_ONLY",
+    "historical_context": true,
+    "booking_idempotency": true,
+    "reschedule_readback": true,
+    "read_result_persisted": true,
+    "canonical_availability": true,
+    "historical_revalidation": true,
+    "missing_vehicle_blocked": true,
+    "missing_mutation_blocked": true,
+    "inferred_location_blocked": true,
+    "backdated_new_message_blocked": true
+  }
+}

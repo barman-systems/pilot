@@ -15,7 +15,7 @@ export function dialogueHarness({type='car_wash',services,options={},planner,ext
    if(name==='dabbir_semantic_load_v2')return {semantic_state:structuredClone(state),version,message_revision:revision};
    if(name==='dabbir_semantic_commit_v2'){state=structuredClone(args.p_state);decisions.push(args.p_metrics);return {version:++version,state,replay:false};}
    if(name==='dabbir_semantic_set_pending_v2'){pending={pending_action:args.p_action,payload:args.p_payload,expires_at:new Date(now.getTime()+900000).toISOString()};return true;}
-   if(name==='dabbir_whatsapp_ai_check_availability')return {slots:[]};
+   if(['dabbir_semantic_check_availability_v1','dabbir_whatsapp_ai_check_availability'].includes(name))return {slots:[]};
    if(name==='dabbir_semantic_execute_v2')throw Error('UNEXPECTED_MUTATION');
    return true;
   };
