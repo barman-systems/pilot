@@ -81,6 +81,9 @@ function parseTime(raw,s) {
   }
   const h=Number(clock[1]),minute=Number(clock[2]||0);
   if(clock[3] && /^(am|pm|ص|م)$/.test(clock[3]))period=/^(pm|م)$/.test(clock[3])?'pm':'am';
+  // An explicit 24-hour clock already states its day period. Keep that fact
+  // when the customer later corrects only the hour within the same session.
+  if(!period&&(h>=13||h===0))period=h>=12?'pm':'am';
   // Reuse only a period explicitly stated by the same customer in this semantic session.
   if(!period && s.entities.time?.period_explicit && ['CUSTOMER_STATED','CUSTOMER_CORRECTION','CUSTOMER_CONFIRMED'].includes(s.entities.time.source))period=s.entities.time.period;
   else if(!period && corrected && s.entities.time?.period)period=s.entities.time.period;
@@ -178,10 +181,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     const raw=turn.body;
     const catalogService=scoped(c.services,c).find(x=>x.id===turn.catalog_service_id);
     if(catalogService){invalidate(s,'slot',stamp);fact(s,'service',catalogService.id,'CUSTOMER_STATED',.99,stamp,{label:nameOf(catalogService),grounded_by:'DATABASE_FACT'});fact(s,'price',catalogService.price,'DATABASE_FACT',1,stamp);s.goal='BOOK_SERVICE';s.intent='BOOKING';s.intent_confirmed=true;s.policy_dependencies=[];}
-    const t=normalizeSemanticText(raw),correction=/لا قصدي|قصدي|مو هذا|مب هذا|i mean|actually|instead/.test(t),source=correction?'CUSTOMER_CORRECTION':'CUSTOMER_STATED';
+    const t=normalizeSemanticText(raw),correction=/لا قصدي|قصدي|مو هذا|مب هذا|i mean|actually|instead/.test(t)||c.cognitive_message_role==='CORRECTION',source=correction?'CUSTOMER_CORRECTION':'CUSTOMER_STATED';
     const positive=t.replace(/(?:لا|مب|مو|not|dont|don't)\s+(?:تلغي|تلغ|cancel)(?:\s+(?:الاول|الثاني|the first|the second))?/g,' ');
     const cancel=/(?:^|\s)(?:الغ|الغيه|الغي|الغاء|تلغي|cancel)(?:\s|$)/.test(positive);
-    const reschedule=/غير(?:ه|ي)?|بدل(?:ه|ي)?|تعديل|اجل|reschedule|change (?:it|my|the) (?:appointment|booking|time)/.test(positive);
+    const draftCorrection=c.cognitive_active&&s.goal==='BOOK_SERVICE'&&!s.last_verified_action&&!/موعدي|حجزي|reschedule|my (?:appointment|booking)/.test(positive);
+    const reschedule=!draftCorrection&&/غير(?:ه|ي)?|بدل(?:ه|ي)?|تعديل|اجل|reschedule|change (?:it|my|the) (?:appointment|booking|time)/.test(positive);
     const booking=/(?:ابا|ابي|ابغي|ابغى|اريد|احجز|حجز|book\b|booking|same .*tomorrow)/.test(t);
     // Share the existing production classifier. Separate phrase lists here caused
     // ordinary GCC catalog questions to fall through to the model and handoff.

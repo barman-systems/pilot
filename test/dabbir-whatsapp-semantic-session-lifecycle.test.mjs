@@ -46,6 +46,7 @@ function harness({text,semantic=previous(),pending=stalePresentation,at=turnAt}=
     if(name==='dabbir_semantic_commit_v2'){committed=args.p_state;return {version:8,state:committed,replay:false};}
     if(name==='dabbir_semantic_assert_current_v2')return true;
     if(name==='dabbir_semantic_set_pending_v2')return {pending_action:args.p_action};
+    if(name==='dabbir_cognitive_record_delivery_v1')return {verified:true};
     if(name==='dabbir_record_ai_operator_decision_v1')return true;
     throw new Error('UNEXPECTED_RPC:'+name);
   };

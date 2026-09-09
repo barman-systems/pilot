@@ -1,0 +1,27 @@
+# Cognitive dialogue repair — 2026-09-09
+
+## Baseline and root cause
+
+Live GitHub main and production at 11:54 UTC: `9b949c37d3f3ff2d6a01c2d565e6502c5e6da189`, deployment `dpl_ASBm8dcpLqp6iKRiSyDzkNCdUHXA`.
+Production message/event readback, 10:09 UTC, confirms the reported sequence verbatim: service discovery → exterior wash request → vehicle question → `ستيشن` → generic menu.
+The third UNDERSTOOD event records `semantic_override=SUPPORT`, `NO_OPERATIONAL_AUTHORITY`, and missing_count=0. The same service and MOBILE car-wash contract remained attached. This was not a missing vehicle keyword: the existing reducer already recognizes that value.
+
+The orchestrator's proposalConflicts/proposalOverrideBase treats a confident per-turn model intent as authority to clear goal, intent confirmation, missing requirements and pending action. Its bounded planner snapshot omits the prior clarification field/question. Only date/time/binary confirmations have a hand-written continuation shortcut. No delivery quality gate reconciles the reply with the retained journey. Separately, pricing shares the mutable service entity with booking, and generic change wording can incorrectly become RESCHEDULE_BOOKING.
+
+## Change justification, before implementation
+
+Preserve the existing semantic version, fact provenance, compare-and-swap commits, batch locks, scoped contracts, SQL action authority and receipts. Add a bounded, inspectable cognitive view and a general pending-field resolver over those facts. A model proposes turn role and candidate changes; it cannot erase an active goal merely by proposing SUPPORT. A side question gets its own read target, with the booking goal retained. Before delivery, a deterministic quality gate rejects generic/reset/redundant decisions and replans against the current contract.
+
+This repairs a class of failures across configured requirements, not a vehicle keyword. Date, resource, service, location and other permitted fields all use the same continuation/merge rule. Inferred facts remain non-executable. Topic changes and destructive actions still require explicit grounded intent and existing SQL checks.
+
+Golden cases exposed two additional continuity faults: an explicitly stated 24-hour time lost its known day period during a later hour correction; and answering a different required field still counted as a failed repeated question. Preserve the period derived from the customer's exact clock and reset failure counters on grounded progress in any required field. Neither change invents availability or relaxes execution authority.
+
+## Verification and release prevention
+
+First reproduce the exact three-turn failure through the real orchestrator with an adversarial SUPPORT proposal. Add multi-turn golden cases, including corrections, side questions, missing/foreign/stale memory, activity differences, provider failures and duplicate/stale turns. Keep full existing safety tests. Distinguish deterministic replay, live model calls, production RPC/browser proof, and real WhatsApp delivery. No mock is production proof; no rollout expansion based on unmeasured SLOs. Persist metrics without message text, coordinates, customer names or credentials.
+
+## Acceptance limits
+
+The first CI advisor gate rejected the private rollout table's implicit RLS default deny as `rls_enabled_no_policy`. Add an explicit restrictive deny-all policy, retaining revoked client ACLs and the postgres-owned loader. This documents and preserves the actual access boundary; it does not raise the advisor baseline or weaken a gate.
+
+The requested 98–99.5% SLOs need measured denominators; small test suites cannot establish population reliability. A live external WhatsApp journey requires an authorized test recipient and verified delivery receipts. Pending source work and missing evidence are not automatically external blockers.

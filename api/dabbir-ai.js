@@ -1,4 +1,5 @@
 import { probeSemanticInterpreter } from './_dabbir-semantic-interpreter.js';
+import {probeCognitiveDialogue} from './_dabbir-cognitive-probe.js';
 import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
 import { configuredDirectProviders } from './_ai-provider-readiness.js';
@@ -56,7 +57,9 @@ export default async function handler(req, res) {
     return json(res, 403, { ok: false, error: 'synthetic_mode_required' });
   }
 
-  const result = req.body?.probe === 'whatsapp_semantic'
+  const result = req.body?.probe === 'cognitive_dialogue'
+    ? await probeCognitiveDialogue().catch(()=>({ok:false,state:'PROVIDER_ERROR',error:'COGNITIVE_PROBE_FAILED',cognitive_probe:true}))
+    : req.body?.probe === 'whatsapp_semantic'
     ? await probeSemanticInterpreter().catch(error=>({ok:false,state:'PROVIDER_ERROR',error:['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID'].includes(error?.code)?error.code:'SEMANTIC_PROBE_FAILED',semantic_probe:true}))
     : await generateDABBIRAiReply({
     project: req.body?.project,
