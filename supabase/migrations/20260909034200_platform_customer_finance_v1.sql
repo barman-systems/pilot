@@ -2,6 +2,34 @@
 -- Scope: DABBIR's subscription evidence and AI operating cost only.
 -- It intentionally excludes tenant/customer operational payments and never fabricates revenue or margin.
 
+create or replace function public.dabbir_platform_customer_business_access_v1(
+  p_actor_user_id uuid,
+  p_target_user_id uuid,
+  p_business_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path to 'pg_catalog','public','dabbir_private'
+as $function$
+begin
+  perform dabbir_private.platform_assert_permission(p_actor_user_id,'manage_customers');
+  if not dabbir_private.platform_scope_allows_business(p_actor_user_id,p_business_id) then
+    raise exception 'DABBIR_BUSINESS_SCOPE_REQUIRED';
+  end if;
+  if not exists(
+    select 1
+    from public.dabbir_memberships m
+    where m.user_id=p_target_user_id
+      and m.business_id=p_business_id
+      and m.status='active'
+  ) then
+    raise exception 'DABBIR_CUSTOMER_BUSINESS_MISMATCH';
+  end if;
+  return true;
+end;
+$function$;
+
 create or replace function public.dabbir_platform_customer_finance_overview_v1(p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -25,18 +53,24 @@ begin
     else 'NO_PROVIDER_EVENTS'
   end;
 
-  with ai as (
+  with scoped_businesses as (
+    select b.id
+    from public.dabbir_businesses b
+    where dabbir_private.platform_scope_allows_business(p_actor_user_id,b.id)
+  ),
+  ai as (
     select
-      count(distinct business_id)::bigint as businesses,
-      coalesce(sum(ai_requests),0)::bigint as ai_requests,
-      coalesce(sum(input_tokens),0)::bigint as input_tokens,
-      coalesce(sum(output_tokens),0)::bigint as output_tokens,
-      coalesce(sum(reasoning_tokens),0)::bigint as reasoning_tokens,
-      round(coalesce(sum(known_cost_aed),0),6) as known_cost_aed,
-      round(coalesce(sum(known_cost_usd),0),6) as known_cost_usd,
-      coalesce(sum(unpriced_operations),0)::bigint as unpriced_operations
-    from public.dabbir_ai_customer_cost_monthly_v1
-    where month_start>=v_month_start and month_start<v_month_end
+      count(distinct v.business_id)::bigint as businesses,
+      coalesce(sum(v.ai_requests),0)::bigint as ai_requests,
+      coalesce(sum(v.input_tokens),0)::bigint as input_tokens,
+      coalesce(sum(v.output_tokens),0)::bigint as output_tokens,
+      coalesce(sum(v.reasoning_tokens),0)::bigint as reasoning_tokens,
+      round(coalesce(sum(v.known_cost_aed),0),6) as known_cost_aed,
+      round(coalesce(sum(v.known_cost_usd),0),6) as known_cost_usd,
+      coalesce(sum(v.unpriced_operations),0)::bigint as unpriced_operations
+    from public.dabbir_ai_customer_cost_monthly_v1 v
+    join scoped_businesses sb on sb.id=v.business_id
+    where v.month_start>=v_month_start and v.month_start<v_month_end
   )
   select jsonb_build_object(
     'generated_at',pg_catalog.now(),
@@ -56,10 +90,37 @@ begin
     ),
     'subscriptions',jsonb_build_object(
       'web_billing_environment',v_web_environment,
-      'web_records',(select count(*) from public.dabbir_billing_accounts),
-      'web_active_records',(select count(*) from public.dabbir_billing_accounts where lower(coalesce(status,'')) in ('active','trialing')),
-      'apple_production_active',(select count(*) from public.dabbir_apple_entitlements where lower(coalesce(environment,''))='production' and lower(coalesce(status,''))='active' and coalesce(expires_at,pg_catalog.now()+interval '1 second')>pg_catalog.now()),
-      'google_production_active',(select count(*) from public.dabbir_google_entitlements where lower(coalesce(environment,''))='production' and lower(coalesce(status,''))='active' and coalesce(expires_at,pg_catalog.now()+interval '1 second')>pg_catalog.now())
+      'web_records',(
+        select count(*) from public.dabbir_billing_accounts ba
+        where exists(select 1 from scoped_businesses sb where sb.id=ba.business_id)
+      ),
+      'web_active_records',(
+        select count(*) from public.dabbir_billing_accounts ba
+        where exists(select 1 from scoped_businesses sb where sb.id=ba.business_id)
+          and lower(coalesce(ba.status,'')) in ('active','trialing')
+      ),
+      'apple_production_active',(
+        select count(*) from public.dabbir_apple_entitlements e
+        where lower(coalesce(e.environment,''))='production'
+          and lower(coalesce(e.status,''))='active'
+          and coalesce(e.expires_at,pg_catalog.now()+interval '1 second')>pg_catalog.now()
+          and exists(
+            select 1 from public.dabbir_memberships m
+            join scoped_businesses sb on sb.id=m.business_id
+            where m.user_id=e.user_id and m.status='active'
+          )
+      ),
+      'google_production_active',(
+        select count(*) from public.dabbir_google_entitlements e
+        where lower(coalesce(e.environment,''))='production'
+          and lower(coalesce(e.status,''))='active'
+          and coalesce(e.expires_at,pg_catalog.now()+interval '1 second')>pg_catalog.now()
+          and exists(
+            select 1 from public.dabbir_memberships m
+            join scoped_businesses sb on sb.id=m.business_id
+            where m.user_id=e.user_id and m.status='active'
+          )
+      )
     ),
     'revenue_state','UNAVAILABLE_NO_AUTHORITATIVE_PRICE_LEDGER',
     'margin_state','UNAVAILABLE_NO_AUTHORITATIVE_REVENUE'
@@ -91,6 +152,15 @@ begin
   if not exists(select 1 from public.dabbir_user_accounts where user_id=p_target_user_id) then
     raise exception 'DABBIR_CUSTOMER_ACCOUNT_NOT_FOUND';
   end if;
+  if not exists(
+    select 1
+    from public.dabbir_memberships m
+    where m.user_id=p_target_user_id
+      and m.status='active'
+      and dabbir_private.platform_scope_allows_business(p_actor_user_id,m.business_id)
+  ) then
+    raise exception 'DABBIR_CUSTOMER_OUTSIDE_SCOPE';
+  end if;
 
   v_web_environment:=case
     when exists(select 1 from public.dabbir_stripe_events where livemode=true) then 'LIVE_EVIDENCE_PRESENT'
@@ -103,6 +173,8 @@ begin
     from public.dabbir_memberships m
     join public.dabbir_businesses b on b.id=m.business_id
     where m.user_id=p_target_user_id
+      and m.status='active'
+      and dabbir_private.platform_scope_allows_business(p_actor_user_id,b.id)
   ),
   ai as (
     select
@@ -228,6 +300,8 @@ begin
 end;
 $function$;
 
+revoke all on function public.dabbir_platform_customer_business_access_v1(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.dabbir_platform_customer_business_access_v1(uuid,uuid,uuid) to service_role;
 revoke all on function public.dabbir_platform_customer_finance_overview_v1(uuid) from public,anon,authenticated;
 grant execute on function public.dabbir_platform_customer_finance_overview_v1(uuid) to service_role;
 revoke all on function public.dabbir_platform_customer_finance_v1(uuid,uuid) from public,anon,authenticated;
