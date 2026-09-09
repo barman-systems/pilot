@@ -57,7 +57,7 @@ function onlyMemories(context,memories){
   return {...context,verified_memory:memories,activity_profile:context?.activity_profile?{...context.activity_profile,verified_memory:memories}:context?.activity_profile};
 }
 function affirmative(text){
-  return /^(?:نفس(?:هم|هما)?|نفس السياره(?: والموقع)?|نفس الموقع(?: والسياره)?|هيه|نعم|اي|تمام|ماشي|اوكي|yes|yeah|yep|ok|okay|same|same ones|correct)(?:\s|$)/.test(text);
+  return /^(?:نفس(?:هم|هما)?|نفس السياره(?: والموقع)?|نفس الموقع(?: والسياره)?|هي|هيه|نعم|اي|تمام|ماشي|اوكي|yes|yeah|yep|ok|okay|same|same ones|correct)(?:\s|$)/.test(text);
 }
 function changeAnswer(text){
   return /(?:^|\s)(?:لا|بغير|بتغير|اغير|غير|غيرهم|غيرهما|different|change|change them|new)(?:\s|$)/.test(text);
@@ -65,7 +65,7 @@ function changeAnswer(text){
 function rewriteAffirmative(raw){
   const ar=/[\u0600-\u06ff]/.test(raw);
   if(/(?:^|\s)نفس(?:\s|$)/.test(normalizeSemanticText(raw)))return raw;
-  return raw.replace(/^\s*(?:هيه|نعم|اي|إي|تمام|ماشي|اوكي|yes|yeah|yep|ok|okay|correct)(?=\s|$)/i,ar?'نفس':'same');
+  return raw.replace(/^\s*(?:هي|هيه|نعم|اي|إي|تمام|ماشي|اوكي|yes|yeah|yep|ok|okay|correct)(?=\s|$)/i,ar?'نفس':'same');
 }
 function sanitizeChange(raw){
   const ar=/[\u0600-\u06ff]/.test(raw);
