@@ -91,6 +91,7 @@ function adminServiceUnavailable(res){
 
 function rpcError(error){
   const raw=String(error?.detail||error?.message||'').toUpperCase();
+  if(raw.includes('DABBIR_FINANCIAL_ACCESS_REQUIRED'))return [403,'FINANCIAL_ACCESS_REQUIRED'];
   if(raw.includes('DABBIR_RECOVERY_CONFIRMATION_REQUIRED'))return [409,'RECOVERY_CONFIRMATION_REQUIRED'];
   if(raw.includes('DABBIR_RECOVERY_ACCOUNT_MUST_BE_SUSPENDED'))return [409,'RECOVERY_ACCOUNT_MUST_BE_SUSPENDED'];
   if(raw.includes('DABBIR_RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED'))return [409,'RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED'];
@@ -121,6 +122,10 @@ export default async function handler(req,res){
         const payload=await serviceRpc(context.key,'dabbir_platform_owner_overview',{p_actor_user_id:context.user.id});
         return json(res,200,{ok:true,overview:payload});
       }
+      if(action==='finance_overview'){
+        const payload=await serviceRpc(context.key,'dabbir_platform_customer_finance_overview_v1',{p_actor_user_id:context.user.id});
+        return json(res,200,{ok:true,finance:payload});
+      }
       if(action==='search'){
         const q=String(singleQueryValue(req,'q')||'').trim().slice(0,160);
         const payload=await serviceRpc(context.key,'dabbir_platform_customer_search',{p_actor_user_id:context.user.id,p_query:q||null,p_limit:100});
@@ -131,6 +136,12 @@ export default async function handler(req,res){
         if(!targetUserId)return json(res,400,{ok:false,error:'INVALID_USER_ID'});
         const payload=await serviceRpc(context.key,'dabbir_platform_customer_detail',{p_actor_user_id:context.user.id,p_target_user_id:targetUserId});
         return json(res,200,{ok:true,customer:payload});
+      }
+      if(action==='finance'){
+        const targetUserId=uuid(singleQueryValue(req,'user_id'));
+        if(!targetUserId)return json(res,400,{ok:false,error:'INVALID_USER_ID'});
+        const payload=await serviceRpc(context.key,'dabbir_platform_customer_finance_v1',{p_actor_user_id:context.user.id,p_target_user_id:targetUserId});
+        return json(res,200,{ok:true,finance:payload});
       }
       if(action==='recovery_preview'){
         const targetUserId=uuid(singleQueryValue(req,'user_id'));
