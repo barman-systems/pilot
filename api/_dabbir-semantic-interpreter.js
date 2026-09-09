@@ -36,7 +36,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
   const x=JSON.parse(result.reply);
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,
+    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   // Provider output proposes semantics; application policy owns deterministic
   // operational intent. Explicit availability + grounded temporal evidence is

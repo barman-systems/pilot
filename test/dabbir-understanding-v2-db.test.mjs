@@ -21,8 +21,6 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  alter table public.dabbir_conversations add column updated_at timestamptz default now();
  alter table public.dabbir_handoffs add column id uuid default gen_random_uuid(),add column customer_id uuid,add column route_class text,add column reason text,add column metadata jsonb,add column created_at timestamptz default now(),add column priority integer,add column routing_strategy text,add column summary text,add column attempted_actions jsonb,add column unresolved_items jsonb;`);
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908173803_dabbir_provider_retry_checkpoint_v1.sql',import.meta.url),'utf8'));
- await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909121326_dabbir_cognitive_dialogue_state_v1.sql',import.meta.url),'utf8'));
- await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909121923_dabbir_cognitive_rollout_deny_clients_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -33,23 +31,6 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.query('insert into dabbir_workers(id,business_id) values($1,$2)',[ids.worker,ids.business]);
  await db.query('insert into dabbir_branch_services(business_id,branch_id,service_id) values($1,$2,$3)',[ids.business,ids.branch,ids.service]);
 });after(()=>db.close());
-test('cognitive SQL: rollout is scoped, defaults to shadow and is inaccessible to client roles',async()=>{
- await reset();assert.equal((await load()).cognitive_policy.mode,'shadow');
- await db.query("insert into dabbir_private.cognitive_rollouts(business_id,mode,canary_percent) values($1,'canary',100)",[ids.business]);
- assert.equal((await load()).cognitive_policy.mode,'canary');
- await db.query('delete from dabbir_private.cognitive_rollouts');
- await db.exec('set role authenticated');await assert.rejects(db.query('select * from dabbir_private.cognitive_rollouts'),/permission denied/);await db.exec('reset role');
-});
-test('cognitive SQL: previous question presentation needs a same-batch provider receipt and current version',async()=>{
- await reset();const state=understandConversation({context:context({batch_messages:[{body:'أبي غسيل'}]}),now:evalNow}).state;
- await commit(state);const args=[batch,lock,1,'cognitive-receipt','date'];
- await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
- await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'cognitive-receipt','SENT')",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify']);
- assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
- const saved=(await load()).semantic_state.cognition;assert.equal(saved.pending_question.presentation,'PROVIDER_ACCEPTED');assert.equal(saved.pending_field,'date');
- await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',[batch,lock,0,'cognitive-receipt','date']),/SEMANTIC_VERSION_CONFLICT/);
- await db.exec('set role anon');await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/permission denied/);await db.exec('reset role');
-});
 test('database: semantic state persists once per batch with audited provenance',async()=>{await reset();const s=bookingState();const c=await commit(s);assert.equal(c.version,1);const again=await commit(s);assert.equal(again.replay,true);assert.equal((await load()).version,1);assert.equal((await db.query('select count(*) n from dabbir_ai_understanding_events')).rows[0].n,1);});
 test('database: cross-tenant state and mismatched customer are rejected',async()=>{await reset();const s=bookingState();s.scope.business_id=ids.other;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);s.scope.business_id=ids.business;s.scope.customer_id=owner;await assert.rejects(commit(s),/SEMANTIC_STATE_SCOPE_INVALID/);});
 test('database: compound conversation foreign key rejects cross-business insert',async()=>{await reset();await assert.rejects(db.query('insert into dabbir_ai_conversation_state(business_id,conversation_id) values($1,$2)',[ids.other,ids.conversation]),/foreign key/);});

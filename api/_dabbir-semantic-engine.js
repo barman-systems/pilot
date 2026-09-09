@@ -4,7 +4,6 @@ import {
   understandConversation as understandCore,
   normalizeSemanticText,
 } from './_dabbir-semantic-engine-core.js';
-import {cognitiveReduce} from './_dabbir-cognitive-dialogue.js';
 
 export {
   SEMANTIC_VERSION,
@@ -78,7 +77,7 @@ function sanitizeChange(raw){
   return cleaned||(ar?'بيانات جديدة':'new details');
 }
 
-export function understandLegacyConversation(args){
+export function understandConversation(args){
   const now=args?.now||new Date();
   const previous=args?.previous;
   const marker=previous?.repeat_vehicle_location_prompt;
@@ -122,8 +121,6 @@ export function understandLegacyConversation(args){
   }
   return result;
 }
-
-export function understandConversation(args){return cognitiveReduce(args,understandLegacyConversation);}
 
 // Source-contract sentinels retained for static safety tests. Enforcement remains
 // in _dabbir-semantic-engine-core.js: newer_customer_message_exists,
