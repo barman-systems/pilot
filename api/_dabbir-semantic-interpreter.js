@@ -63,7 +63,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     ? {...x.service_question,explicit_service:x.service_name!=null}:null;
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:semanticRequestSpans(x.request_spans),
-    serviceQuestion,
+    serviceQuestion,contextReference:x.context_reference||null,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   if(serviceQuestion){providerProposal.intent=serviceQuestion.field==='price'?'PRICING':'SERVICE_DISCOVERY';providerProposal.action=serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU';}
   // Provider output proposes semantics; application policy owns deterministic

@@ -834,6 +834,13 @@ async function runJourney() {
     return {status:probe.status,detail:JSON.stringify(evidence)};
   });
 
+  await step('15f_cognitive_context_references',async()=>{
+    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'context_references'}});
+    const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
+    assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_CONTEXT_REFERENCES_FAILED:'+JSON.stringify(evidence));
+    return {status:probe.status,detail:JSON.stringify(evidence)};
+  });
+
   // Bounded comparative measurement once per release, not once per viewport.
   // A failed candidate is recorded as FAIL; the existing required primary
   // continuity gate above is unchanged. No model priority is changed here.

@@ -2,6 +2,8 @@ import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, 
 import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGate} from './_dabbir-cognitive-dialogue.js';
 import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
+import {assertBrainDecision,verifiedAvailability,assertResponseGrounding} from './_dabbir-brain-contract.js';
+import {ordinalReferenceField} from './_dabbir-context-resolver.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -23,6 +25,7 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   cognitive_version:s.cognition?.version||null,goal:s.cognition?.primary_goal||null,message_role:s.cognition?.message_role||null,
   pending_resolved:s.cognitive_pending_resolved===true,quality_violations:s.cognitive_quality_violations||[],
   goal_retained:s.cognition?.do_not_reset===true,queued_goals:arr(s.goal_queue).length,queued_goal_resumed:!!s.goal_queue_resumed,shadow:s.cognitive_shadow||null,
+  reference_resolution:s.context_resolution||null,
   service_question:d.serviceQuestion?{field:d.serviceQuestion.field,verified:d.serviceQuestion.verified,service_id:d.serviceQuestion.service_id}:null});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
@@ -48,7 +51,8 @@ function groundedServiceChoice(c,raw,previous,at){
     const ordinal=resolveOrdinal(raw);
     const currentQuestion=previous?.cognition?.pending_field||previous?.clarification_entity;
     const menuCurrent=!(activeJourney(previous)&&verifiedOperationalFact(previous?.entities?.service)&&currentQuestion&&!['service','service_question_target'].includes(currentQuestion));
-    if(menuCurrent&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
+    const referenceField=ordinalReferenceField(raw);
+    if(menuCurrent&&(!referenceField||referenceField==='service')&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
       const selected=scopedServices(c).find(s=>s.id===offered[ordinal.index].id);
       if(selected)return selected;
     }
@@ -98,7 +102,7 @@ function naturalLanguageTurn(messages){
 function constrainedContinuation(messages,previous){
   const text=normalizedTurnText(messages),key=previous?.clarification_entity;
   if(!text||!key)return false;
-  if(key==='intent_confirmation'&&/^(?:هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(text))return true;
+  if(key==='intent_confirmation'&&/^(?:هي|هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(text))return true;
   if(key==='date'&&/^(?:اليوم|اباليوم|باليوم|باجر|باكر|بكره|غدا|عقب باجر|بعد باجر|بعد بكره|بعد غد|today|tomorrow|day after tomorrow|20\d{2}-\d{2}-\d{2})$/.test(text))return true;
   if(key==='time'){
     if(/^(?:المساء|المسا|العصر|الليل|الصباح|الصبح|الفجر|morning|afternoon|evening|night)$/.test(text))return true;
@@ -151,6 +155,8 @@ function aiFirstPlannerContext(c,state,previous){
   const serviceName=id=>serviceLabel(services.find(x=>x.id===id));const workerName=id=>workerLabel(workers.find(x=>x.id===id));
   const pending=c?.pending_state||{},payload=pending?.payload||{};
   return {...base,situation:situationSnapshot(c,state,previous),
+    workers:workers.slice(0,10).map(w=>({name:workerLabel(w)})),
+    operational_history:arr(c.operational_history).slice(0,8).map(a=>({service:serviceName(a.service_id)||null,worker:workerName(a.worker_id)||null,starts_at:a.starts_at,status:a.status})),
     current_messages:arr(c?.batch_messages).slice(-4).map(x=>String((x?.language_body??x?.body)||'').trim().slice(0,700)).filter(Boolean),
     recent_conversation:safePlannerHistory(c),
     upcoming_appointments:arr(c?.upcoming_appointments).slice(0,6).map((a,index)=>({index:index+1,starts_at:a?.starts_at||null,status:a?.status||null,service:serviceName(a?.service_id)||null,worker:workerName(a?.worker_id)||null})),
@@ -237,7 +243,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
       return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
     }else{
-      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
+      // A first-turn goal resolved from a scoped service reference is already
+      // grounded. A generic provider intent cannot erase it merely because no
+      // previous conversation state existed. Safety/risk checks still run.
+      const goalAnchor=cognitive&&activeJourney(state)&&arr(state.context_resolution?.resolved).some(r=>r.field==='service')?state:semanticPrevious;
+      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(goalAnchor,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=reduce({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
       state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
@@ -258,13 +268,14 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   }
   if(session.reset)state.session_reset=true;else delete state.session_reset;
   budget();
+  if(cognitive)assertBrainDecision(state,decision,c);
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
   if(committed.replay){state=committed.state;decision=cognitive&&state.cognition?.decision?state.cognition.decision:{...decision,action:state.pending_action||decision.action};if(!cognitive){if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);}}
-  const version=committed.version,lang=state.language;
+  const version=committed.version,lang=state.language;let executionReceipt=null;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
   const recordDelivery=async(sent,field)=>{if(cognitive&&state.cognition){if(!sent?.providerMessageId)throw Object.assign(new Error('COGNITIVE_PRESENTATION_UNVERIFIED'),{code:'COGNITIVE_PRESENTATION_UNVERIFIED'});await rpc('dabbir_cognitive_record_delivery_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_provider_message_id:sent.providerMessageId,p_next_field:field||null});}};
-  const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
+  const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();if(cognitive)assertResponseGrounding(text,executionReceipt);await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
   if(c.pending_state?.pending_action==='choose_service'&&(groundedMenuSelection||(activeJourney(state)&&verifiedOperationalFact(state.entities?.service))))await setPending('none',{});
   if(decision.reasonCode==='MULTI_REQUEST_SCOPE_UNRESOLVED')await setPending('none',{});
@@ -273,13 +284,14 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   if(MUTATIONS.has(decision.action)){
     budget();const result=await rpc('dabbir_semantic_execute_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:decision.action});
     if(result?.verified!==true||!result?.appointment_id)throw Object.assign(new Error('SEMANTIC_OUTCOME_NOT_VERIFIED'),{code:'SEMANTIC_OUTCOME_NOT_VERIFIED'});
+    executionReceipt={action:decision.action,verified:true};
     const text=decision.action==='CANCEL_BOOKING'?(lang==='ar'?'تم إلغاء الموعد ✅.':'Your appointment has been cancelled ✅.'):decision.action==='RESCHEDULE_BOOKING'?(lang==='ar'?`تم تعديل الموعد ✅ إلى ${result.starts_at}.`:`Your appointment was rescheduled ✅ to ${result.starts_at}.`):bookingText(result,lang);
     await send(text+(cognitive?queuedGoalPrompt(state,c,turnNow,understandLegacyConversation):''),decision.action.toLowerCase());await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,verified:true,provider_verified:false};
   }
   if(decision.action==='CHECK_AVAILABILITY'){
     budget();await assertCurrent();const appt=arr(c.upcoming_appointments).find(x=>x.id===val(state,'appointment'));
-    const av=await rpc('dabbir_whatsapp_ai_check_availability',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_service_id:appt?.service_id||val(state,'service'),p_worker_id:appt?.worker_id||val(state,'worker')||null,p_requested_local:`${val(state,'date')}T${val(state,'time')}:00`});
-    const slots=arr(av?.slots).slice(0,3);if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots','time');}
+    const av=cognitive?await rpc('dabbir_semantic_check_availability_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version}):await rpc('dabbir_whatsapp_ai_check_availability',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_service_id:appt?.service_id||val(state,'service'),p_worker_id:appt?.worker_id||val(state,'worker')||null,p_requested_local:`${val(state,'date')}T${val(state,'time')}:00`});
+    const slots=verifiedAvailability(av,c,state);if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots','time');}
     else{const payload={activity_contract_version:state.activity_contract_version,mode:state.intent==='RESCHEDULE_BOOKING'?'reschedule':'booking',...(appt?{appointment_id:appt.id}:{}),slots,presented:false};await setPending('choose_slot',payload);const sent=await send(slotsText(slots,lang),'availability','slot');if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_slot',{...payload,presented:true,provider_message_id:sent.providerMessageId});}
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
   }

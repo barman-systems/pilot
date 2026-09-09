@@ -36,7 +36,7 @@ async function runTurn({text,previous={},pending_state=null,deliverMenu=null,cur
     if(name==='dabbir_semantic_assert_current_v2')return true;
     if(name==='dabbir_semantic_set_pending_v2')return {pending_action:args.p_action};
     if(name==='dabbir_record_ai_operator_decision_v1')return true;
-    if(name==='dabbir_whatsapp_ai_check_availability')return {slots:[]};
+    if(name==='dabbir_semantic_check_availability_v1')return {slots:[]};
     if(name==='dabbir_cognitive_record_delivery_v1')return {verified:true};
     throw new Error(`UNEXPECTED_RPC:${name}`);
   };
@@ -127,6 +127,16 @@ test('second/الثاني and exact offered service name resolve through the sam
     assert.equal(second.committed.intent,'BOOKING',choice);
     assert.equal(second.committed.entities.service.value,ids.carpet,choice);
     assert.notEqual(second.result.action,'SERVICE_MENU',choice);
+  }
+});
+
+test('vehicle and employee ordinals never select a service from a displayed catalog',async()=>{
+  for(const text of ['السيارة الثانية','الموظف الثاني','the second car']){
+    const first=await runTurn({text:'شو خدماتكم'}),pending=pendingFromMenu(first);
+    const second=await runTurn({text,previous:first.committed,pending_state:pending});
+    assert.equal(second.result.action,'CLARIFY',text);
+    assert.notEqual(second.committed.entities.service?.status,'active',text);
+    assert.ok(!second.calls.some(x=>x.name==='dabbir_semantic_execute_v2'),text);
   }
 });
 
