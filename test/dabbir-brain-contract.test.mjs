@@ -27,6 +27,6 @@ test('future commitments cannot be invented by owner knowledge or generated pros
 });
 test('model reference cannot contain identifiers or invalid fields',()=>{
  const p={action:'REPLY',intent:'SUPPORT',confidence:1,risk_level:'LOW',service_name:null,knowledge_key:null,entities:[]};
- for(const fields of [['business_id'],[],['service','worker','location','vehicle','service']])assert.equal(semanticContractViolation(JSON.stringify({...p,context_reference:{fields,evidence:'نفس',confidence:1}})),'CONTEXT_REFERENCE');
+ for(const fields of [['business_id'],[],['service','worker','location','vehicle','service']])assert.equal(semanticContractViolation(JSON.stringify({...p,context_reference:{fields,evidence:'نفس',confidence:1}})),'CONTEXT_REFERENCE_FIELDS');
  assert.equal(semanticContractViolation(JSON.stringify({...p,context_reference:{fields:['service'],evidence:'نفس أمس',confidence:.95}})),null);
 });

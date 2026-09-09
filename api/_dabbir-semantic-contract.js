@@ -3,6 +3,7 @@
 const ACTIONS = new Set(['REPLY','CLARIFY','SERVICE_MENU','PRICING','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF']);
 const INTENTS = new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const ENTITIES = new Set(['delivery_mode','vehicle','property_details','date','time']);
+const REFERENCE_FIELDS=['service','worker','vehicle','location'];
 const MESSAGE_ROLES=new Set(['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORRECTION','CONFIRMATION','DENIAL','SIDE_QUESTION','TOPIC_SWITCH','CONTINUATION','CANCELLATION','REFERENCE','SOCIAL']);
 const REQUEST_SPAN_COUNTS=[0,2,3];
 const REQUEST_SPAN_MIN_LENGTH=6,REQUEST_SPAN_MAX_LENGTH=500;
@@ -27,11 +28,11 @@ export const SEMANTIC_JSON_SCHEMA=strictObject({
   // express two or three jobs without unsupported array-bound keywords.
   request_spans:{anyOf:[{type:'null'},strictObject({first_quote:{type:'string'},second_quote:{type:'string'},third_quote:nullableText})]},
   service_question:{anyOf:[{type:'null'},strictObject({field:choice(['price','duration_minutes']),evidence:{type:'string'}})]},
-  context_reference:{anyOf:[{type:'null'},strictObject({fields:{type:'array',items:choice(['service','worker','vehicle','location'])},evidence:{type:'string'},confidence:{type:'number'}})]},
+  context_reference:{anyOf:[{type:'null'},strictObject({fields:{type:'array',items:choice(REFERENCE_FIELDS)},evidence:{type:'string'},confidence:{type:'number'}})]},
 });
 export const SEMANTIC_SYSTEM_PROMPT = `You are DABBIR's semantic interpreter, not a customer reply generator. Return exactly one JSON object, no prose or markdown.
 Required keys: action, intent, confidence (number 0..1), risk_level (LOW/MEDIUM/HIGH), service_name (string or null), service_evidence (exact current-message quote naming the service, or null), knowledge_key (string or null), entities (array), dialogue (object).
-context_reference is null unless the customer refers to an earlier fact, e.g. same vehicle, what I told you, same as yesterday. Propose only the referenced field names, an exact current-message evidence quote and confidence. The application resolves the values, source dates and identity from canonical state and verified operational history; you never provide those identifiers or assume yesterday means the most recent visit.
+context_reference is null unless the customer refers to an earlier fact, e.g. same vehicle, what I told you, same as yesterday. Its exact JSON schema is ${JSON.stringify(SEMANTIC_JSON_SCHEMA.properties.context_reference)}. When non-null, fields contains 1–4 distinct names from ${JSON.stringify(REFERENCE_FIELDS)}, evidence is a nonempty exact current-message quote (at most 300 characters), and confidence is a number from 0 to 1. For an unspecified earlier fact use null if the referenced fields are uncertain; never an empty object or empty fields array. Dates and times belong in entities, never in context_reference.fields. The application resolves the values, source dates and identity from canonical state and verified operational history; you never provide those identifiers or assume yesterday means the most recent visit.
 service_question is null unless the customer asks about a particular service attribute. Then return {field: price or duration_minutes, evidence: exact current-message quote asking that question}. This is a read-only question, not selection or confirmation of a booking. Never return the attribute's value; the application reads the scoped catalog. Keep service_name/service_evidence grounded as below. Use SERVICE_DISCOVERY for duration questions and PRICING for price questions.
 request_spans is null for a single request, answer, correction or side question. Only for two or three independently requested business jobs, return {first_quote: exact quote of the first request, second_quote: exact quote of the second request, third_quote: exact quote of the third request or null}. Every non-null quote must be 6–500 characters and copied from the CURRENT message without overlap. Never invent a second request to fill this object; use null for request_spans instead. Do not split corrections, answers, side questions or alternatives into extra jobs. Never rewrite a quote or assign one job's service/date to another. The application separately grounds each quote and controls the sequence.
 dialogue contains message_role, evidence (an exact quote from the CURRENT message), invalidated_fields (array of field names, only when the customer withdraws or corrects that detail). message_role is NEW_REQUEST, ANSWER_TO_PENDING_QUESTION, CORRECTION, CONFIRMATION, DENIAL, SIDE_QUESTION, TOPIC_SWITCH, CONTINUATION, CANCELLATION, REFERENCE, or SOCIAL. Interpret the current message against situation.pending_field and situation.pending_question first, then the active goal and confirmed fields. Answering a pending question does not create a new goal. A side question does not cancel a booking. A field correction changes that field, not the whole goal. The application validates this proposal and chooses the next required question or allowed action.
@@ -62,7 +63,13 @@ export function semanticContractViolation(raw) {
   if(!confidence(x.confidence)||!['LOW','MEDIUM','HIGH'].includes(x.risk_level))return 'CONFIDENCE_OR_RISK';
   if(!nullableText(x.service_name)||!nullableText(x.knowledge_key))return 'SERVICE_OR_KNOWLEDGE';
   if(x.service_question!=null&&(!['price','duration_minutes'].includes(x.service_question.field)||typeof x.service_question.evidence!=='string'||!x.service_question.evidence.length||x.service_question.evidence.length>300))return 'SERVICE_QUESTION';
-  if(x.context_reference!=null){const r=x.context_reference;if(!Array.isArray(r.fields)||r.fields.length<1||r.fields.length>4||!r.fields.every(k=>['service','worker','vehicle','location'].includes(k))||typeof r.evidence!=='string'||!r.evidence.trim()||r.evidence.length>300||!confidence(r.confidence))return 'CONTEXT_REFERENCE';}
+  if(x.context_reference!=null){
+    const r=x.context_reference;
+    if(typeof r!=='object'||Array.isArray(r)||Object.keys(r).length!==3||!['fields','evidence','confidence'].every(k=>Object.hasOwn(r,k)))return 'CONTEXT_REFERENCE_SHAPE';
+    if(!Array.isArray(r.fields)||r.fields.length<1||r.fields.length>4||new Set(r.fields).size!==r.fields.length||!r.fields.every(k=>REFERENCE_FIELDS.includes(k)))return 'CONTEXT_REFERENCE_FIELDS';
+    if(typeof r.evidence!=='string'||!r.evidence.trim()||r.evidence.length>300)return 'CONTEXT_REFERENCE_EVIDENCE';
+    if(!confidence(r.confidence))return 'CONTEXT_REFERENCE_CONFIDENCE';
+  }
   if(x.request_spans!=null){
     const spans=semanticRequestSpans(x.request_spans);
     if(!spans||!REQUEST_SPAN_COUNTS.includes(spans.length))return 'REQUEST_SPAN_COUNT';

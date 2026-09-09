@@ -3,12 +3,37 @@ import assert from 'node:assert/strict';
 import {z} from 'zod';
 import {generateDABBIRAiReply} from '../api/_ai-core.js';
 import {interpretSemanticMessage, evaluateSemanticProbe} from '../api/_dabbir-semantic-interpreter.js';
-import {SEMANTIC_JSON_SCHEMA,semanticRequestSpans,validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
+import {SEMANTIC_JSON_SCHEMA,SEMANTIC_SYSTEM_PROMPT,semanticRequestSpans,validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
 
 const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk_level:'LOW',service_name:null,knowledge_key:null,
   entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},
     {entity:'time',value:'09:00',evidence:'9 الصبح',confidence:.99,correction:false}]};
 const response=(content=JSON.stringify(proposal),finish_reason='stop')=>new Response(JSON.stringify({choices:[{message:{content},finish_reason}]}),{status:200});
+
+test('JSON-object fallback receives the same reference shape as strict generation',async()=>{
+ const reference={fields:['service','vehicle'],evidence:'نفس اللي قلت لك',confidence:.98};
+ const r=await interpretSemanticMessage({message:reference.evidence,context:{},env:{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'},fetchImpl:async(_url,options)=>{
+  const body=JSON.parse(options.body);assert.equal(body.response_format.type,'json_object');
+  assert.ok(body.messages[0].content.includes(JSON.stringify(SEMANTIC_JSON_SCHEMA.properties.context_reference)));
+  return response(JSON.stringify({...proposal,context_reference:reference}));
+ }});
+ assert.deepEqual(r.proposal.contextReference,reference);assert.equal(r.telemetry.request_count,1);
+ assert.ok(SEMANTIC_SYSTEM_PROMPT.includes(JSON.stringify(SEMANTIC_JSON_SCHEMA.properties.context_reference)));
+});
+
+test('malformed references stay rejected with value-free diagnostic categories',()=>{
+ const valid={fields:['vehicle'],evidence:'private customer sentence',confidence:.95};
+ const cases=[
+  [{},'SHAPE'],[{...valid,customer_id:'private-customer-id'},'SHAPE'],
+  [{...valid,fields:[]},'FIELDS'],[{...valid,fields:['date']},'FIELDS'],[{...valid,fields:['vehicle','vehicle']},'FIELDS'],
+  [{...valid,evidence:''},'EVIDENCE'],[{...valid,confidence:'high'},'CONFIDENCE'],[{...valid,confidence:2},'CONFIDENCE'],
+ ];
+ for(const [reference,reason] of cases){
+  assert.equal(semanticContractViolation(JSON.stringify({...proposal,context_reference:reference})),'CONTEXT_REFERENCE_'+reason);
+  assert.equal(validSemanticContract(JSON.stringify({...proposal,context_reference:reference})),false);
+ }
+ for(const reference of [null,valid])assert.equal(validSemanticContract(JSON.stringify({...proposal,context_reference:reference})),true);
+});
 
 test('live REQUEST_SPAN_COUNT regression: portable generation and legacy decoding preserve bounded job cardinality',()=>{
  const schema=z.fromJSONSchema(SEMANTIC_JSON_SCHEMA);

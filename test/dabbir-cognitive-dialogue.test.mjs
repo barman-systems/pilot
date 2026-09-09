@@ -5,6 +5,18 @@ import {ids} from './fixtures/understanding/cases.mjs';
 import {probeCognitiveDialogue,cognitiveEvaluationEnvironment} from '../api/_dabbir-cognitive-probe.js';
 const proposal=intent=>({intent,action:intent==='SERVICE_DISCOVERY'?'SERVICE_MENU':'REPLY',confidence:.99,riskLevel:'LOW',entities:[]});
 
+for(const intent of ['SUPPORT','SERVICE_DISCOVERY','PRICING'])for(const role of ['NEW_REQUEST','CONTINUATION','ANSWER_TO_PENDING_QUESTION','SIDE_QUESTION'])test(`new explicit service goal survives drifting metadata: ${intent}/${role}`,async()=>{
+ const r=await probeCognitiveDialogue({interpret:async({message})=>({provider:'test-provider',model:'test-model',proposal:{...proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':intent),dialogue:{message_role:role,evidence:message,invalidated_fields:[]}}})});
+ assert.equal(r.ok,true,JSON.stringify(r.turns));
+ assert.equal(r.turns[1].goal,'BOOK_SERVICE');assert.equal(r.turns[1].pending_field,'vehicle');
+ assert.equal(r.turns[2].pending_field,'location');assert.equal(r.checks.no_execution,true);
+});
+
+test('a grounded first service goal cannot bypass the high-risk handoff gate',async()=>{
+ const r=await probeCognitiveDialogue({interpret:async({message})=>({provider:'test-provider',model:'test-model',proposal:{...proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':'SUPPORT'),riskLevel:message==='شو خدماتكم'?'LOW':'HIGH'}})});
+ assert.equal(r.ok,false);assert.equal(r.turns.at(-1).action,'HANDOFF');assert.equal(r.checks.no_execution,true);
+});
+
 test('history-derived goal outranks a drifting intent label on the first turn',async()=>{
  const r=await probeCognitiveDialogue({scenario:'context_references',interpret:async()=>({provider:'test-provider',model:'test-model',proposal:proposal('SUPPORT')})});
  assert.equal(r.ok,true,JSON.stringify(r.checks));
