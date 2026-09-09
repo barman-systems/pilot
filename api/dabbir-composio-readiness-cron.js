@@ -15,6 +15,10 @@ const SESSION_RE=/^trs_[A-Za-z0-9_-]{6,160}$/;
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const sameSecret=(left,right)=>{const a=Buffer.from(String(left||'')),b=Buffer.from(String(right||''));return a.length===b.length&&a.length>0&&timingSafeEqual(a,b)};
 
+export function composioReadinessEnabled(env=process.env){
+  return /^(1|true|yes|on)$/i.test(clean(env.DABBIR_COMPOSIO_ENABLED,16));
+}
+
 export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);
   if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
@@ -95,10 +99,14 @@ function json(res,status,body){res.statusCode=status;res.setHeader('content-type
 export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'});
   if(!cronAuthMode(req))return json(res,401,{ok:false,error:'UNAUTHORIZED'});
+  if(!composioReadinessEnabled()){
+    console.info('dabbir_composio_bootstrap_disabled',{active:false});
+    return json(res,200,{ok:true,active:false,state:'disabled'});
+  }
   try{
     const result=await verifyGoogleSheetsReadOnlySession();
     console.log('dabbir_composio_bootstrap_ready',{toolkit:result.toolkit,mode:result.mode,session_verified:true,tool_count:result.toolCount});
-    return json(res,200,{ok:true,toolkit:result.toolkit,mode:result.mode,session_verified:true,tool_count:result.toolCount});
+    return json(res,200,{ok:true,active:true,toolkit:result.toolkit,mode:result.mode,session_verified:true,tool_count:result.toolCount});
   }catch(error){
     const code=clean(error?.code||error?.message||'COMPOSIO_BOOTSTRAP_FAILED',120);
     console.error('dabbir_composio_bootstrap_failed',{code,provider_status:Number(error?.providerStatus)||null});
