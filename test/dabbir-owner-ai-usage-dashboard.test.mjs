@@ -5,7 +5,7 @@ import { normalizeAiUsageForUi } from '../api/owner-dashboard-data.js';
 
 const ui=fs.readFileSync(new URL('../api/owner-command-center.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/owner-dashboard-data.js',import.meta.url),'utf8');
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260909032000_owner_ai_usage_dashboard_v1.sql',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260909032306_owner_ai_usage_dashboard_v1.sql',import.meta.url),'utf8');
 
 test('AI usage normalization preserves unknown values instead of inventing zero cost',()=>{
   const value=normalizeAiUsageForUi({measurement_state:'PARTIAL',conversations:3,messages:173,unpriced_operations:24,known_cost_aed:null,providers:[{provider:'groq',ai_requests:2,known_cost_aed:null,unpriced_operations:1}]});
