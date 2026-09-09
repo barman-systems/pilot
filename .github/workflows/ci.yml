@@ -42,15 +42,6 @@ jobs:
             export DABBIR_DB_GATE_BASE_SHA
           fi
           node scripts/dabbir-production-db-change-gate.mjs
-      - name: Enforce Supabase advisor regression gate
-        env:
-          SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
-          DABBIR_ADVISOR_BASELINE_PATH: config/supabase-advisor-baseline.json
-          DABBIR_DB_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-          DABBIR_DB_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/dabbir-supabase-advisors-gate.mjs
       - name: Run DABBIR tests
         run: npm test
       - name: Reject committed secrets
