@@ -23,7 +23,6 @@ const report = {
   cleanup: [],
 };
 
-let oidcToken = null;
 let qaA = null;
 let qaB = null;
 let businessA = null;
@@ -115,7 +114,7 @@ const sessionA = new Session('owner-a');
 const sessionB = new Session('owner-b');
 
 async function getGitHubOidcToken() {
-  if (oidcToken) return oidcToken;
+  // Cleanup must not reuse the bootstrap token after a long isolation run.
   const requestUrl = String(process.env.ACTIONS_ID_TOKEN_REQUEST_URL || '').trim();
   const requestToken = String(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN || '').trim();
   assert(requestUrl && requestToken, 'GITHUB_ACTIONS_OIDC_CONTEXT_REQUIRED');
@@ -124,8 +123,7 @@ async function getGitHubOidcToken() {
     headers: { authorization: `Bearer ${requestToken}`, accept: 'application/json' },
   });
   assert(result.ok && result.json?.value, `GITHUB_OIDC_ISSUE_FAILED_${result.status}`);
-  oidcToken = String(result.json.value);
-  return oidcToken;
+  return String(result.json.value);
 }
 
 async function qaControl(action, runId, body = {}) {
