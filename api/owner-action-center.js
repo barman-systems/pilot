@@ -295,7 +295,10 @@ export default async function handler(req,res){
   }catch(error){
     const status=Number(error?.status||500);
     const safe=[400,401,403,404,409,429,502,503].includes(status)?status:500;
-    console.error('dabbir_owner_action_center_failed',{error:String(error?.message||'OWNER_ACTION_CENTER_FAILED').slice(0,140),status:safe});
+    const event={error:String(error?.message||'OWNER_ACTION_CENTER_FAILED').slice(0,140),status:safe};
+    if([400,401,403,404,409].includes(safe))console.info('dabbir_owner_action_center_rejected',event);
+    else if(safe===429)console.warn('dabbir_owner_action_center_rate_limited',event);
+    else console.error('dabbir_owner_action_center_failed',event);
     return json(res,safe,{ok:false,error:String(error?.message||'OWNER_ACTION_CENTER_FAILED').slice(0,140),detail:error?.detail||undefined});
   }
 }
