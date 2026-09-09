@@ -15,7 +15,7 @@ declare
   v_result jsonb;
 begin
   perform dabbir_private.platform_assert_permission(p_actor_user_id,'manage_customers');
-  if not dabbir_private.platform_effective_capability(p_actor_user_id,'payments.view') then
+  if coalesce(dabbir_private.platform_effective_capability(p_actor_user_id,'payments.view'),false) is not true then
     raise exception 'DABBIR_FINANCIAL_ACCESS_REQUIRED';
   end if;
 
@@ -52,7 +52,7 @@ begin
       'known_cost_aed',ai.known_cost_aed,
       'known_cost_usd',ai.known_cost_usd,
       'unpriced_operations',ai.unpriced_operations,
-      'measurement_state',case when ai.unpriced_operations>0 then 'PARTIAL' else 'COMPLETE' end
+      'measurement_state',case when ai.unpriced_operations>0 then 'PARTIAL' when ai.ai_requests=0 then 'NO_METERED_AI' else 'COMPLETE' end
     ),
     'subscriptions',jsonb_build_object(
       'web_billing_environment',v_web_environment,
@@ -85,7 +85,7 @@ declare
   v_result jsonb;
 begin
   perform dabbir_private.platform_assert_permission(p_actor_user_id,'manage_customers');
-  if not dabbir_private.platform_effective_capability(p_actor_user_id,'payments.view') then
+  if coalesce(dabbir_private.platform_effective_capability(p_actor_user_id,'payments.view'),false) is not true then
     raise exception 'DABBIR_FINANCIAL_ACCESS_REQUIRED';
   end if;
   if not exists(select 1 from public.dabbir_user_accounts where user_id=p_target_user_id) then
