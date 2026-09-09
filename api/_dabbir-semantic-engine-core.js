@@ -225,7 +225,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
       if(['delivery_mode','vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp,{...(confirmedKey==='delivery_mode'?{service_id:valueOf(s,'service')}:{})});
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
     }
-    if(valueOf(s,'service') && s.goal==='UNKNOWN' && s.intent==='SUPPORT'){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
+    if(valueOf(s,'service') && s.goal==='UNKNOWN' && s.intent==='SUPPORT' && !c.cognitive_read_question){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
     const bareDateChoice=previous?.clarification_entity==='date' && /^[123]$/.test(t) && (!c.pending_state?.pending_action || c.pending_state.pending_action==='none');
     const isBareChoice=/^[123]$/.test(t) && c.pending_state?.pending_action==='choose_slot';
     const d=parseDate(t,today),time=(isBareChoice||bareDateChoice)?null:parseTime(raw,s);

@@ -1,5 +1,17 @@
 # Cognitive dialogue repair — 2026-09-09
 
+## Live service inquiry and presentation continuity — 13:52 UTC
+
+Production validation of #674 did not establish strict-format reliability: Groq returned 400 for one request and HTTP 200 with an application-invalid contract for another. Keep these failures visible. Record fixed contract failure categories without output text, and allow exactly one retry in the previously supported JSON-object format after strict-format rejection. Both formats pass the identical application validator; this is transport-format compatibility, not an authority fallback. The interpreter's existing total deadline and four-request ceiling still apply. Do not retry authentication, quota or network failures this way.
+
+**Root cause:** An actual customer asked `شو خدماتكم`, then `غسيل عادي كم الوقت؟`, then `3`. The two price lists were provider-verified READ, but both older batches were superseded by the next inbound before the post-send pending-state acknowledgement finished. The saved ordered menu remained `presented:false`, so the ordinal had no verified referent. The application correctly refused to guess, but delivery proof and dialogue state were unnecessarily coupled to the old batch's execution lock.
+
+**Why the existing architecture failed:** Service inquiry only exposes catalog/pricing/approved knowledge actions, despite already loading service duration. It has no structured facet for the customer's specific service question. Separately, a delivered read-only menu can outlive the turn that displayed it; its proof should not require a superseded turn to regain execution authority.
+
+**Change and generalization:** Stamp the staged ordered service presentation with server-owned batch/version/branch provenance. On the next authorized context load, recover only an unexpired menu whose exact outbound key has a SENT or provider-verified DELIVERED/READ receipt in the same business, conversation, customer and branch. Do not mutate the old batch, refresh expiry, recover booking approvals, parse a menu from text, or weaken supersession checks. Preserve original ordinal positions when a catalog item becomes unavailable. Add a structured service-question facet that reads price/duration from the current scoped catalog; it cannot supply values or execute an action. Side inquiries preserve the booking target.
+
+**Verification and regression prevention:** Reproduce the superseded-after-delivery race with real SQL and a second batch. Deny unverified/foreign/expired/wrong-key receipts and unrelated pending actions; prove an old batch still cannot execute. Exercise service removal without ordinal renumbering, duration/price inquiries, missing values and active-booking side questions. Production diagnostics must use the actual interpreter and disclose their synthetic scope; live customer delivery is a separate evidence level.
+
 ## Baseline and root cause
 
 Live GitHub main and production at 11:54 UTC: `9b949c37d3f3ff2d6a01c2d565e6502c5e6da189`, deployment `dpl_ASBm8dcpLqp6iKRiSyDzkNCdUHXA`.
