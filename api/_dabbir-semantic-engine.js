@@ -128,8 +128,10 @@ export function understandConversation(args){
   const prepared=prepareCognitiveTurn(args);
   const result=cognitiveReduce(prepared.args,understandLegacyConversation);
   const transition=finalizeCognitiveTransition(prepared.transition,result.state,result.decision);
-  result.state.cognition={...(result.state.cognition||{}),...transition,version:2};
-  result.state.cognitive_transition_version=2;
+  const transitionVersion=transition?.version||2;
+  const {version:_transitionVersion,...transitionFields}=transition||{};
+  result.state.cognition={...(result.state.cognition||{}),...transitionFields,transition_version:transitionVersion};
+  result.state.cognitive_transition_version=transitionVersion;
   return result;
 }
 
