@@ -90,6 +90,7 @@ async function recordUsage({businessId,operationKey,result,attempts,usage,actual
 export async function generateDABBIRAiReply(args={}){
   const identity=contextIdentity(args.meteringContext||args.businessContext);
   const attempts=[];
+  const skippedAttempts=[];
   let successfulPayload=null;
   let successfulResponse=null;
   const upstreamFetch=args.fetchImpl||fetch;
@@ -111,6 +112,10 @@ export async function generateDABBIRAiReply(args={}){
     const started=Date.now();
     let response;
     try{response=await upstreamFetch(url,nextOptions);}catch(error){
+      if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED'].includes(error?.code)){
+        skippedAttempts.push({provider:endpoint===GATEWAY_ENDPOINT?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown',reason:error.code});
+        throw error;
+      }
       attempts.push({endpoint:endpoint===GATEWAY_ENDPOINT?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown',status:0,duration_ms:Date.now()-started,outcome:'NETWORK_ERROR'});
       throw error;
     }
@@ -132,7 +137,7 @@ export async function generateDABBIRAiReply(args={}){
   const hasUsage=reportedUsage&&[reportedUsage.prompt_tokens??reportedUsage.input_tokens,reportedUsage.completion_tokens??reportedUsage.output_tokens].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0);
   const actualCostUsd=coreResult?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
   const result={...coreResult,telemetry:{final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
-    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms}))}};
+    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms})),skipped_attempts:skippedAttempts}};
   if(!result?.ok){
     // Fixed categories and numeric statuses only: no upstream body, URL, IDs or credentials.
     console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),configured_attempts:attempts.length});

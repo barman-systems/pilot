@@ -48,8 +48,15 @@ function providerSemanticContext(context,referenceTime) {
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
-    if(++attempts>4 || Date.now()>=deadline) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
-    const signal=AbortSignal.timeout(Math.max(1,deadline-Date.now()));
+    const remaining=deadline-Date.now();
+    if(attempts>=4 || remaining<=0) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
+    // Direct-provider schema repair shares the four-request budget. Reserve one
+    // request and the existing gateway primary deadline for the already-enabled
+    // final fallback, instead of exhausting both before it can be reached.
+    const reserve=env.VERCEL_ENV&&String(url)!=='https://ai-gateway.vercel.sh/v1/chat/completions'?6000:0;
+    if(reserve&&(attempts>=3||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
+    attempts++;
+    const signal=AbortSignal.timeout(Math.max(1,remaining-reserve));
     return fetchImpl(url,{...options,signal:options.signal?AbortSignal.any([signal,options.signal]):signal});
   };
   const result=await generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
