@@ -14,6 +14,10 @@ Production validation of #674 did not establish strict-format reliability: Groq 
 
 A further regression reproduced a stale menu overriding the current question: after a full natural-language booking request selected a service, `choose_service` remained alive because only exact/ordinal catalog selections consumed it. A later numeric answer selected a different service from the old menu. Consume the menu whenever a scoped active journey has a verified service, and prevent an older menu ordinal from outranking an active non-service question. Exact service corrections still pass the normal catalog/contract path. This is tested as a five-turn conversation before and after the change.
 
+The live definition of `dabbir_whatsapp_finalize_outbound` revealed the deeper receipt mismatch: successful finalization writes PROVIDER_ACCEPTED, a message ID, finalized_at, and an outbound event whose evidence binds the reservation to the Meta messages API acceptance. The new cognitive gate incorrectly treated all PROVIDER_ACCEPTED rows as unfinished. The earlier SENT/DELIVERED/READ repair therefore remained incomplete and caused ordinary replies to retry until a signed status advanced. Accept finalized acceptance only when every canonical message/event/reservation binding matches. A status label or model-supplied provider ID alone remains insufficient. This records API acceptance, never customer delivery/read proof, and preserves current batch, revision, lock and scope requirements.
+
+The canonical finalizer test also exposed a JSONB merge defect: coalesce does not replace JSON null, so adding presentation fields to a null pending_question produced an array rather than an object. Normalize that slot to an object by checking jsonb_typeof before merging; preserve valid question objects. The regression asserts the resulting field and presentation state, not just RPC success.
+
 ## Baseline and root cause
 
 Live GitHub main and production at 11:54 UTC: `9b949c37d3f3ff2d6a01c2d565e6502c5e6da189`, deployment `dpl_ASBm8dcpLqp6iKRiSyDzkNCdUHXA`.

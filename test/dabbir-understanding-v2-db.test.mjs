@@ -4,7 +4,7 @@ import {resumeQueuedGoal} from '../api/_dabbir-goal-queue.js';
 const db=new PGlite();const batch='90000000-0000-4000-8000-000000000001',lock='90000000-0000-4000-8000-000000000002',message='90000000-0000-4000-8000-000000000003',owner='10000000-0000-4000-8000-000000000001',otherOwner='10000000-0000-4000-8000-000000000002';
 const rpc=async(name,args)=>{const r=await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args);return r.rows[0].result;};
 const load=()=>rpc('dabbir_semantic_load_v2',[batch,lock]);
-async function reset(){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.role','service_role',false)");await db.exec('delete from dabbir_whatsapp_outbound_reservations;delete from dabbir_ai_understanding_events;delete from dabbir_customer_memory;delete from dabbir_ai_action_ledger;delete from dabbir_appointments;delete from dabbir_ai_conversation_state;delete from dabbir_message_batch_items;delete from dabbir_messages;delete from dabbir_message_batches;delete from dabbir_handoffs;');
+async function reset(){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.role','service_role',false)");await db.exec('delete from dabbir_whatsapp_event_ledger;delete from dabbir_whatsapp_outbound_reservations;delete from dabbir_ai_understanding_events;delete from dabbir_customer_memory;delete from dabbir_ai_action_ledger;delete from dabbir_appointments;delete from dabbir_ai_conversation_state;delete from dabbir_message_batch_items;delete from dabbir_messages;delete from dabbir_message_batches;delete from dabbir_handoffs;');
  await db.query("update dabbir_conversations set state='ai_active',understanding_revision=0 where id=$1",[ids.conversation]);
  await db.query('insert into dabbir_messages(id,business_id,conversation_id) values($1,$2,$3)',[message,ids.business,ids.conversation]);
  await db.query('insert into dabbir_message_batches(id,business_id,conversation_id,customer_id,lock_token) values($1,$2,$3,$4,$5)',[batch,ids.business,ids.conversation,ids.customer,lock]);
@@ -27,6 +27,11 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.exec('alter table public.dabbir_whatsapp_outbound_reservations add column provider_verified boolean not null default false');
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909134020_dabbir_cognitive_delivery_progress_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909142432_dabbir_service_presentation_receipts_v1.sql',import.meta.url),'utf8'));
+ await db.exec(`alter table public.dabbir_whatsapp_outbound_reservations add column finalized_at timestamptz,add column provider_status text;
+ alter table public.dabbir_messages add column intent text;
+ alter table public.dabbir_whatsapp_event_ledger alter column id set default gen_random_uuid(),add column business_id uuid,add column connection_id uuid,add column event_key text,add column direction text,add column event_type text,add column provider_message_id text,add column conversation_id uuid,add column message_id uuid,add column provider_status text,add column provider_verified boolean,add column occurred_at timestamptz,add column evidence jsonb;`);
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260903105200_dabbir_whatsapp_ai_outbound_handoff_guard_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909143719_dabbir_cognitive_finalized_acceptance_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -92,6 +97,33 @@ test('database: next turn recovers an exact delivered menu without restoring sup
  }
  await db.query("update dabbir_ai_conversation_state set pending_action='choose_slot'");assert.equal((await nextLoad()).verified_service_presentation,null);
  await db.query("update dabbir_ai_conversation_state set pending_action='choose_service',expires_at=now()-interval '1 second'");assert.equal((await nextLoad()).verified_service_presentation,null);
+});
+
+test('canonical outbound finalization proves API acceptance immediately, without inventing delivery',async()=>{
+ await reset();await commit();
+ const reservation=(await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,sender_type,body,state) values($1,$2,$3,'ai','Which service?','SENDING') returning id",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify'])).rows[0].id;
+ const args=[batch,lock,1,'api-acceptance-receipt','service_question_target'];
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ const receipt=(await db.query('select * from public.dabbir_whatsapp_finalize_outbound($1,$2)',[reservation,'api-acceptance-receipt'])).rows[0];
+ assert.equal(receipt.reservation_state,'PROVIDER_ACCEPTED');assert.ok(receipt.message_id);assert.ok(receipt.event_id);
+ assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
+ const outbound=(await db.query('select * from dabbir_whatsapp_outbound_reservations where id=$1',[reservation])).rows[0];
+ assert.equal(outbound.provider_verified,false);assert.equal(outbound.state,'PROVIDER_ACCEPTED');
+ assert.equal((await load()).semantic_state.cognition.pending_question.presentation,'PROVIDER_ACCEPTED');
+ const event=(await db.query('select * from dabbir_whatsapp_event_ledger where id=$1',[receipt.event_id])).rows[0];
+ for(const [column,invalid] of [['business_id',ids.other],['conversation_id',ids.other],['connection_id',ids.other],['provider_message_id','unrelated'],['event_key','outbound:unrelated'],['direction','inbound'],['message_id',message],['evidence',{source:'meta_messages_api',provider_accepted:true,reservation_id:ids.other}]]){
+  await db.query(`update dabbir_whatsapp_event_ledger set ${column}=$1 where id=$2`,[invalid,receipt.event_id]);
+  await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/,column);
+  await db.query(`update dabbir_whatsapp_event_ledger set ${column}=$1 where id=$2`,[event[column],receipt.event_id]);
+ }
+ await db.query('update dabbir_messages set simulated=true where id=$1',[receipt.message_id]);
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ await db.query('update dabbir_messages set simulated=false where id=$1',[receipt.message_id]);
+ await db.query('update dabbir_whatsapp_outbound_reservations set finalized_at=null where id=$1',[reservation]);
+ await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select dabbir_private.understanding_outbound_receipt_verified_v1($1)',[reservation]),/permission denied/);
+ await db.exec('reset role');
 });
 test('live receipt regression: verified DELIVERED/READ advances presentation while unsafe states stay denied',async()=>{
  await reset();await commit(understandConversation({context:context({batch_messages:[{body:'أبي غسيل'}]}),now:evalNow}).state);
