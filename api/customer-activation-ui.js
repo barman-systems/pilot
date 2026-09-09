@@ -80,6 +80,22 @@ const script=String.raw`(()=>{
   }
 
   function openScreen(screen){if(typeof showScreen==='function')showScreen(screen)}
+  let pressedBusiness=null,deferredRender=false;
+  function finishActivationPress(){
+    pressedBusiness=null;
+    if(deferredRender){deferredRender=false;setTimeout(render,0)}
+  }
+  // Keep the pointer target alive until its click is delivered. Background
+  // setup reads must not replace a button between pointerdown and click.
+  document.addEventListener?.('pointerdown',event=>{
+    if(event.button===0&&event.target.closest?.('#dabbirActivation'))pressedBusiness=workspace?.business?.id||null;
+  },true);
+  document.addEventListener?.('click',finishActivationPress);
+  document.addEventListener?.('pointercancel',finishActivationPress);
+  document.addEventListener?.('pointerup',event=>{
+    if(!event.target.closest?.('#dabbirActivation'))finishActivationPress();
+  });
+  window.addEventListener?.('blur',finishActivationPress);
   function ensure(){
     const dash=q('#screen-dashboard');
     if(!dash)return null;
@@ -140,6 +156,8 @@ const script=String.raw`(()=>{
     const id=workspace?.business?.id||null;
     syncBusinessScope(id);
     const panel=ensure();if(!panel)return;
+    if(pressedBusiness&&pressedBusiness===id){deferredRender=true;return}
+    pressedBusiness=null;
     if(!id){panel.innerHTML='';return}
     const t=copy();
     const first=firstWorkStep();
