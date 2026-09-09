@@ -34,7 +34,7 @@ export const platformPnlScript=String.raw`(()=>{
   function rows(items,kind){const t=T();if(!Array.isArray(items)||!items.length)return '<div class="dabbirPnlNotice">'+esc(t.none)+'</div>';if(kind==='business')return '<div class="dabbirPnlTable"><table><thead><tr><th>'+esc(t.business)+'</th><th>'+esc(t.bRevenue)+'</th><th>'+esc(t.bAi)+'</th><th>'+esc(t.bDirect)+'</th><th>'+esc(t.bShared)+'</th><th>'+esc(t.contribution)+'</th><th>'+esc(t.unpriced)+'</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+esc(r.name||r.business_id)+'</td><td>'+esc(aed(r.revenue_aed))+'</td><td>'+esc(aed(r.ai_cost_aed))+'</td><td>'+esc(aed(r.direct_other_cost_aed))+'</td><td>'+esc(aed(r.allocated_shared_cost_aed))+'</td><td class="'+(Number(r.known_contribution_aed)<0?'dabbirPnlNeg':'')+'">'+esc(aed(r.known_contribution_aed))+'</td><td>'+esc(num(r.unpriced_ai_operations))+'</td></tr>').join('')+'</tbody></table></div>';
     return '<div class="dabbirPnlTable"><table><thead><tr><th>'+(kind==='provider'?esc(t.providers):esc(t.categories))+'</th><th>'+esc(t.total)+'</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+esc(kind==='provider'?r.provider:r.category)+'</td><td>'+esc(aed(r.amount_aed))+'</td></tr>').join('')+'</tbody></table></div>';
   }
-  function render(){const el=ensure();if(!el)return;const t=T();if(denied||capability!=='allowed'){el.hidden=true;return}el.hidden=false;if(loading){el.innerHTML='<div class="dabbirPnlNotice">'+esc(t.loading)+'</div>';return}if(error||!data){el.innerHTML='<div class="dabbirPnlNotice warn">'+esc(t.unavailable)+'</div>';return}const p=data,c=p.costs||{},r=p.revenue||{},complete=p.measurement_state==='COMPLETE';const missing=Array.isArray(p.missing_sources)?p.missing_sources:[];
+  function render(){const el=ensure();if(!el)return;const t=T();if(denied||capability==='unknown'||capability==='probing'){el.hidden=true;return}el.hidden=false;if(capability==='error'||error||!data){el.innerHTML='<div class="dabbirPnlNotice warn">'+esc(t.unavailable)+'</div>';return}if(loading){el.innerHTML='<div class="dabbirPnlNotice">'+esc(t.loading)+'</div>';return}const p=data,c=p.costs||{},r=p.revenue||{},complete=p.measurement_state==='COMPLETE';const missing=Array.isArray(p.missing_sources)?p.missing_sources:[];
     el.innerHTML='<div class="dabbirPnlHead"><div><h2>'+esc(t.title)+'</h2><p>'+esc(t.desc)+'</p></div><div class="dabbirPnlTools"><label>'+esc(t.month)+' <input id="dabbirPnlMonth" type="month" value="'+esc(selectedMonth)+'"></label><button id="dabbirPnlRefresh" type="button">'+esc(t.refresh)+'</button></div></div><div class="dabbirPnlGrid">'+
       '<div class="dabbirPnlStat"><span>'+esc(t.revenue)+'</span><b>'+esc(aed(r.known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.ai)+'</span><b>'+esc(aed(c.ai_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.other)+'</span><b>'+esc(aed(c.other_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.total)+'</span><b>'+esc(aed(c.total_known_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.known)+'</span><b>'+esc(aed(p.known_operating_result_aed))+'</b></div><div class="dabbirPnlStat"><span>'+esc(t.net)+'</span><b>'+esc(complete?aed(p.net_profit_aed):'—')+'</b></div></div>'+ 
       '<div class="dabbirPnlNotice '+(complete?'':'warn')+'"><b>'+esc(complete?t.complete:t.partial)+'</b> · '+esc(t.owner)+(complete?'':'<br>'+esc(t.notFinal))+'</div>'+ 
@@ -44,16 +44,17 @@ export const platformPnlScript=String.raw`(()=>{
   }
   async function probeCapability(){
     if(capability==='allowed')return true;
-    if(capability==='denied')return false;
+    if(capability==='denied'||capability==='error')return false;
     if(capabilityPromise)return capabilityPromise;
-    capability='probing';
+    capability='probing';error=false;
     capabilityPromise=(async()=>{
       try{
         const response=await fetch('/api/owner-finance?action=capability',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
         const payload=await response.json().catch(()=>null);
-        if(!response.ok||!payload?.ok||payload.allowed!==true){capability='denied';denied=true;data=null;return false}
-        capability='allowed';denied=false;return true;
-      }catch{capability='denied';denied=true;data=null;return false}
+        if(response.ok&&payload?.ok&&payload.allowed===true){capability='allowed';denied=false;error=false;return true}
+        if(response.ok&&payload?.ok&&payload.allowed===false){capability='denied';denied=true;error=false;data=null;return false}
+        capability='error';denied=false;error=true;data=null;return false;
+      }catch{capability='error';denied=false;error=true;data=null;return false}
     })();
     try{return await capabilityPromise}finally{capabilityPromise=null;render()}
   }
