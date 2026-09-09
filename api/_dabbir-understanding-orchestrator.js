@@ -13,10 +13,7 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
   tool_selection:d.reasonCode,model_calls:s.model_calls||0,planner_failure_code:s.planner_failure_code||null,
   semantic_interpreter:s.semantic_interpreter||'deterministic',semantic_override:s.semantic_ai_override?.to||null,
-  session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING',
-  activity_type:s.service_type||null,service_id:s.service_id||null,branch_id:s.scope?.branch_id||null,
-  activity_contract_version:s.activity_contract_version||null,supported_actions:s.supported_actions||[],
-  required_entities:s.required_entities||[],delivery_mode:s.delivery_mode||null});
+  session_reset:s.session_reset===true,greeting:d.reasonCode==='GREETING'||d.reasonCode==='NEW_SESSION_GREETING'});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));

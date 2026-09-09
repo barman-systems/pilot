@@ -2,26 +2,6 @@
 // A provider can propose facts; it cannot edit this contract or authorize a tool.
 const arr = v => Array.isArray(v) ? v : [];
 const uniq = v => [...new Set(v)];
-const OPERATIONAL_ACTIONS = new Set(['CHECK_AVAILABILITY','CREATE_BOOKING','RESCHEDULE_BOOKING','CANCEL_BOOKING']);
-// The service contract is authority. A model proposal and a registry label are not.
-export function activityActionAuthority(context,state,action) {
-  if(!OPERATIONAL_ACTIONS.has(action))return {allowed:true};
-  const profile=context?.activity_profile,scope=state?.scope;
-  if(!scope || profile?.source!=='DATABASE_FACT' || profile.version!==1 ||
-    profile.business_id!==context.business?.id || profile.branch_id!==context.conversation?.branch_id ||
-    scope.business_id!==profile.business_id || scope.branch_id!==profile.branch_id ||
-    scope.customer_id!==context.customer?.id || scope.conversation_id!==context.conversation?.id)
-    return {allowed:false,reason:'ACTIVITY_PROFILE_UNVERIFIED'};
-  const appointment=arr(context.upcoming_appointments).find(a=>a.id===state.entities?.appointment?.value &&
-    a.business_id===profile.business_id && a.branch_id===profile.branch_id && (!a.customer_id||a.customer_id===scope.customer_id));
-  const serviceId=['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(action)?appointment?.service_id:state.entities?.service?.value;
-  const contract=arr(profile.services).find(s=>s.service_id===serviceId && s.business_id===profile.business_id && s.branch_id===profile.branch_id);
-  if(!contract)return {allowed:false,reason:'ACTIVITY_SERVICE_CONTEXT_UNVERIFIED'};
-  if(!Array.isArray(contract.supported_actions) || !contract.supported_actions.every(a=>typeof a==='string'))
-    return {allowed:false,reason:'ACTIVITY_ACTION_CONTRACT_INVALID'};
-  if(!contract.supported_actions.includes(action))return {allowed:false,reason:'ACTIVITY_ACTION_NOT_SUPPORTED'};
-  return {allowed:true,service_id:serviceId,activity_type:contract.activity_type,contract_version:contract.contract_version};
-}
 export const DELIVERY_MODES = Object.freeze(['AT_BUSINESS','AT_CUSTOMER','MOBILE','REMOTE','PICKUP','DELIVERY','HYBRID']);
 export const FACT_SOURCES = Object.freeze(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED']);
 export const normalizeDeliveryMode = v => ({AT_BRANCH:'AT_BUSINESS',HOME:'AT_CUSTOMER'}[String(v||'').toUpperCase()] || String(v||'').toUpperCase());
@@ -106,7 +86,6 @@ export function applyActivityRequirements(state,context,now=new Date()) {
   state.activity_schema_version=contract?.schema_version||null;
   state.activity_contract_version=contract?.contract_version||null;
   state.activity_instance_id=contract?.activity_instance_id||null;
-  state.supported_actions=arr(contract?.supported_actions).filter(a=>typeof a==='string'&&/^[A-Z_]{1,40}$/.test(a)).slice(0,12);
   state.service_id=service?.id||null;state.service_type=contract?.activity_type||null;
   state.delivery_mode=mode?.value||null;
   state.required_entities=resolution.required;state.optional_entities=resolution.optional;

@@ -7,6 +7,7 @@ export const COMPOSIO_GOOGLE_SHEETS_READ_TOOLS = Object.freeze([
   'GOOGLESHEETS_BATCH_GET',
 ]);
 
+const EXPECTED_SCHEDULE='*/5 * * * *';
 const BASE_URL='https://backend.composio.dev/api/v3.1';
 const TOOLKIT='googlesheets';
 const READINESS_USER='dabbir_readiness_google_sheets_v1';
@@ -21,7 +22,10 @@ export function composioReadinessEnabled(env=process.env){
 export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);
   if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
-  return null;
+  const production=clean(env.VERCEL_ENV,32)==='production';
+  const userAgent=clean(req.headers?.['user-agent'],120).toLowerCase();
+  const schedule=clean(req.headers?.['x-vercel-cron-schedule'],120);
+  return production&&userAgent==='vercel-cron/1.0'&&schedule===EXPECTED_SCHEDULE?'vercel_schedule':null;
 }
 
 function fail(code,status=503,extra={}){return Object.assign(new Error(code),{code,status,...extra})}

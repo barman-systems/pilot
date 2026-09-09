@@ -15,7 +15,6 @@ async function commit(state=bookingState(),expected=0){const l=await load();stat
 before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding/database.sql',import.meta.url),'utf8'));await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('./fixtures/understanding/activity-database.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908155841_dabbir_activity_intelligence_v1.sql',import.meta.url),'utf8'));
- await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909083226_dabbir_activity_action_authority_v1.sql',import.meta.url),'utf8'));
  await db.exec(`alter table public.dabbir_message_batches add column dispatch_token uuid,add column channel_type text default 'whatsapp',add column attempt_count integer default 1,add column last_error text,add column next_attempt_at timestamptz,add column processed_at timestamptz,add column updated_at timestamptz default now();
  alter table public.dabbir_conversations add column updated_at timestamptz default now();
  alter table public.dabbir_handoffs add column id uuid default gen_random_uuid(),add column customer_id uuid,add column route_class text,add column reason text,add column metadata jsonb,add column created_at timestamptz default now(),add column priority integer,add column routing_strategy text,add column summary text,add column attempted_actions jsonb,add column unresolved_items jsonb;`);
@@ -158,45 +157,3 @@ test('incident regression DB: failure checkpoint preserves facts but grants no e
 test('incident regression DB: checkpoint cannot replace a committed decision',async()=>{await reset();await commit();await assert.rejects(checkpoint(),/SEMANTIC_DECISION_ALREADY_COMMITTED/);});
 test('incident regression DB: checkpoint rejects superseded and human-owned turns',async()=>{await reset();await db.query("update dabbir_conversations set state='action_required'");await assert.rejects(checkpoint(),/AI_BLOCKED_BY_HUMAN_TAKEOVER/);await reset();const l=await load();await db.query('insert into dabbir_messages(business_id,conversation_id) values($1,$2)',[ids.business,ids.conversation]);await assert.rejects(rpc('dabbir_semantic_checkpoint_failure_v1',[batch,lock,l.version,l.message_revision,bookingState(),'AI_PLANNER_UNAVAILABLE']),/SEMANTIC_SUPERSEDED/);});
 test('incident regression DB: failover and checkpoints are inaccessible to authenticated clients',async()=>{await reset();await db.exec('set role authenticated');await assert.rejects(failover(),/permission denied/);await assert.rejects(rpc('dabbir_semantic_checkpoint_failure_v1',[batch,lock,0,0,{},'AI_PLANNER_UNAVAILABLE']),/permission denied/);await db.exec('reset role');});
-
-
-test('database: registry action restriction blocks the canonical executor and rolls back writes',async()=>{
- await activityBooking({delivery_modes:['AT_BUSINESS']});
- const before=(await db.query('select schema from dabbir_private.activity_registry_v1 where version=1')).rows[0].schema;
- try {
-  await db.query("update dabbir_private.activity_registry_v1 set schema=jsonb_set(schema,'{activities,services,supported_actions}',$1::jsonb) where version=1",[JSON.stringify(['CHECK_AVAILABILITY','HANDOFF'])]);
-  await assert.rejects(executeActivity(),/ACTIVITY_ACTION_NOT_SUPPORTED/);
-  assert.equal((await db.query('select count(*)::int n from dabbir_appointments')).rows[0].n,0);
-  assert.equal((await db.query('select count(*)::int n from dabbir_ai_action_ledger')).rows[0].n,0);
- } finally {await db.query('update dabbir_private.activity_registry_v1 set schema=$1 where version=1',[before]);}
-});
-test('database: unknown activity does not inherit generic booking permission',async()=>{
- await reset();await configureActivity({});
- await db.query("update dabbir_businesses set business_type='unconfigured_activity' where id=$1",[ids.business]);
- try {await assert.rejects(load(),/ACTIVITY_TYPE_UNCONFIGURED/);}
- finally {await db.query("update dabbir_businesses set business_type='services' where id=$1",[ids.business]);}
-});
-test('database: existing home-visit setting reaches the contract while service overrides remain authoritative',async()=>{
- await reset();await configureActivity({});
- const initial=(await load()).activity_profile.services[0];
- try {
-  await db.query('insert into public.dabbir_home_service_settings(business_id,enabled) values($1,true)',[ids.business]);
-  const enabled=(await load()).activity_profile.services[0];
-  assert.deepEqual(new Set(enabled.delivery_modes),new Set(['AT_BUSINESS','AT_CUSTOMER']));
-  assert.notEqual(enabled.contract_version,initial.contract_version);
-  await configureActivity({delivery_modes:['AT_BUSINESS']});
-  assert.deepEqual((await load()).activity_profile.services[0].delivery_modes,['AT_BUSINESS']);
- } finally {await db.query('delete from public.dabbir_home_service_settings where business_id=$1',[ids.business]);await configureActivity({});}
-});
-test('database: an activity composed from existing capabilities can be added through registry data',async()=>{
- await reset();
- const before=(await db.query('select schema from dabbir_private.activity_registry_v1 where version=1')).rows[0].schema;
- try {
-  await db.query("update dabbir_private.activity_registry_v1 set schema=jsonb_set(schema,'{activities,equipment_visit}',schema#>'{activities,services}') where version=1");
-  await configureActivity({activity_type:'equipment_visit',delivery_modes:['REMOTE']});
-  const loaded=await load();
-  assert.equal(loaded.activity_profile.services[0].activity_type,'equipment_visit');
-  assert.deepEqual(loaded.activity_profile.services[0].delivery_modes,['REMOTE']);
-  assert.equal(loaded.activity_profile.services[0].supported_actions.includes('CREATE_BOOKING'),true);
- } finally {await db.query('update dabbir_private.activity_registry_v1 set schema=$1 where version=1',[before]);await configureActivity({});}
-});
