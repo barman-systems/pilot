@@ -37,6 +37,21 @@ async function serviceRpc(key,name,params={}){
   return readResponse(response,'PLATFORM_ADMIN_RPC_FAILED');
 }
 
+async function requireBusinessAccess(context,targetUserId,businessId){
+  const allowed=await serviceRpc(context.key,'dabbir_platform_customer_business_access_v1',{
+    p_actor_user_id:context.user.id,
+    p_target_user_id:targetUserId,
+    p_business_id:businessId,
+  });
+  if(allowed!==true){
+    const error=new Error('BUSINESS_ACCESS_DENIED');
+    error.status=403;
+    error.detail='BUSINESS_ACCESS_DENIED';
+    throw error;
+  }
+  return true;
+}
+
 function quietCapability(res,{authenticated=false,role=null,allowed=false,serviceConfigured=false,reason=null}={}){
   return json(res,200,{
     ok:true,
@@ -92,6 +107,7 @@ function adminServiceUnavailable(res){
 function rpcError(error){
   const raw=String(error?.detail||error?.message||'').toUpperCase();
   if(raw.includes('DABBIR_FINANCIAL_ACCESS_REQUIRED'))return [403,'FINANCIAL_ACCESS_REQUIRED'];
+  if(raw.includes('DABBIR_BUSINESS_SCOPE_REQUIRED')||raw.includes('DABBIR_CUSTOMER_OUTSIDE_SCOPE')||raw.includes('BUSINESS_ACCESS_DENIED'))return [403,'BUSINESS_ACCESS_DENIED'];
   if(raw.includes('DABBIR_RECOVERY_CONFIRMATION_REQUIRED'))return [409,'RECOVERY_CONFIRMATION_REQUIRED'];
   if(raw.includes('DABBIR_RECOVERY_ACCOUNT_MUST_BE_SUSPENDED'))return [409,'RECOVERY_ACCOUNT_MUST_BE_SUSPENDED'];
   if(raw.includes('DABBIR_RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED'))return [409,'RECOVERY_EXTERNAL_RECONCILIATION_REQUIRED'];
@@ -148,6 +164,7 @@ export default async function handler(req,res){
         const businessId=uuid(singleQueryValue(req,'business_id'));
         const targetAt=String(singleQueryValue(req,'target_at')||'').trim();
         if(!targetUserId||!businessId||!targetAt||!Number.isFinite(Date.parse(targetAt)))return json(res,400,{ok:false,error:'INVALID_RECOVERY_TARGET'});
+        await requireBusinessAccess(context,targetUserId,businessId);
         const payload=await serviceRpc(context.key,'dabbir_platform_recovery_preview',{p_actor_user_id:context.user.id,p_target_user_id:targetUserId,p_business_id:businessId,p_target_at:new Date(targetAt).toISOString()});
         return json(res,200,{ok:true,preview:payload});
       }
@@ -177,6 +194,7 @@ export default async function handler(req,res){
       const targetUserId=uuid(body.user_id),businessId=uuid(body.business_id);
       const targetAt=String(body.target_at||'').trim();
       if(!targetUserId||!businessId||!targetAt||!Number.isFinite(Date.parse(targetAt)))return json(res,400,{ok:false,error:'INVALID_RECOVERY_TARGET'});
+      await requireBusinessAccess(context,targetUserId,businessId);
       const caseId=await serviceRpc(context.key,'dabbir_platform_recovery_open',{p_actor_user_id:context.user.id,p_target_user_id:targetUserId,p_business_id:businessId,p_target_at:new Date(targetAt).toISOString(),p_reason:String(body.reason||'platform owner support recovery').slice(0,500)});
       return json(res,200,{ok:true,case_id:caseId});
     }
