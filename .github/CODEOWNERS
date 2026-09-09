@@ -1,0 +1,6 @@
+# DABBIR default ownership
+* @barman-systems
+
+# High-risk surfaces
+/.github/ @barman-systems
+/supabase/ @barman-systems
