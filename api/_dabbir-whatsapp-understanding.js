@@ -24,6 +24,25 @@ export function wantsServiceMenu(value=''){
     || /(?:شو|وش|شنو|ايش|اش)\s*(?:عندكم|تقدمون|تقدموا)/i.test(normalized);
 }
 
+// High-precision scheduling classifier for common Gulf availability wording.
+// It deliberately excludes generic product availability such as "المنتج متوفر بكرة":
+// a capacity/appointment cue AND a temporal cue are both required. This is an
+// intent hint only; service, entities, permission and execution remain grounded
+// by the semantic reducer and activity gates.
+export function looksLikeBookingAvailability(value=''){
+  const normalized=textNorm(value);
+  if(!normalized)return false;
+  const temporal=/(?:^|\s)(?:اليوم|باجر|باكر|بكره|غدا|الصبح|صباح|العصر|المسا|المساء|المغرب|الليل|الفجر|today|tomorrow|morning|afternoon|evening|tonight|am|pm)(?:\s|$)/i.test(normalized)
+    || /(?:^|\s)(?:[01]?\d|2[0-3])(?::[0-5]\d)?(?:\s|$)/.test(normalized);
+  if(!temporal)return false;
+  const arabicCapacity=/(?:^|\s)(?:فاضين|فاضيين|فاضي|فاضيه)(?:\s|$)/.test(normalized)
+    || /(?:^|\s)(?:عندكم|في)\s+(?:موعد|وقت|مجال)(?:\s|$)/.test(normalized)
+    || /(?:^|\s)(?:موعد|وقت)\s+(?:متاح|فاضي)(?:\s|$)/.test(normalized);
+  const englishSchedule=/(?:^|\s)(?:any|open|available)\s+(?:slot|slots|appointment|appointments)(?:\s|$)/i.test(normalized)
+    || /(?:^|\s)(?:are\s+you\s+free|have\s+(?:a\s+)?(?:slot|appointment)|appointment\s+available)(?:\s|$)/i.test(normalized);
+  return arabicCapacity||englishSchedule;
+}
+
 export function looksLikeServiceIntent(value=''){
   const normalized=textNorm(value);
   if(!normalized)return false;
