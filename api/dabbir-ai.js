@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   }
 
   const result = req.body?.probe === 'cognitive_dialogue'
-    ? await probeCognitiveDialogue().catch(()=>({ok:false,state:'PROVIDER_ERROR',error:'COGNITIVE_PROBE_FAILED',cognitive_probe:true}))
+    ? await probeCognitiveDialogue({provider:req.body?.provider??null,scenario:req.body?.scenario??'critical'}).catch(error=>({ok:false,state:'PROVIDER_ERROR',error:/^COGNITIVE_(?:PROVIDER_NOT_ALLOWED|PROVIDER_NOT_CONFIGURED|SCENARIO_NOT_ALLOWED)$/.test(error?.message)?error.message:'COGNITIVE_PROBE_FAILED',cognitive_probe:true}))
     : req.body?.probe === 'whatsapp_semantic'
     ? await probeSemanticInterpreter().catch(error=>({ok:false,state:'PROVIDER_ERROR',error:['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID'].includes(error?.code)?error.code:'SEMANTIC_PROBE_FAILED',semantic_probe:true}))
     : await generateDABBIRAiReply({

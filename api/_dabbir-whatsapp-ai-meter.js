@@ -126,7 +126,13 @@ export async function generateDABBIRAiReply(args={}){
     return response;
   };
 
-  const result=await generateCoreReply({...args,fetchImpl:meteredFetch});
+  const startedAt=Date.now();
+  const coreResult=await generateCoreReply({...args,fetchImpl:meteredFetch});
+  const reportedUsage=successfulPayload?.usage;
+  const hasUsage=reportedUsage&&[reportedUsage.prompt_tokens??reportedUsage.input_tokens,reportedUsage.completion_tokens??reportedUsage.output_tokens].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0);
+  const actualCostUsd=coreResult?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
+  const result={...coreResult,telemetry:{final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
+    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms}))}};
   if(!result?.ok){
     // Fixed categories and numeric statuses only: no upstream body, URL, IDs or credentials.
     console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),configured_attempts:attempts.length});
@@ -135,7 +141,6 @@ export async function generateDABBIRAiReply(args={}){
   if(!identity.businessId)return result;
 
   const usage=usageFromPayload(successfulPayload||{});
-  const actualCostUsd=result?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
   const operationKey=`wa-ai-usage:${hash([identity.businessId,identity.conversationId,identity.messageTimestamp,clean(args.message,2000)].join('|')).slice(0,48)}`;
   await recordUsage({businessId:identity.businessId,operationKey,result,attempts,usage,actualCostUsd}).catch(error=>{
     console.warn('dabbir_whatsapp_ai_meter_failed',{error:clean(error?.message||error,120),provider:clean(result?.provider,80)});

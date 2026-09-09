@@ -834,6 +834,23 @@ async function runJourney() {
     return {status:probe.status,detail:JSON.stringify(evidence)};
   });
 
+  // Bounded comparative measurement once per release, not once per viewport.
+  // A failed candidate is recorded as FAIL; the existing required primary
+  // continuity gate above is unchanged. No model priority is changed here.
+  if(REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
+    report.cognitive_model_comparison=[];
+    for(const provider of ['google-gemini','groq','cloudflare-workers-ai']){
+      await step('15c_compare_'+provider,async()=>{
+        const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',provider,scenario:'correction_side_question'}});
+        const evidence={provider,status:probe.status,ok:probe.json?.ok===true,checks:probe.json?.checks||null,providers:probe.json?.providers||[],error:probe.json?.error||null,evidence_scope:probe.json?.evidence_scope||null};
+        report.cognitive_model_comparison.push(evidence);
+        console.log('COGNITIVE_MODEL_MEASUREMENT='+JSON.stringify(evidence));
+        assert(probe.ok&&evidence.ok&&evidence.providers.length>0&&evidence.providers.every(x=>x.provider===provider)&&Object.keys(evidence.checks||{}).length===11&&Object.values(evidence.checks).every(x=>x===true),'COGNITIVE_CANDIDATE_FAILED:'+provider+':'+(evidence.error||'CHECK_FAILURE'));
+        return {status:probe.status,detail:provider+' passed the fixed five-turn real-model comparison; DB and WhatsApp delivery excluded.'};
+      },{required:false});
+    }
+  }
+
   await step('16_employee_human_takeover', async () => {
     const result = await employeeSession.request('/api/chat-control', {
       method: 'POST',

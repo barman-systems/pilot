@@ -22,6 +22,14 @@ First reproduce the exact three-turn failure through the real orchestrator with 
 
 ## Acceptance limits
 
+## Model comparison and telemetry follow-up
+
+Root cause: the existing metering wrapper captures usage and request latency but discards them when a synthetic probe has no tenant ID. The provider readiness endpoint reports configuration, not comparative understanding. Add bounded telemetry to the existing interpreter result and allow only fixed cognitive scenarios against already configured providers. A comparison request isolates the requested provider so failover cannot be mistaken for that provider succeeding. No credentials are returned, no environment is mutated, no provider is added, and production model priority is unchanged. Test provider isolation, missing-cost semantics and both fixed scenarios before comparing live results.
+
+The production English iPhone owner journey failed while choosing a business: the option existed but its menu became hidden. The workspace UI exposes an enabled switch before asynchronous restore completes, and schedules overlapping initialization twice. Restore calls switchBusiness, which closes the menu and loads runtime while a user can already be selecting. Make initialization single-flight, keep the selector disabled until the authorized portfolio restore settles, and make the browser journey wait for that readiness before opening the sidebar. This fixes the initialization race without forced clicks, longer timeouts, or bypassing the actual selector. Re-run the existing real browser booking/receipt gate.
+
+The five-turn comparative case exposed a remaining dialogue defect: answering a side-price question increments the unanswered booking-field counter while recomputing the resumable journey, eventually handing off a normal conversation. An evidenced side question is not an extraction attempt. Preserve that counter for side questions while retaining the existing escalation threshold for actual failed answers. Verify repeated side questions and repeated unresolved answers separately.
+
 The first CI advisor gate rejected the private rollout table's implicit RLS default deny as `rls_enabled_no_policy`. Add an explicit restrictive deny-all policy, retaining revoked client ACLs and the postgres-owned loader. This documents and preserves the actual access boundary; it does not raise the advisor baseline or weaken a gate.
 
 The requested 98–99.5% SLOs need measured denominators; small test suites cannot establish population reliability. A live external WhatsApp journey requires an authorized test recipient and verified delivery receipts. Pending source work and missing evidence are not automatically external blockers.

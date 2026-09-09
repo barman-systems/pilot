@@ -326,7 +326,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   s.semantic_confidence=s.overall_confidence;
   s.operational_confidence=Math.min(s.overall_confidence,c.voice?Number(c.voice.transcription_confidence)||0:1);
   s.last_confirmed_facts=Object.fromEntries(Object.entries(s.entities).filter(([,f])=>supported(f)).map(([k,f])=>[k,{value:f.value,source:f.source,confidence:f.confidence}]));
-  if(s.unresolved_references.length||s.missing_fields.length){s.pending_action='CLARIFY';s.clarification_entity=s.missing_fields[0]||s.unresolved_references[0];if(detectRequirementLoop(s,previous)){s.pending_action='HANDOFF';return route('HANDOFF','REPEATED_REQUIREMENT_EXTRACTION_FAILURE');}return route('CLARIFY','MISSING_OR_AMBIGUOUS_FACT',clarification(s,c));}
+  if(s.unresolved_references.length||s.missing_fields.length){s.pending_action='CLARIFY';s.clarification_entity=s.missing_fields[0]||s.unresolved_references[0];if(detectRequirementLoop(s,previous,c.cognitive_message_role)){s.pending_action='HANDOFF';return route('HANDOFF','REPEATED_REQUIREMENT_EXTRACTION_FAILURE');}return route('CLARIFY','MISSING_OR_AMBIGUOUS_FACT',clarification(s,c));}
   if(s.intent==='CANCEL_BOOKING'){s.pending_action='CANCEL_BOOKING';return route('CANCEL_BOOKING','EXACT_APPOINTMENT_CONFIRMED');}
   if(selected){s.pending_action=s.intent==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':'CREATE_BOOKING';return route(s.pending_action,'VERIFIED_SLOT_SELECTION');}
   if(['BOOKING','RESCHEDULE_BOOKING'].includes(s.intent)){s.pending_action='CHECK_AVAILABILITY';return route('CHECK_AVAILABILITY','REQUIRED_ENTITIES_GROUNDED');}
