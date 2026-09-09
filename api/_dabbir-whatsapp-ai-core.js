@@ -1,4 +1,5 @@
 import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';
+import { retrieveDabbirKnowledge } from './_dabbir-knowledge-rag.js';
 import { runUnderstandingTurn } from './_dabbir-understanding-orchestrator.js';
 import { catalogMenuForContext, resolveCatalogService, sendMetaCatalogProducts } from './_dabbir-whatsapp-catalog.js';
 import { getPublishedBookingFlow, sendMetaBookingFlow } from './_dabbir-whatsapp-flows.js';
@@ -256,7 +257,9 @@ async function processClaim(claim){
       catch(error){if(error?.ambiguous!==true&&error?.definitive===true&&Number(error?.providerStatus)!==429)return null;throw error;}
     },
     planner:async(c,safeContext)=>{
-      const result=await interpretSemanticMessage({message:latestText(c),context:safeContext,
+      const message=latestText(c);
+      const retrieved=await retrieveDabbirKnowledge({businessId:c.business.id,query:message,rpc:serviceRpc,env:process.env,fetchImpl:fetch,limit:5});
+      const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},
         referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,
         meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});
       return result.proposal;
