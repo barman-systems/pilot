@@ -36,9 +36,10 @@ begin
       case
         when coalesce(p.metrics->>'planner_failure_code','')<>'' then 'PLANNER_FAILURE'
         when upper(coalesce(p.metrics->>'action',''))='HANDOFF' then 'HANDOFF'
-        when p.operational_confidence_value<0.65 then 'LOW_OPERATIONAL_CONFIDENCE'
         when upper(coalesce(p.metrics->>'action',''))='CLARIFY'
           and (p.clarification_count_value>=2 or p.unresolved_count_value>0) then 'CLARIFICATION_FRICTION'
+        when upper(coalesce(p.metrics->>'action',''))='CLARIFY' then null
+        when p.operational_confidence_value<0.65 then 'LOW_OPERATIONAL_CONFIDENCE'
         else null
       end as mined_failure_class
     from parsed p
