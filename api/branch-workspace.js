@@ -48,6 +48,19 @@ function idsFilter(ids){
   return clean.length?`(${clean.map(enc).join(',')})`:null;
 }
 
+function customerWorkspaceProjection(rows){
+  if(!Array.isArray(rows))return[];
+  return rows.map(row=>{
+    const metadata=row?.metadata&&typeof row.metadata==='object'&&!Array.isArray(row.metadata)?{...row.metadata}:{};
+    const canonicalPhone=String(row?.phone_e164||'').trim();
+    // customer-crm-ui v1 historically reads the phone from metadata. Keep this as a
+    // response-only compatibility projection; the durable source of truth remains
+    // dabbir_customers.phone_e164 and this value is never written back to metadata.
+    if(canonicalPhone&&!String(metadata.phone||'').trim())metadata.phone=canonicalPhone;
+    return {...row,metadata};
+  });
+}
+
 async function workspace(req,ctx){
   const businessId=safeId(singleQueryValue(req,'business_id'));
   if(!businessId)throw Object.assign(new Error('BUSINESS_ID_REQUIRED'),{status:400});
@@ -93,7 +106,7 @@ async function workspace(req,ctx){
   if(!selectedConversationId)selectedConversationId=conversations?.[0]?.id||null;
 
   const [customers,handoffs,followups,messages]=await Promise.all([
-    customerIds?rest(ctx.token,`dabbir_customers?select=id,display_name,phone_e164,lead_status,metadata,created_at,updated_at&business_id=eq.${enc(businessId)}&id=in.${customerIds}&order=updated_at.desc&limit=200`,'CUSTOMERS_LOOKUP_FAILED'):[],
+    customerIds?rest(ctx.token,`dabbir_customers?select=id,display_name,phone_e164,channel_handle,lead_status,whatsapp_display_name,display_name_source,owner_display_name_updated_at,metadata,created_at,updated_at&business_id=eq.${enc(businessId)}&id=in.${customerIds}&order=updated_at.desc&limit=200`,'CUSTOMERS_LOOKUP_FAILED'):[],
     conversationIds?rest(ctx.token,`dabbir_handoffs?select=id,conversation_id,customer_id,route_class,reason,state,priority,summary,created_at,updated_at&business_id=eq.${enc(businessId)}&conversation_id=in.${conversationIds}&order=updated_at.desc&limit=100`,'HANDOFFS_LOOKUP_FAILED'):[],
     conversationIds?rest(ctx.token,`dabbir_followups?select=id,conversation_id,customer_id,channel_type,reason,status,due_at,recommended_message,blocked_reason,created_at,updated_at&business_id=eq.${enc(businessId)}&conversation_id=in.${conversationIds}&order=updated_at.desc&limit=100`,'FOLLOWUPS_LOOKUP_FAILED'):[],
     selectedConversationId?rest(ctx.token,`dabbir_messages?select=id,conversation_id,sender_type,body,intent,simulated,created_at&business_id=eq.${enc(businessId)}&conversation_id=eq.${enc(selectedConversationId)}&order=created_at.asc&limit=100`,'MESSAGES_LOOKUP_FAILED'):[],
@@ -121,7 +134,7 @@ async function workspace(req,ctx){
     conversations:Array.isArray(conversations)?conversations:[],
     selected_conversation_id:selectedConversationId,
     messages:Array.isArray(messages)?messages:[],
-    customers:Array.isArray(customers)?customers:[],
+    customers:customerWorkspaceProjection(customers),
     appointments:Array.isArray(appointments)?appointments:[],
     handoffs:Array.isArray(handoffs)?handoffs:[],
     followups:Array.isArray(followups)?followups:[],
