@@ -21,7 +21,7 @@ export function renderOwnerCommandCenter(identity={},language='ar'){
 <div class="sectionHeading"><h1 id="pageTitle">${t('نظرة عامة','Overview')}</h1><small id="updatedAt"></small></div>
 <div id="workspaceContext" class="context" hidden><span id="contextText"></span><button id="clearContext">${t('تغيير العميل','Change customer')}</button></div>
 ${status('page')}
-<section id="home" class="screen" aria-labelledby="pageTitle"><div id="overviewMetrics" class="metrics"></div><div class="grid"><section class="panel"><h2>${t('يحتاج انتباهك','Needs your attention')}</h2><div id="ownerAttention"></div></section><section class="panel"><h2>${t('حالة التشغيل','Operational health')}</h2><div id="overviewHealth"></div></section></div></section>
+<section id="home" class="screen" aria-labelledby="pageTitle"><div id="overviewMetrics" class="metrics"></div><section id="aiUsagePanel" class="panel" hidden><div class="recordTitle"><div><h2>${t('استهلاك AI والمحادثات','AI usage and conversations')}</h2><small id="aiUsagePeriod"></small></div><span id="aiUsageBadge" class="status"></span></div><div id="aiUsageMetrics" class="metrics"></div><div id="aiUsageNotice"></div><details><summary>${t('التفصيل حسب مزود AI','Breakdown by AI provider')}</summary><div id="aiUsageProviders"></div></details></section><div class="grid"><section class="panel"><h2>${t('يحتاج انتباهك','Needs your attention')}</h2><div id="ownerAttention"></div></section><section class="panel"><h2>${t('حالة التشغيل','Operational health')}</h2><div id="overviewHealth"></div></section></div></section>
 <section id="customers" class="screen" hidden><form id="customerSearchForm" class="searchForm"><label class="sr" for="customerQuery">${t('البحث عن عميل','Find a customer')}</label><input id="customerQuery" maxlength="160" placeholder="${t('رقم العميل، الاسم أو البريد','Customer number, name or email')}" autocomplete="off"><button class="primary" type="submit">${t('بحث','Search')}</button></form>${status('customers')}<div id="customerResults"></div><div id="customerDetail" class="panel" hidden></div></section>
 <section id="operations" class="screen" hidden><div class="panel"><label for="businessPicker">${t('النشاط المحدد','Selected business')}</label><select id="businessPicker"><option value="">${t('اختر نشاطًا','Choose a business')}</option></select></div>${subnav('operations',[['ORDER','الطلبات','Orders'],['BOOKING','الحجوزات','Bookings'],['PRODUCT','المنتجات','Products'],['SERVICE','الخدمات','Services'],['BRANCH','الفروع','Branches'],['WHATSAPP','واتساب','WhatsApp'],['CALENDAR','التقاويم','Calendars']])}${status('operations')}<div id="operationNotice" class="notice" hidden></div><div id="operationEntities"></div></section>
 <section id="support" class="screen" hidden>${subnav('support',[['cases','القضايا','Cases'],['incidents','الحوادث','Incidents'],['feedback','الملاحظات','Feedback']])}<div class="row" style="margin-bottom:14px"><button id="newSupportCase" class="primary">${t('قضية دعم جديدة','New support case')}</button><button id="newIncident">${t('تسجيل حادث','Record incident')}</button></div>${status('support')}<div id="supportContent"></div></section>
@@ -43,11 +43,13 @@ export function ownerDashboardClient(identity,lang,mountTeam){
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number=v=>!['number','string'].includes(typeof v)||String(v).trim()===''||!Number.isFinite(Number(v))?'—':new Intl.NumberFormat(lang).format(Number(v));
   const date=v=>{if(!v||!Number.isFinite(Date.parse(v)))return'—';return new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short'}).format(new Date(v))};
+  const month=v=>{if(!v||!Number.isFinite(Date.parse(v)))return'—';return new Intl.DateTimeFormat(lang,{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(v))};
+  const aed=v=>!['number','string'].includes(typeof v)||String(v).trim()===''||!Number.isFinite(Number(v))?'—':new Intl.NumberFormat(lang,{style:'currency',currency:'AED',minimumFractionDigits:Number(v)<1?4:2,maximumFractionDigits:6}).format(Number(v));
   const root=identity.authority_role==='ROOT_OWNER';
   const permissions=new Set(identity.permissions||[]),granular=new Set(identity.granular_permissions||[]);
   const can=(coarse,fine)=>root||(granular.size?Boolean(fine&&granular.has(fine)):permissions.has(coarse));
   const globalScope=root||identity.access_scope?.type==='ALL_BUSINESSES';
-  const state={route:'home',sub:'',customer:null,business:null,businesses:[],accounts:[],entities:[],cases:[],incidents:[],commands:[],decisions:[],overview:null,executive:null};
+  const state={route:'home',sub:'',customer:null,business:null,businesses:[],accounts:[],entities:[],cases:[],incidents:[],commands:[],decisions:[],overview:null,executive:null,aiUsage:null,aiUsageError:false};
   const generations=new Map(),controllers=new Map();
   let actionSubmit=null,actionOrigin=null,actionBusy=false;
   const message=(id,text,kind='')=>{const el=$(id+'State');if(el){el.textContent=text;el.className='state '+kind}};
@@ -85,6 +87,27 @@ export function ownerDashboardClient(identity,lang,mountTeam){
   }
   function refreshBusinessPicker(){const entries=state.customer?.businesses?.length?state.customer.businesses:state.businesses;$('businessPicker').innerHTML='<option value="">'+t('اختر نشاطًا','Choose a business')+'</option>'+entries.map(b=>'<option value="'+esc(b.id)+'"'+(b.id===state.business?.id?' selected':'')+'>'+esc(b.name||b.id)+(b.demo_mode?' · '+t('تجريبي','Test'):'')+'</option>').join('')}
   function metric(label,value,note,href){return '<a class="metric" href="#'+href+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note||'')+'</small></a>'}
+  function stat(label,value,note=''){return '<div class="metric"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></div>'}
+  function renderAiUsage(){
+    const panel=$('aiUsagePanel');if(!root){panel.hidden=true;return}panel.hidden=false;
+    if(state.aiUsageError){$('aiUsagePeriod').textContent='';$('aiUsageBadge').textContent=t('القياس غير متاح','Measurement unavailable');$('aiUsageMetrics').innerHTML='';$('aiUsageProviders').innerHTML='';$('aiUsageNotice').innerHTML='<p class="state error">'+t('تعذر تحميل قياس استهلاك AI. لم يتم عرض صفر بدلاً من البيانات المفقودة.','AI usage measurement could not be loaded. Missing data is not shown as zero.')+'</p>';return}
+    const a=state.aiUsage;if(!a){$('aiUsagePeriod').textContent=t('جارٍ التحميل…','Loading…');$('aiUsageBadge').textContent='';$('aiUsageMetrics').innerHTML='';$('aiUsageProviders').innerHTML='';$('aiUsageNotice').innerHTML='';return}
+    const partial=a.measurement_state==='PARTIAL';
+    $('aiUsagePeriod').textContent=t('الشهر: ','Month: ')+month(a.month_start)+' · '+t('آخر تحديث: ','Updated: ')+date(a.generated_at);
+    $('aiUsageBadge').textContent=partial?t('قياس جزئي','Partial measurement'):a.measurement_state==='COMPLETE'?t('قياس مكتمل','Complete measurement'):t('حالة القياس غير معروفة','Measurement state unknown');
+    $('aiUsageBadge').className='status '+(partial?'warn':a.measurement_state==='COMPLETE'?'good':'');
+    $('aiUsageMetrics').innerHTML=[
+      stat(t('المحادثات','Conversations'),number(a.conversations),t('محادثات لها رسائل هذا الشهر','Conversations with messages this month')),
+      stat(t('الرسائل','Messages'),number(a.messages),t('رسائل DABBIR هذا الشهر','DABBIR messages this month')),
+      stat(t('طلبات AI','AI requests'),number(a.ai_requests),t('جميع المزودين','All providers')),
+      stat(t('إجمالي التوكنز','Total tokens'),number(a.total_tokens),t('إدخال + إخراج + reasoning','Input + output + reasoning')),
+      stat(t('الصرف المؤكد','Confirmed spend'),aed(a.known_cost_aed),t('تكلفة مثبتة من المصادر المسعّرة','Cost verified from priced sources')),
+      stat(t('متوسط واتساب / محادثة','WhatsApp avg / conversation'),aed(a.known_cost_per_conversation_aed),t('من التكلفة المؤكدة فقط','Known cost only')),
+    ].join('');
+    $('aiUsageNotice').innerHTML=partial?'<div class="notice">'+t('القياس جزئي: ','Measurement is partial: ')+number(a.unpriced_operations)+' '+t('عملية AI غير مسعّرة، منها ','unpriced AI operations; ')+number(a.whatsapp_unpriced_operations)+' '+t('على واتساب. الصرف المعروض هو التكلفة المؤكدة فقط ولا يعتبر العمليات غير المسعّرة صفرًا.','are on WhatsApp. Displayed spend is confirmed cost only; unpriced operations are not treated as zero.')+'</div>':'<p class="state success">'+t('لا توجد عمليات AI غير مسعّرة ضمن هذا الشهر.','No unpriced AI operations are recorded for this month.')+'</p>';
+    const providers=Array.isArray(a.providers)?a.providers:[];
+    $('aiUsageProviders').innerHTML=list([t('المزود','Provider'),t('طلبات AI','AI requests'),t('الصرف المؤكد','Confirmed spend'),t('غير مسعّر','Unpriced')],providers.map(row=>[esc(row.provider),esc(number(row.ai_requests)),esc(aed(row.known_cost_aed)),esc(number(row.unpriced_operations))]));
+  }
   function renderOverview(){
     const o=state.overview||{},e=state.executive||{},pulse=e.executive_pulse||{},revenue=e.revenue||{};
     const realRevenue=String(revenue.environment||'').toLowerCase()==='live';
@@ -112,12 +135,12 @@ export function ownerDashboardClient(identity,lang,mountTeam){
     ])+'<p><a href="#system/health">'+t('تفاصيل النظام والتكاملات','System and integration details')+'</a></p>';
   }
   async function loadOverview(){
-    state.overview=null;state.executive=null;renderOverview();
+    state.overview=null;state.executive=null;state.aiUsage=null;state.aiUsageError=false;renderOverview();renderAiUsage();
     const generation=(generations.get('home')||0)+1;generations.set('home',generation);message('page',t('جارٍ تحميل المؤشرات…','Loading metrics…'));
-    const results=await Promise.allSettled([api(dataUrl('overview')),root?api(dataUrl('executive')):Promise.resolve(null)]);
+    const results=await Promise.allSettled([api(dataUrl('overview')),root?api(dataUrl('executive')):Promise.resolve(null),root?api(dataUrl('ai_usage')):Promise.resolve(null)]);
     if(generations.get('home')!==generation)return;
-    const [overview,executive]=results;if(overview.status==='fulfilled')state.overview=overview.value.overview;if(executive.status==='fulfilled')state.executive=executive.value?.executive||null;
-    renderOverview();const failed=results.find(r=>r.status==='rejected');message('page',failed?describeError(failed.reason):'',failed?'error':'');
+    const [overview,executive,aiUsage]=results;if(overview.status==='fulfilled')state.overview=overview.value.overview;if(executive.status==='fulfilled')state.executive=executive.value?.executive||null;if(aiUsage.status==='fulfilled')state.aiUsage=aiUsage.value?.ai_usage||null;else if(root)state.aiUsageError=true;
+    renderOverview();renderAiUsage();const failed=[overview,executive].find(r=>r.status==='rejected');message('page',failed?describeError(failed.reason):'',failed?'error':'');
   }
   async function searchCustomers(){
     const q=$('customerQuery').value.trim();
