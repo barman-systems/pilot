@@ -40,11 +40,31 @@ async function requireRoot(req){
   const auth=await ownerBroker(req,'identity',{});
   if(auth.status!==200||!auth.payload?.ok)throw Object.assign(new Error(auth.payload?.error||'OWNER_SESSION_REQUIRED'),{status:auth.status||401});
   if(auth.payload.payload?.authority_role!=='ROOT_OWNER')throw Object.assign(new Error('ROOT_OWNER_REQUIRED'),{status:403});
+  return auth;
+}
+
+function quietCapability(res,{allowed=false,authenticated=false,reason=null}={}){
+  return json(res,200,{ok:true,allowed:Boolean(allowed),authenticated:Boolean(authenticated),reason:reason||null});
+}
+
+async function rootCapability(req,res){
+  if(!ownerSessionToken(req))return quietCapability(res,{reason:'OWNER_SESSION_REQUIRED'});
+  try{
+    const auth=await ownerBroker(req,'identity',{});
+    if(auth.status!==200||!auth.payload?.ok)return quietCapability(res,{reason:'OWNER_SESSION_REQUIRED'});
+    if(auth.payload.payload?.authority_role!=='ROOT_OWNER')return quietCapability(res,{authenticated:true,reason:'ROOT_OWNER_REQUIRED'});
+    return quietCapability(res,{allowed:true,authenticated:true});
+  }catch{
+    return quietCapability(res,{reason:'OWNER_SESSION_REQUIRED'});
+  }
 }
 
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
+  const action=String(singleQueryValue(req,'action')||'').trim();
+  if(action==='capability')return rootCapability(req,res);
+  if(action)return json(res,400,{ok:false,error:'INVALID_ACTION'});
   if(!ownerSessionToken(req))return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
   const raw=String(singleQueryValue(req,'month')||'').trim();
   if(raw&&!monthPattern.test(raw))return json(res,400,{ok:false,error:'INVALID_MONTH'});
