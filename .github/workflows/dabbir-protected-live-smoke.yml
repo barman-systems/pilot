@@ -47,6 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
             echo 'generated=false' >> "$GITHUB_OUTPUT"
@@ -55,72 +56,99 @@ jobs:
             exit 0
           fi
 
+          # Prefer the short-lived GitHub OIDC identity. A stale or under-scoped
+          # Vercel API token must never prevent this independent trusted path from
+          # being attempted. Access is still fail-closed: if neither path proves
+          # access, this step exits non-zero and the browser journey never runs.
+          oidc_response_file="$(mktemp)"
+          oidc_status="$(curl --silent --show-error --output "$oidc_response_file" --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}" || true)"
+          if [ "$oidc_status" = '200' ]; then
+            oidc_token="$(jq -r '.value // empty' "$oidc_response_file")"
+            if [ -n "$oidc_token" ]; then
+              echo "::add-mask::$oidc_token"
+              probe_body="$(mktemp)"
+              probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
+                -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+                -H 'accept: text/html' \
+                "$PROTECTED_QA_ORIGIN/" || true)"
+              if [ "$probe_status" = '200' ] && grep -qi 'DABBIR' "$probe_body"; then
+                echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+                echo 'ready=true' >> "$GITHUB_OUTPUT"
+                echo 'generated=false' >> "$GITHUB_OUTPUT"
+                echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
+                echo 'TRUSTED_GITHUB_OIDC_READY'
+                exit 0
+              fi
+              echo "TRUSTED_GITHUB_OIDC_REJECTED_HTTP_${probe_status:-000}"
+            else
+              echo 'TRUSTED_GITHUB_OIDC_TOKEN_EMPTY'
+            fi
+          else
+            echo "TRUSTED_GITHUB_OIDC_TOKEN_REQUEST_UNAVAILABLE_HTTP_${oidc_status:-000}"
+          fi
+
           if [ -n "${VERCEL_TOKEN:-}" ]; then
             endpoint="https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/protection-bypass?teamId=${VERCEL_TEAM_ID}"
             project_endpoint="https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}"
-
-            project_json="$(curl --fail-with-body --silent --show-error \
+            project_body="$(mktemp)"
+            project_status="$(curl --silent --show-error --output "$project_body" --write-out '%{http_code}' \
               "$project_endpoint" \
-              -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-            mapfile -t stale_secrets < <(printf '%s' "$project_json" | jq -r '.protectionBypass // {} | to_entries[] | select(.value.scope == "automation-bypass" and (.value.isEnvVar // false) == false and .value.note == "DABBIR protected live smoke temporary") | .key')
-            cleaned=0
-            for old_secret in "${stale_secrets[@]:-}"; do
-              [[ "$old_secret" =~ ^[A-Za-z0-9]{32}$ ]] || continue
-              echo "::add-mask::$old_secret"
-              revoke_payload="$(jq -nc --arg secret "$old_secret" '{revoke:{secret:$secret,regenerate:false}}')"
-              if curl --fail-with-body --silent --show-error \
-                -X PATCH "$endpoint" \
-                -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-                -H 'Content-Type: application/json' \
-                --data "$revoke_payload" \
-                >/dev/null; then
-                cleaned=$((cleaned + 1))
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" || true)"
+
+            if [ "$project_status" = '200' ]; then
+              mapfile -t stale_secrets < <(jq -r '.protectionBypass // {} | to_entries[] | select(.value.scope == "automation-bypass" and (.value.isEnvVar // false) == false and .value.note == "DABBIR protected live smoke temporary") | .key' "$project_body")
+              cleaned=0
+              cleanup_failed=0
+              for old_secret in "${stale_secrets[@]:-}"; do
+                [[ "$old_secret" =~ ^[A-Za-z0-9]{32}$ ]] || continue
+                echo "::add-mask::$old_secret"
+                revoke_payload="$(jq -nc --arg secret "$old_secret" '{revoke:{secret:$secret,regenerate:false}}')"
+                revoke_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                  -X PATCH "$endpoint" \
+                  -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+                  -H 'Content-Type: application/json' \
+                  --data "$revoke_payload" || true)"
+                if [[ "$revoke_status" =~ ^2[0-9][0-9]$ ]]; then
+                  cleaned=$((cleaned + 1))
+                else
+                  cleanup_failed=$((cleanup_failed + 1))
+                  echo "VERCEL_API_STALE_BYPASS_REVOKE_UNAVAILABLE_HTTP_${revoke_status:-000}"
+                fi
+              done
+              echo "STALE_AUTOMATION_BYPASSES_CLEANED=$cleaned"
+
+              # Do not mint another temporary bypass if a known stale temporary
+              # bypass could not be revoked. Fall through to the final red gate.
+              if [ "$cleanup_failed" -eq 0 ]; then
+                generate_body="$(mktemp)"
+                generate_status="$(curl --silent --show-error --output "$generate_body" --write-out '%{http_code}' \
+                  -X PATCH "$endpoint" \
+                  -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+                  -H 'Content-Type: application/json' \
+                  --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}' || true)"
+                if [[ "$generate_status" =~ ^2[0-9][0-9]$ ]]; then
+                  secret="$(jq -r '.protectionBypass | to_entries | map(select(.value.scope == "automation-bypass" and .value.note == "DABBIR protected live smoke temporary")) | sort_by(.value.createdAt // 0) | last | .key // empty' "$generate_body")"
+                  if [[ "$secret" =~ ^[A-Za-z0-9]{32}$ ]]; then
+                    echo "::add-mask::$secret"
+                    echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
+                    echo 'ready=true' >> "$GITHUB_OUTPUT"
+                    echo 'generated=true' >> "$GITHUB_OUTPUT"
+                    echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
+                    echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
+                    exit 0
+                  fi
+                  echo 'VERCEL_API_BYPASS_GENERATION_RESPONSE_INVALID'
+                else
+                  echo "VERCEL_API_BYPASS_GENERATION_UNAVAILABLE_HTTP_${generate_status:-000}"
+                fi
               fi
-            done
-            echo "STALE_AUTOMATION_BYPASSES_CLEANED=$cleaned"
-
-            response="$(curl --fail-with-body --silent --show-error \
-              -X PATCH "$endpoint" \
-              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-              -H 'Content-Type: application/json' \
-              --data '{"generate":{"note":"DABBIR protected live smoke temporary"}}')"
-            secret="$(printf '%s' "$response" | jq -r '.protectionBypass | to_entries | map(select(.value.scope == "automation-bypass" and .value.note == "DABBIR protected live smoke temporary")) | sort_by(.value.createdAt // 0) | last | .key // empty')"
-            if [[ ! "$secret" =~ ^[A-Za-z0-9]{32}$ ]]; then
-              echo 'ready=false' >> "$GITHUB_OUTPUT"
-              echo 'generated=false' >> "$GITHUB_OUTPUT"
-              echo 'method=none' >> "$GITHUB_OUTPUT"
-              echo 'BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'
-              exit 2
+            else
+              echo "VERCEL_API_PROJECT_ACCESS_UNAVAILABLE_HTTP_${project_status:-000}"
             fi
-            echo "::add-mask::$secret"
-            echo "VERCEL_AUTOMATION_BYPASS_SECRET=$secret" >> "$GITHUB_ENV"
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-            echo 'generated=true' >> "$GITHUB_OUTPUT"
-            echo 'method=automation_bypass' >> "$GITHUB_OUTPUT"
-            echo 'AUTOMATION_BYPASS_TEMPORARILY_GENERATED'
-            exit 0
-          fi
-
-          oidc_response="$(curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
-          oidc_token="$(printf '%s' "$oidc_response" | jq -r '.value // empty')"
-          if [ -n "$oidc_token" ]; then
-            echo "::add-mask::$oidc_token"
-            probe_body="$(mktemp)"
-            probe_status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
-              -H "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
-              -H 'accept: text/html' \
-              "$PROTECTED_QA_ORIGIN/")"
-            if [ "$probe_status" = '200' ] && grep -qi 'DABBIR' "$probe_body"; then
-              echo "VERCEL_TRUSTED_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
-              echo 'ready=true' >> "$GITHUB_OUTPUT"
-              echo 'generated=false' >> "$GITHUB_OUTPUT"
-              echo 'method=trusted_oidc' >> "$GITHUB_OUTPUT"
-              echo 'TRUSTED_GITHUB_OIDC_READY'
-              exit 0
-            fi
-            echo "TRUSTED_GITHUB_OIDC_REJECTED_HTTP_${probe_status}"
+          else
+            echo 'VERCEL_API_TOKEN_NOT_CONFIGURED'
           fi
 
           echo 'ready=false' >> "$GITHUB_OUTPUT"
@@ -130,7 +158,7 @@ jobs:
           echo '## DABBIR Protected Live Smoke' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo '**State:** BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
-          echo 'No existing bypass, Vercel API token, or accepted GitHub Trusted OIDC source is available. Production remains protected and the browser journey did not run.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Neither an existing bypass, accepted GitHub Trusted OIDC identity, nor an authorized Vercel API fallback proved access. Production remains protected and the browser journey did not run.' >> "$GITHUB_STEP_SUMMARY"
           exit 2
       - name: Install WebKit journey runner
         if: steps.bypass.outputs.ready == 'true'
