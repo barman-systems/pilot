@@ -42,9 +42,25 @@ async function requireRoot(req){
   if(auth.payload.payload?.authority_role!=='ROOT_OWNER')throw Object.assign(new Error('ROOT_OWNER_REQUIRED'),{status:403});
 }
 
+async function rootCapability(req,res){
+  if(!ownerSessionToken(req))return json(res,200,{ok:true,allowed:false,reason:'OWNER_SESSION_REQUIRED'});
+  try{
+    await requireRoot(req);
+    return json(res,200,{ok:true,allowed:true,role:'ROOT_OWNER',reason:null});
+  }catch(error){
+    const status=Number.isInteger(error?.status)?error.status:503;
+    if(status===401)return json(res,200,{ok:true,allowed:false,reason:'OWNER_SESSION_REQUIRED'});
+    if(status===403)return json(res,200,{ok:true,allowed:false,reason:'ROOT_OWNER_REQUIRED'});
+    return json(res,503,{ok:false,allowed:false,error:'PLATFORM_FINANCE_UNAVAILABLE'});
+  }
+}
+
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
+  const action=String(singleQueryValue(req,'action')||'').trim();
+  if(action==='capability')return rootCapability(req,res);
+  if(action)return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
   if(!ownerSessionToken(req))return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
   const raw=String(singleQueryValue(req,'month')||'').trim();
   if(raw&&!monthPattern.test(raw))return json(res,400,{ok:false,error:'INVALID_MONTH'});
