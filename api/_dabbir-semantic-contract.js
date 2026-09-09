@@ -3,8 +3,10 @@
 const ACTIONS = new Set(['REPLY','CLARIFY','SERVICE_MENU','PRICING','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF']);
 const INTENTS = new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const ENTITIES = new Set(['delivery_mode','vehicle','property_details','date','time']);
+const MESSAGE_ROLES=new Set(['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORRECTION','CONFIRMATION','DENIAL','SIDE_QUESTION','TOPIC_SWITCH','CONTINUATION','CANCELLATION','REFERENCE','SOCIAL']);
 export const SEMANTIC_SYSTEM_PROMPT = `You are DABBIR's semantic interpreter, not a customer reply generator. Return exactly one JSON object, no prose or markdown.
-Required keys: action, intent, confidence (number 0..1), risk_level (LOW/MEDIUM/HIGH), service_name (string or null), service_evidence (exact current-message quote naming the service, or null), knowledge_key (string or null), entities (array).
+Required keys: action, intent, confidence (number 0..1), risk_level (LOW/MEDIUM/HIGH), service_name (string or null), service_evidence (exact current-message quote naming the service, or null), knowledge_key (string or null), entities (array), dialogue (object).
+dialogue contains message_role, evidence (an exact quote from the CURRENT message), invalidated_fields (array of field names, only when the customer withdraws or corrects that detail). message_role is NEW_REQUEST, ANSWER_TO_PENDING_QUESTION, CORRECTION, CONFIRMATION, DENIAL, SIDE_QUESTION, TOPIC_SWITCH, CONTINUATION, CANCELLATION, REFERENCE, or SOCIAL. Interpret the current message against situation.pending_field and situation.pending_question first, then the active goal and confirmed fields. Answering a pending question does not create a new goal. A side question does not cancel a booking. A field correction changes that field, not the whole goal. The application validates this proposal and chooses the next required question or allowed action.
 action: REPLY, CLARIFY, SERVICE_MENU, PRICING, CHECK_AVAILABILITY, CREATE_BOOKING, CANCEL_BOOKING, RESCHEDULE_BOOKING, HANDOFF.
 intent: SUPPORT, SERVICE_DISCOVERY, PRICING, BOOKING, CANCEL_BOOKING, RESCHEDULE_BOOKING, HUMAN_ASSISTANCE.
 Each entity has entity, value, evidence (exact quote from the CURRENT customer message), confidence (0..1), correction (boolean).
@@ -20,6 +22,7 @@ export function validSemanticContract(raw) {
     return !!(x && !Array.isArray(x) && ACTIONS.has(x.action) && INTENTS.has(x.intent)
       && confidence(x.confidence) && ['LOW','MEDIUM','HIGH'].includes(x.risk_level)
       && nullableText(x.service_name) && nullableText(x.knowledge_key)
+      && (x.dialogue==null||(MESSAGE_ROLES.has(x.dialogue.message_role)&&typeof x.dialogue.evidence==='string'&&x.dialogue.evidence.length>0&&x.dialogue.evidence.length<=300&&Array.isArray(x.dialogue.invalidated_fields)&&x.dialogue.invalidated_fields.length<=4&&x.dialogue.invalidated_fields.every(k=>ENTITIES.has(k)||['service','worker','location'].includes(k))))
       && Array.isArray(x.entities) && x.entities.length<=8
       && x.entities.every(f=>f && ENTITIES.has(f.entity) && typeof f.value==='string' && f.value.length<=500
         && typeof f.evidence==='string' && f.evidence.length>0 && f.evidence.length<=300

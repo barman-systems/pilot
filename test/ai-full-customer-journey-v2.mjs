@@ -827,6 +827,13 @@ async function runJourney() {
     return { status: result.status, detail: `Real provider verified: ${JSON.stringify(providerEvidence)}; AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
   });
 
+  await step('15b_cognitive_goal_continuity', async () => {
+    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue'}});
+    const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
+    assert(probe.ok&&probe.json?.ok===true&&probe.json?.cognitive_probe===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),`COGNITIVE_CONTINUITY_PROBE_FAILED:${JSON.stringify(evidence)}`);
+    return {status:probe.status,detail:JSON.stringify(evidence)};
+  });
+
   await step('16_employee_human_takeover', async () => {
     const result = await employeeSession.request('/api/chat-control', {
       method: 'POST',

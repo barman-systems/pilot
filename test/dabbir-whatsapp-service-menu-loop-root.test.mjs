@@ -37,6 +37,7 @@ async function runTurn({text,previous={},pending_state=null,deliverMenu=null}){
     if(name==='dabbir_semantic_set_pending_v2')return {pending_action:args.p_action};
     if(name==='dabbir_record_ai_operator_decision_v1')return true;
     if(name==='dabbir_whatsapp_ai_check_availability')return {slots:[]};
+    if(name==='dabbir_cognitive_record_delivery_v1')return {verified:true};
     throw new Error(`UNEXPECTED_RPC:${name}`);
   };
   const result=await runUnderstandingTurn({

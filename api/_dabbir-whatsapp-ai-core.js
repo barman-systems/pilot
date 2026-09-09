@@ -238,7 +238,7 @@ async function executeSelectedSlot(claim,context,index,lang){
 async function processClaim(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)throw Object.assign(new Error('AI_CONTEXT_UNVERIFIED'),{code:'AI_CONTEXT_UNVERIFIED'});
-  return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,
+  return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,cognitiveMode:'policy',
     deliverMenu:async(guarded,c,lang)=>{
       const connection=await loadConversationConnectionWithServiceKey(serviceKey(),c.business.id,c.conversation.id);
       const flow=await getPublishedBookingFlow({businessId:c.business.id,connectionId:connection.id});
