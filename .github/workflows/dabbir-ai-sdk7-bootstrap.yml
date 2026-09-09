@@ -27,10 +27,10 @@ jobs:
       - name: Upgrade AI SDK production line
         run: |
           npm install --package-lock-only --ignore-scripts --save-exact \
-            ai@7.0.93 \
+            ai@7.0.62 \
             @ai-sdk/openai-compatible@3.0.44 \
-            @ai-sdk/otel@1.0.90 \
-            @ai-sdk/workflow@2.0.24 \
+            @ai-sdk/otel@1.0.62 \
+            @ai-sdk/workflow@1.0.62 \
             workflow@4.8.5 \
             zod@4.5.4
       - name: Update version contract
@@ -44,21 +44,19 @@ jobs:
           const lock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
           const packages = lock.packages || {};
 
-          test('DABBIR stays on the pinned AI SDK 7 production line', () => {
-            assert.equal(pkg.dependencies?.ai, '7.0.93');
-            assert.equal(pkg.dependencies?.['@ai-sdk/openai-compatible'], '3.0.44');
-            assert.equal(pkg.dependencies?.['@ai-sdk/otel'], '1.0.90');
-            assert.equal(pkg.dependencies?.['@ai-sdk/workflow'], '2.0.24');
-            assert.equal(pkg.dependencies?.workflow, '4.8.5');
-            assert.equal(pkg.dependencies?.zod, '4.5.4');
-            for (const [name, version] of Object.entries({
-              ai:'7.0.93',
+          test('DABBIR stays on the stable AI SDK 7 + Workflow 4 production line', () => {
+            const expected={
+              ai:'7.0.62',
               '@ai-sdk/openai-compatible':'3.0.44',
-              '@ai-sdk/otel':'1.0.90',
-              '@ai-sdk/workflow':'2.0.24',
+              '@ai-sdk/otel':'1.0.62',
+              '@ai-sdk/workflow':'1.0.62',
               workflow:'4.8.5',
               zod:'4.5.4',
-            })) assert.equal(packages[`node_modules/${name}`]?.version, version);
+            };
+            for (const [name,version] of Object.entries(expected)) {
+              assert.equal(pkg.dependencies?.[name],version);
+              assert.equal(packages[`node_modules/${name}`]?.version,version);
+            }
           });
 
           test('OpenAI-compatible adapter resolves a single provider protocol line', () => {
@@ -66,9 +64,15 @@ jobs:
             const rootProvider=packages['node_modules/@ai-sdk/provider'];
             assert.ok(compatible);
             assert.ok(rootProvider);
-            const requested=compatible.dependencies?.['@ai-sdk/provider'];
-            assert.ok(requested);
+            assert.ok(compatible.dependencies?.['@ai-sdk/provider']);
             assert.equal(packages['node_modules/@ai-sdk/openai-compatible/node_modules/@ai-sdk/provider'], undefined);
+          });
+
+          test('WorkflowAgent remains on stable Workflow 4 rather than Workflow 5 beta', () => {
+            const workflowAgent=packages['node_modules/@ai-sdk/workflow'];
+            assert.ok(workflowAgent);
+            assert.equal(packages['node_modules/workflow']?.version,'4.8.5');
+            assert.equal(packages['node_modules/workflow']?.version.includes('beta'),false);
           });
           EOF
       - name: Remove one-shot bootstrap workflow
@@ -78,5 +82,5 @@ jobs:
           git config user.name dabbir-release-guardian
           git config user.email dabbir-release-guardian@users.noreply.github.com
           git add package.json package-lock.json test/ai-sdk-version-contract.test.mjs .github/workflows/dabbir-ai-sdk7-bootstrap.yml
-          git commit -m "chore(ai): move DABBIR to AI SDK 7 production line"
+          git commit -m "chore(ai): move DABBIR to stable AI SDK 7 production line"
           git push origin HEAD:feat/dabbir-intelligence-flywheel-v1
