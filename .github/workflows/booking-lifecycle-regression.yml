@@ -25,6 +25,14 @@ jobs:
         run: node --test test/dabbir-booking-lifecycle*.test.mjs
       - name: Install pinned isolated browser verifier
         run: |
+          # Playwright installs its own pinned Chromium/WebKit builds. The hosted
+          # runner's unrelated Google Chrome apt source can be temporarily
+          # inconsistent and must not prevent installing Ubuntu browser deps.
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then
+              sudo rm -f "$source"
+            fi
+          done
           npm install --prefix "$RUNNER_TEMP/booking-playwright" --no-audit --no-fund --ignore-scripts playwright@1.63.0
           node "$RUNNER_TEMP/booking-playwright/node_modules/playwright/cli.js" install --with-deps chromium webkit
       - name: iPhone and iPad browser matrix over real served UI
