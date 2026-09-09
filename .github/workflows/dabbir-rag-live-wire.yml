@@ -1,0 +1,71 @@
+name: DABBIR RAG live wiring
+
+on:
+  push:
+    branches:
+      - feat/dabbir-intelligence-flywheel-v1
+    paths:
+      - .github/workflows/dabbir-rag-live-wire.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/dabbir-intelligence-flywheel-v1
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Wire business-scoped approved knowledge into semantic planner
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core=Path('api/_dabbir-whatsapp-ai-core.js')
+          text=core.read_text()
+          import_line="import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';\n"
+          rag_import="import { retrieveDabbirKnowledge } from './_dabbir-knowledge-rag.js';\n"
+          if rag_import not in text:
+              if import_line not in text:
+                  raise SystemExit('semantic interpreter import drifted')
+              text=text.replace(import_line,import_line+rag_import,1)
+
+          old="""    planner:async(c,safeContext)=>{\n      const result=await interpretSemanticMessage({message:latestText(c),context:safeContext,\n        referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,\n        meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});\n      return result.proposal;\n    }});"""
+          new="""    planner:async(c,safeContext)=>{\n      const message=latestText(c);\n      const retrieved=await retrieveDabbirKnowledge({businessId:c.business.id,query:message,rpc:serviceRpc,env:process.env,fetchImpl:fetch,limit:5});\n      const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},\n        referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,\n        meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});\n      return result.proposal;\n    }});"""
+          if old not in text:
+              if new not in text:
+                  raise SystemExit('semantic planner block drifted')
+          else:
+              text=text.replace(old,new,1)
+          core.write_text(text)
+
+          test=Path('test/dabbir-intelligence-flywheel.test.mjs')
+          t=test.read_text()
+          marker="test('WhatsApp semantic planner consumes only guarded business-scoped RAG context'"
+          if marker not in t:
+              t += """\ntest('WhatsApp semantic planner consumes only guarded business-scoped RAG context',()=>{const source=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');assert.match(source,/import \\{ retrieveDabbirKnowledge \\} from '\\.\\/_dabbir-knowledge-rag\\.js'/);assert.match(source,/retrieveDabbirKnowledge\\(\\{businessId:c\\.business\\.id,query:message,rpc:serviceRpc,env:process\\.env,fetchImpl:fetch,limit:5\\}\\)/);assert.match(source,/context:\\{\\.\\.\\.safeContext,retrieved_business_knowledge:retrieved\\}/);assert.doesNotMatch(source,/retrieved_business_knowledge[^\\n]{0,200}(?:CREATE_BOOKING|CANCEL_BOOKING|RESCHEDULE_BOOKING)\\s*\\(/)});\n"""
+          test.write_text(t)
+          PY
+      - name: Verify full repository gates
+        run: |
+          npm ci --ignore-scripts
+          npm run audit:prod
+          npm test
+          npm run check:syntax
+          npm run dabbir:build
+      - name: Commit verified live RAG wiring and remove one-shot workflow
+        run: |
+          rm .github/workflows/dabbir-rag-live-wire.yml
+          git config user.name dabbir-release-guardian
+          git config user.email dabbir-release-guardian@users.noreply.github.com
+          git add api/_dabbir-whatsapp-ai-core.js test/dabbir-intelligence-flywheel.test.mjs .github/workflows/dabbir-rag-live-wire.yml
+          git commit -m "feat(ai): ground WhatsApp semantic planner with approved RAG"
+          git push origin HEAD:feat/dabbir-intelligence-flywheel-v1
