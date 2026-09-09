@@ -21,30 +21,6 @@ function groundedServiceName(x,message,context) {
   return name;
 }
 
-// Preserve the useful part of agent-style chat loops: the interpreter sees a
-// bounded, role-correct dialogue instead of forcing it to rediscover the whole
-// conversation from an opaque JSON blob. Human operator replies are assistant-
-// side from the customer's point of view. The semantic state still owns truth,
-// authority and long-lived memory; this history is interpretation evidence only.
-function semanticRoleHistory(context) {
-  const recent=Array.isArray(context?.recent_conversation)?context.recent_conversation:[];
-  return recent.slice(-8).flatMap(item=>{
-    const sender=String(item?.sender_type??item?.role??'').toLowerCase();
-    const role=sender==='customer'||sender==='user'?'user':['ai','assistant','human'].includes(sender)?'assistant':null;
-    const content=sanitizeSemanticText(item?.body??item?.content??'').trim().slice(0,600);
-    return role&&content?[{role,content}]:[];
-  }).slice(-4);
-}
-
-function providerSemanticContext(context,referenceTime) {
-  const source=context&&typeof context==='object'&&!Array.isArray(context)?context:{};
-  // recent_conversation is sent through the provider's native role history.
-  // Removing the duplicate copy lowers tokens and prevents two conflicting
-  // representations of the same turn from competing for attention.
-  const {recent_conversation:_recentConversation,...rest}=source;
-  return sanitizeSemanticContext({...rest,reference_time:referenceTime});
-}
-
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -54,8 +30,8 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   };
   const result=await generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
     message:sanitizeSemanticText(message).slice(0,2000),
-    businessContext:JSON.stringify(providerSemanticContext(context,referenceTime)),
-    history:semanticRoleHistory(context),fetchImpl:fetchBounded,env,meteringContext});
+    businessContext:JSON.stringify(sanitizeSemanticContext({...context,reference_time:referenceTime})),
+    history:[],fetchImpl:fetchBounded,env,meteringContext});
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   const x=JSON.parse(result.reply);
