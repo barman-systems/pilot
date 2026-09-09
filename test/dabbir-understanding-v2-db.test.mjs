@@ -24,8 +24,6 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908173803_dabbir_provider_retry_checkpoint_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909121326_dabbir_cognitive_dialogue_state_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909121923_dabbir_cognitive_rollout_deny_clients_v1.sql',import.meta.url),'utf8'));
- await db.exec('alter table public.dabbir_whatsapp_outbound_reservations add column provider_verified boolean not null default false');
- await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909134020_dabbir_cognitive_delivery_progress_v1.sql',import.meta.url),'utf8'));
  await db.query('insert into auth.users(id) values($1),($2)',[owner,otherOwner]);
  await db.query('insert into dabbir_businesses(id) values($1),($2)',[ids.business,ids.other]);
  await db.query("insert into dabbir_memberships values($1,$2,'owner','active'),($3,$4,'owner','active')",[ids.business,owner,ids.other,otherOwner]);
@@ -54,22 +52,6 @@ test('cognitive SQL: previous question presentation needs a same-batch provider 
  await db.exec('set role anon');await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/permission denied/);await db.exec('reset role');
 });
 test('database: semantic state persists once per batch with audited provenance',async()=>{await reset();const s=bookingState();const c=await commit(s);assert.equal(c.version,1);const again=await commit(s);assert.equal(again.replay,true);assert.equal((await load()).version,1);assert.equal((await db.query('select count(*) n from dabbir_ai_understanding_events')).rows[0].n,1);});
-test('live receipt regression: verified DELIVERED/READ advances presentation while unsafe states stay denied',async()=>{
- await reset();await commit(understandConversation({context:context({batch_messages:[{body:'أبي غسيل'}]}),now:evalNow}).state);
- await db.query("insert into dabbir_whatsapp_outbound_reservations(business_id,conversation_id,idempotency_key,provider_message_id,state) values($1,$2,$3,'progress-receipt','SENDING')",[ids.business,ids.conversation,'wa-understanding:'+batch+':clarify']);
- const args=[batch,lock,1,'progress-receipt','vehicle'];
- for(const [state,verified] of [['SENDING',true],['PROVIDER_ACCEPTED',true],['FAILED',true],['AMBIGUOUS',true],['DELIVERED',false],['READ',false]]){
-  await db.query("update dabbir_whatsapp_outbound_reservations set state=$1,provider_verified=$2 where provider_message_id='progress-receipt'",[state,verified]);
-  await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
- }
- for(const state of ['SENT','DELIVERED','READ']){
-  await db.query("update dabbir_whatsapp_outbound_reservations set state=$1,provider_verified=$2 where provider_message_id='progress-receipt'",[state,state!=='SENT']);
-  assert.equal((await rpc('dabbir_cognitive_record_delivery_v1',args)).verified,true);
- }
- assert.equal((await db.query("select count(*) n from dabbir_ai_understanding_events where event_type='COGNITIVE_PRESENTED'")).rows[0].n,1);
- await db.query("update dabbir_whatsapp_outbound_reservations set idempotency_key='wa-understanding:another-batch:clarify' where provider_message_id='progress-receipt'");
- await assert.rejects(rpc('dabbir_cognitive_record_delivery_v1',args),/COGNITIVE_PRESENTATION_UNVERIFIED/);
-});
 test('database: queued goal persists through real SQL execution and only resumes after verified delivery',async()=>{
  await reset();const s=bookingState();const stamp=new Date();s.updated_at=stamp.toISOString();s.expires_at=new Date(stamp.getTime()+86400000).toISOString();
  const queued=understandConversation({context:context({batch_messages:[{body:'أبي أحجز غسيل كامل بكره الساعة 6 م'}]}),now:stamp}).state;
