@@ -57,6 +57,7 @@ test('owner P&L data API stays strict while capability probe fails closed quietl
   assert.match(api,/platformPnlMonth/);
   assert.match(api,/INVALID_MONTH/);
   assert.match(api,/action==='capability'/);
+  assert.match(api,/PLATFORM_FINANCE_UNAVAILABLE/);
 
   const capability=await invokeOwnerFinance('/api/owner-finance?action=capability');
   assert.equal(capability.status,200);
@@ -89,7 +90,8 @@ test('root P&L requires both platform surface and explicit root-finance capabili
   assert.match(platformCustomersUi,/action=capability/);
   assert.match(ui,/owner-finance\?action=capability/);
   assert.match(ui,/capability!=='allowed'/);
-  assert.match(ui,/payload\.allowed!==true/);
+  assert.match(ui,/payload\.allowed===true/);
+  assert.match(ui,/payload\.allowed===false/);
 });
 
 test('root P&L latches authorization loss instead of retrying 401/403 from DOM mutations',()=>{
@@ -98,4 +100,11 @@ test('root P&L latches authorization loss instead of retrying 401/403 from DOM m
   assert.match(ui,/if\(!el\|\|loading\|\|data\|\|denied\|\|error\)return/);
   assert.match(ui,/MutationObserver\(\(\)=>\{void maybeLoad\(\)\}\)/);
   assert.doesNotMatch(ui,/MutationObserver\(\(\)=>\{if\(ensure\(\).*load\(\)/);
+});
+
+test('root P&L keeps capability outages visible without automatic retry storms',()=>{
+  assert.match(ui,/capability='error';denied=false;error=true;data=null/);
+  assert.match(ui,/capability==='error'\|\|error\|\|!data/);
+  assert.match(ui,/capability==='denied'\|\|capability==='error'/);
+  assert.match(ui,/if\(!el\|\|loading\|\|data\|\|denied\|\|error\)return/);
 });
