@@ -1,4 +1,4 @@
-name: DABBIR intelligence runtime wire
+name: DABBIR intelligence dependency repair
 
 on:
   push:
@@ -11,10 +11,10 @@ permissions:
   contents: write
 
 jobs:
-  wire:
+  repair:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,86 +24,75 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Add Vercel OpenTelemetry runtime
-        run: |
-          npm install --package-lock-only --ignore-scripts --save-exact \
-            @vercel/otel@2.1.3 \
-            @opentelemetry/api@1.9.1 \
-            @opentelemetry/api-logs@0.219.0
-      - name: Wire RAG, privacy-safe telemetry, agents, and maintenance
+      - name: Remove unused vulnerable Workflow runtime line
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json
 
-          def patch(path, old, new):
-              p=Path(path); text=p.read_text()
-              if old not in text:
-                  raise SystemExit(f'expected block not found: {path}: {old[:100]}')
-              p.write_text(text.replace(old,new,1))
+          package_path=Path('package.json')
+          package=json.loads(package_path.read_text())
+          deps=package.get('dependencies',{})
+          for name in ('@ai-sdk/workflow','workflow','@ai-sdk/otel'):
+              deps.pop(name,None)
+          package_path.write_text(json.dumps(package,indent=2,ensure_ascii=False)+'\n')
 
-          # RAG is explicit opt-in and has a hard live-turn latency budget.
-          p=Path('api/_dabbir-knowledge-rag.js'); text=p.read_text()
-          text=text.replace("if(env.DABBIR_KNOWLEDGE_RAG_ENABLED==='0')return {ok:false,reason:'DISABLED'};",
-              "if(!['1','true'].includes(String(env.DABBIR_KNOWLEDGE_RAG_ENABLED||'').toLowerCase()))return {ok:false,reason:'DISABLED'};")
-          text=text.replace("const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl});",
-              "const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl,timeoutMs:2500});")
-          p.write_text(text)
+          Path('test/ai-sdk-version-contract.test.mjs').write_text("""import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
 
-          # Feed only owner-approved, business-scoped retrieved knowledge to the semantic interpreter.
-          p=Path('api/_dabbir-whatsapp-ai-core.js'); text=p.read_text()
-          needle="import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';\n"
-          if "_dabbir-knowledge-rag.js" not in text:
-              text=text.replace(needle,needle+"import { retrieveDabbirKnowledge } from './_dabbir-knowledge-rag.js';\n",1)
-          old="""    planner:async(c,safeContext)=>{\n      const result=await interpretSemanticMessage({message:latestText(c),context:safeContext,\n        referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,\n        meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});\n      return result.proposal;\n    }});"""
-          new="""    planner:async(c,safeContext)=>{\n      const message=latestText(c);\n      const retrieved=await retrieveDabbirKnowledge({businessId:c.business.id,query:message,rpc:serviceRpc,env:process.env,fetchImpl:fetch,limit:5});\n      const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},\n        referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,\n        meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});\n      return result.proposal;\n    }});"""
-          if old not in text: raise SystemExit('semantic planner block drifted')
-          p.write_text(text.replace(old,new,1))
+          const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+          const lock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
+          const packages = lock.packages || {};
 
-          # AI SDK v7 telemetry is global; existing AI SDK generation must explicitly omit content.
-          p=Path('api/translate.js'); text=p.read_text()
-          old="""  const { text } = await generateText({\n    model,\n    prompt,\n    abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),"""
-          new="""  const { text } = await generateText({\n    model,\n    prompt,\n    telemetry: { functionId: 'dabbir.translate', recordInputs: false, recordOutputs: false },\n    abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),"""
-          if old not in text: raise SystemExit('translate generateText block drifted')
-          p.write_text(text.replace(old,new,1))
+          test('DABBIR stays on the stable AI SDK 7 production line', () => {
+            const expected={
+              ai:'7.0.62',
+              '@ai-sdk/openai-compatible':'3.0.44',
+              zod:'4.5.4',
+            };
+            for (const [name,version] of Object.entries(expected)) {
+              assert.equal(pkg.dependencies?.[name],version);
+              assert.equal(packages[`node_modules/${name}`]?.version,version);
+            }
+          });
 
-          # Register telemetry after the existing runtime preload; no prompt/output bodies are exported by DABBIR calls.
-          p=Path('api/_sentry-preload.js'); text=p.read_text()
-          old="""if (isVercelFunctionRuntime) {\n  await import('./_sentry-runtime.js');\n}"""
-          new="""if (isVercelFunctionRuntime) {\n  await import('./_sentry-runtime.js');\n  await import('./_dabbir-ai-telemetry.js');\n}"""
-          if old not in text: raise SystemExit('preload block drifted')
-          p.write_text(text.replace(old,new,1))
+          test('OpenAI-compatible adapter resolves a single provider protocol line', () => {
+            const compatible=packages['node_modules/@ai-sdk/openai-compatible'];
+            const rootProvider=packages['node_modules/@ai-sdk/provider'];
+            assert.ok(compatible);
+            assert.ok(rootProvider);
+            assert.ok(compatible.dependencies?.['@ai-sdk/provider']);
+            assert.equal(packages['node_modules/@ai-sdk/openai-compatible/node_modules/@ai-sdk/provider'], undefined);
+          });
 
-          Path('api/_dabbir-ai-telemetry.js').write_text("""import { registerOTel } from '@vercel/otel';\nimport { OpenTelemetry } from '@ai-sdk/otel';\nimport { registerTelemetry } from 'ai';\n\nconst FLAG=Symbol.for('dabbir.ai.otel.registered');\nconst enabled=value=>value==='1'||value==='true';\nexport function aiTelemetrySettings(functionId,metadata={}){\n  return {functionId:String(functionId||'dabbir.ai').slice(0,120),recordInputs:false,recordOutputs:false,metadata:{product:'DABBIR',...metadata}};\n}\nexport function initializeDabbirAiTelemetry(env=process.env,{registerOtel=registerOTel,registerAi=registerTelemetry,makeIntegration=()=>new OpenTelemetry()}={}){\n  if(globalThis[FLAG])return {ok:true,state:'ALREADY_REGISTERED'};\n  if(!enabled(String(env.DABBIR_AI_OTEL_ENABLED||'').toLowerCase()))return {ok:false,state:'DISABLED'};\n  registerOtel({serviceName:'dabbir',instrumentationConfig:{fetch:{dontPropagateContextUrls:[\n    'generativelanguage.googleapis.com','api.groq.com','graph.facebook.com','ai-gateway.vercel.sh','cloud.langfuse.com','us.cloud.langfuse.com'\n  ]}}});\n  registerAi(makeIntegration());\n  globalThis[FLAG]=true;\n  return {ok:true,state:'REGISTERED'};\n}\n\ninitializeDabbirAiTelemetry();\n""")
+          test('WorkflowAgent is not shipped until its stable dependency graph passes the production audit', () => {
+            assert.equal(pkg.dependencies?.['@ai-sdk/workflow'],undefined);
+            assert.equal(pkg.dependencies?.workflow,undefined);
+            assert.equal(packages['node_modules/@ai-sdk/workflow'],undefined);
+            assert.equal(packages['node_modules/workflow'],undefined);
+          });
 
-          Path('api/_dabbir-ai-sdk7.js').write_text("""import { ToolLoopAgent, stepCountIs } from 'ai';\nimport { WorkflowAgent } from '@ai-sdk/workflow';\nimport { aiTelemetrySettings } from './_dabbir-ai-telemetry.js';\n\nconst clean=(v,max=4000)=>String(v??'').trim().slice(0,max);\nconst boundedSteps=value=>Math.min(8,Math.max(1,Number(value)||4));\nfunction baseOptions({model,instructions,tools={},runtimeContext={},maxSteps=4,functionId}){\n  if(!model)throw new Error('DABBIR_AGENT_MODEL_REQUIRED');\n  return {model,instructions:clean(instructions,6000)||'Operate only through provided DABBIR tools and policy.',tools,runtimeContext,\n    stopWhen:stepCountIs(boundedSteps(maxSteps)),timeout:{totalMs:30000,stepMs:12000,toolMs:8000},\n    telemetry:aiTelemetrySettings(functionId)};\n}\nexport function createDabbirToolLoopAgent(options={}){return new ToolLoopAgent(baseOptions({...options,functionId:options.functionId||'dabbir.tool-loop'}))}\nexport function createDabbirWorkflowAgent(options={}){return new WorkflowAgent(baseOptions({...options,functionId:options.functionId||'dabbir.workflow-agent'}))}\nexport function dabbirAgentRuntimePolicy(){return {whatsapp_authority:false,workflow_mutation_authority:false,max_steps:8,total_timeout_ms:30000,telemetry_content:false}}\n""")
-
-          # Schedule only after this PR's DB migration is applied; preview calls fail soft until then.
-          v=Path('vercel.json'); data=json.loads(v.read_text())
-          data.setdefault('env',{})['DABBIR_KNOWLEDGE_RAG_ENABLED']='1'
-          data['env']['DABBIR_AI_OTEL_ENABLED']='1'
-          data['env']['DABBIR_EMBEDDING_MODEL']='gemini-embedding-2'
-          cron={'path':'/api/dabbir-intelligence-maintenance-cron','schedule':'17 * * * *'}
-          data.setdefault('crons',[])
-          if not any(x.get('path')==cron['path'] for x in data['crons']): data['crons'].append(cron)
-          data.setdefault('functions',{}).setdefault('api/dabbir-intelligence-maintenance-cron.js',{})['maxDuration']=60
-          v.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
-
-          Path('test/dabbir-ai-sdk7-runtime.test.mjs').write_text("""import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';\nimport {aiTelemetrySettings,initializeDabbirAiTelemetry} from '../api/_dabbir-ai-telemetry.js';\nimport {dabbirAgentRuntimePolicy} from '../api/_dabbir-ai-sdk7.js';\n\ntest('AI telemetry never records DABBIR inputs or outputs',()=>{const t=aiTelemetrySettings('dabbir.test');assert.equal(t.recordInputs,false);assert.equal(t.recordOutputs,false);assert.equal(t.metadata.product,'DABBIR')});\ntest('telemetry registration is fail closed when disabled',()=>{let calls=0;const r=initializeDabbirAiTelemetry({DABBIR_AI_OTEL_ENABLED:'0'},{registerOtel:()=>calls++,registerAi:()=>calls++,makeIntegration:()=>({})});assert.equal(r.state,'DISABLED');assert.equal(calls,0)});\ntest('new agent runtime does not replace WhatsApp mutation authority',()=>{const p=dabbirAgentRuntimePolicy();assert.equal(p.whatsapp_authority,false);assert.equal(p.workflow_mutation_authority,false);assert.ok(p.max_steps<=8);assert.equal(p.telemetry_content,false)});\ntest('all direct AI SDK generateText calls explicitly disable content telemetry',()=>{for(const file of ['api/translate.js']){const s=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');assert.match(s,/recordInputs:\s*false/);assert.match(s,/recordOutputs:\s*false/)}});\ntest('Vercel config schedules intelligence maintenance and enables guarded layers',()=>{const v=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));assert.equal(v.env.DABBIR_KNOWLEDGE_RAG_ENABLED,'1');assert.equal(v.env.DABBIR_AI_OTEL_ENABLED,'1');assert.ok(v.crons.some(x=>x.path==='/api/dabbir-intelligence-maintenance-cron'&&x.schedule==='17 * * * *'));assert.equal(v.functions['api/dabbir-intelligence-maintenance-cron.js'].maxDuration,60)});\n""")
-
-          # Remove one-shot workflow before committing final branch state.
-          Path('.github/workflows/dabbir-intelligence-runtime-wire.yml').unlink()
+          test('unused AI telemetry integration is not shipped as a dead production dependency', () => {
+            assert.equal(pkg.dependencies?.['@ai-sdk/otel'],undefined);
+            assert.equal(packages['node_modules/@ai-sdk/otel'],undefined);
+          });
+          """.replace('          ',''))
           PY
-      - name: Install and run full gates
+      - name: Regenerate lock without force
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify clean production graph and full gates
         run: |
           npm ci --ignore-scripts
+          npm run audit:prod
           npm test
           npm run check:syntax
           npm run dabbir:build
-      - name: Commit runtime wiring
+      - name: Commit verified repair and remove one-shot workflow
         run: |
+          rm .github/workflows/dabbir-intelligence-runtime-wire.yml
           git config user.name dabbir-release-guardian
           git config user.email dabbir-release-guardian@users.noreply.github.com
-          git add package.json package-lock.json api test vercel.json .github/workflows/dabbir-intelligence-runtime-wire.yml
-          git commit -m "feat(ai): wire RAG, agents and privacy-safe telemetry"
+          git add package.json package-lock.json test/ai-sdk-version-contract.test.mjs .github/workflows/dabbir-intelligence-runtime-wire.yml
+          git commit -m "fix(ai): remove unused vulnerable workflow runtime"
           git push origin HEAD:feat/dabbir-intelligence-flywheel-v1
