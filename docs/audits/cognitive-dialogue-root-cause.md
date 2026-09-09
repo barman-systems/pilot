@@ -18,6 +18,8 @@ The live definition of `dabbir_whatsapp_finalize_outbound` revealed the deeper r
 
 The canonical finalizer test also exposed a JSONB merge defect: coalesce does not replace JSON null, so adding presentation fields to a null pending_question produced an array rather than an object. Normalize that slot to an object by checking jsonb_typeof before merging; preserve valid question objects. The regression asserts the resulting field and presentation state, not just RPC success.
 
+Service-question references also retain provenance: a tentative service entity is not enough to answer “its duration.” The inquiry target must be a grounded current-message catalog name or a verified state/read target. Otherwise ask which service is meant, retaining the original goal. The negative reference test prevents an inferred selection from becoming an authoritative service answer.
+
 ## Baseline and root cause
 
 Live GitHub main and production at 11:54 UTC: `9b949c37d3f3ff2d6a01c2d565e6502c5e6da189`, deployment `dpl_ASBm8dcpLqp6iKRiSyDzkNCdUHXA`.

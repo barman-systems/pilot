@@ -108,11 +108,11 @@ export function cognitiveReduce(args,reduce){
  const side=wasActive&&(['PRICING','SERVICE_MENU'].includes(decision.action)||proposedRead||knowledge);
  let role=d?.message_role||(side?'SIDE_QUESTION':resolvesPending(previous,state)?'ANSWER_TO_PENDING_QUESTION':arr(state.user_corrections).length>arr(previous?.user_corrections).length?'CORRECTION':wasActive?'CONTINUATION':'NEW_REQUEST');
  if(side){
-  const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service')};
+  const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service'),service_verified:verifiedOperationalFact(state.entities?.service)};
   // Recompute the next business requirement from the retained goal. A pricing
 // target never overwrites the service being booked or reuses a slot approval.
   result=reduce({...args,proposal:null,previous:prepared,context:{...c,batch_messages:[],cognitive_message_role:'SIDE_QUESTION'}});
-  state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,resumeReply:result.decision.action==='CLARIFY'?result.decision.reply:null};
+  state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,queryServiceVerified:inquiry.service_verified,resumeReply:result.decision.action==='CLARIFY'?result.decision.reply:null};
   if(knowledge){const answer=state.language==='en'?knowledge.value?.answer_en||knowledge.value?.answer_ar:knowledge.value?.answer_ar||knowledge.value?.answer_en;if(typeof answer==='string')decision.reply=answer.slice(0,1400)+(decision.resumeReply?'\n'+decision.resumeReply:'');else decision=result.decision;}
   role='SIDE_QUESTION';
  }

@@ -1,4 +1,5 @@
 import {normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
+import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 
 // Read-only response facet over the current branch catalog. The interpreter
 // names the requested attribute; it never supplies its value or a booking fact.
@@ -7,8 +8,9 @@ export function answerServiceQuestion({context:c,state,decision,proposal}){
  if(!q||!['price','duration_minutes'].includes(q.field)||typeof q.evidence!=='string'||!q.evidence.trim()||!raw.includes(q.evidence)||Number(proposal.confidence)<.8||!['REPLY','PRICING','SERVICE_MENU'].includes(decision.action))return decision;
  const ar=state.language==='ar',catalog=(c.services||[]).filter(s=>(!s.business_id||s.business_id===c.business.id)&&(!s.branch_id||s.branch_id===c.conversation.branch_id));
  const named=proposal.serviceName?catalog.filter(s=>[s.name_ar,s.name,s.name_en].some(n=>n&&normalizeSemanticText(n)===normalizeSemanticText(proposal.serviceName))):[];
- const selected=state.entities?.service?.status==='active'?state.entities.service.value:null;
- const service=proposal.serviceName?(named.length===1?named[0]:null):q.explicit_service?null:catalog.find(s=>s.id===(decision.queryServiceId||selected));
+ const selected=verifiedOperationalFact(state.entities?.service)?state.entities.service.value:null;
+ const target=decision.queryServiceVerified===true?decision.queryServiceId:selected;
+ const service=proposal.serviceName?(named.length===1?named[0]:null):q.explicit_service?null:catalog.find(s=>s.id===target);
  const label=String(service?.name_ar||service?.name||service?.name_en||'').slice(0,180);
  const value=service?.[q.field],numeric=value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
  const currency=String(c.business.currency_code||'');

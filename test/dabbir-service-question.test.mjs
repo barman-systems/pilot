@@ -72,6 +72,13 @@ test('missing duration and unsupported service names never borrow another servic
  assert.equal(unknown.reply,'أي خدمة تقصد؟');
 });
 
+test('an inferred service is not a verified referent for its duration',async()=>{
+ const h=harness();await h.turn('أبا غسيل عادي',{action:'CREATE_BOOKING',intent:'BOOKING',confidence:.98,riskLevel:'MEDIUM',entities:[]});
+ h.state.entities.service={...h.state.entities.service,source:'AI_INFERENCE',confidence:.5};
+ const r=await h.turn('كم مدته؟',question('duration_minutes','كم مدته'));
+ assert.equal(r.reply,'أي خدمة تقصد؟');assert.doesNotMatch(r.reply,/45 دقيقة/);
+});
+
 test('interpreter accepts only a current-message service question and never its proposed value',async()=>{
  const output={action:'REPLY',intent:'SUPPORT',confidence:.98,risk_level:'LOW',service_name:'VIP',service_evidence:'VIP',knowledge_key:null,entities:[],
   service_question:{field:'duration_minutes',evidence:'كم الوقت'},dialogue:{message_role:'NEW_REQUEST',evidence:'كم الوقت',invalidated_fields:[]},request_spans:[]};
