@@ -10,6 +10,14 @@ const kind=m=>String(m?.memory_key||'').replace(/^last_verified_|^preferred_|^kn
 const scope=(row,c)=>row?.business_id===c.business?.id&&row.customer_id===c.customer?.id&&row.branch_id===c.conversation?.branch_id;
 const catalog=(rows,c)=>arr(rows).filter(r=>(!r.business_id||r.business_id===c.business?.id)&&(!r.branch_id||r.branch_id===c.conversation?.branch_id));
 
+// An explicit noun constrains an ordinal's target. A displayed slot list does
+// not turn "the second car" into approval to book the second slot.
+export function ordinalReferenceField(raw){
+ const t=normalize(raw),matches=[];
+ for(const [field,pattern] of [['vehicle',/سيار|\b(?:car|vehicle)s?\b/],['worker',/عامل|موظف|\b(?:worker|staff|employee)\b/],['service',/خدم|\bservice\b/],['branch',/فرع|\bbranch\b/],['appointment',/موعد|حجز|\b(?:appointment|booking|slot)\b/]])if(pattern.test(t))matches.push(field);
+ return matches.length===1?matches[0]:matches.length?'multiple_options':null;
+}
+
 export function referenceRequest(raw,proposal=null){
  const t=normalize(raw);
  const reference=/(?:نفس|اللي قلت|قلت لك|اللي قبل|مثل اخر|مثل آخر|same|last time|told you|as before)/i.test(t);

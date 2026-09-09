@@ -130,6 +130,16 @@ test('second/الثاني and exact offered service name resolve through the sam
   }
 });
 
+test('vehicle and employee ordinals never select a service from a displayed catalog',async()=>{
+  for(const text of ['السيارة الثانية','الموظف الثاني','the second car']){
+    const first=await runTurn({text:'شو خدماتكم'}),pending=pendingFromMenu(first);
+    const second=await runTurn({text,previous:first.committed,pending_state:pending});
+    assert.equal(second.result.action,'CLARIFY',text);
+    assert.notEqual(second.committed.entities.service?.status,'active',text);
+    assert.ok(!second.calls.some(x=>x.name==='dabbir_semantic_execute_v2'),text);
+  }
+});
+
 test('legacy loop repair: exact service clears only the unsupported ordinal-as-time artifact',async()=>{
   const first=await runTurn({text:'شو خدماتكم'});
   const legacy=structuredClone(first.committed);

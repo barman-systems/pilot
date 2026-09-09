@@ -1,6 +1,6 @@
 import { applyActivityRequirements, normalizeDeliveryMode, validLocation, detectRequirementLoop, activityActionAuthority } from './_dabbir-activity-intelligence.js';
 import { wantsServiceMenu } from './_dabbir-whatsapp-understanding.js';
-import { resolveContextReferences } from './_dabbir-context-resolver.js';
+import { resolveContextReferences, ordinalReferenceField } from './_dabbir-context-resolver.js';
 // Pure semantic reducer. Provider output is a proposal, never execution authority.
 export const SEMANTIC_VERSION = 2;
 export const TRUST = Object.freeze({ PROVIDER_VERIFIED: 100, DATABASE_FACT: 95, OWNER_POLICY: 95,
@@ -256,7 +256,15 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     if(bareDateChoice)s.unresolved_references.push('date_input');
     if(/(?:مب|مو|not)\s+(?:باجر|tomorrow)\s*$/.test(t))invalidate(s,'date',stamp);
     if(/(?:لا تلغي|لا تلغ|dont cancel|do not cancel|don't cancel)\s*(?:الموعد|it)?$/.test(t)){s.intent='SUPPORT';s.goal='UNKNOWN';invalidate(s,'appointment',stamp);}
-    const ordinal=bareDateChoice?{index:null,ambiguous:false,mentioned:false}:resolveOrdinal(raw),slots=arr(c.pending_state?.payload?.slots);
+    let ordinal=bareDateChoice?{index:null,ambiguous:false,mentioned:false}:resolveOrdinal(raw);
+    const slots=arr(c.pending_state?.payload?.slots),referenceField=ordinalReferenceField(raw);
+    const presentedField=({choose_slot:'appointment',choose_appointment:'appointment',choose_service:'service'})[c.pending_state?.pending_action];
+    if(ordinal.mentioned&&referenceField&&referenceField!==presentedField){
+      ordinal={...ordinal,index:null,ambiguous:false};
+      invalidate(s,'slot',stamp);
+      if(['vehicle','worker','service'].includes(referenceField))invalidate(s,referenceField,stamp);
+      s.unresolved_references.push(referenceField);
+    }
     const pendingLive=c.pending_state?.payload?.presented===true && c.pending_state?.expires_at && Date.parse(c.pending_state.expires_at)>now.getTime();
     const referenceQuestion=ordinal.index!=null && /[?؟]|(?:^|\s)(?:متى|كم|هل|when|what|price|does|is)(?:\s|$)/i.test(raw);
     if(ordinal.ambiguous)s.unresolved_references.push('multiple_options');
@@ -374,6 +382,8 @@ export function clarification(s,c,{acknowledge=true}={}) {
   if(ref==='voice_transcript')return en?'Please confirm the unclear detail in a short text message.':'ممكن تكتب التفصيل غير الواضح في الصوت؟';
   if(ref==='verified_history')return en?'Which service did you use last time?':'أي خدمة تقصد من آخر مرة؟';
   if(ref==='vehicle')return en?'Which vehicle do you mean?':'أي سيارة تقصد؟';
+  if(ref==='worker')return en?'Which staff member do you mean?':'أي موظف تقصد؟';
+  if(ref==='service')return en?'Which service do you mean?':'أي خدمة تقصد؟';
   if(ref==='slot_confirmation')return en?'Do you want to book that time?':'تبا تحجز هذا الوقت؟';
   if(ref==='multiple_options'||ref==='offered_option')return en?'Which one option do you mean?':'أي خيار واحد تقصد؟';
   if(ref==='date_input')return en?'Do you mean today, tomorrow, or a specific date?':'تقصد اليوم أو باجر، أو اكتب التاريخ؟';

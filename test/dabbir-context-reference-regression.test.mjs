@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {understandConversation,resolveOrdinal} from '../api/_dabbir-semantic-engine.js';
-import {context,ids,memory,now} from './fixtures/understanding/cases.mjs';
+import {context,ids,memory,now,offered,appointments,offeredAppointments} from './fixtures/understanding/cases.mjs';
 
 const run=(body,previous,extra={})=>understandConversation({context:context({...extra,batch_messages:[{body}]}),previous,now});
 const selected=()=>run('أبي غسيل كامل باجر الساعة 18:00').state;
@@ -44,4 +44,21 @@ test('real dialogue affirmative هي answers the pending confirmation without re
  const r=run('هي',p);
  assert.equal(r.state.intent_confirmed,true);
  assert.equal(r.decision.action,'CHECK_AVAILABILITY');
+});
+
+for(const [body,field] of [['السيارة الثانية','vehicle'],['the second car','vehicle'],['الموظف الثاني','worker'],['الخدمة الثانية','service']])test('typed ordinal cannot authorize an offered slot: '+body,()=>{
+ const r=run(body,null,{pending_state:offered});
+ assert.equal(r.decision.action,'CLARIFY');
+ assert.ok(r.state.unresolved_references.includes(field));
+ assert.notEqual(r.state.entities.slot?.status,'active');
+});
+test('a typed vehicle ordinal cannot select an appointment for cancellation',()=>{
+ const r=run('الغ السيارة الثانية',null,{pending_state:offeredAppointments,upcoming_appointments:appointments});
+ assert.equal(r.decision.action,'CLARIFY');
+ assert.notEqual(r.state.entities.appointment?.status,'active');
+});
+test('unqualified feminine ordinal still confirms the actually presented slot',()=>{
+ const r=run('لا مب هذي، الثانية',null,{pending_state:offered});
+ assert.equal(r.decision.action,'CREATE_BOOKING');
+ assert.equal(r.state.entities.slot.value,1);
 });

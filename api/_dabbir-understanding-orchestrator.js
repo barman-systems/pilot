@@ -3,6 +3,7 @@ import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGa
 import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {assertBrainDecision,verifiedAvailability,assertResponseGrounding} from './_dabbir-brain-contract.js';
+import {ordinalReferenceField} from './_dabbir-context-resolver.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -50,7 +51,8 @@ function groundedServiceChoice(c,raw,previous,at){
     const ordinal=resolveOrdinal(raw);
     const currentQuestion=previous?.cognition?.pending_field||previous?.clarification_entity;
     const menuCurrent=!(activeJourney(previous)&&verifiedOperationalFact(previous?.entities?.service)&&currentQuestion&&!['service','service_question_target'].includes(currentQuestion));
-    if(menuCurrent&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
+    const referenceField=ordinalReferenceField(raw);
+    if(menuCurrent&&(!referenceField||referenceField==='service')&&!ordinal.ambiguous&&ordinal.index!=null&&offered[ordinal.index]){
       const selected=scopedServices(c).find(s=>s.id===offered[ordinal.index].id);
       if(selected)return selected;
     }
