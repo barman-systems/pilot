@@ -67,10 +67,15 @@ function sessionPrevious(previous,c,at){
   if((expired||idle)&&!pendingStateLive(c,at)&&!(previous.recovery_required===true&&!expired))return {previous:null,reset:true};
   return {previous,reset:false};
 }
-function greetingOnly(messages){
+function greetingKind(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
-  return /^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?|مرحبا(?: بك)?|هلا(?: والله)?|hello|hi|hey|good morning|good evening)$/.test(text);
+  if(/^(?:صباح الخير|صباح النور|صبحكم الله بالخير|good morning)$/.test(text))return 'morning';
+  if(/^(?:مساء الخير|مسا الخير|مساء النور|مسا النور|good evening)$/.test(text))return 'evening';
+  if(/^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?)$/.test(text))return 'salam';
+  if(/^(?:مرحبا(?: بك)?|هلا(?: والله)?|hello|hi|hey)$/.test(text))return 'hello';
+  return null;
 }
+function greetingOnly(messages){return greetingKind(messages)!==null;}
 function orphanChoiceOnly(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
   return /^(?:[123]|الاول|اول|الثاني|ثاني|الثالث|ثالث|first|second|third|the first|the second|the third)$/.test(text);
@@ -105,13 +110,16 @@ function recoveryGreetingDecision(state,c,at){
   return {action:'CLARIFY',intent:state.intent,confidence:state.semantic_confidence||0,riskLevel:'LOW',missingFields:state.missing_fields,
     reasonCode:'INTERRUPTED_REQUEST_RESUME',reply:state.language==='ar'?'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟':'Hello. Your previous request is unfinished. Would you like to continue it?'};
 }
-function greetingDecision(state,sessionReset){
+function greetingDecision(state,sessionReset,messages){
   state.sub_intent='GREETING';state.missing_fields=[];state.unresolved_references=[];
   state.overall_confidence=1;state.semantic_confidence=1;
   state.operational_confidence=Math.min(1,state.transcription_confidence==null?1:Number(state.transcription_confidence)||0);
   if(sessionReset){state.session_reset=true;state.goal='UNKNOWN';state.intent='SUPPORT';}
-  const ar=state.language==='ar';
-  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply:ar?'وعليكم السلام، حياك. كيف أقدر أساعدك؟':'Hello. How can I help you?'};
+  const ar=state.language==='ar',kind=greetingKind(messages);
+  const reply=ar
+    ?(kind==='morning'?'صباح النور، حياك. كيف أقدر أخدمك؟':kind==='evening'?'مساء النور، حياك. كيف أقدر أخدمك؟':kind==='salam'?'وعليكم السلام، حياك. كيف أقدر أخدمك؟':'حياك الله. كيف أقدر أخدمك؟')
+    :(kind==='morning'?'Good morning. How can I help you?':kind==='evening'?'Good evening. How can I help you?':'Hello. How can I help you?');
+  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply};
 }
 function staleChoiceDecision(state){
   delete state.entities?.time;delete state.entities?.slot;
@@ -181,7 +189,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   state.model_calls=0;state.semantic_interpreter='deterministic';delete state.planner_failure_code;delete state.semantic_ai_override;
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
   const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
-  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);
+  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope,c.batch_messages);
   const deterministic={state:structuredClone(state),decision:{...decision}};
   const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&(!constrainedContinuation(c.batch_messages,semanticPrevious)||semanticPrevious?.recovery_required===true)&&naturalLanguageTurn(c.batch_messages));
   if(shouldInterpret){
@@ -206,7 +214,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   if(session.reset)state.session_reset=true;else delete state.session_reset;
   budget();
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
-  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);}
+  if(committed.replay){state=committed.state;decision={...decision,action:state.pending_action||decision.action};if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope,c.batch_messages);}
   const version=committed.version,lang=state.language;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});

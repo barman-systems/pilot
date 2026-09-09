@@ -32,6 +32,10 @@ function fact(s,key,value,source,confidence,now,extra={}) {
   s.entities[key]={value,source,confidence,status:value==null?'unresolved':'active',updated_at:now,...extra};
 }
 function invalidate(s,key,now) { if(s.entities[key]) fact(s,key,null,'CUSTOMER_CORRECTION',0,now); }
+function clearBookingJourneyFacts(s) {
+  for(const key of ['service','price','delivery_mode','vehicle','location','property_details','date','time','worker','slot','appointment'])delete s.entities[key];
+  delete s.repeat_vehicle_location_prompt;
+}
 function freshState(c,now) {
   return {version:2,revision:0,scope:{business_id:c.business?.id,conversation_id:c.conversation?.id,customer_id:c.customer?.id,branch_id:c.conversation?.branch_id},
     goal:'UNKNOWN',intent:'SUPPORT',sub_intent:null,entities:{},pending_action:null,missing_fields:[],unresolved_references:[],user_corrections:[],
@@ -72,18 +76,22 @@ function parseTime(raw,s) {
   let period=/(?:مساء|المسا|المغرب|الليل|العصر|evening|afternoon|night|\bpm\b)/.test(t)?'pm':/(?:صباح|الصبح|الفجر|morning|\bam\b)/.test(t)?'am':null;
   if(broad && !clock)return {value:null,confidence:.55,part:t.includes('مغرب')||/sunset|maghrib/.test(t)?'after_maghrib':'after_asr'};
   if(!clock) {
-    if(period && s.entities.time?.hour!=null && !broad) {
-      const hour=s.entities.time.hour%12+(period==='pm'?12:0);
-      return {value:String(hour).padStart(2,'0')+':'+String(s.entities.time.minute||0).padStart(2,'0'),confidence:.99,period,hour:s.entities.time.hour,minute:s.entities.time.minute||0};
+    const priorTime=s.entities.time,actionAt=Date.parse(s.last_verified_action?.at||''),priorUpdated=Date.parse(priorTime?.updated_at||'');
+    const sameJourneyPeriod=!Number.isFinite(actionAt)||(Number.isFinite(priorUpdated)&&priorUpdated>actionAt);
+    if(period && sameJourneyPeriod && priorTime?.hour!=null && !broad) {
+      const hour=priorTime.hour%12+(period==='pm'?12:0);
+      return {value:String(hour).padStart(2,'0')+':'+String(priorTime.minute||0).padStart(2,'0'),confidence:.99,period,hour:priorTime.hour,minute:priorTime.minute||0};
     }
     if(period||/الظهر|الليل|الصبح/.test(t))return {value:null,confidence:.55,part:period||'daypart',...(period?{period,period_explicit:true}:{})};
     return null;
   }
   const h=Number(clock[1]),minute=Number(clock[2]||0);
   if(clock[3] && /^(am|pm|ص|م)$/.test(clock[3]))period=/^(pm|م)$/.test(clock[3])?'pm':'am';
-  // Reuse only a period explicitly stated by the same customer in this semantic session.
-  if(!period && s.entities.time?.period_explicit && ['CUSTOMER_STATED','CUSTOMER_CORRECTION','CUSTOMER_CONFIRMED'].includes(s.entities.time.source))period=s.entities.time.period;
-  else if(!period && corrected && s.entities.time?.period)period=s.entities.time.period;
+  // Reuse a daypart only when it belongs to the current journey, never a completed booking.
+  const priorTime=s.entities.time,actionAt=Date.parse(s.last_verified_action?.at||''),priorUpdated=Date.parse(priorTime?.updated_at||'');
+  const sameJourneyPeriod=!Number.isFinite(actionAt)||(Number.isFinite(priorUpdated)&&priorUpdated>actionAt);
+  if(!period && sameJourneyPeriod && priorTime?.period_explicit && ['CUSTOMER_STATED','CUSTOMER_CORRECTION','CUSTOMER_CONFIRMED'].includes(priorTime.source))period=priorTime.period;
+  else if(!period && corrected && sameJourneyPeriod && priorTime?.period)period=priorTime.period;
   if(!period && h<13 && h!==0)return {value:null,confidence:.55,hour:h,minute,part:'am_pm'};
   const hh=period?h%12+(period==='pm'?12:0):h;
   return {value:String(hh).padStart(2,'0')+':'+String(minute).padStart(2,'0'),confidence:.99,period,hour:h,minute};
@@ -114,7 +122,8 @@ function resolveCatalog(s,c,text,now,source) {
 function reuseMemory(s,c,t,now) {
   if(!/(?:نفس|اللي قبل|المرة اللي طافت|same|last time)/.test(t))return;
   const onlyVehicle=/سيار|vehicle|car\b/.test(t),onlyWorker=/عامل|موظف|worker|staff/.test(t),onlyLocation=/مكان|موقع|location|place|address/.test(t),onlyService=/خدم|service/.test(t);
-  const allowed=onlyVehicle?['vehicle']:onlyWorker?['worker']:onlyLocation?['location']:onlyService?['service']:['service','worker','vehicle','location'];
+  const mentioned=[];if(onlyService)mentioned.push('service');if(onlyWorker)mentioned.push('worker');if(onlyVehicle)mentioned.push('vehicle');if(onlyLocation)mentioned.push('location');
+  const allowed=mentioned.length?mentioned:['service','worker','vehicle','location'];
   let used=0;
   for(const m of arr(c.verified_memory)) {
     if(!m.id || m.branch_id!==c.conversation.branch_id || !m.expires_at || (m.service_id && valueOf(s,'service') && m.service_id!==valueOf(s,'service')) || m.business_id!==c.business.id || m.customer_id!==c.customer.id || m.status!=='verified' || !['DATABASE_FACT','CUSTOMER_CONFIRMED','OWNER_POLICY','PROVIDER_VERIFIED'].includes(m.source) || m.confidence<.9 || !m.last_confirmed_at || (m.expires_at && Date.parse(m.expires_at)<=Date.parse(now)))continue;
@@ -141,8 +150,14 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   const stamp=now.toISOString();
   const fresh=freshState(c,stamp);
   const same=previous && Object.keys(fresh.scope).every(k=>previous.scope?.[k]===fresh.scope[k]) && previous.version===2 && Date.parse(previous.expires_at)>now.getTime();
+  const currentText=normalizeSemanticText(arr(c.batch_messages).map(x=>clean(x?.language_body??x?.body,1500)).join(' '));
+  const explicitNewBooking=/(?:^|\s)(?:(?:ابا|ابي|ابغي|ابغى|اريد)\s+)?(?:احجز|حجز|book|booking)(?:\s|$)/.test(currentText)&&!/(?:الغ|الغاء|تلغي|cancel|تعديل|اجل|reschedule|change (?:it|my|the) (?:appointment|booking|time))/.test(currentText);
+  const pendingActive=!!(c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&c.pending_state.expires_at&&Date.parse(c.pending_state.expires_at)>now.getTime());
+  const lastActionAt=Date.parse(previous?.last_verified_action?.at||''),journeyMarker=Date.parse(previous?.journey_started_after_action_at||'');
+  const forceFreshBooking=!!(same&&Number.isFinite(lastActionAt)&&explicitNewBooking&&!pendingActive&&(!Number.isFinite(journeyMarker)||journeyMarker<=lastActionAt));
   const completed=previous?.last_verified_action?.at && Date.parse(previous.last_verified_action.at)>=Date.parse(previous.updated_at);
-  const s=same&&!completed?structuredClone(previous):{...fresh,last_verified_action:same?previous?.last_verified_action||null:null,last_verified_outcome:same?previous?.last_verified_outcome||null:null};
+  const s=same&&!completed&&!forceFreshBooking?structuredClone(previous):{...fresh,last_verified_action:same?previous?.last_verified_action||null:null,last_verified_outcome:same?previous?.last_verified_outcome||null:null};
+  if(forceFreshBooking)s.journey_started_after_action_at=stamp;
   s.updated_at=stamp;s.revision=(previous?.revision||0)+1;s.missing_fields=[];s.unresolved_references=[];s.pending_action=null;
   delete s.entities.slot; // Confirmation authorizes exactly this customer turn.
   s.ontology=c.business?.business_type||'services';
@@ -212,7 +227,16 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     }
     if(previous?.clarification_entity==='property_details' && raw.trim().length>=2 && raw.length<=300)fact(s,'property_details',raw.trim(),source,.99,stamp);
     if(/^(?:هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(t)) {
-      if(previous?.clarification_entity==='intent_confirmation')s.intent_confirmed=true;
+      if(previous?.clarification_entity==='intent_confirmation'){
+        const target=previous.intent;
+        if(target==='BOOKING'){
+          const actionAt=Date.parse(previous.last_verified_action?.at||''),markerAt=Date.parse(previous.journey_started_after_action_at||'');
+          if(Number.isFinite(actionAt)&&(!Number.isFinite(markerAt)||markerAt<=actionAt)){clearBookingJourneyFacts(s);s.journey_started_after_action_at=stamp;fact(s,'branch',c.conversation.branch_id,'DATABASE_FACT',1,stamp);}
+          s.goal='BOOK_SERVICE';s.intent='BOOKING';
+        }else if(target==='CANCEL_BOOKING'){s.goal='CANCEL_BOOKING';s.intent='CANCEL_BOOKING';}
+        else if(target==='RESCHEDULE_BOOKING'){s.goal='RESCHEDULE_BOOKING';s.intent='RESCHEDULE_BOOKING';}
+        s.intent_confirmed=true;
+      }
       const confirmedKey=previous?.clarification_entity;
       if(['delivery_mode','vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp,{...(confirmedKey==='delivery_mode'?{service_id:valueOf(s,'service')}:{})});
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
@@ -228,8 +252,9 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     if(/(?:لا تلغي|لا تلغ|dont cancel|do not cancel|don't cancel)\s*(?:الموعد|it)?$/.test(t)){s.intent='SUPPORT';s.goal='UNKNOWN';invalidate(s,'appointment',stamp);}
     const ordinal=bareDateChoice?{index:null,ambiguous:false,mentioned:false}:resolveOrdinal(raw),slots=arr(c.pending_state?.payload?.slots);
     const pendingLive=c.pending_state?.payload?.presented===true && c.pending_state?.expires_at && Date.parse(c.pending_state.expires_at)>now.getTime();
+    const verifiedChoiceContext=!!(pendingLive&&['choose_service','choose_slot','choose_appointment'].includes(c.pending_state?.pending_action));
     const referenceQuestion=ordinal.index!=null && /[?؟]|(?:^|\s)(?:متى|كم|هل|when|what|price|does|is)(?:\s|$)/i.test(raw);
-    if(ordinal.ambiguous)s.unresolved_references.push('multiple_options');
+    if(ordinal.ambiguous&&verifiedChoiceContext)s.unresolved_references.push('multiple_options');
     if(referenceQuestion && pendingLive && c.pending_state?.pending_action==='choose_slot')s.unresolved_references.push('slot_confirmation');
     if(['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent) && !(s.intent==='RESCHEDULE_BOOKING' && pendingLive && c.pending_state?.pending_action==='choose_slot' && ordinal.index!=null && !d && !time)) {
       const appointments=scoped(c.upcoming_appointments,c);
@@ -247,7 +272,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
         s.intent=c.pending_state.payload.mode==='reschedule'?'RESCHEDULE_BOOKING':'BOOKING';s.goal=s.intent==='BOOKING'?'BOOK_SERVICE':'RESCHEDULE_BOOKING';
         if(c.pending_state.payload.mode==='reschedule')fact(s,'appointment',c.pending_state.payload.appointment_id,'CUSTOMER_CONFIRMED',1,stamp);
       }
-    } else if(ordinal.mentioned && !['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent))s.unresolved_references.push('offered_option');
+    } else if(ordinal.mentioned&&verifiedChoiceContext&&!['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent))s.unresolved_references.push('offered_option');
   }
   if(valueOf(s,'date') && valueOf(s,'date')<today)invalidate(s,'date',stamp);
   if(c.voice && (c.voice.clarification_required || !(Number(c.voice.transcription_confidence)>=.85))) {s.unresolved_references.push('voice_transcript');}
@@ -324,22 +349,22 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   if(['BOOKING','RESCHEDULE_BOOKING'].includes(s.intent)){s.pending_action='CHECK_AVAILABILITY';return route('CHECK_AVAILABILITY','REQUIRED_ENTITIES_GROUNDED');}
   if(s.intent==='PRICING')return route('PRICING','DATABASE_PRICE');
   if(s.intent==='SERVICE_DISCOVERY')return route('SERVICE_MENU','DATABASE_CATALOG');
-  return route('REPLY','NO_OPERATIONAL_AUTHORITY',s.language==='ar'?'أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟':'I can help with services, prices, bookings or changing your appointment. What do you need?');
+  return route('REPLY','NO_OPERATIONAL_AUTHORITY',s.language==='ar'?'كيف أقدر أخدمك؟ أقدر أساعدك بالخدمات والأسعار والحجوزات.':'How can I help? I can help with services, prices, and bookings.');
 }
 
 export function clarification(s,c) {
   const en=s.language==='en',ref=s.unresolved_references[0],key=s.missing_fields[0];
   if(['date','time'].includes(key)&&s.entities[key]?.source==='AI_INFERENCE')return en?`Please confirm ${s.entities[key].value}?`:`للتأكيد، تقصد ${s.entities[key].value}؟`;
-  if(key==='intent_confirmation')return s.intent==='CANCEL_BOOKING'?(en?'Do you want to cancel an appointment?':'تقصد تبا تلغي موعد؟'):s.intent==='RESCHEDULE_BOOKING'?(en?'Do you want to change an appointment?':'تقصد تبا تعدل موعد؟'):(en?'Do you want to book a service?':'تقصد تبا تحجز خدمة؟');
+  if(key==='intent_confirmation')return s.intent==='CANCEL_BOOKING'?(en?'Would you like to cancel an appointment?':'هل تريد إلغاء موعد؟'):s.intent==='RESCHEDULE_BOOKING'?(en?'Would you like to change an appointment?':'هل تريد تعديل موعد؟'):(en?'Would you like to book a service?':'هل تريد حجز خدمة؟');
   if(ref==='branch')return en?'Which branch do you mean? This conversation is linked to one branch.':'أي فرع تقصد؟ هذه المحادثة مرتبطة بفرع محدد.';
   if(ref==='voice_transcript')return en?'Please confirm the unclear detail in a short text message.':'ممكن تكتب التفصيل غير الواضح في الصوت؟';
   if(ref==='verified_history')return en?'Which service did you use last time?':'أي خدمة تقصد من آخر مرة؟';
   if(ref==='vehicle')return en?'Which vehicle do you mean?':'أي سيارة تقصد؟';
-  if(ref==='slot_confirmation')return en?'Do you want to book that time?':'تبا تحجز هذا الوقت؟';
-  if(ref==='multiple_options'||ref==='offered_option')return en?'Which one option do you mean?':'أي خيار واحد تقصد؟';
+  if(ref==='slot_confirmation')return en?'Would you like to book that time?':'هل تريد حجز هذا الوقت؟';
+  if(ref==='multiple_options'||ref==='offered_option')return en?'Which option do you mean?':'أي خيار تقصد؟';
   if(ref==='date_input')return en?'Do you mean today, tomorrow, or a specific date?':'تقصد اليوم أو باجر، أو اكتب التاريخ؟';
   if(key==='appointment'||ref==='appointment')return en?'Which appointment do you mean?':'أي موعد تقصد؟';
-  if(key==='service') {if(s.entities.service?.source==='AI_INFERENCE'&&s.entities.service.label)return en?`Do you mean ${s.entities.service.label}?`:`تقصد ${s.entities.service.label}؟`;const names=arr(s.entities.service?.candidates).map(x=>x.label).slice(0,2);return names.length===2?(en?`Do you mean ${names[0]} or ${names[1]}?`:`تقصد ${names[0]} أو ${names[1]}؟`):(en?'Which service would you like?':'أي خدمة تبا؟');}
+  if(key==='service') {if(s.entities.service?.source==='AI_INFERENCE'&&s.entities.service.label)return en?`Do you mean ${s.entities.service.label}?`:`تقصد ${s.entities.service.label}؟`;const names=arr(s.entities.service?.candidates).map(x=>x.label).slice(0,2);return names.length===2?(en?`Do you mean ${names[0]} or ${names[1]}?`:`تقصد ${names[0]} أو ${names[1]}؟`):(en?'Which service would you like?':'أي خدمة تناسبك؟');}
   if(key==='date')return en?'Which day works for you?':'أي يوم يناسبك؟';
   if(key==='time') {
     const f=s.entities.time;
@@ -354,11 +379,10 @@ export function clarification(s,c) {
     const f=s.entities[key];if(f?.source==='AI_INFERENCE')return en?'Please confirm: '+String(f.value)+'?':'للتأكيد، تقصد '+String(f.value)+'؟';
     const definition=s.activity_requirements?.contract?.entity_definitions?.[key];
     const question=definition?.[en?'question_en':'question_ar']||(en?'Please provide '+key:'ما تفاصيل '+key+'؟');
-    // Compose acknowledgement only from grounded facts; the question itself
-    // stays bound to the resolver's next entity, never a provider's invented one.
+    // Acknowledge the grounded service only. Never echo stale date/time facts while
+    // asking for a different requirement.
     const service=scoped(c.services,c).find(x=>x.id===valueOf(s,'service'));
-    const known=[service?nameOf(service):null,supported(s.entities.date)?valueOf(s,'date'):null,supported(s.entities.time)?(en?'at ':'الساعة ')+valueOf(s,'time'):null].filter(Boolean);
-    return known.length?(en?'Got it: ':'تمام، ')+known.join('، ')+'. '+question:question;
+    return service?(en?`Got it — ${nameOf(service)}. ${question}`:`تمام، اخترت ${nameOf(service)}. ${question}`):question;
   }
   return en?'Which detail should I use?':'أي تفصيل تقصد؟';
 }
