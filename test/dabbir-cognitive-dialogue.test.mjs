@@ -5,6 +5,13 @@ import {ids} from './fixtures/understanding/cases.mjs';
 import {probeCognitiveDialogue,cognitiveEvaluationEnvironment} from '../api/_dabbir-cognitive-probe.js';
 const proposal=intent=>({intent,action:intent==='SERVICE_DISCOVERY'?'SERVICE_MENU':'REPLY',confidence:.99,riskLevel:'LOW',entities:[]});
 
+test('history-derived goal outranks a drifting intent label on the first turn',async()=>{
+ const r=await probeCognitiveDialogue({scenario:'context_references',interpret:async()=>({provider:'test-provider',model:'test-model',proposal:proposal('SUPPORT')})});
+ assert.equal(r.ok,true,JSON.stringify(r.checks));
+ assert.equal(r.turns[0].goal,'BOOK_SERVICE');
+ assert.equal(r.turns[0].service_preserved,true);
+});
+
 test('critical live regression: شو خدماتكم → أبا غسيل خارجي → ستيشن never resets the booking',async()=>{
  const h=dialogueHarness({planner:(body)=>proposal(body==='شو خدماتكم'?'SERVICE_DISCOVERY':body==='ستيشن'?'SUPPORT':'BOOKING')});
  await h.turn('شو خدماتكم');await h.turn('أبا غسيل خارجي');

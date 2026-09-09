@@ -123,7 +123,9 @@ export function detectRequirementLoop(state,previous,messageRole=null) {
   const current=JSON.stringify(state.entities?.[key]||null),before=JSON.stringify(previous?.entities?.[key]||null);
   const progressed=Object.entries(state.entities||{}).some(([field,f])=>field!=='branch'&&verifiedOperationalFact(f)&&JSON.stringify(f.value)!==JSON.stringify(previous?.entities?.[field]?.value));
   const repeated=!progressed && previous?.clarification_entity===key && current===before;
-  const count=repeated?(previous.requirement_loop?.count||1)+(messageRole==='SIDE_QUESTION'?0:1):1;
+  const references=state.context_resolution;
+  const answeredOtherFact=(references?.resolved||[]).length>0&&!(references?.resolved||[]).some(r=>r.field===key)&&!(references?.unresolved||[]).includes(key);
+  const count=repeated?(previous.requirement_loop?.count||1)+(messageRole==='SIDE_QUESTION'||answeredOtherFact?0:1):1;
   state.requirement_loop={key,count};
   return count>=3;
 }

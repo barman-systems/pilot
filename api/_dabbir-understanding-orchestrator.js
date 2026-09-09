@@ -241,7 +241,11 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
       return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
     }else{
-      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
+      // A first-turn goal resolved from a scoped service reference is already
+      // grounded. A generic provider intent cannot erase it merely because no
+      // previous conversation state existed. Safety/risk checks still run.
+      const goalAnchor=cognitive&&activeJourney(state)&&arr(state.context_resolution?.resolved).some(r=>r.field==='service')?state:semanticPrevious;
+      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&(arr(proposal.requestSpans).length>=2||proposal.serviceQuestion))&&(!cognitive||mayReplaceGoal(goalAnchor,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=reduce({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
       state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
