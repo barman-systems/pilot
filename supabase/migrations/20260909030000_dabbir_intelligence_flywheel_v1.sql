@@ -229,7 +229,14 @@ begin
       when coalesce(e.metrics->>'planner_failure_code','')<>'' then 'PLANNER_FAILURE'
       when upper(coalesce(e.metrics->>'action',''))='HANDOFF' then 'HANDOFF'
       when upper(coalesce(e.metrics->>'action',''))='CLARIFY' then 'CLARIFICATION'
-      when coalesce((e.metrics->>'operational_confidence')::numeric,1)<0.65 then 'LOW_OPERATIONAL_CONFIDENCE'
+      when (
+        case
+          when char_length(coalesce(e.metrics->>'operational_confidence',''))<=32
+            and coalesce(e.metrics->>'operational_confidence','') ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
+          then least(1::numeric,greatest(0::numeric,(e.metrics->>'operational_confidence')::numeric))
+          else 1::numeric
+        end
+      )<0.65 then 'LOW_OPERATIONAL_CONFIDENCE'
       else 'OTHER_FAILURE'
     end,
     jsonb_strip_nulls(jsonb_build_object(
@@ -244,7 +251,14 @@ begin
   where e.created_at>=now()-least(greatest(coalesce(p_since,interval '24 hours'),interval '1 hour'),interval '30 days')
     and (coalesce(e.metrics->>'planner_failure_code','')<>''
       or upper(coalesce(e.metrics->>'action','')) in ('CLARIFY','HANDOFF')
-      or coalesce((e.metrics->>'operational_confidence')::numeric,1)<0.65)
+      or (
+        case
+          when char_length(coalesce(e.metrics->>'operational_confidence',''))<=32
+            and coalesce(e.metrics->>'operational_confidence','') ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
+          then least(1::numeric,greatest(0::numeric,(e.metrics->>'operational_confidence')::numeric))
+          else 1::numeric
+        end
+      )<0.65)
   order by e.created_at asc
   limit least(greatest(coalesce(p_limit,500),1),2000)
   on conflict (source_event_id) do nothing;
@@ -265,9 +279,24 @@ begin
       failure_class,metrics->>'intent' as intent,metrics->>'action' as action,metrics->>'tool_selection' as reason_code,
       nullif(metrics->>'planner_failure_code','') as planner_failure_code,count(*)::bigint as occurrences,
       min(created_at) as first_seen,max(created_at) as last_seen,
-      jsonb_build_object('avg_semantic_confidence',round(avg(coalesce((metrics->>'semantic_confidence')::numeric,0)),3),
-        'avg_operational_confidence',round(avg(coalesce((metrics->>'operational_confidence')::numeric,0)),3),
-        'voice_cases',count(*) filter (where coalesce((metrics->>'voice')::boolean,false))) as evidence
+      jsonb_build_object(
+        'avg_semantic_confidence',round(avg(
+          case
+            when char_length(coalesce(metrics->>'semantic_confidence',''))<=32
+              and coalesce(metrics->>'semantic_confidence','') ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
+            then least(1::numeric,greatest(0::numeric,(metrics->>'semantic_confidence')::numeric))
+            else 0::numeric
+          end
+        ),3),
+        'avg_operational_confidence',round(avg(
+          case
+            when char_length(coalesce(metrics->>'operational_confidence',''))<=32
+              and coalesce(metrics->>'operational_confidence','') ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
+            then least(1::numeric,greatest(0::numeric,(metrics->>'operational_confidence')::numeric))
+            else 0::numeric
+          end
+        ),3),
+        'voice_cases',count(*) filter (where lower(coalesce(metrics->>'voice',''))='true')) as evidence
     from public.dabbir_ai_eval_cases
     where created_at>=now()-least(greatest(coalesce(p_since,interval '7 days'),interval '1 hour'),interval '30 days')
     group by failure_class,metrics->>'intent',metrics->>'action',metrics->>'tool_selection',metrics->>'planner_failure_code'
