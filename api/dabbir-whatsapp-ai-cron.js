@@ -13,6 +13,7 @@ const countValue=value=>{
   if(Array.isArray(value)&&value.length&&Number.isFinite(Number(value[0])))return Number(value[0]);
   return 0;
 };
+const whatsappFlowsEnabled=()=>clean(process.env.DABBIR_WHATSAPP_FLOWS_ENABLED,16)==='1';
 
 export default async function handler(req,res){
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
@@ -30,11 +31,14 @@ export default async function handler(req,res){
       coexistenceError=clean(error?.code||error?.message||'COEXISTENCE_BOOTSTRAP_FAILED');
       console.error('dabbir_whatsapp_coexistence_bootstrap_failed',{error:coexistenceError});
     }
+    const flowProvisionEnabled=whatsappFlowsEnabled();
     let flows={processed:0,published:0,validation_failed:0,failed:0},flowProvisionError=null;
-    try{flows=await processWhatsAppFlowProvisioning({limit:2});}
-    catch(error){
-      flowProvisionError=clean(error?.code||error?.message||'WHATSAPP_FLOW_PROVISION_FAILED');
-      console.error('dabbir_whatsapp_flow_provisioning_failed',{error:flowProvisionError});
+    if(flowProvisionEnabled){
+      try{flows=await processWhatsAppFlowProvisioning({limit:2});}
+      catch(error){
+        flowProvisionError=clean(error?.code||error?.message||'WHATSAPP_FLOW_PROVISION_FAILED');
+        console.error('dabbir_whatsapp_flow_provisioning_failed',{error:flowProvisionError});
+      }
     }
     const result=await processWhatsAppRecoveryWithServiceMenu({limit:12});
     const failover=await recoverWhatsAppAiProviderFailovers({limit:12});
@@ -49,14 +53,14 @@ export default async function handler(req,res){
     console.info('dabbir_whatsapp_ai_recovery',{
       auth_mode:authMode,voice_processed:voice.processed,voice_recovery_ok:voiceRecoveryError===null,
       coexistence_processed:coexistence.processed,coexistence_requested:coexistence.requested,coexistence_ok:coexistenceError===null,
-      flow_provision_processed:flows.processed,flow_published:flows.published,flow_validation_failed:flows.validation_failed,flow_failed:flows.failed,flow_provision_ok:flowProvisionError===null,
+      flow_provision_enabled:flowProvisionEnabled,flow_provision_processed:flows.processed,flow_published:flows.published,flow_validation_failed:flows.validation_failed,flow_failed:flows.failed,flow_provision_ok:flowProvisionError===null,
       processed:result.processed,provider_failovers:failover.processed,
       followup_candidates:followupCandidates,followup_capture_ok:followupCaptureError===null,
     });
     return json(res,200,{
       ok:true,voice_processed:voice.processed,voice_recovery_ok:voiceRecoveryError===null,
       coexistence_processed:coexistence.processed,coexistence_requested:coexistence.requested,coexistence_not_applicable:coexistence.notApplicable,coexistence_retry:coexistence.retry,coexistence_ok:coexistenceError===null,
-      flow_provision_processed:flows.processed,flow_published:flows.published,flow_validation_failed:flows.validation_failed,flow_failed:flows.failed,flow_provision_ok:flowProvisionError===null,
+      flow_provision_enabled:flowProvisionEnabled,flow_provision_processed:flows.processed,flow_published:flows.published,flow_validation_failed:flows.validation_failed,flow_failed:flows.failed,flow_provision_ok:flowProvisionError===null,
       processed:result.processed,provider_failovers:failover.processed,
       followup_candidates:followupCandidates,followup_capture_ok:followupCaptureError===null,
     });
