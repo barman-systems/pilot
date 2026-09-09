@@ -57,7 +57,9 @@ for(let index=0;index<9;index++)test(`approval contract scenario ${index+2}`,()=
   const approval=describeApproval([{action:WRITE_TOOLS[index%WRITE_TOOLS.length],idempotency_key:`key-${index}`,reason:'owner goal'}],'ar')[0];assert.equal(approval.risk,'MEDIUM');assert.equal(approval.expires_in_seconds,600);assert.ok(approval.idempotency_key);assert.match(endpoint,/action==='approve'/);
 });
 
-const idempotencyEvidence=[/metadata->>idempotency_key/,/PRODUCT_REPLAY_LOOKUP_FAILED/,/sku=eq\./,/STOCK_REPLAY_LOOKUP_FAILED/,/reference_note=like/,/EXPENSE_REPLAY_LOOKUP_FAILED/,/note=like/,/APPOINTMENT_REPLAY_LOOKUP_FAILED/,/idempotency_fingerprint/,/idempotent_replay:true/];
+// The removed ungrounded booking writer is covered by zero-write authority
+// tests; the remaining executable tools retain their replay assertions.
+const idempotencyEvidence=[/metadata->>idempotency_key/,/PRODUCT_REPLAY_LOOKUP_FAILED/,/sku=eq\./,/STOCK_REPLAY_LOOKUP_FAILED/,/reference_note=like/,/EXPENSE_REPLAY_LOOKUP_FAILED/,/note=like/,/idempotent_replay:true/];
 for(const [index,pattern] of idempotencyEvidence.entries())test(`retry and idempotency scenario ${index+1}`,()=>assert.match(endpoint,pattern));
 
 for(let index=0;index<5;index++)test(`multi-step partial failure scenario ${index+1}`,()=>{
@@ -140,14 +142,14 @@ test('Arabic product commands build exact approval plans without AI',()=>{
   }
 });
 
-test('exact Arabic and English timed bookings build approval plans without AI',()=>{
+test('exact Arabic and English timed bookings parse a proposal without execution authority',()=>{
   const cases=[
     ['Wqqe يبا يغسل الساعه 9م',{customer_name:'Wqqe',day:'today',period:'exact',exact_time:'21:00',duration_minutes:30}],
     ['سالم يريد حجز الساعة 9:30 ص',{customer_name:'سالم',day:'today',period:'exact',exact_time:'09:30',duration_minutes:30}],
     ['John wants a wash at 7 pm',{customer_name:'John',day:'today',period:'exact',exact_time:'19:00',duration_minutes:30}]
   ];
   for(const [command,args] of cases){const plan=deterministicPlan(command);assert.equal(plan.tool,'book_available_appointment');assert.deepEqual(plan.args,args);assert.deepEqual(validate(plan),{action:'book_available_appointment',...args})}
-  assert.match(endpoint,/REQUESTED_TIME_UNAVAILABLE/);assert.match(endpoint,/EXACT_REQUESTED_SLOT/);assert.match(endpoint,/ends_at:slotEnd/);
+  assert.match(endpoint,/OWNER_BOOKING_CONTEXT_REQUIRED/);
 });
 
 test('routine inventory commands parse without the AI provider',()=>{
