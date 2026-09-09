@@ -40,7 +40,7 @@ export default async function handler(req,res){
       if(!businessId||!customerId)return json(res,400,{ok:false,error:'CUSTOMER_CONTEXT_REQUIRED'});
       const member=membershipFor(ctx,businessId);if(!member)return json(res,403,{ok:false,error:'BUSINESS_ACCESS_DENIED'});
       const rows=await payload(await supabaseRest(
-        `dabbir_customers?select=id,business_id,display_name,whatsapp_display_name,display_name_source,owner_display_name_updated_at,updated_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(customerId)}&limit=1`,
+        `dabbir_customers?select=id,business_id,display_name,phone_e164,channel_handle,lead_status,whatsapp_display_name,display_name_source,owner_display_name_updated_at,created_at,updated_at&business_id=eq.${encodeURIComponent(businessId)}&id=eq.${encodeURIComponent(customerId)}&limit=1`,
         ctx.token,{cache:'no-store'}
       ),'CUSTOMER_PROFILE_READ_FAILED');
       const customer=Array.isArray(rows)?rows[0]:null;
