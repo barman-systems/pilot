@@ -31,7 +31,7 @@ function usageFromPayload(payload={}){
   };
 }
 
-function actualGatewayCost(payload={},response){
+export function actualGatewayCost(payload={},response){
   const candidates=[
     payload?.providerMetadata?.gateway?.cost,
     payload?.provider_metadata?.gateway?.cost,
@@ -40,6 +40,9 @@ function actualGatewayCost(payload={},response){
     response?.headers?.get?.('x-vercel-ai-gateway-cost'),
   ];
   for(const value of candidates){
+    // A missing header returns null. Number(null), blank strings and booleans
+    // are not provider evidence of a free request.
+    if(typeof value!=='number'&&(typeof value!=='string'||!value.trim()))continue;
     const number=Number(value);
     if(Number.isFinite(number)&&number>=0)return number;
   }
