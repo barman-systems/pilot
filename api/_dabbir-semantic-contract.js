@@ -4,6 +4,8 @@ const ACTIONS = new Set(['REPLY','CLARIFY','SERVICE_MENU','PRICING','CHECK_AVAIL
 const INTENTS = new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const ENTITIES = new Set(['delivery_mode','vehicle','property_details','date','time']);
 const MESSAGE_ROLES=new Set(['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORRECTION','CONFIRMATION','DENIAL','SIDE_QUESTION','TOPIC_SWITCH','CONTINUATION','CANCELLATION','REFERENCE','SOCIAL']);
+const REQUEST_SPAN_COUNTS=[0,2,3];
+const REQUEST_SPAN_MIN_LENGTH=6,REQUEST_SPAN_MAX_LENGTH=500;
 // Generation shape only. Evidence, bounds, scope and action authority are still
 // checked by the application; a structurally valid proposal is not a fact.
 const strictObject=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -21,7 +23,8 @@ export const SEMANTIC_JSON_SCHEMA=strictObject({
     message_role:choice(MESSAGE_ROLES),evidence:{type:'string'},
     invalidated_fields:{type:'array',items:choice([...ENTITIES,'service','worker','location'])},
   }),
-  request_spans:{type:'array',items:{type:'string'}},
+  request_spans:{anyOf:REQUEST_SPAN_COUNTS.map(count=>({type:'array',minItems:count,maxItems:count,
+    items:{type:'string',minLength:REQUEST_SPAN_MIN_LENGTH,maxLength:REQUEST_SPAN_MAX_LENGTH}}))},
   service_question:{anyOf:[{type:'null'},strictObject({field:choice(['price','duration_minutes']),evidence:{type:'string'}})]},
 });
 export const SEMANTIC_SYSTEM_PROMPT = `You are DABBIR's semantic interpreter, not a customer reply generator. Return exactly one JSON object, no prose or markdown.
@@ -46,8 +49,8 @@ export function semanticContractViolation(raw) {
   if(!nullableText(x.service_name)||!nullableText(x.knowledge_key))return 'SERVICE_OR_KNOWLEDGE';
   if(x.service_question!=null&&(!['price','duration_minutes'].includes(x.service_question.field)||typeof x.service_question.evidence!=='string'||!x.service_question.evidence.length||x.service_question.evidence.length>300))return 'SERVICE_QUESTION';
   if(x.request_spans!=null){
-    if(!Array.isArray(x.request_spans)||![0,2,3].includes(x.request_spans.length))return 'REQUEST_SPAN_COUNT';
-    if(!x.request_spans.every(s=>typeof s==='string'&&s.trim().length>=6&&s.length<=500))return 'REQUEST_SPAN_EVIDENCE';
+    if(!Array.isArray(x.request_spans)||!REQUEST_SPAN_COUNTS.includes(x.request_spans.length))return 'REQUEST_SPAN_COUNT';
+    if(!x.request_spans.every(s=>typeof s==='string'&&s.trim().length>=REQUEST_SPAN_MIN_LENGTH&&s.length<=REQUEST_SPAN_MAX_LENGTH))return 'REQUEST_SPAN_EVIDENCE';
   }
   if(x.dialogue!=null){
     if(!MESSAGE_ROLES.has(x.dialogue.message_role))return 'DIALOGUE_ROLE';
