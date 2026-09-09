@@ -26,7 +26,6 @@ const report = {
   artifacts: {},
 };
 
-let oidcToken = null;
 let owner = null;
 let employee = null;
 let businessId = null;
@@ -193,7 +192,8 @@ const ownerSession = new Session('owner');
 const employeeSession = new Session('employee');
 
 async function getGitHubOidcToken() {
-  if (oidcToken) return oidcToken;
+  // Long journeys can outlive an issued token. Each privileged QA request
+  // obtains a fresh GitHub token; the server still validates every claim.
   const requestUrl = String(process.env.ACTIONS_ID_TOKEN_REQUEST_URL || '').trim();
   const requestToken = String(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN || '').trim();
   assert(requestUrl && requestToken, 'GITHUB_ACTIONS_OIDC_CONTEXT_REQUIRED');
@@ -202,8 +202,7 @@ async function getGitHubOidcToken() {
     headers: { authorization: `Bearer ${requestToken}`, accept: 'application/json' },
   }, false);
   assert(result.ok && result.json?.value, `GITHUB_OIDC_ISSUE_FAILED_${result.status}:${small(result.text)}`);
-  oidcToken = String(result.json.value);
-  return oidcToken;
+  return String(result.json.value);
 }
 
 async function qaControl(action, body = {}) {
