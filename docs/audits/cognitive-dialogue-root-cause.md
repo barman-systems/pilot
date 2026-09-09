@@ -22,6 +22,18 @@ First reproduce the exact three-turn failure through the real orchestrator with 
 
 ## Acceptance limits
 
+## Bounded multi-goal continuation
+
+Root cause: one mutable entity map and one intent cannot represent two independently requested jobs. Parsing an entire multi-request message can bind the second job's date or service to the first. The existing secondary_goals array has no runtime owner.
+
+Change: let the existing interpreter propose at most three non-overlapping exact request spans. Ground each span through the existing pure reducer, require explicit confirmed intent, and retain separate scoped semantic frames. Only the first frame reaches the current execution loop; later frames persist under the existing versioned commit. A queued frame resumes on a later turn only after the preceding action has a matching database outcome and provider-accepted completion. Slot and appointment confirmations never transfer between jobs, and service/branch authority is revalidated on resume. Models do not write frames or receipts.
+
+This generalizes across activity contracts without vehicle-specific branching. Cover distinct services/dates, booking plus rescheduling, side questions, corrections, duplicate spans, ungrounded spans, stale/foreign frames, missing execution/delivery proof, and removal of a queued service. This initial bounded queue does not claim same-turn execution of several mutations or arbitrary multi-party planning.
+
+Queued cancellation/rescheduling also pins the original scoped appointment candidate set. Otherwise creating the first booking could make that new appointment become the sole candidate for an older deferred request. Resume intersects the original candidates with fresh authorized DB rows; it never treats a newly created appointment as the old requested target.
+
+The failed live model comparison also exposed a diagnostic-adapter gap: recoverable provider errors invoke the canonical failure-checkpoint RPC, which the synthetic probe did not model. The probe then replaced useful provider evidence with a generic diagnostic error. Model that local checkpoint explicitly, stop on the first failure, and retain bounded status/latency/token evidence. Business mutation RPCs remain forbidden.
+
 ## Model comparison and telemetry follow-up
 
 Root cause: the existing metering wrapper captures usage and request latency but discards them when a synthetic probe has no tenant ID. The provider readiness endpoint reports configuration, not comparative understanding. Add bounded telemetry to the existing interpreter result and allow only fixed cognitive scenarios against already configured providers. A comparison request isolates the requested provider so failover cannot be mistaken for that provider succeeding. No credentials are returned, no environment is mutated, no provider is added, and production model priority is unchanged. Test provider isolation, missing-cost semantics and both fixed scenarios before comparing live results.

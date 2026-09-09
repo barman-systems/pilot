@@ -1,5 +1,6 @@
 import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, understandLegacyConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
 import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGate} from './_dabbir-cognitive-dialogue.js';
+import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const val=(s,k)=>s.entities[k]?.value;
@@ -20,7 +21,7 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   required_entities:s.required_entities||[],delivery_mode:s.delivery_mode||null,
   cognitive_version:s.cognition?.version||null,goal:s.cognition?.primary_goal||null,message_role:s.cognition?.message_role||null,
   pending_resolved:s.cognitive_pending_resolved===true,quality_violations:s.cognitive_quality_violations||[],
-  goal_retained:s.cognition?.do_not_reset===true,shadow:s.cognitive_shadow||null});
+  goal_retained:s.cognition?.do_not_reset===true,queued_goals:arr(s.goal_queue).length,queued_goal_resumed:!!s.goal_queue_resumed,shadow:s.cognitive_shadow||null});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
@@ -173,6 +174,9 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const reduce=cognitive?understandConversation:understandLegacyConversation;
   if(c.activity_profile)c.activity_profile={...c.activity_profile,verified_memory:arr(c.verified_memory)};const session=sessionPrevious(load.semantic_state,c,turnNow);
   let semanticPrevious=session.previous,groundedMenuSelection=false;const isGreeting=greetingOnly(c.batch_messages);
+  const resumed=cognitive?resumeQueuedGoal(semanticPrevious,c,turnNow):{previous:semanticPrevious};
+  semanticPrevious=resumed.previous;
+  if(cognitive&&Array.isArray(semanticPrevious?.goal_queue_target_ids))c.upcoming_appointments=arr(c.upcoming_appointments).filter(a=>semanticPrevious.goal_queue_target_ids.includes(a.id));
   c.batch_messages=await Promise.all(arr(c.batch_messages).map(async message=>{
     const body=String(message.body||'');const selected=groundedServiceChoice(c,body,semanticPrevious,turnNow);
     if(selected){groundedMenuSelection=true;return {...message,language_body:body,body:serviceLabel(selected),catalog_service_id:selected.id};}
@@ -187,6 +191,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   }));
   semanticPrevious=previousForGroundedService(semanticPrevious,groundedMenuSelection);
   let {state,decision}=reduce({context:c,previous:semanticPrevious,now:turnNow});
+  if(resumed.blocked){state.goal_queue=arr(semanticPrevious?.goal_queue);state.pending_action='HANDOFF';decision={...decision,action:'HANDOFF',reasonCode:'QUEUED_GOAL_RECEIPT_OR_SCOPE_UNVERIFIED'};}
   const newScope=!sameSemanticScope(load.semantic_state,c);const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
   state.model_calls=0;state.semantic_interpreter='deterministic';delete state.planner_failure_code;delete state.semantic_ai_override;
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
@@ -208,7 +213,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       await finish(claim,'HUMAN_REQUIRED','AI_PROVIDER_FAILED_TWICE');
       return {state:'HUMAN_REQUIRED',action:'HANDOFF',error:'AI_PROVIDER_FAILED_TWICE',customer_requested_human:false};
     }else{
-      const conflict=proposalConflicts(state,proposal)&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
+      const conflict=proposalConflicts(state,proposal)&&!(cognitive&&arr(proposal.requestSpans).length>=2)&&(!cognitive||mayReplaceGoal(semanticPrevious,proposal,c.batch_messages));const providerContext=conflict?{...c,batch_messages:[]}:c;
       const providerPrevious=conflict?proposalOverrideBase(state,semanticPrevious,proposal):semanticPrevious;
       ({state,decision}=reduce({context:providerContext,previous:providerPrevious,now:turnNow,proposal,proposalEvidence:c.batch_messages}));
       state.model_calls=1;state.semantic_interpreter='ai_first_v1';delete state.planner_failure_code;delete state.recovery_required;
@@ -238,13 +243,14 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
   if(groundedMenuSelection&&c.pending_state?.pending_action==='choose_service')await setPending('none',{});
+  if(decision.reasonCode==='MULTI_REQUEST_SCOPE_UNRESOLVED')await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
   if(decision.action==='HANDOFF'){await assertCurrent();await handoff(c,decision.reasonCode,'Understanding V2 requires human assistance','SUPPORT');await finish(claim,'HUMAN_REQUIRED',decision.reasonCode);return {state:'HUMAN_REQUIRED',action:'HANDOFF'};}
   if(MUTATIONS.has(decision.action)){
     budget();const result=await rpc('dabbir_semantic_execute_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:decision.action});
     if(result?.verified!==true||!result?.appointment_id)throw Object.assign(new Error('SEMANTIC_OUTCOME_NOT_VERIFIED'),{code:'SEMANTIC_OUTCOME_NOT_VERIFIED'});
     const text=decision.action==='CANCEL_BOOKING'?(lang==='ar'?'تم إلغاء الموعد ✅.':'Your appointment has been cancelled ✅.'):decision.action==='RESCHEDULE_BOOKING'?(lang==='ar'?`تم تعديل الموعد ✅ إلى ${result.starts_at}.`:`Your appointment was rescheduled ✅ to ${result.starts_at}.`):bookingText(result,lang);
-    await send(text,decision.action.toLowerCase());await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,verified:true,provider_verified:false};
+    await send(text+(cognitive?queuedGoalPrompt(state,c,turnNow,understandLegacyConversation):''),decision.action.toLowerCase());await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,verified:true,provider_verified:false};
   }
   if(decision.action==='CHECK_AVAILABILITY'){
     budget();await assertCurrent();const appt=arr(c.upcoming_appointments).find(x=>x.id===val(state,'appointment'));
