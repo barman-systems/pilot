@@ -1,6 +1,9 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const bundleIdentifier = process.env.DABBIR_IOS_BUNDLE_ID?.trim() || 'com.barmansystems.dabbir';
+const androidPackage = process.env.DABBIR_ANDROID_PACKAGE?.trim() || 'com.barmansystems.dabbir';
+const androidVersionCode = Number.parseInt(process.env.DABBIR_ANDROID_VERSION_CODE?.trim() || '1', 10);
+const easProjectId = process.env.DABBIR_EAS_PROJECT_ID?.trim() || '';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -11,6 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/dabbir-app-icon.png',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
+  ...(easProjectId ? { extra: { ...(config.extra || {}), eas: { projectId: easProjectId } } } : {}),
   ios: {
     supportsTablet: false,
     bundleIdentifier,
@@ -30,6 +34,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       ],
     },
   },
+  android: {
+    package: androidPackage,
+    versionCode: Number.isFinite(androidVersionCode) && androidVersionCode > 0 ? androidVersionCode : 1,
+  },
   plugins: [
     'expo-apple-authentication',
     ['expo-secure-store', { configureAndroidBackup: false }],
@@ -40,6 +48,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         ios: {
           deploymentTarget: '16.4',
           privacyManifestAggregationEnabled: true,
+        },
+        android: {
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          usesCleartextTraffic: false,
         },
       },
     ],
