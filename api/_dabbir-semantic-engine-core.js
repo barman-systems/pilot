@@ -146,7 +146,10 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   const same=previous && Object.keys(fresh.scope).every(k=>previous.scope?.[k]===fresh.scope[k]) && previous.version===2 && Date.parse(previous.expires_at)>now.getTime();
   const completed=previous?.last_verified_action?.at && Date.parse(previous.last_verified_action.at)>=Date.parse(previous.updated_at);
   const s=same&&!completed?structuredClone(previous):{...fresh,last_verified_action:same?previous?.last_verified_action||null:null,last_verified_outcome:same?previous?.last_verified_outcome||null:null};
-  s.updated_at=stamp;s.revision=(previous?.revision||0)+1;s.missing_fields=[];s.unresolved_references=[];s.pending_action=null;
+  s.updated_at=stamp;s.revision=(previous?.revision||0)+1;s.missing_fields=[];s.unresolved_references=[];s.pending_action=null;s.sub_intent=null;
+  // Read-only intents describe one customer turn. They must not leak into the
+  // next message and turn a grounded service detail into another catalog menu.
+  if(s.goal==='UNKNOWN'&&['SERVICE_DISCOVERY','PRICING'].includes(s.intent))s.intent='SUPPORT';
   delete s.entities.slot; // Confirmation authorizes exactly this customer turn.
   s.ontology=c.business?.business_type||'services';
   s.business_constraints=[];
@@ -190,6 +193,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     // Share the existing production classifier. Separate phrase lists here caused
     // ordinary GCC catalog questions to fall through to the model and handoff.
     const discovery=wantsServiceMenu(raw);
+    const durationQuestion=/(?:كم الوقت|كم وقت|كم ياخذ|كم تاخذ|كم تاخذون|كم يستغرق|المده|مده|how long|duration|how much time|how many minutes)/.test(t);
     const pricing=/بكم|كم السعر|كم سعر|how much|price|pricing/.test(t);
     if(/فرع|\bbranch\b/.test(t)) {
       const named=arr(c.branches).filter(b=>includesName(t,b.name));
@@ -198,6 +202,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     }
     if(cancel){s.goal='CANCEL_BOOKING';s.intent='CANCEL_BOOKING';s.intent_confirmed=true;}
     else if(reschedule){s.goal='RESCHEDULE_BOOKING';s.intent='RESCHEDULE_BOOKING';s.intent_confirmed=true;}
+    else if(durationQuestion&&s.goal==='UNKNOWN'){s.intent='SUPPORT';s.sub_intent='SERVICE_DURATION';}
     else if(pricing)s.intent='PRICING';
     else if(discovery)s.intent='SERVICE_DISCOVERY';
     else if(booking){s.goal='BOOK_SERVICE';s.intent='BOOKING';s.intent_confirmed=true;}
@@ -225,9 +230,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
       if(['delivery_mode','vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp,{...(confirmedKey==='delivery_mode'?{service_id:valueOf(s,'service')}:{})});
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
     }
-    if(valueOf(s,'service') && s.goal==='UNKNOWN' && s.intent==='SUPPORT' && !c.cognitive_read_question){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
+    if(valueOf(s,'service') && s.entities.service?.updated_at===stamp && s.goal==='UNKNOWN' && s.intent==='SUPPORT' && s.sub_intent!=='SERVICE_DURATION' && !c.cognitive_read_question){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
     const bareDateChoice=previous?.clarification_entity==='date' && /^[123]$/.test(t) && (!c.pending_state?.pending_action || c.pending_state.pending_action==='none');
-    const isBareChoice=/^[123]$/.test(t) && c.pending_state?.pending_action==='choose_slot';
+    // A numeric service-menu answer is never a clock. If the presentation was
+    // not verified it remains unresolved, but it cannot poison the time entity.
+    const isBareChoice=/^[123]$/.test(t) && ['choose_slot','choose_service'].includes(c.pending_state?.pending_action);
     const d=parseDate(t,today),time=(isBareChoice||bareDateChoice)?null:parseTime(raw,s);
     if(d){if(d!==valueOf(s,'date'))invalidate(s,'slot',stamp);fact(s,'date',d,source,.99,stamp);}
     if(time){invalidate(s,'slot',stamp);fact(s,'time',time.value,source,time.confidence,stamp,time);}
@@ -258,6 +265,15 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     } else if(ordinal.mentioned && !['CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(s.intent))s.unresolved_references.push('offered_option');
   }
   if(valueOf(s,'date') && valueOf(s,'date')<today)invalidate(s,'date',stamp);
+  if(s.goal==='UNKNOWN'&&s.sub_intent==='SERVICE_DURATION'&&supported(s.entities.service)){
+    const service=scoped(c.services,c).find(x=>x.id===valueOf(s,'service'));
+    const minutes=Number(service?.duration_minutes);
+    delete s.entities.time;s.missing_fields=[];s.unresolved_references=[];
+    s.overall_confidence=.99;s.semantic_confidence=.99;s.operational_confidence=Math.min(.99,c.voice?Number(c.voice.transcription_confidence)||0:1);
+    s.last_confirmed_facts=Object.fromEntries(Object.entries(s.entities).filter(([,f])=>supported(f)).map(([k,f])=>[k,{value:f.value,source:f.source,confidence:f.confidence}]));
+    if(Number.isFinite(minutes)&&minutes>0){const n=Math.max(1,Math.trunc(minutes));return route('REPLY','DATABASE_SERVICE_DURATION',s.language==='ar'?`${nameOf(service)} مدته ${n} دقيقة.`:`${nameOf(service)} takes ${n} minutes.`);}
+    return route('REPLY','SERVICE_DURATION_UNVERIFIED',s.language==='ar'?'مدة هذه الخدمة غير متحققة حاليًا.':'This service duration is not verified right now.');
+  }
   if(c.voice && (c.voice.clarification_required || !(Number(c.voice.transcription_confidence)>=.85))) {s.unresolved_references.push('voice_transcript');}
   if(proposal) {
     // Unknown model assertions remain explicitly untrusted, with no ids or raw text persisted.
