@@ -3,26 +3,50 @@ import assert from 'node:assert/strict';
 import {z} from 'zod';
 import {generateDABBIRAiReply} from '../api/_ai-core.js';
 import {interpretSemanticMessage, evaluateSemanticProbe} from '../api/_dabbir-semantic-interpreter.js';
-import {SEMANTIC_JSON_SCHEMA,validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
+import {SEMANTIC_JSON_SCHEMA,semanticRequestSpans,validSemanticContract,semanticContractViolation} from '../api/_dabbir-semantic-contract.js';
 
 const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk_level:'LOW',service_name:null,knowledge_key:null,
   entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},
     {entity:'time',value:'09:00',evidence:'9 الصبح',confidence:.99,correction:false}]};
 const response=(content=JSON.stringify(proposal),finish_reason='stop')=>new Response(JSON.stringify({choices:[{message:{content},finish_reason}]}),{status:200});
 
-test('live REQUEST_SPAN_COUNT regression: provider schema and application agree on bounded job cardinality',()=>{
+test('live REQUEST_SPAN_COUNT regression: portable generation and legacy decoding preserve bounded job cardinality',()=>{
  const schema=z.fromJSONSchema(SEMANTIC_JSON_SCHEMA);
  const complete={...proposal,service_evidence:null,service_question:null,dialogue:{message_role:'NEW_REQUEST',evidence:'book tomorrow',invalidated_fields:[]}};
  for(const count of [0,1,2,3,4,8]){
-  const value={...complete,request_spans:Array.from({length:count},(_,i)=>'book independent service '+i)};
+  const quotes=Array.from({length:count},(_,i)=>'book independent service '+i);
+  const value={...complete,request_spans:quotes};
   const expected=[0,2,3].includes(count);
-  assert.equal(validSemanticContract(JSON.stringify(value)),expected,'application count '+count);
-  assert.equal(schema.safeParse(value).success,expected,'provider schema count '+count);
+  assert.equal(validSemanticContract(JSON.stringify(value)),expected,'legacy application count '+count);
+  const wire={...complete,request_spans:count===0?null:{first_quote:quotes[0],second_quote:quotes[1]??null,third_quote:quotes[2]??null,...(count>3?{fourth_quote:quotes[3]}:{})}};
+  assert.equal(schema.safeParse(wire).success,expected,'portable provider cardinality '+count);
+  assert.equal(validSemanticContract(JSON.stringify(wire)),expected,'portable application cardinality '+count);
+  if(expected)assert.deepEqual(semanticRequestSpans(wire.request_spans),quotes);
  }
  for(const text of ['short','x'.repeat(501)]){
   const value={...complete,request_spans:[text,'book another service']};
   assert.equal(validSemanticContract(JSON.stringify(value)),false);
-  assert.equal(schema.safeParse(value).success,false,'provider evidence bounds');
+  const wire={...complete,request_spans:{first_quote:text,second_quote:'book another service',third_quote:null}};
+  assert.equal(schema.safeParse(wire).success&&validSemanticContract(JSON.stringify(wire)),false,'generation plus execution evidence boundary');
+ }
+});
+
+test('strict request encoding uses documented object/null unions instead of rejected array bounds',()=>{
+ const text=JSON.stringify(SEMANTIC_JSON_SCHEMA.properties.request_spans);
+ assert.doesNotMatch(text,/minItems|maxItems|minLength|maxLength/);
+ const shape=SEMANTIC_JSON_SCHEMA.properties.request_spans.anyOf[1];
+ assert.deepEqual(shape.required,['first_quote','second_quote','third_quote']);assert.equal(shape.additionalProperties,false);
+ for(const value of [{first_quote:'first only'},{first_quote:'first request',second_quote:null,third_quote:null},{first_quote:'first request',second_quote:'second request',third_quote:null,extra:'injected'}]){
+  assert.equal(validSemanticContract(JSON.stringify({...proposal,request_spans:value})),false);
+ }
+});
+
+test('actual interpreter decodes two or three native quotes into the existing planner array',async()=>{
+ const quotes=['book exterior today','book VIP tomorrow','cancel my old appointment'];
+ for(const count of [0,2,3]){
+  const raw={...proposal,entities:[],request_spans:count===0?null:{first_quote:quotes[0],second_quote:quotes[1],third_quote:count===3?quotes[2]:null}};
+  const result=await interpretSemanticMessage({message:quotes.slice(0,count).join(' and ')||'hello',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify(raw))});
+  assert.deepEqual(result.proposal.requestSpans,quotes.slice(0,count));
  }
 });
 
