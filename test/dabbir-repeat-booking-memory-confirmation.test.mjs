@@ -63,12 +63,14 @@ test('answering same reuses only verified vehicle and location, then asks for ti
   assert.equal(result.decision.reply,'أي وقت يناسبك؟');
 });
 
-test('yes in GCC Arabic confirms the same verified vehicle and location',()=>{
-  const prompt=reachRepeatPrompt();
-  const result=run('هيه',prompt.state);
-  assert.equal(result.state.entities.vehicle.value,'saloon');
-  assert.equal(result.state.entities.location.value.lat,24.186653);
-  assert.equal(result.decision.reply,'أي وقت يناسبك؟');
+test('GCC Arabic yes variants confirm the same verified vehicle and location',()=>{
+  for(const yes of ['هي','هيه','اي']){
+    const prompt=reachRepeatPrompt();
+    const result=run(yes,prompt.state);
+    assert.equal(result.state.entities.vehicle.value,'saloon',yes);
+    assert.equal(result.state.entities.location.value.lat,24.186653,yes);
+    assert.equal(result.decision.reply,'أي وقت يناسبك؟',yes);
+  }
 });
 
 test('change answer stays a new booking and cannot be misclassified as reschedule',()=>{
