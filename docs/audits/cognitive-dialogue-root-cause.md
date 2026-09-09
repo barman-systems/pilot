@@ -22,4 +22,6 @@ First reproduce the exact three-turn failure through the real orchestrator with 
 
 ## Acceptance limits
 
+The first CI advisor gate rejected the private rollout table's implicit RLS default deny as `rls_enabled_no_policy`. Add an explicit restrictive deny-all policy, retaining revoked client ACLs and the postgres-owned loader. This documents and preserves the actual access boundary; it does not raise the advisor baseline or weaken a gate.
+
 The requested 98–99.5% SLOs need measured denominators; small test suites cannot establish population reliability. A live external WhatsApp journey requires an authorized test recipient and verified delivery receipts. Pending source work and missing evidence are not automatically external blockers.
