@@ -26,6 +26,18 @@ test('finance is fail-closed behind independent payments view capability',()=>{
   assert.match(api,/FINANCIAL_ACCESS_REQUIRED/);
 });
 
+test('finance and privileged recovery are constrained to actor business scope',()=>{
+  assert.match(sql,/dabbir_platform_customer_business_access_v1/);
+  assert.match(sql,/platform_scope_allows_business\(p_actor_user_id,p_business_id\)/);
+  assert.match(sql,/m\.user_id=p_target_user_id[\s\S]*m\.business_id=p_business_id[\s\S]*m\.status='active'/);
+  assert.match(sql,/DABBIR_CUSTOMER_OUTSIDE_SCOPE/);
+  assert.match(sql,/join scoped_businesses sb on sb\.id=v\.business_id/);
+  assert.match(sql,/and dabbir_private\.platform_scope_allows_business\(p_actor_user_id,b\.id\)/);
+  assert.match(api,/async function requireBusinessAccess/);
+  assert.match(api,/await requireBusinessAccess\(context,targetUserId,businessId\)/);
+  assert.match(api,/dabbir_platform_customer_business_access_v1/);
+});
+
 test('financial truth keeps unknown revenue and partial provider cost explicit',()=>{
   assert.match(sql,/UNAVAILABLE_NO_AUTHORITATIVE_PRICE_LEDGER/);
   assert.match(sql,/UNAVAILABLE_NO_AUTHORITATIVE_REVENUE/);
@@ -36,8 +48,8 @@ test('financial truth keeps unknown revenue and partial provider cost explicit',
   assert.match(ui,/no authoritative price\/revenue ledger/);
 });
 
-test('financial RPCs are service-role only and avoid unnecessary provider identifiers',()=>{
-  for(const signature of ['dabbir_platform_customer_finance_overview_v1\\(uuid\\)','dabbir_platform_customer_finance_v1\\(uuid,uuid\\)']){
+test('financial and business-access RPCs are service-role only and avoid unnecessary provider identifiers',()=>{
+  for(const signature of ['dabbir_platform_customer_business_access_v1\\(uuid,uuid,uuid\\)','dabbir_platform_customer_finance_overview_v1\\(uuid\\)','dabbir_platform_customer_finance_v1\\(uuid,uuid\\)']){
     assert.match(sql,new RegExp('revoke all on function public\\.'+signature+' from public,anon,authenticated','i'));
     assert.match(sql,new RegExp('grant execute on function public\\.'+signature+' to service_role','i'));
   }
