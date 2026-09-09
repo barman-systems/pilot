@@ -53,6 +53,11 @@ test('foreign receipt and foreign activity profile cannot become operational aut
 test('missing database activity profile fails closed',()=>{
  const c=ctx();delete c.activity_profile;const r=turn(c,'أبا VIP باجر الساعة 5 مساء');assert.equal(r.decision.action,'HANDOFF');
 });
+test('a visible unconfigured catalog service cannot authorize an AI action',()=>{
+ const c=ctx('services');Object.assign(c.activity_profile.services[0],{configuration_status:'UNCONFIGURED',activity_type:null,supported_actions:[],delivery_modes:[],mode_requirements:{},contract_version:null});
+ const result=turn(c,'أبي VIP بكرة الساعة 5 مساء');
+ assert.equal(result.decision.action,'HANDOFF');assert.equal(result.decision.reasonCode,'ACTIVITY_TYPE_UNCONFIGURED');
+});
 test('safe memory needs a current version, branch, customer, service and complete value',()=>{
  const c=ctx(),s=mobileState(c).state;
  const memory={id:'memory-1',version:2,status:'verified',business_id:ids.business,customer_id:ids.customer,branch_id:ids.branch,service_id:ids.service,expires_at:'2026-10-01T00:00:00Z'};

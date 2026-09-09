@@ -16,6 +16,7 @@ before(async()=>{await db.exec(fs.readFileSync(new URL('./fixtures/understanding
  await db.exec(fs.readFileSync(new URL('./fixtures/understanding/activity-database.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260908155841_dabbir_activity_intelligence_v1.sql',import.meta.url),'utf8'));
  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909085635_dabbir_activity_action_authority_v1.sql',import.meta.url),'utf8'));
+ await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260909091257_dabbir_activity_configuration_visibility_v1.sql',import.meta.url),'utf8'));
  await db.exec(`alter table public.dabbir_message_batches add column dispatch_token uuid,add column channel_type text default 'whatsapp',add column attempt_count integer default 1,add column last_error text,add column next_attempt_at timestamptz,add column processed_at timestamptz,add column updated_at timestamptz default now();
  alter table public.dabbir_conversations add column updated_at timestamptz default now();
  alter table public.dabbir_handoffs add column id uuid default gen_random_uuid(),add column customer_id uuid,add column route_class text,add column reason text,add column metadata jsonb,add column created_at timestamptz default now(),add column priority integer,add column routing_strategy text,add column summary text,add column attempted_actions jsonb,add column unresolved_items jsonb;`);
@@ -173,7 +174,12 @@ test('database: registry action restriction blocks the canonical executor and ro
 test('database: unknown activity does not inherit generic booking permission',async()=>{
  await reset();await configureActivity({});
  await db.query("update dabbir_businesses set business_type='unconfigured_activity' where id=$1",[ids.business]);
- try {await assert.rejects(load(),/ACTIVITY_TYPE_UNCONFIGURED/);}
+ try {
+  const service=(await load()).activity_profile.services[0];
+  assert.equal(service.service_id,ids.service);assert.equal(service.configuration_status,'UNCONFIGURED');
+  assert.equal(service.contract_version,null);assert.deepEqual(service.supported_actions,[]);assert.equal(service.automatic_booking,false);
+  await assert.rejects(db.query('select dabbir_private.activity_contract_v1($1,$2,$3)',[ids.business,ids.branch,ids.service]),/ACTIVITY_TYPE_UNCONFIGURED/);
+ }
  finally {await db.query("update dabbir_businesses set business_type='services' where id=$1",[ids.business]);}
 });
 test('database: existing home-visit setting reaches the contract while service overrides remain authoritative',async()=>{
@@ -198,5 +204,27 @@ test('database: an activity composed from existing capabilities can be added thr
   assert.equal(loaded.activity_profile.services[0].activity_type,'equipment_visit');
   assert.deepEqual(loaded.activity_profile.services[0].delivery_modes,['REMOTE']);
   assert.equal(loaded.activity_profile.services[0].supported_actions.includes('CREATE_BOOKING'),true);
+  await activityBooking({activity_type:'equipment_visit',delivery_modes:['REMOTE']});
+  const result=await executeActivity();assert.equal(result.verified,true);
+  const saved=(await db.query('select activity_intelligence from dabbir_appointments where id=$1',[result.appointment_id])).rows[0];
+  assert.equal(saved.activity_intelligence.activity_type,'equipment_visit');
  } finally {await db.query('update dabbir_private.activity_registry_v1 set schema=$1 where version=1',[before]);await configureActivity({});}
+});
+
+test('database: an owner can configure and revoke an unregistered business service without granting generic execution',async()=>{
+ await reset();await configureActivity({});
+ await db.query("update dabbir_businesses set business_type='store' where id=$1",[ids.business]);
+ try {
+  const missing=(await load()).activity_profile.services[0];assert.equal(missing.configuration_status,'UNCONFIGURED');
+  await configureActivity({activity_type:'consulting',delivery_modes:['REMOTE']});
+  assert.equal((await load()).activity_profile.services[0].activity_type,'consulting');
+  await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role','authenticated',false)",[owner]);await db.exec('set role authenticated');
+  const current=(await rpc('dabbir_activity_profile_v1',[ids.business,ids.branch])).services[0];
+  const revoked=await rpc('dabbir_activity_service_configure_v1',[ids.business,ids.branch,ids.service,current.owner_version,{},'REVOKE',null]);
+  assert.equal(revoked.contract.configuration_status,'UNCONFIGURED');assert.deepEqual(revoked.contract.supported_actions,[]);
+  const visible=await rpc('dabbir_activity_profile_v1',[ids.business,ids.branch]);assert.equal(visible.services[0].service_id,ids.service);
+  await db.exec('reset role');
+  await assert.rejects(db.query('select dabbir_private.activity_assert_action_v1($1,$2,$3,$4)',[ids.business,ids.branch,ids.service,'CREATE_BOOKING']),/ACTIVITY_TYPE_UNCONFIGURED/);
+  assert.equal((await db.query('select count(*)::int n from dabbir_appointments')).rows[0].n,0);
+ } finally {await db.exec('reset role');await db.query("update dabbir_businesses set business_type='services' where id=$1",[ids.business]);await configureActivity({});}
 });

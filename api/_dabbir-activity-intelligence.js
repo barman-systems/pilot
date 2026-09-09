@@ -48,6 +48,7 @@ export function resolveOperationalRequirements({business,service,delivery_mode,c
   const contract=arr(profile.services).find(x=>x.service_id===service?.id);
   if (!contract) {result.required=['service'];result.missing=['service'];return result;}
   if(contract.business_id!==business.id || contract.branch_id!==state.scope.branch_id) {block('ACTIVITY_SERVICE_SCOPE_MISMATCH');return result;}
+  if(contract.configuration_status==='UNCONFIGURED') {block('ACTIVITY_TYPE_UNCONFIGURED');return result;}
   result.contract=contract;
   const mode=normalizeDeliveryMode(delivery_mode);
   if(!DELIVERY_MODES.includes(mode) || mode==='HYBRID' || !arr(contract.delivery_modes).includes(mode)) {
