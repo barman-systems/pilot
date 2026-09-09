@@ -3,7 +3,6 @@ import { json, SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 import { syncBusinessCalendars } from './_calendar-sync-core.js';
 
-const EXPECTED_SCHEDULE='*/5 * * * *';
 const clean=(value,max=500)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 
 function serviceKey(){
@@ -15,7 +14,7 @@ function sameSecret(left,right){const a=Buffer.from(String(left||'')),b=Buffer.f
 export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096),authorization=clean(req.headers?.authorization,8192);
   if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
-  return clean(env.VERCEL_ENV,32)==='production'&&clean(req.headers?.['user-agent'],120).toLowerCase()==='vercel-cron/1.0'&&clean(req.headers?.['x-vercel-cron-schedule'],120)===EXPECTED_SCHEDULE?'vercel_schedule':null;
+  return null; // Schedule headers are caller-controlled, never authentication.
 }
 async function rpc(key,name,params={}){
   const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`,{

@@ -15,10 +15,7 @@ export function cronAuthMode(req, env = process.env) {
   const secret = clean(env.CRON_SECRET, 4096);
   const authorization = clean(req.headers?.authorization, 8192);
   if (secret) return sameSecret(authorization, `Bearer ${secret}`) ? 'secret' : null;
-  const production = clean(env.VERCEL_ENV, 32) === 'production';
-  const agent = clean(req.headers?.['user-agent'], 120).toLowerCase();
-  const schedule = clean(req.headers?.['x-vercel-cron-schedule'], 120);
-  return production && agent === 'vercel-cron/1.0' && schedule === DAILY_OPERATOR_SCHEDULE ? 'vercel_schedule' : null;
+  return null; // Schedule headers are caller-controlled, never authentication.
 }
 
 export default async function handler(req, res) {

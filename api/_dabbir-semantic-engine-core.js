@@ -1,4 +1,4 @@
-import { applyActivityRequirements, normalizeDeliveryMode, validLocation, detectRequirementLoop } from './_dabbir-activity-intelligence.js';
+import { applyActivityRequirements, normalizeDeliveryMode, validLocation, detectRequirementLoop, activityActionAuthority } from './_dabbir-activity-intelligence.js';
 import { wantsServiceMenu } from './_dabbir-whatsapp-understanding.js';
 // Pure semantic reducer. Provider output is a proposal, never execution authority.
 export const SEMANTIC_VERSION = 2;
@@ -156,7 +156,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   s.dialect=/ابا|ابي|ابغي|باجر|عقب|طرش|دز|هيه|شو|ماشي/.test(all)?'GCC':s.dialect;
   s.audio_confidence=c.voice?.audio_confidence??null;
   s.transcription_confidence=c.voice?.transcription_confidence??null;
-  const route=(action,reason,reply=null)=>({state:s,decision:{action,intent:s.intent,confidence:s.overall_confidence,riskLevel:['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(action)?'MEDIUM':'LOW',missingFields:s.missing_fields,reasonCode:reason,reply}});
+  const route=(action,reason,reply=null)=>{
+    const authority=activityActionAuthority(c,s,action);
+    if(!authority.allowed){action='HANDOFF';reason=authority.reason;reply=null;s.pending_action='HANDOFF';s.operational_confidence=0;}
+    return {state:s,decision:{action,intent:s.intent,confidence:s.overall_confidence,riskLevel:['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING'].includes(action)?'MEDIUM':'LOW',missingFields:s.missing_fields,reasonCode:reason,reply}};
+  };
   const refuse=/انس(?:ى)?\s+تعليمات|ignore\s+(?:all\s+|previous\s+)?instructions|باقي العملاء|عملاء نشاط اخر|other (?:customers|tenants)|system prompt|api.?key|access.?token/.test(all);
   if(!scopeValid(c)){s.overall_confidence=0;return route('HANDOFF','TENANT_SCOPE_UNVERIFIED');}
   if(c.conversation.newer_customer_message_exists){s.overall_confidence=0;return route('SUPERSEDED','NEWER_CUSTOMER_MESSAGE');}
@@ -366,7 +370,7 @@ export function clarification(s,c) {
 export function semanticPlannerContext(c,s) {
   // Internal identifiers and full DB rows never enter the provider context.
   return {language:s.language,goal:s.goal,intent:s.intent,missing_fields:s.missing_fields,
-    activity:{type:s.service_type,delivery_mode:s.delivery_mode,required:s.required_entities||[],optional:s.optional_entities||[],diagnosis_allowed:false},
+    activity:{type:s.service_type,delivery_mode:s.delivery_mode,required:s.required_entities||[],optional:s.optional_entities||[],supported_actions:s.supported_actions||[],diagnosis_allowed:false},
     entities:Object.fromEntries(Object.entries(s.entities).map(([k,f])=>[k,{value:['date','time','price'].includes(k)?f.value:f.label||null,source:f.source,confidence:f.confidence}])),
     services:arr(c.services).slice(0,12).map(x=>({name:nameOf(x),price:x.price,duration_minutes:x.duration_minutes})),
     knowledge:arr(c.knowledge).filter(k=>k.source==='owner_approved'&&Number(k.confidence)>=.95).slice(0,8).map(k=>({key:clean(k.key,80),answer:clean(k.value?.answer_ar||k.value?.answer_en,400)})),
