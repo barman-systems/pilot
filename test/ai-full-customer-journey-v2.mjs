@@ -837,6 +837,7 @@ async function runJourney() {
   await step('15f_cognitive_context_references',async()=>{
     const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'context_references'}});
     const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
+    report.cognitive_context_reference_evidence=evidence;
     assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_CONTEXT_REFERENCES_FAILED:'+JSON.stringify(evidence));
     return {status:probe.status,detail:JSON.stringify(evidence)};
   });

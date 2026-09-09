@@ -261,7 +261,10 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
     if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
 
     const model = models[index];
-    const timeoutMs = index === 0 ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining) : remaining;
+    // Structured interpretation may be the last available HTTP attempt. Give
+    // it the remaining existing gateway window; the interpreter's shared
+    // 18-second deadline still applies. Ordinary short replies keep the split.
+    const timeoutMs = semantic ? remaining : index === 0 ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining) : remaining;
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GATEWAY_ENDPOINT,
