@@ -17,6 +17,6 @@ export default async function handler(req,res){
   try{indexing=await indexApprovedKnowledge({rpc:call,env:process.env,fetchImpl:fetch,limit:12})}catch(error){indexing={ok:false,state:'FAILED',error:clean(error?.message||'RAG_INDEX_FAILED',160)}}
   try{mining=await mineProductionFailures({rpc:call,since:'7 days'})}catch(error){mining={ok:false,state:'FAILED',error:clean(error?.message||'FAILURE_MINER_FAILED',160)}}
   const ok=indexing.state==='SKIPPED'?Boolean(mining?.ok):Boolean(indexing?.ok&&mining?.ok);
-  const summary={ok,auth_mode:authMode,indexing:{ok:indexing.ok,state:indexing.state,queued:indexing.queued||0,indexed:indexing.indexed||0,failed:indexing.failed||0,reason:indexing.reason||null},mining:{ok:Boolean(mining?.ok),cases_ingested:mining?.cases_ingested||0,clusters_updated:mining?.clusters_updated||0,proposals_touched:mining?.proposals_touched||0,auto_apply:false}};
+  const summary={ok,auth_mode:authMode,indexing:{ok:indexing.ok,state:indexing.state,queued:indexing.queued||0,indexed:indexing.indexed||0,failed:indexing.failed||0,error_codes:indexing.error_codes||{},reason:indexing.reason||null},mining:{ok:Boolean(mining?.ok),cases_ingested:mining?.cases_ingested||0,clusters_updated:mining?.clusters_updated||0,proposals_touched:mining?.proposals_touched||0,auto_apply:false}};
   console.info('dabbir_intelligence_maintenance',summary);return json(res,ok?200:503,summary);
 }

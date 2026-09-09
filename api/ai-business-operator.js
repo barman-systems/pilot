@@ -108,32 +108,22 @@ export function validate(plan){
   return null;
 }
 function todayDubai(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch{return new Date().toISOString().slice(0,10)}}
-function nextDubaiDay(dateKey){const [y,m,d]=dateKey.split('-').map(Number),n=new Date(Date.UTC(y,m-1,d)+86400000);return `${n.getUTCFullYear()}-${String(n.getUTCMonth()+1).padStart(2,'0')}-${String(n.getUTCDate()).padStart(2,'0')}`}
-function dubaiIso(dateKey,hour,minute=0){return new Date(`${dateKey}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00+04:00`).toISOString()}
-async function bookAvailableAppointment(token,businessId,payload){
-  const idempotencyKey=clean(payload.idempotency_key,120);
-  if(idempotencyKey){const replay=await rest(token,`dabbir_appointments?select=id,customer_id,service_id,starts_at,status,idempotency_key,created_at&business_id=eq.${businessId}&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`,{},'APPOINTMENT_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}
-  const today=todayDubai(),date=payload.day==='tomorrow'?nextDubaiDay(today):today;
-  const now=Date.now();
-  const exact=payload.period==='exact';
-  const [requestedHour,requestedMinute]=exact?payload.exact_time.split(':').map(Number):[null,null];
-  const start=exact?dubaiIso(date,requestedHour,requestedMinute):dubaiIso(date,15,0),end=exact?new Date(new Date(start).getTime()+payload.duration_minutes*60000).toISOString():dubaiIso(date,18,0);
-  if(now>=new Date(end).getTime()||exact&&new Date(start).getTime()<=now+10*60000)throw Object.assign(new Error(exact?'TIME_SLOT_PASSED':'AFTERNOON_WINDOW_PASSED'),{status:409});
-  const existing=await rest(token,`dabbir_appointments?select=id,customer_id,starts_at,ends_at,status,simulated&business_id=eq.${businessId}&starts_at=lt.${encodeURIComponent(end)}&ends_at=gt.${encodeURIComponent(start)}&status=neq.cancelled&order=starts_at.asc&limit=100`,{},'APPOINTMENTS_LOOKUP_FAILED');
-  const step=Math.max(30,payload.duration_minutes)*60000;
-  let slot=exact?start:null;
-  if(exact&&(existing||[]).some(x=>x.simulated===false))throw Object.assign(new Error('REQUESTED_TIME_UNAVAILABLE'),{status:409});
-  if(!exact)for(let t=new Date(start).getTime();t<new Date(end).getTime();t+=step){const candidateEnd=t+payload.duration_minutes*60000,overlap=(existing||[]).some(x=>x.simulated===false&&new Date(x.starts_at).getTime()<candidateEnd&&new Date(x.ends_at||new Date(new Date(x.starts_at).getTime()+3600000)).getTime()>t);if(t>now+10*60000&&!overlap){slot=new Date(t).toISOString();break}}
-  if(!slot)throw Object.assign(new Error('NO_FREE_AFTERNOON_SLOT'),{status:409});
-  const q=encodeURIComponent(payload.customer_name.replace(/[%*]/g,''));
-  const found=await rest(token,`dabbir_customers?select=id,display_name,lead_status&business_id=eq.${businessId}&display_name=ilike.*${q}*&limit=5`,{},'CUSTOMER_LOOKUP_FAILED');
-  let customer=(found||[]).find(x=>String(x.display_name||'').trim()===payload.customer_name)||found?.[0]||null;
-  if(!customer){const rows=await rest(token,'dabbir_customers?select=id,display_name,lead_status,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,display_name:payload.customer_name,lead_status:'new',metadata:{source:'dabbir_ai_business_operator'}})},'CUSTOMER_CREATE_FAILED');customer=rows?.[0]||null;if(!customer?.id)throw Object.assign(new Error('CUSTOMER_CREATE_UNVERIFIED'),{status:502})}
-  const fingerprint=idempotencyKey?await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${businessId}:${customer.id}:${slot}`)).then(x=>Buffer.from(x).toString('hex')):null;
-  const slotEnd=new Date(new Date(slot).getTime()+payload.duration_minutes*60000).toISOString();
-  const rows=await rest(token,'dabbir_appointments?select=id,customer_id,service_id,starts_at,ends_at,status,simulated,idempotency_key,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,customer_id:customer.id,service_id:null,starts_at:slot,ends_at:slotEnd,status:'requested',simulated:false,booking_source:'dabbir_ai_business_operator',...(idempotencyKey?{idempotency_key:idempotencyKey,idempotency_fingerprint:fingerprint}:{})})},'APPOINTMENT_CREATE_FAILED');
-  const appt=rows?.[0];if(!appt?.id)throw Object.assign(new Error('APPOINTMENT_CREATE_UNVERIFIED'),{status:502});
-  return {...appt,customer_name:customer.display_name,selected_as:exact?'EXACT_REQUESTED_SLOT':'FIRST_FREE_AFTERNOON_SLOT'};
+function requireOwnerBookingContext() {
+  // The owner tool currently carries a name/time proposal, not a verified
+  // service, branch, customer and activity execution contract. Approval does
+  // not supply those facts. Use the existing owner appointment flow to resolve
+  // them until this adapter can pass the canonical activity executor contract.
+  throw Object.assign(new Error('OWNER_BOOKING_CONTEXT_REQUIRED'), {status:409});
+}
+function ownerBookingContextResult(language) {
+  return {ok:false,state:'needs_information',executed:false,error:'OWNER_BOOKING_CONTEXT_REQUIRED',
+    missing_fields:['customer_id','service_id','branch_id','activity_contract'],next_step:'appointments',
+    summary:language==='ar'?'لم يُنشأ حجز. افتح المواعيد وحدد العميل والخدمة والفرع ومتطلبات الخدمة قبل الحفظ.':'No booking was created. Open appointments and select the customer, service, branch and service requirements before saving.'};
+}
+function validateOwnerWrite(plan) {
+  const payload=validate(plan);
+  if(payload?.action==='book_available_appointment')requireOwnerBookingContext();
+  return payload;
 }
 export async function executeTool(token,businessId,payload){
   const key=clean(payload.idempotency_key,120);
@@ -143,18 +133,19 @@ export async function executeTool(token,businessId,payload){
   if(payload.action==='set_inventory')return await rpc(token,'dabbir_owner_set_inventory',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity},'INVENTORY_UPDATE_FAILED');
   if(payload.action==='receive_stock'){if(key){const replay=await rest(token,`dabbir_inventory_movements?select=id,product_id,quantity_delta,quantity_after,reference_note,created_at&business_id=eq.${businessId}&product_id=eq.${payload.product_id}&reference_note=like.*${encodeURIComponent(key)}*&limit=1`,{},'STOCK_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}return await rpc(token,'dabbir_owner_receive_stock',{p_business_id:businessId,p_product_id:payload.product_id,p_quantity:payload.quantity,p_note:key?`${payload.note||''} [${key}]`.trim():payload.note||''},'STOCK_RECEIPT_FAILED')}
   if(payload.action==='create_expense'){if(key){const replay=await rest(token,`dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at&business_id=eq.${businessId}&note=like.*${encodeURIComponent(key)}*&limit=1`,{},'EXPENSE_REPLAY_LOOKUP_FAILED');if(replay?.[0])return {...replay[0],idempotent_replay:true}}const rows=await rest(token,'dabbir_expenses?select=id,amount_aed,category,note,occurred_on,created_at',{method:'POST',headers:{prefer:'return=representation'},body:JSON.stringify({business_id:businessId,amount_aed:Number(payload.amount_aed.toFixed(2)),category:payload.category,note:key?`${payload.note||''} [${key}]`.trim():payload.note||'',occurred_on:/^\d{4}-\d{2}-\d{2}$/.test(payload.occurred_on)?payload.occurred_on:todayDubai()})},'EXPENSE_CREATE_FAILED');const result=rows?.[0];if(!result?.id)throw Object.assign(new Error('EXPENSE_CREATE_UNVERIFIED'),{status:502});return result}
-  if(payload.action==='book_available_appointment')return await bookAvailableAppointment(token,businessId,payload);
+  if(payload.action==='book_available_appointment')requireOwnerBookingContext();
   throw Object.assign(new Error('UNSUPPORTED_TOOL'),{status:400});
 }
 async function executeApproved(ctx,businessId,approvalToken){
   const approved=verifyApproval(ctx.token,approvalToken,businessId,ctx.user.id);if(!approved)throw Object.assign(new Error('APPROVAL_INVALID_EXPIRED_OR_TAMPERED'),{status:403});
+  for(const raw of approved.plan.slice(0,6))validateOwnerWrite({tool:raw.action,args:raw});
   const receipts=[],transitions=[{state:'received',at:new Date().toISOString()},{state:'executing',at:new Date().toISOString()}];
   for(const raw of approved.plan.slice(0,6)){const payload=validate({tool:raw.action,args:raw});if(!payload)throw Object.assign(new Error('APPROVED_PLAN_INVALID'),{status:400});payload.idempotency_key=raw.idempotency_key;try{const before=payload.action==='set_inventory'||payload.action==='receive_stock'?(await rest(ctx.token,`dabbir_inventory?select=product_id,quantity,reserved,updated_at&business_id=eq.${businessId}&product_id=eq.${payload.product_id}&limit=1`,{},'BEFORE_READ_FAILED'))?.[0]||null:null;const result=await executeTool(ctx.token,businessId,payload);transitions.push({state:'verifying',step:raw.step,at:new Date().toISOString()});receipts.push({step:raw.step,tool:payload.action,business_id:businessId,idempotency_key:payload.idempotency_key,verified_by:'TENANT_RLS_WRITE_RETURNING_OR_READ_AFTER_WRITE',before,result})}catch(error){const state=receipts.length?'partially_completed':'failed';transitions.push({state,step:raw.step,at:new Date().toISOString()});return {ok:false,state,executed:receipts.length>0,version:OPERATOR_VERSION,goal:approved.goal,receipts,error:clean(error?.message||'TOOL_EXECUTION_FAILED',140),transitions}}}
   transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:true,version:OPERATOR_VERSION,goal:approved.goal,receipts,transitions};
 }
 
 export async function deterministicWritePlan({token,businessId,message,language='ar'}){
-  let plan=deterministicPlan(message),payload=validate(plan);
+  let plan=deterministicPlan(message),payload=validateOwnerWrite(plan);
   if(!payload){
     const inventory=parseInventoryCommand(message);
     if(inventory){
@@ -171,7 +162,7 @@ export async function deterministicWritePlan({token,businessId,message,language=
       if(!payload)throw Object.assign(new Error('INVENTORY_PLAN_INVALID'),{status:400});
     }else{
       plan=await aiPlan(message,language);
-      payload=validate(plan);
+      payload=validateOwnerWrite(plan);
       if(!payload)return null;
     }
   }
@@ -185,17 +176,18 @@ export default async function handler(req,res){
   const body=await readJsonBody(req,32768).catch(()=>null),businessId=safeId(body?.business_id),action=clean(body?.action||'plan',24).toLowerCase();if(!businessId)return json(res,400,{ok:false,error:'BUSINESS_ID_REQUIRED'});
   const ctx=await auth(req,res,businessId);if(!ctx)return;const language=String(body?.language||'ar').toLowerCase()==='en'?'en':'ar';
   if(action==='cancel')return json(res,200,{ok:true,state:'cancelled',executed:false,version:OPERATOR_VERSION,transitions:[{state:'received',at:new Date().toISOString()},{state:'cancelled',at:new Date().toISOString()}]});
-  if(action==='approve'){try{return json(res,200,await executeApproved(ctx,businessId,clean(body?.approval_token,16000)))}catch(error){const status=[400,403,409].includes(Number(error?.status))?Number(error.status):500;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'APPROVAL_EXECUTION_FAILED',140)})}}
+  if(action==='approve'){try{return json(res,200,await executeApproved(ctx,businessId,clean(body?.approval_token,16000)))}catch(error){if(error?.message==='OWNER_BOOKING_CONTEXT_REQUIRED')return json(res,409,ownerBookingContextResult(language));const status=[400,403,409].includes(Number(error?.status))?Number(error.status):500;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'APPROVAL_EXECUTION_FAILED',140)})}}
   if(action!=='plan')return json(res,400,{ok:false,error:'ACTION_NOT_ALLOWED'});const message=clean(body?.message,800);if(!message)return json(res,400,{ok:false,error:'MESSAGE_REQUIRED'});
   try{const direct=await runDeterministicReadGoal({token:ctx.token,businessId,goal:message,language});if(direct)return json(res,200,direct)}catch(error){return json(res,502,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'VERIFIED_READ_FAILED',140)})}
-  try{const directWrite=await deterministicWritePlan({token:ctx.token,businessId,message,language});if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite))}catch(error){const status=[400,404,409].includes(Number(error?.status))?Number(error.status):502;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'DETERMINISTIC_WRITE_FAILED',140)})}
+  try{const directWrite=await deterministicWritePlan({token:ctx.token,businessId,message,language});if(directWrite)return json(res,200,deterministicApproval(ctx,businessId,message,language,directWrite))}catch(error){if(error?.message==='OWNER_BOOKING_CONTEXT_REQUIRED')return json(res,409,ownerBookingContextResult(language));const status=[400,404,409].includes(Number(error?.status))?Number(error.status):502;return json(res,status,{ok:false,state:'failed',executed:false,version:OPERATOR_VERSION,error:clean(error?.message||'DETERMINISTIC_WRITE_FAILED',140)})}
   try{
-    const planned=await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validate});
+    const planned=await planAutonomousRun({token:ctx.token,userId:ctx.user.id,businessId,goal:message,language,validateWrite:validateOwnerWrite});
     if(planned?.state==='completed'&&!planned?.executed&&!(Array.isArray(planned?.plan)&&planned.plan.length)&&looksLikeWriteIntent(message)){
       return json(res,422,{...planned,ok:false,state:'failed',error:'NO_EXECUTABLE_PLAN',summary:language==='ar'?'لم يُنفذ شيء: لم يتمكن دبّر من بناء خطوة تنفيذية قابلة للموافقة لهذا الطلب. اذكر اسم العميل والوقت المطلوب بوضوح.':'Nothing was executed: DABBIR could not build an approvable execution step for this request. Include the customer name and requested time.'});
     }
     return json(res,200,planned);
   }catch(error){
+    if(error?.message==='OWNER_BOOKING_CONTEXT_REQUIRED')return json(res,409,ownerBookingContextResult(language));
     const budgetCode=error?.code==='AI_MONTHLY_BUDGET_REACHED'||error?.message==='AI_MONTHLY_BUDGET_REACHED'?'AI_MONTHLY_BUDGET_REACHED':error?.code==='AI_BUDGET_UNAVAILABLE'||error?.message==='AI_BUDGET_UNAVAILABLE'?'AI_BUDGET_UNAVAILABLE':null;
     const publicError=budgetCode||(error?.name==='AbortError'||error?.name==='TimeoutError'?'AGENT_TIMEOUT':'AI_PROVIDER_UNAVAILABLE');
     const providerStatus=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status)||null;

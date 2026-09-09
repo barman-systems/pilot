@@ -4,6 +4,12 @@ const DEFAULT_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models/
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clean=(value,max=16000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,max);
 const ragEnabled=env=>['1','true'].includes(String(env?.DABBIR_KNOWLEDGE_RAG_ENABLED||'').trim().toLowerCase());
+function failureCode(error){
+  const code=String(error?.code||error?.message||'');
+  if(/^(?:EMBEDDING_PROVIDER_[45][0-9]{2}|EMBEDDING_CONTRACT_INVALID|EMBEDDING_TEXT_EMPTY|EMBEDDING_MODEL_UNAPPROVED|GEMINI_API_KEY_MISSING|KNOWLEDGE_ID_INVALID)$/.test(code))return code;
+  if(['AbortError','TimeoutError'].includes(error?.name))return 'RAG_TIMEOUT';
+  return 'RAG_DEPENDENCY_FAILED';
+}
 
 export function knowledgeDocumentInstruction({title,content}={}){
   return `title: ${clean(title,220)||'none'} | text: ${clean(content,15000)}`;
@@ -37,7 +43,9 @@ export function vectorSqlText(vector){
 export async function retrieveDabbirKnowledge({businessId,query,rpc,env=process.env,fetchImpl=fetch,limit=5}={}){
   if(!UUID.test(String(businessId||''))||typeof rpc!=='function'||!clean(query,1200))return [];
   if(!ragEnabled(env))return [];
-  const config=embeddingConfiguration(env);if(!config.ok)return [];
+  const started=Date.now();
+  const diagnose=code=>console.warn('dabbir_knowledge_retrieval_failed',{business_id:businessId,code,provider:'gemini',model:DEFAULT_MODEL,latency_ms:Date.now()-started});
+  const config=embeddingConfiguration(env);if(!config.ok){diagnose(config.reason);return []}
   try{
     const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl,timeoutMs:2500});
     const rows=await rpc('dabbir_knowledge_hybrid_search_v1',{p_business_id:businessId,p_query:clean(query,1200),p_embedding_text:vectorSqlText(vector),p_limit:Math.min(8,Math.max(1,Number(limit)||5))});
@@ -45,14 +53,14 @@ export async function retrieveDabbirKnowledge({businessId,query,rpc,env=process.
       knowledge_key:clean(row?.knowledge_key,180),knowledge_type:clean(row?.knowledge_type,80),content:clean(row?.content,1400),
       score:Number.isFinite(Number(row?.score))?Number(row.score):0,
     })).filter(row=>row.content&&row.score>=0);
-  }catch{return []}
+  }catch(error){diagnose(failureCode(error));return []}
 }
 export async function indexApprovedKnowledge({rpc,env=process.env,fetchImpl=fetch,limit=12}={}){
   if(typeof rpc!=='function')throw new Error('RAG_RPC_REQUIRED');
   if(!ragEnabled(env))return {ok:false,state:'SKIPPED',reason:'DISABLED',indexed:0,failed:0};
   const config=embeddingConfiguration(env);if(!config.ok)return {ok:false,state:'SKIPPED',reason:config.reason,indexed:0,failed:0};
   const queue=await rpc('dabbir_knowledge_embedding_queue_v1',{p_limit:Math.min(30,Math.max(1,Number(limit)||12))});
-  const rows=Array.isArray(queue)?queue:[];let indexed=0,failed=0;
+  const rows=Array.isArray(queue)?queue:[];let indexed=0,failed=0;const error_codes={};
   for(const row of rows){
     try{
       if(!UUID.test(String(row?.knowledge_id||'')))throw new Error('KNOWLEDGE_ID_INVALID');
@@ -60,7 +68,7 @@ export async function indexApprovedKnowledge({rpc,env=process.env,fetchImpl=fetc
       const vector=await embedKnowledgeText(instruction,{env,fetchImpl});
       await rpc('dabbir_knowledge_embedding_upsert_v1',{p_knowledge_id:row.knowledge_id,p_content:clean(row.content,16000),p_content_hash:clean(row.content_hash,64),p_embedding_text:vectorSqlText(vector),p_model:DEFAULT_MODEL});
       indexed++;
-    }catch{failed++}
+    }catch(error){failed++;const code=failureCode(error);error_codes[code]=(error_codes[code]||0)+1;}
   }
-  return {ok:failed===0,state:failed?'PARTIAL':'COMPLETE',queued:rows.length,indexed,failed,model:DEFAULT_MODEL,dimensions:EMBEDDING_DIMENSIONS};
+  return {ok:failed===0,state:failed?'PARTIAL':'COMPLETE',queued:rows.length,indexed,failed,error_codes,model:DEFAULT_MODEL,dimensions:EMBEDDING_DIMENSIONS};
 }
