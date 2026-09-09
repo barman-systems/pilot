@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {dialogueHarness} from './fixtures/understanding/dialogue-harness.mjs';
 import {ids} from './fixtures/understanding/cases.mjs';
-import {probeCognitiveDialogue} from '../api/_dabbir-cognitive-probe.js';
+import {probeCognitiveDialogue,cognitiveEvaluationEnvironment} from '../api/_dabbir-cognitive-probe.js';
 const proposal=intent=>({intent,action:intent==='SERVICE_DISCOVERY'?'SERVICE_MENU':'REPLY',confidence:.99,riskLevel:'LOW',entities:[]});
 
 test('critical live regression: شو خدماتكم → أبا غسيل خارجي → ستيشن never resets the booking',async()=>{
@@ -43,6 +43,36 @@ test('unknown answer preserves goal and asks a targeted clarification without a 
 test('the authenticated fixed probe uses the same bounded planner and never reaches a business tool',async()=>{
  const result=await probeCognitiveDialogue({interpret:async({message})=>({proposal:proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':message==='ستيشن'?'SUPPORT':'BOOKING'),provider:'test-provider',model:'test-model'})});
  assert.equal(result.ok,true);assert.equal(result.providers.length,2);assert.equal(result.turns[2].pending_field,'location');assert.equal(result.external_side_effects,false);
+});
+
+test('comparison isolates only the selected configured provider and cannot report fallback as success',async()=>{
+ const env={GEMINI_API_KEY:'gemini-test',GROQ_API_KEY:'groq-test',DABBIR_AI_MODEL:'existing-model',VERCEL_ENV:'production',SUPABASE_SERVICE_ROLE_KEY:'private-test'};
+ const selected=cognitiveEvaluationEnvironment('groq',env);
+ assert.deepEqual(selected,{GROQ_API_KEY:'groq-test',DABBIR_AI_MODEL:'existing-model'});
+ assert.equal(env.GEMINI_API_KEY,'gemini-test');assert.notEqual(selected,env);
+ assert.throws(()=>cognitiveEvaluationEnvironment('untrusted',env),/NOT_ALLOWED/);
+ assert.throws(()=>cognitiveEvaluationEnvironment('cloudflare-workers-ai',env),/NOT_CONFIGURED/);
+ const r=await probeCognitiveDialogue({provider:'groq',env,interpret:async({message,env:actual})=>{
+  assert.deepEqual(actual,selected);return {proposal:proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':'BOOKING'),provider:'different-provider',model:'model'};
+ }});
+ assert.equal(r.checks.real_provider,false);assert.equal(r.ok,false);
+});
+
+test('fixed comparative conversation checks side-price truth and preserves the original service after correction',async()=>{
+ const r=await probeCognitiveDialogue({scenario:'correction_side_question',interpret:async({message})=>({
+  proposal:{...proposal(message==='شو خدماتكم'?'SERVICE_DISCOVERY':message==='كم VIP'?'PRICING':'BOOKING'),...(message==='كم VIP'?{dialogue:{message_role:'SIDE_QUESTION',evidence:message,invalidated_fields:[]}}:{})},provider:'test-provider',model:'test-model'
+ })});
+ assert.equal(r.turns.length,5);assert.deepEqual(r.checks,Object.fromEntries(Object.keys(r.checks).map(k=>[k,true])));assert.equal(r.ok,true);
+});
+
+test('side questions do not consume failed-answer attempts but repeated unresolved answers still escalate',async()=>{
+ const h=dialogueHarness({planner:(_body,_s,p)=>p||proposal('BOOKING')});await h.turn('أبا خارجي');
+ for(let i=0;i<3;i++){
+  const r=await h.turn('كم VIP',{...proposal('PRICING'),dialogue:{message_role:'SIDE_QUESTION',evidence:'كم VIP',invalidated_fields:[]}});
+  assert.equal(r.result.action,'PRICING');assert.equal(r.state.requirement_loop.count,1);assert.equal(r.state.goal,'BOOK_SERVICE');
+ }
+ await h.turn('ما فهمت',proposal('SUPPORT'));
+ const failed=await h.turn('ما فهمت',proposal('SUPPORT'));assert.equal(failed.result.action,'HANDOFF');
 });
 
 test('shadow computes a comparison only, with no second provider call, execution or replacement state',async()=>{

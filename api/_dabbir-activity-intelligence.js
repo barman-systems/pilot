@@ -117,13 +117,13 @@ export function applyActivityRequirements(state,context,now=new Date()) {
   state.business_constraints=resolution.required.filter(x=>!['service','branch','delivery_mode','date','time','slot'].includes(x));
   return resolution;
 }
-export function detectRequirementLoop(state,previous) {
+export function detectRequirementLoop(state,previous,messageRole=null) {
   const key=state.clarification_entity;
   if(!key || state.pending_action!=='CLARIFY'){state.requirement_loop=null;return false;}
   const current=JSON.stringify(state.entities?.[key]||null),before=JSON.stringify(previous?.entities?.[key]||null);
   const progressed=Object.entries(state.entities||{}).some(([field,f])=>field!=='branch'&&verifiedOperationalFact(f)&&JSON.stringify(f.value)!==JSON.stringify(previous?.entities?.[field]?.value));
   const repeated=!progressed && previous?.clarification_entity===key && current===before;
-  const count=repeated?(previous.requirement_loop?.count||1)+1:1;
+  const count=repeated?(previous.requirement_loop?.count||1)+(messageRole==='SIDE_QUESTION'?0:1):1;
   state.requirement_loop={key,count};
   return count>=3;
 }

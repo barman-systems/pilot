@@ -23,6 +23,7 @@ export async function runOwnerAiBookingJourney({ownerSession,employeeSession,con
  try{
   await page.goto(origin,{waitUntil:'domcontentloaded',timeout:45000});
   await page.locator('#appShell:not(.hidden)').waitFor({state:'visible',timeout:25000});
+  await page.waitForFunction(()=>document.querySelector('#dbwSwitchBtn')?.disabled===false,null,{timeout:20000});
   await page.locator('#menuBtn:visible').click();
   await page.locator('#dbwSwitchBtn').click();
   await page.locator('#dbwMenu [data-dbw-id="'+business_id+'"]').click();

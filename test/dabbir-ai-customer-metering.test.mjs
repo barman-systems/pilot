@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import {actualGatewayCost} from '../api/_dabbir-whatsapp-ai-meter.js';
+import {actualGatewayCost,generateDABBIRAiReply} from '../api/_dabbir-whatsapp-ai-meter.js';
+
+test('synthetic provider telemetry preserves unknown cost and reports only actual token evidence',async()=>{
+ for(const usage of [undefined,{prompt_tokens:12,completion_tokens:7},{prompt_tokens:null,completion_tokens:7}]){
+  const r=await generateDABBIRAiReply({project:'dabbir_businesses',message:'مرحبا',env:{GROQ_API_KEY:'secret-test-only'},fetchImpl:async()=>new Response(JSON.stringify({model:'existing-model',choices:[{message:{content:'مرحبا'}}],usage}),{status:200})});
+  assert.equal(r.ok,true);assert.equal(r.provider,'groq');assert.equal(r.telemetry.request_count,1);assert.equal(r.telemetry.actual_cost_usd,null);
+  assert.deepEqual(r.telemetry.final_request_usage,usage?.prompt_tokens===12?{inputTokens:12,outputTokens:7,reasoningTokens:0}:null);
+  assert.equal(r.telemetry.attempts[0].provider,'groq');assert.equal(r.telemetry.attempts[0].status,200);
+  assert.doesNotMatch(JSON.stringify(r.telemetry),/secret-test|https:|مرحبا/);
+ }
+});
 
 test('missing or malformed gateway cost remains unknown instead of verified zero',()=>{
   const absent=new Response('{}');

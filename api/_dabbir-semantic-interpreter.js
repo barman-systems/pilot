@@ -32,8 +32,8 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     message:sanitizeSemanticText(message).slice(0,2000),
     businessContext:JSON.stringify(sanitizeSemanticContext({...context,reference_time:referenceTime})),
     history:[],fetchImpl:fetchBounded,env,meteringContext});
-  if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE'});
-  if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID'});
+  if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});
+  if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   const x=JSON.parse(result.reply);
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
     serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,
@@ -42,7 +42,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   // operational intent. Explicit availability + grounded temporal evidence is
   // a booking-journey signal even if a stochastic provider says SERVICE_MENU.
   const proposal=applyDeterministicSemanticIntentPolicy({message,proposal:providerProposal});
-  return {proposal,provider:result.provider,model:result.model};
+  return {proposal,provider:result.provider,model:result.model,telemetry:result.telemetry||null};
 }
 
 // Fixed, authenticated synthetic case exercises the SAME interpreter used by
