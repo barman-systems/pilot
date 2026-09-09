@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const sql=fs.readFileSync(new URL('../supabase/migrations/20260909050000_platform_pnl_ledger_v1.sql',import.meta.url),'utf8');
+const sql=fs.readFileSync(new URL('../supabase/migrations/20260909051108_platform_pnl_ledger_v1.sql',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../api/owner-finance.js',import.meta.url),'utf8');
 const client=fs.readFileSync(new URL('../api/_platform-finance.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/platform-pnl-ui.js',import.meta.url),'utf8');
