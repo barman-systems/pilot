@@ -150,3 +150,8 @@ begin
   get diagnostics proposals=row_count;
   return jsonb_build_object('ok',true,'cases_ingested',ingested,'clusters_updated',clusters,'proposals_touched',proposals,'auto_apply',false);
 end $fn$;
+
+revoke all on function public.dabbir_ai_eval_ingest_recent_v1(interval,integer) from public, anon, authenticated;
+revoke all on function public.dabbir_ai_failure_mine_v1(interval) from public, anon, authenticated;
+grant execute on function public.dabbir_ai_eval_ingest_recent_v1(interval,integer) to service_role;
+grant execute on function public.dabbir_ai_failure_mine_v1(interval) to service_role;
