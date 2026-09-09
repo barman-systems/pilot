@@ -6,6 +6,7 @@ const sql=fs.readFileSync(new URL('../supabase/migrations/20260909051108_platfor
 const api=fs.readFileSync(new URL('../api/owner-finance.js',import.meta.url),'utf8');
 const client=fs.readFileSync(new URL('../api/_platform-finance.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/platform-pnl-ui.js',import.meta.url),'utf8');
+const billingUi=fs.readFileSync(new URL('../api/dabbir-billing-ui.js',import.meta.url),'utf8');
 const bundles=fs.readFileSync(new URL('../config/dabbir-ui-bundles.json',import.meta.url),'utf8');
 
 test('canonical P&L ledger is DABBIR-only and append-only for service role',()=>{
@@ -53,5 +54,9 @@ test('owner UI shows known result, final net profit and source gaps separately',
   assert.match(ui,/missing_sources/);
   assert.match(ui,/allocated_shared_cost_aed/);
   assert.match(ui,/known_contribution_aed/);
-  assert.match(bundles,/\/api\/platform-pnl-ui/);
+  assert.match(ui,/export const platformPnlScript/);
+  assert.match(billingUi,/platformPnlScript/);
+  assert.match(billingUi,/\.\/platform-pnl-ui\.js/);
+  assert.match(bundles,/\/api\/dabbir-billing-ui/);
+  assert.doesNotMatch(bundles,/\/api\/platform-pnl-ui/);
 });

@@ -22,7 +22,6 @@
     "/api/business-profile-ui",
     "/api/dabbir-billing-ui",
     "/api/platform-customers-ui",
-    "/api/platform-pnl-ui",
     "/api/platform-customer-support-ui",
     "/api/platform-recovery-reconciliation-ui",
     "/api/verified-metrics-ui",

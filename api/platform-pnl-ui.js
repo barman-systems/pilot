@@ -1,4 +1,4 @@
-const script=String.raw`(()=>{
+export const platformPnlScript=String.raw`(()=>{
   if(window.__dabbirPlatformPnlUi)return;window.__dabbirPlatformPnlUi=true;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ar=()=>document.documentElement.lang!=='en';
@@ -46,5 +46,5 @@ const script=String.raw`(()=>{
 
 export default function handler(req,res){
   if(!['GET','HEAD'].includes(req.method)){res.statusCode=405;res.setHeader('allow','GET, HEAD');return res.end('Method Not Allowed')}
-  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');res.setHeader('x-dabbir-platform-pnl-ui','v1');res.statusCode=200;return res.end(req.method==='HEAD'?'':script);
+  res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');res.setHeader('x-dabbir-platform-pnl-ui','v1');res.statusCode=200;return res.end(req.method==='HEAD'?'':platformPnlScript);
 }
