@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {supabaseRest,supabaseRpc} from './_auth-core.js';
+import {logEvent,classifyFailure} from './_observability.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=v=>UUID.test(String(v||''))?v:null;
@@ -33,9 +34,14 @@ export function approvedOwnerBooking(payload){
  if(!/^[0-9a-f]{32}$/.test(String(payload?.quote_hash||''))||!/^owner-ai:[A-Za-z0-9_-]{16,100}$/.test(String(payload?.idempotency_key||'')))throw fault('OWNER_BOOKING_CONTEXT_REQUIRED');
  return {action:'book_available_appointment',booking_request:ownerBookingRequest(payload.booking_request),quote_hash:payload.quote_hash,idempotency_key:payload.idempotency_key};
 }
-export async function prepareOwnerBooking(token,businessId,input,language='ar'){
+async function bookingRpc(token,businessId,parameters,traceId){
+ const started=Date.now(),base={operation:parameters.p_execute?'owner_booking_execute':'owner_booking_quote',correlation_id:traceId||randomUUID(),business_id:businessId,branch_id:parameters.p_request.branch_id,service_id:parameters.p_request.service_id,tool:'book_available_appointment'};
+ try{const result=await read(await supabaseRpc('dabbir_owner_activity_booking_v1',token,{p_business_id:businessId,...parameters}));logEvent('info',{...base,outcome:'DATABASE_RETURNED',verified_by_database:result.verified===true,state:result.state||null,activity_type:result.quote?.activity_type||result.activity_intelligence?.activity_type,appointment_id:result.appointment_id||null,idempotent_replay:result.idempotent_replay===true,latency_ms:Date.now()-started});return result;}
+ catch(error){logEvent('warn',{...base,outcome:'FAILED',failure_class:classifyFailure(error,'DATA'),error_code:/^[A-Z_]+(?::[a-z_]+)?$/.test(error.message)?error.message:'OWNER_BOOKING_REQUEST_FAILED',latency_ms:Date.now()-started});throw error;}
+}
+export async function prepareOwnerBooking(token,businessId,input,language='ar',traceId){
  const request=ownerBookingRequest(input);
- const prepared=await read(await supabaseRpc('dabbir_owner_activity_booking_v1',token,{p_business_id:businessId,p_request:request,p_execute:false}));
+ const prepared=await bookingRpc(token,businessId,{p_request:request,p_execute:false},traceId);
  const q=prepared.quote;
  if(prepared.ok!==true||prepared.state!=='awaiting_approval'||q?.business_id!==businessId||q.branch_id!==request.branch_id||q.customer_id!==request.customer_id||q.service_id!==request.service_id||!q.contract_version||!q.activity_type||!Number.isFinite(q.price)||!Number.isInteger(q.duration_minutes)||!/^[0-9a-f]{32}$/.test(String(prepared.quote_hash||'')))throw fault('OWNER_BOOKING_RESULT_UNVERIFIED',502);
  const when=new Intl.DateTimeFormat(language==='ar'?'ar-AE':'en-GB',{timeZone:q.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(q.starts_at));
@@ -43,9 +49,9 @@ export async function prepareOwnerBooking(token,businessId,input,language='ar'){
  const raw={action:'book_available_appointment',booking_request:request,quote_hash:prepared.quote_hash,idempotency_key:'owner-ai:'+randomUUID(),step:1,reason:summary};
  return {raw,quote:q,approval:[{step:1,tool:raw.action,summary}]};
 }
-export async function executeOwnerBooking(token,businessId,payload){
+export async function executeOwnerBooking(token,businessId,payload,traceId){
  const approved=approvedOwnerBooking(payload);
- const result=await read(await supabaseRpc('dabbir_owner_activity_booking_v1',token,{p_business_id:businessId,p_request:approved.booking_request,p_execute:true,p_quote_hash:approved.quote_hash,p_operation_key:approved.idempotency_key}));
+ const result=await bookingRpc(token,businessId,{p_request:approved.booking_request,p_execute:true,p_quote_hash:approved.quote_hash,p_operation_key:approved.idempotency_key},traceId);
  const r=approved.booking_request;
  if(result.ok!==true||result.verified!==true||!id(result.appointment_id)||result.business_id!==businessId||result.branch_id!==r.branch_id||result.customer_id!==r.customer_id||result.service_id!==r.service_id||result.activity_intelligence?.source!=='owner_ai')throw fault('OWNER_BOOKING_RESULT_UNVERIFIED',502);
  return result;
