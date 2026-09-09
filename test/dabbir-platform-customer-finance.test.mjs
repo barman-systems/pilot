@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const api=fs.readFileSync(new URL('../api/platform-customers.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../api/platform-customers-ui.js',import.meta.url),'utf8');
-const sql=fs.readFileSync(new URL('../supabase/migrations/20260909034200_platform_customer_finance_v1.sql',import.meta.url),'utf8');
+const sql=fs.readFileSync(new URL('../supabase/migrations/20260909042748_platform_customer_finance_v1.sql',import.meta.url),'utf8');
 
 test('customer admin exposes finance overview and per-customer finance without mixing tenant payments',()=>{
   assert.match(api,/action==='finance_overview'/);
