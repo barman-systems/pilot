@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   isConversationNudge,
+  looksLikeBookingAvailability,
   looksLikeServiceIntent,
   previousCustomerText,
   resolveRequestedLocal,
@@ -16,6 +17,15 @@ const menuSource=fs.readFileSync(new URL('../api/_dabbir-whatsapp-service-menu.j
 test('Gulf no-space service discovery wording opens the deterministic menu',()=>{
   for(const text of ['شوعندكم','شو عندكم','وشعندكم','شنو عندكم','ايش تقدمون','شو خدماتكم']){
     assert.equal(wantsServiceMenu(text),true,text);
+  }
+});
+
+test('explicit Gulf scheduling availability is recognized without treating product stock as booking intent',()=>{
+  for(const text of ['فاضين بكره 9 الصبح','فاضين باجر 5 المسا','عندكم وقت اليوم 17:00','في موعد باجر الصبح','any slots tomorrow morning','are you free tomorrow 9 am']){
+    assert.equal(looksLikeBookingAvailability(text),true,text);
+  }
+  for(const text of ['هل المنتج متوفر بكرة؟','المنتج متوفر اليوم','شو عندكم بكره','كم سعر المنتج بكره','فاضين؟','any products available tomorrow']){
+    assert.equal(looksLikeBookingAvailability(text),false,text);
   }
 });
 
