@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { appointmentTimeWindow } from './_appointment-time-window.js';
 import {
   calendarError,
   decryptTokenPayload,
@@ -159,8 +160,10 @@ export async function syncCalendarConnection(req,connection){
     const times=eventTimes(provider,event);if(!times.start)continue;
     const externalMs=new Date(times.start).getTime(),internalMs=new Date(appointment.starts_at).getTime();
     if(Math.abs(externalMs-internalMs)>60000&& !['cancelled','completed'].includes(appointment.status)){
-      await serviceRest(`dabbir_appointments?id=eq.${enc(appointment.id)}&business_id=eq.${enc(businessId)}`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({starts_at:times.start,status:'rescheduled'})});
-      appointment.starts_at=times.start;appointment.status='rescheduled';providerUpdates++;
+      const duration=new Date(appointment.ends_at).getTime()-internalMs;
+      const window=appointmentTimeWindow(times.start,Number.isFinite(duration)&&duration>0?duration:DEFAULT_DURATION_MS);
+      await serviceRest(`dabbir_appointments?id=eq.${enc(appointment.id)}&business_id=eq.${enc(businessId)}`,{method:'PATCH',headers:{prefer:'return=minimal'},body:JSON.stringify({...window,status:'rescheduled'})});
+      Object.assign(appointment,window,{status:'rescheduled'});providerUpdates++;
     }
   }
 

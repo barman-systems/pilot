@@ -1,6 +1,7 @@
 import { singleQueryValue } from './_request-query.js';
 import { branchFilter, resolveBranchScope } from './_branch-scope.js';
 import { bookingQuery } from './_booking-query.js';
+import { appointmentTimeWindow } from './_appointment-time-window.js';
 import {
   accessTokenFromRequest,
   getBusinessMemberships,
@@ -79,8 +80,7 @@ async function updateAppointment(req,ctx,body,businessId,appointmentId){
     if(start===null)return {status:400,body:{ok:false,error:'VALID_START_TIME_REQUIRED'}};
     const currentStart=validStart(current.starts_at);
     if(!currentStart||start.getTime()!==currentStart.getTime()){
-      patch.starts_at=start.toISOString();
-      patch.ends_at=new Date(start.getTime()+durationMs(current)).toISOString();
+      Object.assign(patch,appointmentTimeWindow(start,durationMs(current)));
     }
   }
   if(body.status!==undefined){
