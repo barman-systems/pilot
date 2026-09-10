@@ -32,16 +32,14 @@ export function verifiedAvailability(result,context,state){
 // Last-mile invariant for prose from knowledge or future response generators.
 // This is a safety backstop, not a language-understanding or execution router.
 export function assertResponseGrounding(text,receipt=null){
- const t=String(text||'').normalize('NFKD').replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[أإآ]/g,'ا').replace(/\s+/g,' ').toLowerCase();
+ const t=String(text||'').normalize('NFKC').replace(/[أإآ]/g,'ا').toLowerCase();
  const claims=[
-  ['CREATE_BOOKING',/(?:تم (?:حجز|تاكيد (?:الحجز|الموعد)|تثبيت الموعد)|حجزت(?: لك)?|ثبت(?:نا|ت) (?:لك )?الموعد|(?:i have|i've|i|we have|we've|we) booked|your (?:booking|appointment) (?:is|has been) confirmed|booking confirmed)/],
-  ['RESCHEDULE_BOOKING',/(?:تم تعديل (?:الموعد|الحجز)|عدل(?:ت|نا) (?:لك )?(?:الموعد|الحجز)|your (?:appointment|booking) (?:was|has been) rescheduled|(?:i|we) (?:have )?rescheduled)/],
-  ['CANCEL_BOOKING',/(?:تم الغاء (?:الموعد|الحجز)|لغي(?:ت|نا) (?:لك )?(?:الموعد|الحجز)|your (?:appointment|booking) (?:was|has been) cancel(?:l)?ed|(?:i|we) (?:have )?cancel(?:l)?ed)/],
-  ['HANDOFF',/(?:بلغ(?:ت|نا) الفريق|ارسل(?:ت|نا) (?:للفريق|التفاصيل)|تم (?:ابلاغ|اخطار) الفريق|(?:i|we) (?:have )?(?:notified|informed|sent .* to) (?:the )?(?:team|staff))/],
+  ['CREATE_BOOKING',/(?:تم (?:حجز|تاكيد الحجز)|حجزت لك|(?:i have|i've|i) booked|your (?:booking|appointment) (?:is|has been) confirmed)/],
+  ['RESCHEDULE_BOOKING',/(?:تم تعديل الموعد|عدلت لك الموعد|your appointment (?:was|has been) rescheduled)/],
+  ['CANCEL_BOOKING',/(?:تم الغاء الموعد|لغيت لك الموعد|your appointment (?:was|has been) cancelled)/],
  ];
- const negated=t.replace(/(?:لم|ما) (?:يتم|تم) (?:حجز|تاكيد الحجز|تعديل الموعد|الغاء الموعد)/g,'').replace(/(?:ما|لم) (?:حجزت|نحجز|احجز)(?: لك)?/g,'');
+ const negated=t.replace(/(?:لم|ما) (?:يتم|تم) (?:حجز|تاكيد الحجز|تعديل الموعد|الغاء الموعد)/g,'');
  for(const [action,pattern] of claims)if(pattern.test(negated)&&!(receipt?.verified===true&&receipt.action===action))throw Object.assign(new Error('BRAIN_UNVERIFIED_ACTION_LANGUAGE'),{code:'BRAIN_UNVERIFIED_ACTION_LANGUAGE'});
- if(/^(?:تم|done|booked|حجزت|عدلت|ارسلت|ثبت الموعد)[.! ✅]*$/.test(t)&&receipt?.verified!==true)throw Object.assign(new Error('BRAIN_UNVERIFIED_ACTION_LANGUAGE'),{code:'BRAIN_UNVERIFIED_ACTION_LANGUAGE'});
  // No unpersisted future commitments are supported by this release.
- if(/(?:بشيك|راح (?:اشيك|اتحقق|احجز|اعدل|ارسل)|سوف اتحقق|ساحول|بعطي الفريق|برسل للفريق|(?:i|we)(?:'ll| will) (?:check|book|send|notify|cancel|reschedule))/.test(t))throw Object.assign(new Error('BRAIN_UNPERSISTED_COMMITMENT'),{code:'BRAIN_UNPERSISTED_COMMITMENT'});
+ if(/(?:بشيك|راح (?:اشيك|اتحقق)|سوف اتحقق|ساحول|بعطي الفريق|برسل للفريق|i(?:'ll| will) (?:check|book|send|notify|cancel|reschedule))/.test(t))throw Object.assign(new Error('BRAIN_UNPERSISTED_COMMITMENT'),{code:'BRAIN_UNPERSISTED_COMMITMENT'});
 }

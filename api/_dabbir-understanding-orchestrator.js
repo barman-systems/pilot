@@ -10,10 +10,9 @@ const val=(s,k)=>s.entities[k]?.value;
 const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
 const SEMANTIC_INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
-const DETERMINISTIC_AUTHORITY_REASONS=new Set(['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST']);
+const DETERMINISTIC_AUTHORITY_REASONS=new Set(['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED']);
 export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
-  missing_fields:s.missing_fields,provider_trace:s.provider_trace||null,decision_latency_ms:s.decision_latency_ms??null,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
   semantic_confidence:s.semantic_confidence??0,operational_confidence:s.operational_confidence??0,
@@ -29,16 +28,6 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   reference_resolution:s.context_resolution||null,
   service_question:d.serviceQuestion?{field:d.serviceQuestion.field,verified:d.serviceQuestion.verified,service_id:d.serviceQuestion.service_id}:null});
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
-export function safeProviderTrace(metadata){
- if(!metadata||typeof metadata!=='object')return null;
- const label=v=>typeof v==='string'&&/^[a-z0-9_./:@-]{1,160}$/i.test(v)?v:null;
- const number=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0?v:null;
- const attempts=arr(metadata.attempts).slice(0,4).map(a=>({provider:label(a.provider),model:label(a.model),status:number(a.status),latency_ms:number(a.latency_ms)}));
- const usage=metadata.final_request_usage;
- return {provider:label(metadata.provider)||attempts.at(-1)?.provider||null,model:label(metadata.model)||attempts.at(-1)?.model||null,fallback_used:new Set(attempts.map(a=>[a.provider,a.model].join(':'))).size>1,attempts,
-  latency_ms:number(metadata.latency_ms),actual_cost_usd:number(metadata.actual_cost_usd),
-  tokens:usage?{input:number(usage.inputTokens),output:number(usage.outputTokens),reasoning:number(usage.reasoningTokens)}:null};
-}
 const workerLabel=w=>String(w?.display_name||w?.name||'').trim().slice(0,160);
 const scopedServices=c=>arr(c?.services).filter(s=>(!s?.business_id||s.business_id===c.business?.id)&&(!s?.branch_id||s.branch_id===c.conversation?.branch_id));
 const scopedWorkers=c=>arr(c?.workers).filter(w=>(!w?.business_id||w.business_id===c.business?.id)&&(!w?.branch_id||w.branch_id===c.conversation?.branch_id));
@@ -188,11 +177,10 @@ function proposalOverrideBase(state,previous,proposal){
 // One bounded orchestrator owns Understanding -> Semantic AI -> Policy -> Tool -> Verification.
 // The model interprets natural language; only database-grounded facts and existing mutation gates can execute.
 export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,planner,now=()=>new Date(),cognitiveMode='active'}) {
-  const started=Date.now();let steps=0,providerTrace=null;
+  const started=Date.now();let steps=0;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   const c={...context,...load},turnNow=now();
-  c.upcoming_appointments=arr(c.upcoming_appointments).filter(a=>(!a.business_id||a.business_id===c.business?.id)&&(!a.customer_id||a.customer_id===c.customer?.id)&&(!a.branch_id||a.branch_id===c.conversation?.branch_id));
   if(load.verified_service_presentation)c.pending_state=load.verified_service_presentation;
   const mode=cognitiveMode==='policy'?(load.cognitive_policy?.mode||'shadow'):cognitiveMode;
   const cognitive=mode==='active'||mode==='canary';
@@ -235,7 +223,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!pendingResolved&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&(!constrainedContinuation(c.batch_messages,semanticPrevious)||semanticPrevious?.recovery_required===true)&&naturalLanguageTurn(c.batch_messages));
   if(shouldInterpret){
     budget();let proposal,plannerFailure;
-    try{proposal=await planner(c,aiFirstPlannerContext(c,state,semanticPrevious));providerTrace=safeProviderTrace(proposal?.executionMetadata);observedProposal=proposal;}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;providerTrace=safeProviderTrace(error.telemetry);plannerFailure=error.code;}
+    try{proposal=await planner(c,aiFirstPlannerContext(c,state,semanticPrevious));observedProposal=proposal;}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
     if(plannerFailure){
       // Until interpretation succeeds, the first parse is provisional. A
       // catalog name in a side question must not replace the active booking
@@ -247,7 +235,6 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
         checkpointState.revision=state.revision;checkpointState.updated_at=turnNow.toISOString();
         if(checkpointState.cognition)checkpointState.cognition={...checkpointState.cognition,revision:state.revision,journey_stage:'RETRY',next_action:'WAIT',response_strategy:'RETRY_INTERPRETATION'};
       }
-      checkpointState.provider_trace=providerTrace;checkpointState.decision_latency_ms=Date.now()-started;
       await rpc('dabbir_semantic_checkpoint_failure_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
         p_expected_version:load.version,p_message_revision:load.message_revision,p_state:checkpointState,p_error:plannerFailure});
       if(Number(claim.attempt_count||1)<2){await finish(claim,'RETRY',plannerFailure);return {state:'RETRY',action:'RETRY',error:plannerFailure};}
@@ -281,7 +268,6 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       goal_changed:state.goal!==shadow.state.goal,action_changed:decision.action!==shadow.decision.action};
   }
   if(session.reset)state.session_reset=true;else delete state.session_reset;
-  state.provider_trace=providerTrace;state.decision_latency_ms=Date.now()-started;
   budget();
   if(cognitive)assertBrainDecision(state,decision,c);
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
@@ -290,11 +276,10 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
   const recordDelivery=async(sent,field)=>{if(cognitive&&state.cognition){if(!sent?.providerMessageId)throw Object.assign(new Error('COGNITIVE_PRESENTATION_UNVERIFIED'),{code:'COGNITIVE_PRESENTATION_UNVERIFIED'});await rpc('dabbir_cognitive_record_delivery_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_provider_message_id:sent.providerMessageId,p_next_field:field||null});}};
-  const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();assertResponseGrounding(text,executionReceipt);await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
+  const send=async(text,purpose,field=state.cognition?.pending_field)=>{budget();if(cognitive)assertResponseGrounding(text,executionReceipt);await assertCurrent();const sent=await deliver({...claim,semantic_version:version},c,text,purpose);await recordDelivery(sent,field);return sent;};
   if(session.reset&&c.pending_state?.pending_action&&c.pending_state.pending_action!=='none'&&!pendingStateLive(c,turnNow)&&!['human_active','action_required'].includes(c.conversation?.state))await setPending('none',{});
   if(c.pending_state?.pending_action==='choose_service'&&(groundedMenuSelection||(activeJourney(state)&&verifiedOperationalFact(state.entities?.service))))await setPending('none',{});
   if(decision.reasonCode==='MULTI_REQUEST_SCOPE_UNRESOLVED')await setPending('none',{});
-  if(decision.reasonCode==='CUSTOMER_WITHDREW_REQUEST')await setPending('none',{});
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','PRICING','SERVICE_MENU'].includes(decision.action)?'REPLY':decision.action,p_intent:decision.intent,p_confidence:decision.confidence,p_risk_level:decision.riskLevel,p_missing_fields:decision.missingFields,p_reason_code:decision.reasonCode}).catch(()=>null);
   if(decision.action==='HANDOFF'){await assertCurrent();await handoff(c,decision.reasonCode,'Understanding V2 requires human assistance','SUPPORT');await finish(claim,'HUMAN_REQUIRED',decision.reasonCode);return {state:'HUMAN_REQUIRED',action:'HANDOFF'};}
   if(MUTATIONS.has(decision.action)){
@@ -312,7 +297,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
   }
   if(decision.action==='CLARIFY'&&(state.missing_fields.includes('appointment')||state.unresolved_references.includes('appointment'))){
-    const appointments=arr(c.upcoming_appointments).filter(a=>(!a.customer_id||a.customer_id===c.customer.id)&&(!a.business_id||a.business_id===c.business.id)&&(!a.branch_id||a.branch_id===c.conversation.branch_id)).slice(0,3);if(appointments.length){c.appointmentPresentation={appointments:appointments.map(a=>({id:a.id,starts_at:a.starts_at})),mode:state.intent,presented:false};await setPending('choose_appointment',c.appointmentPresentation);const lines=appointments.map((a,i)=>`${i+1}) ${new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:c.business.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(a.starts_at))}`);decision.reply+='\n'+lines.join('\n');}
+    const appointments=arr(c.upcoming_appointments).slice(0,3);if(appointments.length){c.appointmentPresentation={appointments:appointments.map(a=>({id:a.id,starts_at:a.starts_at})),mode:state.intent,presented:false};await setPending('choose_appointment',c.appointmentPresentation);const lines=appointments.map((a,i)=>`${i+1}) ${new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:c.business.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(a.starts_at))}`);decision.reply+='\n'+lines.join('\n');}
   }
   if(decision.action==='PRICING'||decision.action==='SERVICE_MENU'){
     if(decision.action==='SERVICE_MENU'&&deliverMenu&&decision.reasonCode!=='SIDE_QUESTION_RESUME'){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await recordDelivery(menu,'service');await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}

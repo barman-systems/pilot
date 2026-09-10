@@ -3,7 +3,6 @@
 import {runUnderstandingTurn} from './_dabbir-understanding-orchestrator.js';
 import {interpretSemanticMessage} from './_dabbir-semantic-interpreter.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
-import {probeUnseenActivities} from './_dabbir-multi-activity-probe.js';
 
 export function cognitiveEvaluationEnvironment(provider,env=process.env){
  if(provider==null)return env;
@@ -16,7 +15,6 @@ export function cognitiveEvaluationEnvironment(provider,env=process.env){
 
 export async function probeCognitiveDialogue({interpret=interpretSemanticMessage,provider=null,scenario='critical',env=process.env}={}){
  const evaluationEnv=cognitiveEvaluationEnvironment(provider,env);
- if(scenario==='unseen_multi_activity')return probeUnseenActivities({interpret,env:evaluationEnv});
  if(!['critical','correction_side_question','multiple_requests','service_details','context_references'].includes(scenario))throw new Error('COGNITIVE_SCENARIO_NOT_ALLOWED');
  const details=scenario==='service_details';
  const b='10000000-0000-4000-8000-000000000001',branch='20000000-0000-4000-8000-000000000001',service='30000000-0000-4000-8000-000000000001';

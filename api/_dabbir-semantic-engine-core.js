@@ -20,7 +20,7 @@ const supported = f => f?.status === 'active' && f?.value != null && f.confidenc
 const localDate = (now,tz) => new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
 const addDays = (d,n) => new Date(Date.parse(d+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
 const includesName = (text,name) => name && (' '+text+' ').includes(' '+normalizeSemanticText(name)+' ');
-function scoped(rows,c) { return arr(rows).filter(x => (!x.business_id || x.business_id===c.business.id) && (!x.branch_id || x.branch_id===c.conversation.branch_id) && (!x.customer_id || x.customer_id===c.customer.id)); }
+function scoped(rows,c) { return arr(rows).filter(x => (!x.business_id || x.business_id===c.business.id) && (!x.branch_id || x.branch_id===c.conversation.branch_id)); }
 function scopeValid(c) { return !!(c.business?.id && c.conversation?.id && c.customer?.id && c.conversation?.branch_id && c.business?.timezone); }
 function validCoordinates(lat,lng) { return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180; }
 
@@ -55,8 +55,6 @@ export function resolveOrdinal(raw) {
 function parseDate(t,today) {
   // Only the last positive correction is active, including GCC double negation.
   t=t.split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1).trim();
-  // A contingency is ordered preference, not a correction to the later day.
-  if(/(?:اذا|if)/.test(t)&&/(?:اليوم|today)/.test(t)&&/(?:باجر|tomorrow)/.test(t)&&/(?:ما فيه|فل|full|unavailable|no availability)/.test(t))return today;
   if(/(?:عقب باجر|بعد باجر|بعد بكره|بعد غد|day after tomorrow)/.test(t))return addDays(today,2);
   if(/(?:^|\s)(?:باجر|باكر|بكره|غدا|tomorrow)(?:\s|$)/.test(t) && !/(?:مب|مو|not)\s+(?:باجر|tomorrow)\s*$/.test(t))return addDays(today,1);
   if(/(?:^|\s)(?:اليوم|اباليوم|باليوم|today)(?:\s|$)/.test(t))return today;
@@ -190,20 +188,8 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   if(c.catalog_error)return route('HANDOFF',c.catalog_error);
   if(['human_active','action_required'].includes(c.conversation.state)||c.human_takeover){return route('HANDOFF','HUMAN_TAKEOVER_ACTIVE');}
   if(refuse){s.intent='UNSUPPORTED';s.overall_confidence=1;return route('REPLY','UNTRUSTED_INSTRUCTION',s.language==='ar'?'أقدر أساعدك بخدمات هذا النشاط ومواعيدك فقط.':'I can help with this business and your own appointments only.');}
-  if(/^(?:لا\s+)?(?:خلاص\s+)?(?:غيرت رايي|ما ابي اكمل|cancel this request|never mind|nevermind|i changed my mind)$/.test(all)){
-    s.goal='UNKNOWN';s.intent='SUPPORT';s.intent_confirmed=false;s.goal_queue=[];
-    invalidate(s,'slot',stamp);invalidate(s,'appointment',stamp);s.pending_action='REPLY';
-    return route('REPLY','CUSTOMER_WITHDREW_REQUEST',s.language==='ar'?'تمام، وقفت متابعة الطلب الحالي.':'Okay, I have stopped the current request.');
-  }
   if(/لا\s*(?:تحجز|تسوي حجز)|(?:dont|do not)\s+book/.test(all)){s.goal='UNKNOWN';s.intent='SUPPORT';s.pending_action='CLARIFY';s.unresolved_references=['booking_confirmation'];return route('CLARIFY','BOOKING_NEGATED',s.language==='ar'?'ما حجزت. هل تريد اختيار وقت آخر؟':'I have not booked. Would you like to choose another time?');}
   if(/(?:ابا|ابي|ابغي|اريد|اكلم|كلم|حولني|مع)\s*(?:اكلم\s*)?(?:المدير|المالك|موظف|انسان|شخص)|\b(?:human|manager|speak to staff|talk to the owner)\b/.test(all)){s.goal='HUMAN_ASSISTANCE';s.intent='HUMAN_ASSISTANCE';s.overall_confidence=1;return route('HANDOFF','CUSTOMER_REQUESTED_HUMAN');}
-  // An empty trusted execution catalog cannot authorize an appointment workflow.
-  // Retain the existing durable handoff path for businesses without service tools.
-  if(!arr(c.activity_profile?.services).length&&!scoped(c.services,c).length){s.pending_action='HANDOFF';return route('HANDOFF','NO_CONFIGURED_SERVICE_CAPABILITY');}
-  if(/^(?:هذا|هذي|هو موجود|رجعها)$/.test(all)&&!valueOf(s,'service')&&!valueOf(s,'worker')){
-    s.pending_action='CLARIFY';s.clarification_entity='reference';s.unresolved_references=['reference'];
-    return route('CLARIFY','REFERENCE_TARGET_MISSING',s.language==='ar'?'أي واحد تقصد؟':'Which one do you mean?');
-  }
   let today;try{today=localDate(now,c.business.timezone);}catch{return route('HANDOFF','TIMEZONE_UNVERIFIED');}
   // Catalog and branch facts are revalidated on every turn, including remembered values.
   if(valueOf(s,'service')&&!scoped(c.services,c).some(x=>x.id===valueOf(s,'service')))invalidate(s,'service',stamp);
@@ -223,7 +209,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     // ordinary GCC catalog questions to fall through to the model and handoff.
     const discovery=wantsServiceMenu(raw);
     const durationQuestion=/(?:كم الوقت|كم وقت|كم ياخذ|كم تاخذ|كم تاخذون|كم يستغرق|المده|مده|how long|duration|how much time|how many minutes)/.test(t);
-    const pricing=/بكم|كم (?:كان )?(?:السعر|سعر)|how much|price|pricing/.test(t);
+    const pricing=/بكم|كم السعر|كم سعر|how much|price|pricing/.test(t);
     if(/فرع|\bbranch\b/.test(t)) {
       const named=arr(c.branches).filter(b=>includesName(t,b.name));
       const genericBranch=/^(?:في الفرع|بالفرع|at (?:the )?branch)$/.test(t);

@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {clarification,normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
+import {clarification} from './_dabbir-semantic-engine-core.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const actions={BOOK_SERVICE:'CREATE_BOOKING',CANCEL_BOOKING:'CANCEL_BOOKING',RESCHEDULE_BOOKING:'RESCHEDULE_BOOKING'};
@@ -22,13 +22,7 @@ function frameState(state){
 // its facts. There are no tools, DB writes or free-form model states here.
 export function partitionGoalRequests(args,reduce){
  const spans=args.proposal?.requestSpans;
- if(!Array.isArray(spans)||spans.length<2){
-  // Without separately grounded spans, one mutation must not consume a
-  // compound cancel-and-book instruction and silently discard the second goal.
-  const t=normalizeSemanticText(raw(args.context));
-  if(/(?:^|\s)(?:الغ|الغي|cancel)(?:\s|$)/.test(t)&&/(?:واحجز|و احجز|and book|and rebook)/.test(t))return {invalid:true};
-  return null;
- }
+ if(!Array.isArray(spans)||spans.length<2)return null;
  const c=args.context,now=args.now||new Date(),source=raw(c),ranges=[];
  if(spans.length>3)return {invalid:true};
  for(const span of spans){

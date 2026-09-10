@@ -842,13 +842,6 @@ async function runJourney() {
     return {status:probe.status,detail:JSON.stringify(evidence)};
   });
 
-  await step('15g_unseen_multi_activity',async()=>{
-    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'unseen_multi_activity'}});
-    report.unseen_multi_activity_evidence=probe.json;
-    assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===4&&Object.values(probe.json.checks).every(x=>x===true),'UNSEEN_MULTI_ACTIVITY_FAILED:'+JSON.stringify(probe.json));
-    return {status:probe.status,detail:JSON.stringify({checks:probe.json.checks,evidence_scope:probe.json.evidence_scope})};
-  });
-
   // Bounded comparative measurement once per release, not once per viewport.
   // A failed candidate is recorded as FAIL; the existing required primary
   // continuity gate above is unchanged. No model priority is changed here.

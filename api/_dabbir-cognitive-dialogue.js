@@ -94,7 +94,7 @@ export function cognitiveReduce(args,reduce){
  let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:d?.message_role||null}});
  let {state,decision}=result;
  if(continuation&&previous?.language)state.language=previous.language;
- if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
+ if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
  const partition=partitionGoalRequests(args,reduce);
  if(partition?.invalid){
   state.intent_confirmed=false;delete state.entities.slot;delete state.entities.appointment;
@@ -128,8 +128,8 @@ export function cognitiveReduce(args,reduce){
 export function qualityGate({state,decision,previous,context}){
  const violations=[];
  if(activeJourney(state)&&decision.reasonCode==='NO_OPERATIONAL_AUTHORITY')violations.push('ACTIVE_GOAL_GENERIC_REPLY');
- if(activeJourney(previous)&&state.goal==='UNKNOWN'&&!['BOOKING_NEGATED','UNTRUSTED_INSTRUCTION','CUSTOMER_WITHDREW_REQUEST'].includes(decision.reasonCode))violations.push('GOAL_RESET');
- if(decision.action==='CLARIFY'&&verifiedOperationalFact(state.entities?.[state.clarification_entity])&&!arr(state.invalid_fields).includes(state.clarification_entity)&&!arr(state.unresolved_references).includes(state.clarification_entity))violations.push('ASKED_CONFIRMED_FACT');
+ if(activeJourney(previous)&&state.goal==='UNKNOWN'&&!['BOOKING_NEGATED','UNTRUSTED_INSTRUCTION'].includes(decision.reasonCode))violations.push('GOAL_RESET');
+ if(decision.action==='CLARIFY'&&verifiedOperationalFact(state.entities?.[state.clarification_entity])&&!arr(state.invalid_fields).includes(state.clarification_entity))violations.push('ASKED_CONFIRMED_FACT');
  if(violations.length&&activeJourney(state)&&state.missing_fields?.length){
   const field=state.missing_fields.find(k=>!verifiedOperationalFact(state.entities?.[k])||arr(state.invalid_fields).includes(k));
   if(field){state.pending_action='CLARIFY';state.clarification_entity=field;decision={...decision,action:'CLARIFY',reasonCode:'COGNITIVE_REPLAN',reply:clarification({...state,missing_fields:[field]},context)};}

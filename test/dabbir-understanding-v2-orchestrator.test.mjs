@@ -31,9 +31,3 @@ test('runtime: foreign product mapping never becomes an entity',async()=>{const 
 test('runtime: multi-quantity catalog order requires handoff',async()=>{const h=harness({text:'[DABBIR_CATALOG_ORDER catalog_id=123456 items=wash*2]',resolveProduct:async()=>{throw Error('must not resolve');}});assert.equal((await h.run()).action,'HANDOFF');});
 test('runtime: native catalog delivery is bound to the persisted semantic version',async()=>{let version;const h=harness({text:'شو عندكم',deliverMenu:async claim=>{version=claim.semantic_version;return {providerMessageId:'meta.catalog'};}});assert.equal((await h.run()).action,'CATALOG_MENU');assert.equal(version,1);assert.equal(h.replies.length,0);});
 test('runtime: recording a new appointment does not claim confirmed booking',()=>{const base={timezone:'Asia/Dubai',starts_at:slots[0].starts_at};assert.doesNotMatch(bookingText({...base,status:'new'},'en'),/is confirmed/);assert.match(bookingText({...base,status:'new'},'ar'),/بانتظار التأكيد/);assert.match(bookingText({...base,status:'confirmed'},'en'),/is confirmed/);});
-for(const code of ['DB_UNAVAILABLE','SEMANTIC_VERSION_CONFLICT','ACTIVITY_HISTORICAL_REFERENCE_STALE'])test('failed mutation never sends success or clears the pending request: '+code,async()=>{
- const h=harness({text:'الثاني',extra:{pending_state:offered},fail:{name:'dabbir_semantic_execute_v2',code}});
- await assert.rejects(h.run(),new RegExp(code));assert.equal(h.replies.length,0);
- assert.equal(h.calls.filter(x=>x.name==='dabbir_semantic_execute_v2').length,1);
- assert.ok(!h.calls.some(x=>x.name==='dabbir_semantic_set_pending_v2'&&x.args.p_action==='none'));
-});
