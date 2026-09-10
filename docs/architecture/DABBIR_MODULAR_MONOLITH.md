@@ -1,6 +1,31 @@
 # DABBIR: authority map and incremental refactor
 
-Status: PARTIALLY VERIFIED. This is an implementation ledger, not launch approval.
+Status: PARTIALLY VERIFIED; further rollout BLOCKED by the required current
+Production journey. This is an implementation ledger, not launch approval.
+
+## Current rollout checkpoint — 2026-09-10 09:35 UTC
+
+| Slice | PR | Deployed state | Verification |
+|---|---|---|---|
+| Text/template transport | #697 | Merged and deployed | Full Production PASS on stable SHA |
+| Worker/recovery dispatcher | #698 | Merged and deployed | Full Production PASS on stable descendant main |
+| All active Meta message HTTP | #699 | Merged and deployed | Functional first run passed, release drift; current-main full gate remains FAILED |
+| Coexistence customer resolver | #701 | Reviewable; SQL not applied | Required CI passed; 12 SQL behavior cases; Production fixture not run |
+| Superseded WhatsApp removal | #702 | Reviewable; deletion not deployed | 2828/2828 CI, security and booking browser gates passed |
+
+Current Production is `a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd`, deployment
+`dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j`. Run 34458663288 failed twice on that
+stable SHA. Attempt 1 exhausted the configured model chain (429 responses and
+timeouts) in the required independent-goal probe. Attempt 2 passed all required
+cognitive probes but failed the English 768×1024 WebKit dashboard click inside
+the visual matrix. The browser was waiting for the Today navigation target to
+be stable; the complete UI cause is not established. Later full iPhone/iPad and
+isolation stages were skipped. Neither attempt is a complete Production PASS.
+
+The next migration and deletion remain held behind this gate. No provider or
+Brain behavior, timeout, test requirement or authorization rule is changed to
+obtain a passing result. Both failures and artifacts remain in
+`verification-checkpoint.json`. Real-phone Meta proof remains separate.
 
 ## Observed baseline
 
@@ -124,7 +149,7 @@ unchanged attempt. Both attempts are retained in the verification checkpoint.
 | Transport implementation blocks to inspect per text/template transport bug | 2 | 1 | Static inspection count, not measured repair time |
 | Source files to change for a common text/template transport defect | 1 | 1 | Both implementations previously lived in one file |
 | `_whatsapp-live-core.js` lines | 331 | 256 | Extracted transport owns 55 lines separately |
-| API JS import cycles | 0 | To be regenerated | Literal import graph only |
+| API JS import cycles | 0 | 0 | Literal import graph only |
 | Isolated transport behavior cases | 0 in dedicated suite | 28 | No DB/model/Meta credentials required |
 | Mutation/security files changed | 0 | 0 | No migration, RLS, auth, Brain or reservation edits |
 | Owner lookup time / actual files touched per future bug | Not measured | Not measured | No fabricated productivity percentage |
@@ -323,3 +348,9 @@ corrected baseline/pre-removal candidate count is 41, and the prepared cleanup
 count is one. Rechecking the actual deleted WhatsApp functions gives the same
 24 private functions and two externally unreferenced exports. Two regression
 tests now protect parameter-default reachability and self-import cycle detection.
+
+
+The final prepared cleanup CI on `afdcdc8d4bf52c6d9804569decf0b06b74ce7920`
+passed 2828/2828, zero failed/skipped (run 34460497327). The two audit regression
+cases account for the increase from the 2826-test integrated local run. This is
+branch regression evidence, not proof that the deletion has reached Production.

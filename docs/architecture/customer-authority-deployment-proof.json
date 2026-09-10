@@ -90,5 +90,11 @@
   "production_test_status": "NOT_RUN",
   "source_migration": "supabase/migrations/20260910075409_dabbir_coexistence_customer_authority_v1.sql",
   "migration_version_note": "Created with Supabase CLI. If MCP assigns the deployment version, reconcile the unmerged filename and test reference with that actual version before merge; never edit existing migration history.",
-  "real_phone_meta_evidence": "NOT_CLAIMED"
+  "real_phone_meta_evidence": "NOT_CLAIMED",
+  "rollout_status": "HELD: required current Production journey 34458663288 failed; no migration or Production fixture was executed.",
+  "pre_apply_recheck": {
+    "observed_at": "2026-09-10T09:33:00Z",
+    "definitions_and_acl_match_before": true,
+    "latest_live_migration": "20260910045420_dabbir_conditional_availability_date_v1"
+  }
 }

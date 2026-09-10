@@ -1,6 +1,6 @@
 {
-  "observed_at": "2026-09-10T09:19:00Z",
-  "status": "PARTIALLY_VERIFIED",
+  "observed_at": "2026-09-10T09:35:00Z",
+  "status": "PARTIALLY_VERIFIED_ROLLOUT_BLOCKED",
   "production_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
   "deployment_id": "dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j",
   "slice1": {
@@ -75,7 +75,7 @@
     },
     {
       "pr": 699,
-      "status": "FUNCTIONAL_PASS_RELEASE_DRIFT_REVERIFY_CURRENT_MAIN",
+      "status": "DEPLOYED_CURRENT_MAIN_FULL_PRODUCTION_GATE_FAILED",
       "scope": "shared HTTP transport for all active message types",
       "head": "b85b2879b93550db2ca4c03993889fbe82a31295",
       "production_sha": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
@@ -96,8 +96,38 @@
       "current_main_verification": {
         "run_id": 34458663288,
         "job_id": 102814368319,
+        "attempt": 1,
         "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
-        "status": "IN_PROGRESS"
+        "status": "FAILED",
+        "required_failure": "15d_cognitive_independent_goals: HTTP 502; AI_PLANNER_UNAVAILABLE at turn 3",
+        "provider_attempts": [
+          {
+            "provider": "google-gemini",
+            "status": 429
+          },
+          {
+            "provider": "groq",
+            "status": 429
+          },
+          {
+            "provider": "cloudflare-workers-ai",
+            "status": 0,
+            "latency_ms": 5001
+          },
+          {
+            "provider": "vercel-ai-gateway",
+            "status": 0,
+            "latency_ms": 12001
+          }
+        ],
+        "no_execution": true,
+        "real_provider": false,
+        "english_iphone": "NOT_RUN",
+        "ipad": "NOT_RUN",
+        "isolation": "NOT_RUN",
+        "stable_release": true,
+        "artifact_id": 10145251516,
+        "artifact_sha256": "2b297eb82e11f15c9df7537d7efd4d59cedc02185cd859e64b54ca65901cc55d"
       },
       "production_ci": {
         "run_id": 34458064289,
@@ -105,12 +135,69 @@
         "passed": 2798,
         "failed": 0,
         "skipped": 0
-      }
+      },
+      "unchanged_retry": {
+        "run_id": 34458663288,
+        "attempt": 2,
+        "job_id": 102817560283,
+        "status": "FAILED",
+        "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+        "original_failure_retained": true,
+        "note": "Attempt 2 was already running when a retry request was issued; GitHub rejected the duplicate request with workflow already running. No third attempt was started.",
+        "required_failure": "25_mobile_webkit_owner_journey: Today/dashboard navigation click timed out after 10000ms in English 768x1024 WebKit view",
+        "cognitive_required_probes": "PASS, including original 15d independent-goal failure",
+        "visual_counts": {
+          "PASS": 45,
+          "NOT_APPLICABLE": 5,
+          "ACTION_FAILED": 1,
+          "OVERFLOW": 0,
+          "BROKEN_TARGET": 0
+        },
+        "visual_interrupted": true,
+        "owner_booking_create_replay_complete": "PASS",
+        "owner_ai_activity_booking": "PASS",
+        "english_iphone": "NOT_RUN",
+        "ipad_full_journey": "NOT_RUN",
+        "isolation": "NOT_RUN",
+        "stable_release": true,
+        "artifact_id": 10145615731,
+        "artifact_sha256": "ee0b5b602a5d27cbf1f951ddc3e2bc6e73a3cd1c9b40e927b1564a250cb54ce7",
+        "root_cause": "UNRESOLVED: click trace shows unstable element; complete DOM/trace diagnosis is not established. Do not label the failure harmless or convert it to PASS."
+      },
+      "probe_dependency_check": {
+        "source_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+        "root": "api/_dabbir-cognitive-probe.js",
+        "reachable_modules": [
+          "api/_ai-core.js",
+          "api/_auth-core.js",
+          "api/_dabbir-activity-intelligence.js",
+          "api/_dabbir-brain-contract.js",
+          "api/_dabbir-cognitive-dialogue.js",
+          "api/_dabbir-cognitive-probe.js",
+          "api/_dabbir-context-resolver.js",
+          "api/_dabbir-goal-queue.js",
+          "api/_dabbir-multi-activity-probe.js",
+          "api/_dabbir-semantic-contract.js",
+          "api/_dabbir-semantic-engine-core.js",
+          "api/_dabbir-semantic-engine.js",
+          "api/_dabbir-semantic-intent-policy.js",
+          "api/_dabbir-semantic-interpreter.js",
+          "api/_dabbir-semantic-privacy.js",
+          "api/_dabbir-service-question.js",
+          "api/_dabbir-understanding-orchestrator.js",
+          "api/_dabbir-whatsapp-ai-meter.js",
+          "api/_dabbir-whatsapp-understanding.js",
+          "api/_supabase-key-auth.js"
+        ],
+        "changed_transport_modules_reachable": [],
+        "limitations": "Literal repository imports only; synthetic probe explicitly forbids database/customer tools and injects delivery."
+      },
+      "further_retry": "NOT_STARTED: no repeated retries to obtain a passing gate; required navigation failure needs diagnosis."
     },
     {
       "pr": 701,
-      "status": "CURRENT_MAIN_INTEGRATED_CI_PASS_NOT_APPLIED_TO_DATABASE",
-      "scope": "Coexistence existing customer resolver, 12 SQL behavior cases; total 2805 local passes",
+      "status": "CI_PASS_ROLLOUT_HELD_BEHIND_SLICE3_PRODUCTION_GATE",
+      "scope": "Coexistence existing customer resolver, 12 SQL behavior cases; database migration and rollback-only Production fixture NOT_APPLIED/NOT_RUN.",
       "head": "fe4e8dc83da4bdf5b31c382223daf91f143873c8"
     }
   ],
@@ -210,5 +297,33 @@
       4
     ],
     "reason": "Included references in function parameter defaults; all actual removed functions still pass caller proof."
+  },
+  "cleanup_ci": {
+    "run_id": 34460497327,
+    "job_id": 102816923674,
+    "sha": "afdcdc8d4bf52c6d9804569decf0b06b74ce7920",
+    "passed": 2828,
+    "failed": 0,
+    "skipped": 0,
+    "security_and_booking_browser_gates": "PASS"
+  },
+  "rollout_blocker": {
+    "run_id": 34458663288,
+    "attempts": 2,
+    "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+    "remaining_actions_held": [
+      "Apply customer authority migration PR701",
+      "Run deployed Coexistence rollback-only database fixture",
+      "Merge and deploy PR701",
+      "Merge and deploy legacy cleanup PR702"
+    ],
+    "unchanged_safeguards": [
+      "No test/security/Production gate relaxed",
+      "No Brain/provider routing change",
+      "No database migration or fixture executed",
+      "No legacy deletion deployed",
+      "No real-phone Meta claim"
+    ],
+    "next_evidence_needed": "Diagnose the required English iPad dashboard navigation timeout and complete the unchanged mandatory full Production journey with stable release identity before resuming rollout."
   }
 }
