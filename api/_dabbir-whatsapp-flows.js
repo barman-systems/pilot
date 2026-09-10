@@ -1,3 +1,4 @@
+import { requestMetaMessage } from './_whatsapp-message-transport.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { embeddedPlatformConfig, openAccessToken } from './_whatsapp-embedded-core.js';
@@ -156,14 +157,16 @@ export async function sendMetaBookingFlow({context,connection,recipient,lang='ar
   const platform=applyDabbirMetaPublicIdentifiers(embeddedPlatformConfig());const accessToken=openAccessToken(connection,platform,businessId);const phone=clean(connection?.phone_number_id,160);const to=clean(recipient||session.recipient_handle,160).replace(/[^0-9]/g,'');
   if(!accessToken||!phone||!to)throw Object.assign(new Error('WHATSAPP_BOOKING_FLOW_SEND_CONTEXT_INCOMPLETE'),{code:'WHATSAPP_BOOKING_FLOW_SEND_CONTEXT_INCOMPLETE'});
   const interactive={type:'flow',header:{type:'text',text:lang==='ar'?'طلب حجز':'Booking request'},body:{text:lang==='ar'?'اختر الخدمة والوقت، ثم نكمل التفاصيل المطلوبة هنا.':'Choose the service and time; we will collect any remaining details here.'},footer:{text:lang==='ar'?'يمكنك متابعة المحادثة هنا في أي وقت.':'You can continue this chat at any time.'},action:{name:'flow',parameters:{flow_message_version:'3',flow_action:'navigate',flow_token:tokenPlain,flow_id:String(localFlow.meta_flow_id),flow_cta:lang==='ar'?'إكمال الحجز':'Complete booking',flow_action_payload:{screen:'BOOKING',data:{services}}}}};
-  let response;
+  let response,payload;
   try{
-    response=await fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phone)}/messages`,{method:'POST',cache:'no-store',signal:AbortSignal.timeout(10000),headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to,type:'interactive',interactive})});
+    ({response,payload}=await requestMetaMessage({
+      graphVersion:platform.graphVersion,phoneNumberId:phone,token:accessToken,
+      message:{messaging_product:'whatsapp',recipient_type:'individual',to,type:'interactive',interactive},
+    }));
   }catch{
     await serviceRpc('dabbir_whatsapp_mark_booking_flow_delivery',{p_session_id:session.session_id,p_state:'ambiguous',p_provider_message_id:null,p_error:'META_WHATSAPP_FLOW_SEND_NETWORK'}).catch(()=>null);
     throw Object.assign(new Error('META_WHATSAPP_FLOW_SEND_NETWORK'),{code:'META_WHATSAPP_FLOW_SEND_NETWORK',ambiguous:true});
   }
-  const payload=await response.json().catch(()=>({}));
   if(!response.ok){
     await serviceRpc('dabbir_whatsapp_mark_booking_flow_delivery',{p_session_id:session.session_id,p_state:response.status>=500?'ambiguous':'failed',p_provider_message_id:null,p_error:'META_WHATSAPP_FLOW_SEND_FAILED'}).catch(()=>null);
     const error=providerError('META_WHATSAPP_FLOW_SEND_FAILED',response,payload);if(error.definitive)error.flowFallbackSafe=true;throw error;

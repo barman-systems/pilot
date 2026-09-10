@@ -1,3 +1,4 @@
+import { requestMetaMessage } from './_whatsapp-message-transport.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { embeddedPlatformConfig, openAccessToken } from './_whatsapp-embedded-core.js';
 import { serviceRpc } from './_whatsapp-live-core.js';
@@ -224,14 +225,11 @@ export async function sendMetaCatalogProducts({connection,businessId,recipient,c
         action:{catalog_id:clean(catalogId,80),sections:[{title:arabic?'الخدمات':'Services',product_items:productItems.map(product_retailer_id=>({product_retailer_id}))}]},
       };
 
-  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10_000);
   try{
-    const response=await fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`,{
-      method:'POST',cache:'no-store',signal:controller.signal,
-      headers:{authorization:`Bearer ${token}`,'content-type':'application/json',accept:'application/json'},
-      body:JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to,type:'interactive',interactive}),
+    const {response,payload}=await requestMetaMessage({
+      graphVersion:platform.graphVersion,phoneNumberId,token,
+      message:{messaging_product:'whatsapp',recipient_type:'individual',to,type:'interactive',interactive},
     });
-    const payload=await response.json().catch(()=>({}));
     if(!response.ok)throw catalogError(payload,response,'META_WHATSAPP_CATALOG_SEND_FAILED');
     const providerMessageId=clean(payload?.messages?.[0]?.id,320);
     if(!providerMessageId)throw Object.assign(new Error('META_WHATSAPP_CATALOG_SEND_WITHOUT_ID'),{code:'META_WHATSAPP_CATALOG_SEND_WITHOUT_ID',ambiguous:true});
@@ -240,5 +238,5 @@ export async function sendMetaCatalogProducts({connection,businessId,recipient,c
     if(error?.name==='AbortError')throw Object.assign(new Error('META_WHATSAPP_CATALOG_SEND_TIMEOUT_AMBIGUOUS'),{code:'META_WHATSAPP_CATALOG_SEND_TIMEOUT_AMBIGUOUS',ambiguous:true});
     if(error instanceof TypeError&&error?.ambiguous!==false)error.ambiguous=true;
     throw error;
-  }finally{clearTimeout(timeout);}
+  }
 }
