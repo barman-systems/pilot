@@ -1,0 +1,227 @@
+{
+  "status": "DATABASE_APPLIED_AND_READBACK_VERIFIED_JOURNEY_PENDING",
+  "scope": "Two existing service-only Coexistence RPCs reuse the existing private customer resolver; no backfill.",
+  "pr": 701,
+  "verified_before_apply_production": {
+    "sha": "e099c3f8a656c06fd60d832d5b87ea39a593d8a1",
+    "deployment": "dpl_7GL8JJHqX8WeBwZfZ8tC21n4ZQGr",
+    "run": 34467199606,
+    "attempt": 1,
+    "verdict": "PASS",
+    "artifact_id": 10148572189,
+    "artifact_sha256": "e95412e85a216f324045259cc739c95d3382839b3b78c182fa955ac47fc65b60"
+  },
+  "migration": {
+    "name": "dabbir_coexistence_customer_authority_v1",
+    "version": "20260910110354"
+  },
+  "source_migration": "supabase/migrations/20260910110354_dabbir_coexistence_customer_authority_v1.sql",
+  "migration_sql_sha256": "988e32b12dd5a4eb68848a0b2dde76cc6be1e6e62d93160859c9bcb0104ac123",
+  "migration_version_note": "Created with Supabase CLI at 20260910075409. The unmerged filename was reconciled to the actual MCP-assigned version; SQL bytes and existing migration history were not altered.",
+  "before_functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "arguments": "p_business_id uuid, p_sender_handle text, p_display_name text",
+      "definition_md5": "a271c5b9adbc1de1ad6bfa8a3b3d10c7",
+      "name": "dabbir_private.resolve_whatsapp_customer_v1",
+      "proconfig": [
+        "search_path=pg_catalog, public, dabbir_private, auth"
+      ],
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "arguments": "p_phone_number_id text, p_customer_handle text, p_display_name text, p_action text, p_occurred_at timestamp with time zone",
+      "definition_md5": "62c2538647b8e90a9dafe13d5c5c852e",
+      "name": "public.dabbir_whatsapp_apply_coexistence_contact_sync",
+      "proconfig": [
+        "search_path=pg_catalog, public, auth"
+      ],
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_customer_handle text, p_display_name text, p_body text, p_direction text, p_source_field text, p_occurred_at timestamp with time zone",
+      "definition_md5": "9dd9b3b1a8202ed19b0987b857968d58",
+      "name": "public.dabbir_whatsapp_persist_coexistence_message",
+      "proconfig": [
+        "search_path=pg_catalog, public, dabbir_private, auth"
+      ],
+      "security_definer": true
+    }
+  ],
+  "after_functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "body_md5": "0ab36e7e913597f91f42d1e0256a41d3",
+      "definition_md5": "a271c5b9adbc1de1ad6bfa8a3b3d10c7",
+      "name": "dabbir_private.resolve_whatsapp_customer_v1",
+      "proconfig": [
+        "search_path=pg_catalog, public, dabbir_private, auth"
+      ],
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "body_md5": "07a34db873711c0a4014f96965a8b49b",
+      "definition_md5": "c894c15e914a09e2e18e9c65044ff367",
+      "name": "public.dabbir_whatsapp_apply_coexistence_contact_sync",
+      "proconfig": [
+        "search_path=pg_catalog, public, auth"
+      ],
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "body_md5": "32b7f91d54e37132a76942177ba3f06d",
+      "definition_md5": "513b9622d73da04acf7635bb15e72731",
+      "name": "public.dabbir_whatsapp_persist_coexistence_message",
+      "proconfig": [
+        "search_path=pg_catalog, public, dabbir_private, auth"
+      ],
+      "security_definer": true
+    }
+  ],
+  "reviewed_function_bodies_match": true,
+  "canonical_resolver_unchanged": true,
+  "acl_and_search_path_unchanged": true,
+  "before_rls": [
+    {
+      "policy_hash": "309f0e129853f87dcd55c8146b66dc7f",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_conversations"
+    },
+    {
+      "policy_hash": "c7a154f6c23061eb5572eb6072b9e90d",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_customers"
+    },
+    {
+      "policy_hash": "58709aad6e2c367e2983ab249a22535c",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_handoffs"
+    },
+    {
+      "policy_hash": "b97f24f502a3bf649a260061c36b3d64",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_message_batches"
+    },
+    {
+      "policy_hash": "c7d41da689dfe1908a5970020a7e4cd4",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_messages"
+    },
+    {
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_coexistence_mutations"
+    },
+    {
+      "policy_hash": "7f72ccd38cc502bc892cc343ea1ae3f4",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_connections"
+    },
+    {
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_event_ledger"
+    }
+  ],
+  "after_rls": [
+    {
+      "policy_hash": "309f0e129853f87dcd55c8146b66dc7f",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_conversations"
+    },
+    {
+      "policy_hash": "c7a154f6c23061eb5572eb6072b9e90d",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_customers"
+    },
+    {
+      "policy_hash": "58709aad6e2c367e2983ab249a22535c",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_handoffs"
+    },
+    {
+      "policy_hash": "b97f24f502a3bf649a260061c36b3d64",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_message_batches"
+    },
+    {
+      "policy_hash": "c7d41da689dfe1908a5970020a7e4cd4",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_messages"
+    },
+    {
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_coexistence_mutations"
+    },
+    {
+      "policy_hash": "7f72ccd38cc502bc892cc343ea1ae3f4",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_connections"
+    },
+    {
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47",
+      "relforcerowsecurity": true,
+      "relrowsecurity": true,
+      "table_name": "dabbir_whatsapp_event_ledger"
+    }
+  ],
+  "rls_policy_hashes_and_force_flags_unchanged": true,
+  "advisors": {
+    "unchanged": {
+      "security": true,
+      "performance": true
+    },
+    "security": [
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "count": 9,
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable"
+      }
+    ],
+    "performance": [
+      {
+        "name": "unused_index",
+        "level": "INFO",
+        "count": 136,
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index"
+      },
+      {
+        "name": "auth_db_connections_absolute",
+        "level": "INFO",
+        "count": 1,
+        "remediation": "https://supabase.com/docs/guides/deployment/going-into-prod"
+      }
+    ]
+  },
+  "production_test": "test/fixtures/architecture/coexistence-production-rollback.sql",
+  "production_test_status": "PASS",
+  "production_test_result": {
+    "verification": "COEXISTENCE_DEPLOYED_CONTRACT_PASS",
+    "evidence_scope": "SYNTHETIC_DATABASE_ONLY_NO_META",
+    "remaining_fixture_businesses": 0
+  },
+  "post_apply_exact_sha_journey": "PENDING_FINAL_HEAD_CI_MERGE_AND_DEPLOY",
+  "real_phone_meta_evidence": "NOT_CLAIMED",
+  "remaining_ui_investigation": "Original WebKit timeout not reproduced; no speculative application fix claimed."
+}
