@@ -217,3 +217,48 @@ test instead requires three overlapping attempts to be denied by that real
 connection gate and zero new send reservations. Successful outbound duplicate
 suppression on an authorized real-phone path remains unproven; this rejection
 test is not used to claim otherwise.
+
+### Final fallback generation failure and bounded correction
+
+The subsequent exact-release workflow `34434752594` on `bff9d58da4ee89dfb7f9dce9b6b673e1d05423b0`
+failed English context-reference probe 15f. Goal, service and vehicle survived;
+the planner returned `AI_PLANNER_UNAVAILABLE`, no reply and no execution. The
+last Gateway HTTP response was 200 but the structured interpretation was rejected.
+Usage reported 1593 output tokens, including 1536 reasoning tokens, against the
+existing 1600-token cap. This strongly indicates output headroom exhaustion;
+the artifact does not preserve the final provider finish reason, so truncation
+is not asserted as a separately observed raw response field.
+
+The verified Gateway catalogue lists `low`, `medium`, and `high` for the exact
+configured `google/gemini-3.7-flash` model. Gateway's documented Chat Completions
+mapping forwards `reasoning_effort: low` to Gemini's low thinking level. The
+adapter now requests that setting only for semantic calls to this endpoint and
+model, preserving the existing Groq setting. Ordinary replies, other models,
+provider order, 1600 output tokens, four HTTP calls and the 18-second shared
+deadline are unchanged. Low effort is not a guarantee of output completion;
+the schema validator and truncation rejection remain mandatory.
+
+Permanent regressions cover the actual four-provider request sequence, the
+unchanged output cap, rejected truncated output despite low effort, and isolation
+from ordinary reply generation. No reasoning text is requested or stored.
+
+Sources checked 2026-09-10:
+[Gateway model catalogue](https://ai-gateway.vercel.sh/v1/models),
+[Google reasoning mapping](https://vercel.com/docs/ai-gateway/models-and-providers/reasoning/google),
+[Chat Completions reasoning field](https://vercel.com/docs/ai-gateway/models-and-providers/reasoning).
+
+Before this correction, PR #688 merged as `cab2f1e5c38f4e55c84ddb80d30a4ea6d442c6b4`
+and deployed as `dpl_8rxqHo8JeXntsKa9Z1V1yZisC84P`. It includes the independent
+single-delivery-mode authority correction from PR #689. The merged local suite
+passed 2682 tests. Its exact Production journey is tracked in workflow
+`34435559201`; completion is recorded separately, not presumed from deployment.
+
+That workflow completed FAIL on the exact `cab2f1e5` release: the Arabic
+context-reference probe again exhausted provider time (17.47 seconds; four
+requests). It preserved history/goal/vehicle and performed no execution. The
+goal-continuity and four-activity probes passed. English and the subsequent
+isolation stage were skipped by the unchanged required gate. Artifact
+`10136205310` (SHA256 `7a16d241d5e05209b08faf13a81d34880a739d4917d87031a4ea1edc3fa20fe8`)
+retains the failure. The bounded-generation correction therefore still requires
+a fresh exact-release Production journey. Local correction suite: 2686/2686,
+zero failures or skips; syntax check passed.

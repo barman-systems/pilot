@@ -208,6 +208,11 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
   // Capability is verified for this configured endpoint/model, not inferred from
   // OpenAI-compatible transport. Keep other providers' existing request contract.
   const strictSemantic=semantic && !schemaFallback && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
+  // Production exhausted 1536 of 1600 output tokens on reasoning and returned
+  // incomplete JSON. The Gateway catalog verifies low effort for this exact
+  // model; do not assume the control for other configured models/providers.
+  const boundedReasoning=semantic && (model==='openai/gpt-oss-20b'
+    || (endpoint===GATEWAY_ENDPOINT && model==='google/gemini-3.7-flash'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -222,7 +227,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         max_tokens: semantic ? 1600 : 320,
         ...(semantic ? { response_format: strictSemantic
           ? {type:'json_schema',json_schema:{name:'dabbir_semantic_interpretation',strict:true,schema:SEMANTIC_JSON_SCHEMA}}
-          : {type:'json_object'}, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
+          : {type:'json_object'}, ...(boundedReasoning ? { reasoning_effort: 'low' } : {}) } : {}),
         stream: false,
       }),
     });

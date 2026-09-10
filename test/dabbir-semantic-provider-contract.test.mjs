@@ -135,6 +135,45 @@ test('strict schema rejection uses the existing fallback budget and format',asyn
 });
 
 const allProviders={GEMINI_API_KEY:'test',GROQ_API_KEY:'test',CLOUDFLARE_API_TOKEN:'test',CLOUDFLARE_ACCOUNT_ID:'test',VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'};
+test('live fallback truncation regression: verified Gateway model reserves JSON headroom within the same output cap',async()=>{
+ const requests=[];
+ const result=await interpretSemanticMessage({message:'نفس اللي قلت لك',context:{},env:{...allProviders,DABBIR_AI_GATEWAY_MODEL:'google/gemini-3.7-flash'},fetchImpl:async(url,options)=>{
+  const body=JSON.parse(options.body);requests.push({url,body});
+  if(!url.includes('ai-gateway'))return new Response('{}',{status:429});
+  return response();
+ }});
+ const body=requests[3].body;
+ assert.equal(body.model,'google/gemini-3.7-flash');
+ assert.equal(body.reasoning_effort,'low');assert.equal(body.max_tokens,1600);
+ assert.deepEqual(body.response_format,{type:'json_object'});
+ assert.equal(result.provider,'vercel-ai-gateway');assert.equal(result.telemetry.request_count,4);
+ assert.equal(requests[0].body.reasoning_effort,undefined,'direct Gemini capability is not assumed');
+ assert.equal(requests[2].body.reasoning_effort,undefined,'Cloudflare configuration is unchanged');
+});
+test('low-effort Gateway output still fails closed on truncation without increasing requests',async()=>{
+ let calls=0,body;
+ await assert.rejects(interpretSemanticMessage({message:'نفس اللي قلت لك',context:{},env:{...allProviders,DABBIR_AI_GATEWAY_MODEL:'google/gemini-3.7-flash'},fetchImpl:async(url,options)=>{
+  calls++;
+  if(!url.includes('ai-gateway'))return new Response('{}',{status:429});
+  body=JSON.parse(options.body);
+  return response(JSON.stringify(proposal),'length');
+ }}),error=>error.code==='AI_PLANNER_UNAVAILABLE'&&error.telemetry.request_count===4);
+ assert.equal(calls,4);assert.equal(body.reasoning_effort,'low');assert.equal(body.max_tokens,1600);
+});
+test('ordinary replies do not inherit the semantic reasoning configuration',async()=>{
+ const result=await generateDABBIRAiReply({project:'dabbir_businesses',message:'hello',env:{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test',DABBIR_AI_GATEWAY_MODEL:'google/gemini-3.7-flash'},fetchImpl:async(_url,options)=>{
+  const body=JSON.parse(options.body);assert.equal(body.reasoning_effort,undefined);assert.equal(body.max_tokens,320);
+  return response('Hello');
+ }});
+ assert.equal(result.ok,true);
+});
+test('semantic reasoning effort is not guessed for unverified Gateway models',async()=>{
+ let body;
+ const result=await interpretSemanticMessage({message:'hello',context:{},env:{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test',DABBIR_AI_GATEWAY_MODEL:'unverified/model'},fetchImpl:async(_url,options)=>{
+  body=JSON.parse(options.body);return response();
+ }});
+ assert.equal(result.model,'unverified/model');assert.equal(body.reasoning_effort,undefined);
+});
 test('production regression: schema repair cannot exhaust the final provider request reservation',async()=>{
  const endpoints=[];
  const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async(url,options)=>{
