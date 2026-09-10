@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { scopedVisualCapabilities, visualAvailability, internalVisualSummary, emitInternalVisualSummary, assertInternalVisualGate } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
+import vm from 'node:vm';
+import { scopedVisualCapabilities, visualAvailability, internalVisualSummary, emitInternalVisualSummary, assertInternalVisualGate, captureSidebarFailure } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
 
 const measured = (screen, overflow = false, extra = {}) => ({ screen, width: 390, height: 844, language: 'ar', status: 'PASS', overflow, ...extra });
 const scopedProfile = (appointments = false) => ({ ok: true, json: { ok: true, business_id: 'qa-business', profile: { show_appointments: appointments, show_operations: false } } });
@@ -75,7 +76,7 @@ const blockStart = journeySource.indexOf("  if (process.env.DABBIR_INTERNAL_VISU
 const blockEnd = journeySource.indexOf('\n  // The functional report', blockStart);
 assert.ok(blockStart > 0 && blockEnd > blockStart, 'visual runner contract moved');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const runVisualBlock = new AsyncFunction('process', 'REPORT_PATH', 'fs', 'ownerSession', 'businessId', 'page', 'browserContext', 'ORIGIN', 'scopedVisualCapabilities', 'visualAvailability', 'emitInternalVisualSummary', 'assertInternalVisualGate', journeySource.slice(blockStart, blockEnd));
+const runVisualBlock = new AsyncFunction('process', 'REPORT_PATH', 'fs', 'ownerSession', 'businessId', 'page', 'browserContext', 'ORIGIN', 'scopedVisualCapabilities', 'visualAvailability', 'emitInternalVisualSummary', 'assertInternalVisualGate', 'captureSidebarFailure', journeySource.slice(blockStart, blockEnd));
 
 async function simulate({ missingTarget, unavailable, failClick, overflowScreen, teamOverflow = false, profile = scopedProfile() } = {}) {
   const lines = [], reports = [], requests = [];
@@ -107,7 +108,7 @@ async function simulate({ missingTarget, unavailable, failClick, overflowScreen,
       { mkdirSync() {}, writeFileSync(path, value) { reports.push(JSON.parse(value)); } },
       { async request(path, options) { requests.push({ path, options }); return profile; } },
       'qa-business', makePage(), { async newPage() { return makePage(true); } }, 'https://local.invalid',
-      scopedVisualCapabilities, visualAvailability, visual => emitInternalVisualSummary(visual, line => lines.push(line)), assertInternalVisualGate);
+      scopedVisualCapabilities, visualAvailability, visual => emitInternalVisualSummary(visual, line => lines.push(line)), assertInternalVisualGate, captureSidebarFailure);
   } catch (caught) { error = caught; }
   return { error, lines, reports, requests, summary: JSON.parse(lines[0].slice(lines[0].indexOf('=') + 1)) };
 }
@@ -149,6 +150,7 @@ test('actual runner preserves click failure rather than hiding it as an unavaila
   assert.equal(result.summary.counts.UNAVAILABLE, 0);
   assert.equal(result.summary.cases.at(-1).screen, 'customers');
   assert.equal(result.summary.interrupted, true);
+  assert.deepEqual(result.reports[0].sidebar_failure, { state: 'UNAVAILABLE' });
 });
 
 test('actual runner reports unexplained absence separately and never trusts another business capability', async () => {
@@ -159,4 +161,28 @@ test('actual runner reports unexplained absence separately and never trusts anot
   assert.equal(result.summary.counts.NOT_APPLICABLE, 0);
   assert.equal(result.summary.counts.UNAVAILABLE, 20);
   assert.equal(result.summary.counts.PASS, 85);
+});
+
+
+test('failure diagnostic records offscreen closed geometry without reading tenant data or dispatching input', async () => {
+  const sensitive = 'PRIVATE_CUSTOMER_CONTENT';
+  const target = { getBoundingClientRect: () => ({ x: -300.6, y: 100, width: 257, height: 46 }), contains: () => false };
+  const side = { classList: { contains: () => false }, scrollTop: 0, getBoundingClientRect: () => ({ x: -314.6, y: 0, width: 286, height: 1024 }), querySelector: () => target };
+  const document = { documentElement: { dir: 'ltr' }, querySelector: selector => selector === '#side' ? side : null, elementFromPoint: () => null };
+  for (const key of ['cookie', 'body']) Object.defineProperty(document, key, { get() { throw new Error(sensitive); } });
+  const diagnostic = await captureSidebarFailure({ evaluate: async fn => vm.runInNewContext('(' + fn.toString() + ')()', {
+    document, window: { visualViewport: { width: 768, height: 1024, offsetLeft: 0, offsetTop: 0 } }, innerWidth: 768, innerHeight: 1024, scrollX: 0, scrollY: 0,
+    getComputedStyle: () => ({ left: '0px', top: '0px', transform: 'matrix(1, 0, 0, 1, -314.6, 0)', transition: '0.2s', position: 'fixed', overflowX: 'hidden', overflowY: 'auto', visibility: 'visible', pointerEvents: 'auto' }),
+  }) });
+  assert.equal(diagnostic.state, 'CAPTURED');
+  assert.equal(diagnostic.side_open, false);
+  assert.equal(diagnostic.target.x, -300.6);
+  assert.equal(diagnostic.target_receives_pointer, false);
+  assert.equal(diagnostic.viewport.width, 768);
+  assert.doesNotMatch(JSON.stringify(diagnostic), /PRIVATE_CUSTOMER_CONTENT|cookie|workspace|textContent|innerHTML/);
+});
+
+test('closed or stalled browser diagnostics remain bounded and cannot replace the click failure', async () => {
+  assert.deepEqual(await captureSidebarFailure({ async evaluate() { throw new Error('PRIVATE_BROWSER_ERROR'); } }), { state: 'DIAGNOSTIC_UNAVAILABLE' });
+  assert.deepEqual(await captureSidebarFailure({ evaluate: () => new Promise(() => {}) }), { state: 'DIAGNOSTIC_TIMEOUT' });
 });

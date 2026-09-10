@@ -3,6 +3,49 @@
 const SCREENS = new Set(['dashboard', 'tasks', 'notifications', 'customers', 'appointments', 'operations', 'integrations', 'settings', 'automations', 'analytics', 'team']);
 const STATUSES = ['PASS', 'OVERFLOW', 'UNAVAILABLE', 'NOT_APPLICABLE', 'BROKEN_TARGET', 'ACTION_FAILED'];
 
+// Failure-only, read-only geometry. Never dispatch input, open a menu, or replace
+// the original failure. No text, HTML, cookies, URLs, workspace or customer data.
+export async function captureSidebarFailure(page) {
+  let timer;
+  try {
+    return await Promise.race([
+      page.evaluate(() => {
+        const side = document.querySelector('#side');
+        const target = side?.querySelector('[data-screen="dashboard"]');
+        const menu = document.querySelector('#menuBtn');
+        const rect = node => {
+          const box = node?.getBoundingClientRect();
+          return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
+        };
+        const box = target?.getBoundingClientRect();
+        const hit = box && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        const css = side && getComputedStyle(side);
+        const viewport = window.visualViewport;
+        return {
+          state: 'CAPTURED',
+          rtl: document.documentElement.dir === 'rtl',
+          side_open: side?.classList.contains('open') === true,
+          today_active: document.querySelector('#screen-dashboard')?.classList.contains('active') === true,
+          target_receives_pointer: Boolean(hit && (hit === target || target?.contains(hit))),
+          viewport: { width: innerWidth, height: innerHeight, visual_width: viewport?.width ?? null,
+            visual_height: viewport?.height ?? null, visual_left: viewport?.offsetLeft ?? null,
+            visual_top: viewport?.offsetTop ?? null, scroll_x: scrollX, scroll_y: scrollY },
+          sidebar: rect(side), target: rect(target), menu: rect(menu),
+          side_scroll_top: side?.scrollTop ?? null,
+          style: css ? { left: css.left, top: css.top, transform: css.transform,
+            transition: css.transition, position: css.position, overflow_x: css.overflowX,
+            overflow_y: css.overflowY, visibility: css.visibility, pointer_events: css.pointerEvents } : null,
+        };
+      }).then(value => value || { state: 'UNAVAILABLE' }),
+      new Promise(resolve => { timer = setTimeout(() => resolve({ state: 'DIAGNOSTIC_TIMEOUT' }), 1500); }),
+    ]);
+  } catch {
+    return { state: 'DIAGNOSTIC_UNAVAILABLE' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function scopedVisualCapabilities(result, businessId) {
   if (!businessId || result?.ok !== true || result.json?.ok !== true || result.json.business_id !== businessId) return {};
   const appointments = result.json.profile?.show_appointments;
