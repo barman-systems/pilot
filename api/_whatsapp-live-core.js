@@ -1,3 +1,4 @@
+import { sendMetaMessage } from './_whatsapp-message-transport.js';
 import { openAccessToken, embeddedPlatformConfig } from './_whatsapp-embedded-core.js';
 import { applyDabbirMetaPublicIdentifiers } from './_dabbir-meta-public-config.js';
 import { withServerReadTimeout } from './_server-read-timeout.js';
@@ -197,56 +198,19 @@ export async function sendMetaText({ connection, businessId, recipient, body }) 
     throw error;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`, {
-      method: 'POST',
-      cache: 'no-store',
-      signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: clean(recipient, 160),
-        type: 'text',
-        text: { preview_url: false, body: clean(body, 4000) },
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error('META_WHATSAPP_SEND_FAILED');
-      error.status = response.status >= 500 ? 502 : 409;
-      error.providerStatus = response.status;
-      error.providerCode = payload?.error?.code || null;
-      error.ambiguous = response.status >= 500;
-      error.definitive = response.status >= 400 && response.status < 500;
-      throw error;
-    }
-    const providerMessageId = clean(payload?.messages?.[0]?.id, 320);
-    if (!providerMessageId) {
-      const error = new Error('META_WHATSAPP_SEND_ACCEPTED_WITHOUT_ID');
-      error.status = 502;
-      error.ambiguous = true;
-      throw error;
-    }
-    return { providerMessageId, providerStatus: response.status };
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      const timeoutError = new Error('META_WHATSAPP_SEND_TIMEOUT_AMBIGUOUS');
-      timeoutError.status = 502;
-      timeoutError.ambiguous = true;
-      throw timeoutError;
-    }
-    if (error instanceof TypeError && error?.ambiguous !== false) error.ambiguous = true;
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return sendMetaMessage({
+    graphVersion: platform.graphVersion, phoneNumberId, token,
+    message: {
+      messaging_product: 'whatsapp', recipient_type: 'individual',
+      to: clean(recipient, 160), type: 'text',
+      text: { preview_url: false, body: clean(body, 4000) },
+    },
+    errors: {
+      failed: 'META_WHATSAPP_SEND_FAILED',
+      withoutId: 'META_WHATSAPP_SEND_ACCEPTED_WITHOUT_ID',
+      timeout: 'META_WHATSAPP_SEND_TIMEOUT_AMBIGUOUS',
+    },
+  });
 }
 
 export async function sendMetaTemplate({ connection, businessId, recipient, templateName, language = 'ar', parameters = [] }) {
@@ -271,61 +235,22 @@ export async function sendMetaTemplate({ connection, businessId, recipient, temp
     throw error;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`, {
-      method: 'POST',
-      cache: 'no-store',
-      signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        accept: 'application/json',
+  return sendMetaMessage({
+    graphVersion: platform.graphVersion, phoneNumberId, token,
+    message: {
+      messaging_product: 'whatsapp', recipient_type: 'individual', to,
+      type: 'template',
+      template: {
+        name, language: { code },
+        components: values.length ? [{
+          type: 'body', parameters: values.map(text => ({ type: 'text', text })),
+        }] : [],
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'template',
-        template: {
-          name,
-          language: { code },
-          components: values.length ? [{
-            type: 'body',
-            parameters: values.map(text => ({ type: 'text', text })),
-          }] : [],
-        },
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error('META_WHATSAPP_TEMPLATE_SEND_FAILED');
-      error.status = response.status >= 500 ? 502 : 409;
-      error.providerStatus = response.status;
-      error.providerCode = payload?.error?.code || null;
-      error.ambiguous = response.status >= 500;
-      error.definitive = response.status >= 400 && response.status < 500;
-      throw error;
-    }
-    const providerMessageId = clean(payload?.messages?.[0]?.id, 320);
-    if (!providerMessageId) {
-      const error = new Error('META_WHATSAPP_TEMPLATE_ACCEPTED_WITHOUT_ID');
-      error.status = 502;
-      error.ambiguous = true;
-      throw error;
-    }
-    return { providerMessageId, providerStatus: response.status };
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      const timeoutError = new Error('META_WHATSAPP_TEMPLATE_TIMEOUT_AMBIGUOUS');
-      timeoutError.status = 502;
-      timeoutError.ambiguous = true;
-      throw timeoutError;
-    }
-    if (error instanceof TypeError && error?.ambiguous !== false) error.ambiguous = true;
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+    },
+    errors: {
+      failed: 'META_WHATSAPP_TEMPLATE_SEND_FAILED',
+      withoutId: 'META_WHATSAPP_TEMPLATE_ACCEPTED_WITHOUT_ID',
+      timeout: 'META_WHATSAPP_TEMPLATE_TIMEOUT_AMBIGUOUS',
+    },
+  });
 }
