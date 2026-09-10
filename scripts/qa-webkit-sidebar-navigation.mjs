@@ -113,6 +113,24 @@ try{
     }
    }
   }
+  // Reproduce the language/open transition at bounded frame offsets. Setup invokes
+  // the shipped button handlers; the Today action retains the native pointer check.
+  for(const delay of [0,8,16,24,32,48,64,96,128,176,208]){
+   await page.evaluate(()=>{showScreen('analytics');setLang('ar')});
+   await page.waitForFunction(()=>{
+    const side=document.querySelector('#side'),css=getComputedStyle(side);
+    return !side.classList.contains('open')&&Math.abs(parseFloat(css.left)-482)<1&&!side.getAnimations().some(a=>a.playState==='running');
+   },null,{timeout:10000});
+   await page.evaluate(delay=>new Promise(resolve=>{
+    document.querySelector('#enBtn').click();
+    setTimeout(()=>{document.querySelector('#menuBtn').click();resolve()},delay);
+   }),delay);
+   const entry={width:768,height:1024,language:'en',screen:'dashboard',open_delay_ms:delay,status:'RUNNING',beforeClick:await state()};report.cases.push(entry);
+   await page.locator('#side [data-screen="dashboard"]:visible').click({timeout:10000});
+   await page.locator('#screen-dashboard.active').waitFor({state:'visible',timeout:10000});
+   assert.equal(await page.locator('#side.open').count(),0,'navigation closes the sidebar');
+   entry.status='PASS';console.log('SIDEBAR_TRANSITION='+JSON.stringify(entry));
+  }
   assert.equal(report.blocked.length,0,'no external requests');
  }catch(error){
   report.status='FAIL';report.error=String(error.message);report.state=await state();report.pageErrors=pageErrors;

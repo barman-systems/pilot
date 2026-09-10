@@ -9,7 +9,6 @@ on:
       - '.github/workflows/booking-lifecycle-regression.yml'
 permissions:
   contents: read
-  actions: read
 jobs:
   browser:
     name: Booking lifecycle browser regression
@@ -23,23 +22,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Read original navigation failure metadata
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/barman-systems/pilot/actions/artifacts/10145615731/zip > "$RUNNER_TEMP/navigation-failure.zip"
-          python - <<'PY'
-          import json, os, zipfile
-          with zipfile.ZipFile(os.environ['RUNNER_TEMP']+'/navigation-failure.zip') as archive:
-              names=[n for n in archive.namelist() if n.endswith('dabbir-internal-visual/report.json')]
-              assert len(names)==1, names
-              report=json.loads(archive.read(names[0]))
-          assert report['sha']=='a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd'
-          error=report.get('error','')
-          assert 'locator.click: Timeout 10000ms exceeded' in error and 'data-screen="dashboard"' in error
-          lines=[line for line in error.splitlines() if not any(s in line.lower() for s in ['http','@','token','cookie','authorization'])]
-          print('ORIGINAL_NAVIGATION_FAILURE='+'\n'.join(lines)[:12000])
-          PY
       - name: Lifecycle and authenticated API regressions
         run: node --test test/dabbir-booking-lifecycle*.test.mjs
       - name: Install pinned isolated browser verifier
@@ -54,15 +36,6 @@ jobs:
           done
           npm install --prefix "$RUNNER_TEMP/booking-playwright" --no-audit --no-fund --ignore-scripts playwright@1.63.0
           node "$RUNNER_TEMP/booking-playwright/node_modules/playwright/cli.js" install --with-deps chromium webkit
-      - name: Production-pinned WebKit sidebar navigation regression
-        env:
-          PLAYWRIGHT_PATH: ${{ runner.temp }}/navigation-playwright/node_modules/playwright
-          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
-        run: |
-          npm install --prefix "$RUNNER_TEMP/navigation-playwright" --no-audit --no-fund --ignore-scripts playwright@1.62.1
-          node "$PLAYWRIGHT_PATH/cli.js" install webkit
-          node scripts/build-dabbir-ui-bundles.mjs
-          node scripts/qa-webkit-sidebar-navigation.mjs
       - name: iPhone and iPad browser matrix over real served UI
         env:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
@@ -85,3 +58,37 @@ jobs:
           path: booking-browser-evidence/
           retention-days: 7
           if-no-files-found: warn
+
+  navigation:
+    name: Production WebKit sidebar navigation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install the Production-pinned WebKit verifier
+        run: |
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then sudo rm -f "$source"; fi
+          done
+          npm install --prefix "$RUNNER_TEMP/navigation-playwright" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          node "$RUNNER_TEMP/navigation-playwright/node_modules/playwright/cli.js" install --with-deps webkit
+      - name: Real root and bundle navigation across language and viewport transitions
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/navigation-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: sidebar-browser-evidence
+        run: |
+          node scripts/build-dabbir-ui-bundles.mjs
+          node scripts/qa-webkit-sidebar-navigation.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sidebar-navigation-${{ github.run_id }}
+          path: sidebar-browser-evidence/
+          retention-days: 7
+          if-no-files-found: error
