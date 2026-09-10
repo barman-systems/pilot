@@ -1,0 +1,51 @@
+{
+  "observed_at": "2026-09-10T08:12:00Z",
+  "status": "PARTIALLY_VERIFIED",
+  "production_sha": "155a2f0d9c322067ec9d7e7bc143b605db504925",
+  "deployment_id": "dpl_D9HcdoiBy4pJP5rg1wzx8XjgJYya",
+  "slice1": {
+    "pr": 697,
+    "local_baseline_tests": 2716,
+    "local_after_tests": 2744,
+    "ci": "PASS, including concurrent main changes",
+    "production_attempt_1": {
+      "run_id": 34451656218,
+      "job_id": 102790676514,
+      "arabic": "PASS",
+      "english_iphone": "PASS",
+      "ipad": "FAIL: 15f_cognitive_context_references, 502, real_provider=false, no_execution=true",
+      "isolation": "NOT_RUN: previous step failed",
+      "release_identity_before_after": "MATCH",
+      "artifact_id": 10142527271,
+      "artifact_sha256": "8ff91b57e56c029af3932be676ee7f624c33a08536ff9ebd8eb91e19859f3319"
+    },
+    "retry": "One unchanged exact-SHA full gate rerun started; no gates changed."
+  },
+  "prepared_slices": [
+    {
+      "pr": 698,
+      "status": "CI_PASS_PRODUCTION_PENDING",
+      "scope": "worker/cron dispatch owner; old module retained"
+    },
+    {
+      "pr": 699,
+      "status": "CI_PASS_PRODUCTION_PENDING",
+      "scope": "shared HTTP transport for all active message types"
+    },
+    {
+      "pr": 701,
+      "status": "CI_PASS_NOT_APPLIED_TO_DATABASE",
+      "scope": "Coexistence existing customer resolver, 12 SQL behavior cases; total 2805 local passes"
+    }
+  ],
+  "deletion_gate": {
+    "legacy_files_removed": [],
+    "unreachable_core_functions_removed": [],
+    "reason": "Wait for deployed caller migration and exact-SHA complete Production proof."
+  },
+  "limitations": [
+    "Real-phone Meta proof is separate and not claimed.",
+    "Actual future repair time and owner lookup time have not been measured.",
+    "SQL inventory excludes dynamic SQL, REST writers and external callers unless separately enumerated."
+  ]
+}
