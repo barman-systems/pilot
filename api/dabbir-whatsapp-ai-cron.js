@@ -1,6 +1,6 @@
 import { json } from './_auth-core.js';
 import { cronAuthMode } from './salon-reminders-cron.js';
-import { processWhatsAppRecoveryWithServiceMenu } from './_dabbir-whatsapp-service-menu.js';
+import { processWhatsAppRecoveryWithServiceMenu } from './_dabbir-whatsapp-dispatch.js';
 import { recoverWhatsAppAiProviderFailovers } from './_dabbir-whatsapp-ai-provider-failover.js';
 import { processWhatsAppVoiceRecovery } from './_dabbir-whatsapp-voice.js';
 import { processCoexistenceBootstrap } from './_whatsapp-coexistence.js';

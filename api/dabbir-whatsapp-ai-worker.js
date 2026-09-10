@@ -1,5 +1,5 @@
 import { json, readJsonBody } from './_auth-core.js';
-import { processWhatsAppDispatchWithServiceMenu } from './_dabbir-whatsapp-service-menu.js';
+import { processWhatsAppDispatchWithServiceMenu } from './_dabbir-whatsapp-dispatch.js';
 import { failoverWhatsAppAiProvider } from './_dabbir-whatsapp-ai-provider-failover.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
