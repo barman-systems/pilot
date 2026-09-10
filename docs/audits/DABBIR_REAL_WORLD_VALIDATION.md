@@ -157,3 +157,54 @@ test catalogues for those activities are explicit synthetic QA setups exercising
 the real ontology, not claims of existing populated customer deployments.
 Store has one existing order and no services; conversational order execution
 still lacks a supported brain action.
+
+### Production execution on dda4bee2 and failures retained
+
+PR #687 merged as `dda4bee2ffc247df70ec4ab5ceaf62353134a003`, deployed as
+`dpl_Hw5NwpnBbMZfgjwY9fa2D6a6GRsj`. Workflow `34432118238` pinned this exact
+Production release before and after the journey. Arabic passed 35/35 required
+checks. English passed 32/33; the full workflow therefore FAILED and its later
+isolation stage was skipped. Both runs cleaned their disposable tenants/users.
+The complete relevant evidence is retained in
+`DABBIR_REAL_MODEL_PRODUCTION_DDA4BEE2.json`.
+
+All four new live-model activity scenarios passed in both runs: services,
+clinic, laundry and salon. Duration questions and the clinic boundary therefore
+have actual-model evidence, beyond the deterministic benchmark. This remains
+eight synthetic-context scenario executions, not 104 live-model conversations
+or a real Meta round trip.
+
+The English run exposed a stochastic continuity failure: after selecting an
+exterior service, the state contained a guessed saloon vehicle and asked about
+the delivery mode even though the catalog allowed only MOBILE. The reducer
+accepted a quoted but semantically unrelated model entity as AI_INFERENCE,
+which displaced the single-mode database default. The fix requires grounded
+vehicle/delivery-mode evidence and ignores unsupported guesses. Two permanent
+regressions exercise the failure with and without a model correction flag.
+No raw provider reasoning is stored.
+
+An independent boundary test found 2647 bytes of valid bounded provider metadata
+would exceed the existing 2048-byte PostgreSQL event limit. Event metadata now
+compacts repeated activity/attempt details while retaining the complete bounded
+trace in the canonical state in the same transaction. The database limit is
+unchanged. A real PostgreSQL JSONB size regression verifies the compact event.
+Full suite after these fixes: 2680/2680; syntax check passed. A fresh Production
+journey is still required for this follow-up change.
+
+Fresh provider evidence: primary Gemini returned HTTP 429; Groq sometimes
+succeeded and sometimes returned 400/429; Cloudflare timed out; the configured
+Vercel AI Gateway completed fallback. Schema compatibility repair shares the
+existing four-request/18-second bound. Tokens and available gateway costs are
+retained in the evidence. Direct-provider monetary cost is unknown, not zero.
+Model calls precede tool execution; there is no second model generation after
+a booking mutation. Switching provider cannot itself invoke a business tool.
+
+The store request SQL proof persisted one handoff and the canonical pending
+handoff, with `action_required` conversation state. Replay returned the same
+handoff and created no order or appointment. The transaction rolled back.
+This proves durable request escalation, not conversational retail order creation.
+See `DABBIR_BRAIN_STORE_REQUEST_SMOKE.sql` and its JSON evidence.
+
+Rollout remains one business at 100% canary; businesses without an explicit
+rollout retain shadow mode. No real customer's human takeover was reset and no
+new activity was globally enabled to obtain a passing test.
