@@ -107,10 +107,11 @@ test('side questions do not consume failed-answer attempts but repeated unresolv
  const h=dialogueHarness({planner:(_body,_s,p)=>p||proposal('BOOKING')});await h.turn('أبا خارجي');
  for(let i=0;i<3;i++){
   const r=await h.turn('كم VIP',{...proposal('PRICING'),dialogue:{message_role:'SIDE_QUESTION',evidence:'كم VIP',invalidated_fields:[]}});
-  assert.equal(r.result.action,'PRICING');assert.equal(r.state.requirement_loop.count,1);assert.equal(r.state.goal,'BOOK_SERVICE');
+  assert.equal(r.result.action,'PRICING');assert.equal(r.state.requirement_loop,null);assert.equal(r.state.goal,'BOOK_SERVICE');
  }
- await h.turn('ما فهمت',proposal('SUPPORT'));
- const failed=await h.turn('ما فهمت',proposal('SUPPORT'));assert.equal(failed.result.action,'HANDOFF');
+ const first=await h.turn('ما فهمت',proposal('SUPPORT'));assert.equal(first.state.requirement_loop.count,1);
+ const second=await h.turn('ما فهمت',proposal('SUPPORT'));assert.equal(second.result.action,'CLARIFY');assert.equal(second.state.requirement_loop.count,2);
+ const failed=await h.turn('ما فهمت',proposal('SUPPORT'));assert.equal(failed.result.action,'HANDOFF');assert.equal(failed.state.requirement_loop.count,3);
 });
 
 test('fixed multiple-request probe measures independent goals, side questions and scoped correction',async()=>{
