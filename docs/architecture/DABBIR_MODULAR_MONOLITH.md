@@ -5,7 +5,7 @@ Status: PARTIALLY VERIFIED. This is an implementation ledger, not launch approva
 ## Observed baseline
 
 - Requested historical baseline: `eb826bca7f08b7b5b58bba06639f31b21a23c0c4`.
-- Current main and authenticated Production release endpoint, 2026-09-10:
+- Main and authenticated Production release observed at task start, 2026-09-10:
   `0ae7e93b54478c35fa3da55c8c8202e139b62b8b`, deployment
   `dpl_3De4C1Sy5etgSc6soyqjKYmh6hf5` (PR #695 greeting fix retained).
 - Local baseline: 2716 tests, all passed, zero skipped.
@@ -46,7 +46,7 @@ and its existing scheduled/Edge adapters. No framework or service is added.
 |---|---|---|---|---|---|
 | Meta authentication / ingestion | `dabbir-whatsapp-webhook.js`; Coexistence reuses `verifyMetaSignature` | Raw signed bytes → normalized text/location/voice/status event | Crypto, parsers, persistence adapters, safe telemetry | Invalid signature/raw body rejected before persistence | Webhook signature, raw-body, branch-routing suites |
 | Durable inbound | SQL `dabbir_whatsapp_persist_inbound`; location/voice/Flow adapters | Provider ID + receiving phone ID → tenant-scoped conversation/message/batch IDs | Exact connection lookup, customer resolver, inbox tables | Unique provider event, incomplete or unverified persistence rejected | Real-DB ingestion and tenant isolation |
-| Dispatch / recovery | Current service-menu wrappers delegate to `processClaimedWhatsAppAiBatch` | Opaque dispatch token / bounded recovery limit → claim state and outcome | Claim/finish RPCs and AI worker core | No work without DB claim; CAS conflicts cancelled, ambiguous sends handed off | Dispatch contract suite; full deployed journey |
+| Dispatch / recovery | `_dabbir-whatsapp-dispatch.js` delegates to `processClaimedWhatsAppAiBatch`; previous module retained | Opaque dispatch token / bounded recovery limit → claim state and outcome | Claim/finish RPCs and AI worker core | No work without DB claim; CAS conflicts cancelled, ambiguous sends handed off | Dispatch contract suite; full deployed journey |
 | Conversation | `runUnderstandingTurn` in `_dabbir-understanding-orchestrator.js` | Claim + scoped context + explicit effect ports → decision/state/outcome | Semantic engine, Brain contract, cognitive/context helpers; injected RPC/delivery | Missing scope/requirements block mutation; proposal is not permission | Understanding, cognitive, greeting, real-DB concurrency suites |
 | Business/activity/service facts | SQL `dabbir_activity_profile_v1` and private `activity_contract_v1`; JS `_dabbir-activity-intelligence.js` validates projection | Verified tenant/branch/service → versioned requirements/allowed actions | DB activity registry, verified facts/memory, exact service/worker scope | Missing/stale/unconfigured contract blocks operation | Activity authority/configuration/delivery-mode suites |
 | Decision | `_dabbir-semantic-engine.js` + `_dabbir-semantic-interpreter.js` | Bounded redacted context + customer turn → typed proposal | Pure semantic helpers; metered provider interface | Invalid/uncertain proposal cannot authorize writes | Frozen understanding cases and contract tests |
@@ -88,7 +88,9 @@ exact wire payload, acceptance without delivery claim, 400/401/403/429/500/503,
 malformed/missing receipts, network errors, precise timeout, capability denial
 and OIDC template compatibility. Existing source-location assertion points at
 the extracted classifier; its assertion is unchanged. Full local suite:
-2744 passed, zero failed/skipped. Deployed verification is pending.
+2744 passed, zero failed/skipped. Exact deployed CI passed 2752 cases after
+concurrent main changes; the complete Production journey passed on its second
+unchanged attempt. Both attempts are retained in the verification checkpoint.
 
 ## Before/after measurements
 
@@ -231,10 +233,21 @@ dependency, and fails on import cycles. Its local reachability is conservative
 and limited to top-level function declarations; nonliteral imports/eval are
 listed as hazards. It is an inspection tool, not an automatic deletion tool.
 Prepared tree: 290 API JS modules, 522 literal import edges, zero cycles, 44 local
-unreachable candidates. The complete 2810-test local suite passes, zero skipped.
-Five new worker cases exercise the actual claimed worker and versioned executor,
+unreachable candidates. The complete 2822-test integrated local suite passes, zero skipped, including
+the concurrently deployed independent-read fix without alteration.
+Seven new worker cases exercise the actual claimed worker and versioned executor,
 so future legacy deletion cannot rely only on matching strings in dead code.
 
 `verification-checkpoint.json` retains exact deployment/run/artifact identity,
 including failed attempts. A failed model probe remains failed; successful
 Arabic/iPhone stages do not convert the complete iPad/isolation gate into PASS.
+
+Five service-presentation cases exercise tenant services/prices, receipt-bound
+presentation, stale/foreign choices and read-only side questions on the actual
+conversation authority. These replace no security or Production gate.
+
+Slice 2 functional journeys all passed, including 13 isolation checks, but its
+first final release identity check failed because concurrent main advanced to
+`4ef4fb47ac7474757ce8b5972a14b4293501a7b6`. The complete current-main journey
+must pass before a subsequent merge or legacy deletion; partial success is
+not used as deletion permission.

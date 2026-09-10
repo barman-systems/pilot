@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-09-10T08:12:00Z",
+  "observed_at": "2026-09-10T08:50:00Z",
   "status": "PARTIALLY_VERIFIED",
-  "production_sha": "155a2f0d9c322067ec9d7e7bc143b605db504925",
-  "deployment_id": "dpl_D9HcdoiBy4pJP5rg1wzx8XjgJYya",
+  "production_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+  "deployment_id": "dpl_HWynqR7WyTV5ycjn6vz7wHxuQcUs",
   "slice1": {
     "pr": 697,
     "local_baseline_tests": 2716,
@@ -42,15 +42,35 @@
   "prepared_slices": [
     {
       "pr": 698,
-      "status": "MERGED_PRODUCTION_VERIFICATION_RUNNING",
+      "status": "FUNCTIONAL_PASS_RELEASE_DRIFT_REVERIFY_CURRENT_MAIN",
       "scope": "worker/cron dispatch owner; old module retained",
       "production_sha": "8826d37ed15aac45550a34f2f3b00b76c9cc07ba",
-      "production_journey_run": 34455112211
+      "production_journey_run": 34455112211,
+      "production_attempt_1": {
+        "run_id": 34455112211,
+        "job_id": 102799567201,
+        "arabic": "PASS",
+        "english_iphone": "PASS",
+        "ipad": "PASS",
+        "isolation": "PASS 13/13",
+        "stable_release": false,
+        "failure": "Concurrent independent-read Brain fix advanced main/Production during the journey; no refactor gate was weakened.",
+        "actual_final_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+        "artifact_id": 10143756924,
+        "artifact_sha256": "8d7c755ce7a33d4c090676a9f269512a26ff0b725ef1d8817dbb9f31a8662838"
+      },
+      "current_main_verification": {
+        "run_id": 34455759835,
+        "job_id": 102804642358,
+        "status": "IN_PROGRESS",
+        "sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6"
+      }
     },
     {
       "pr": 699,
-      "status": "CI_PASS_PRODUCTION_PENDING",
-      "scope": "shared HTTP transport for all active message types"
+      "status": "CURRENT_MAIN_INTEGRATED_CI_RUNNING_PRODUCTION_PENDING",
+      "scope": "shared HTTP transport for all active message types",
+      "head": "b85b2879b93550db2ca4c03993889fbe82a31295"
     },
     {
       "pr": 701,
@@ -87,5 +107,12 @@
     ],
     "future_bug_repair_time": "NOT_MEASURED",
     "owner_lookup_time": "NOT_MEASURED"
+  },
+  "prepared_local_regression": {
+    "passed": 2822,
+    "failed": 0,
+    "skipped": 0,
+    "includes_concurrent_main_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+    "scope": "Slices 1-4 plus caller/behavior proof, not all changes deployed"
   }
 }
