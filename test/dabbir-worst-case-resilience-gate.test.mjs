@@ -9,6 +9,7 @@ const resilience=await read('supabase/migrations/20260903120500_dabbir_worst_cas
 const calendarLock=await read('supabase/migrations/20260902073500_dabbir_booking_calendar_transaction_lock_v1.sql');
 const salonApi=await read('api/salon-operations.js');
 const whatsapp=await read('api/_whatsapp-live-core.js');
+const whatsappTransport=await read('api/_whatsapp-message-transport.js');
 const guardian=await read('.github/workflows/dabbir-release-guardian.yml');
 
 test('worst-case gate: booking writes are serialized and replay-safe',()=>{
@@ -44,7 +45,7 @@ test('worst-case gate: definite notification failures have bounded durable retry
 
 test('worst-case gate: ambiguous WhatsApp outcomes never auto-retry',()=>{
   assert.match(whatsapp,/META_WHATSAPP_TEMPLATE_TIMEOUT_AMBIGUOUS/);
-  assert.match(whatsapp,/error\.ambiguous = response\.status >= 500/);
+  assert.match(whatsappTransport,/error\.ambiguous = response\.status >= 500/);
   assert.match(resilience,/STALE_PROCESSING_REQUIRES_RECONCILIATION/);
   assert.match(resilience,/p_status='ambiguous'[\s\S]*status='ambiguous'[\s\S]*next_attempt_at=null/);
   assert.doesNotMatch(resilience,/p_status='ambiguous'[\s\S]{0,500}status='pending'/);
