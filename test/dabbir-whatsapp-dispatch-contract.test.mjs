@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { processWhatsAppDispatchWithServiceMenu as dispatch, processWhatsAppRecoveryWithServiceMenu as recover } from '../api/_dabbir-whatsapp-dispatch.js';
 
 const originalFetch = global.fetch;
-const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-test.beforeEach(() => { process.env.SUPABASE_SERVICE_ROLE_KEY = 'dispatch-fixture-only'; });
+const serviceKeyEnv = 'SUPABASE_SERVICE_ROLE_KEY';
+const originalKey = process.env[serviceKeyEnv];
+test.beforeEach(() => { process.env[serviceKeyEnv] = 'dispatch-fixture-only'; });
 test.afterEach(() => {
   global.fetch = originalFetch;
-  if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  if (originalKey === undefined) delete process.env[serviceKeyEnv];
+  else process.env[serviceKeyEnv] = originalKey;
 });
 function rpcFixture(responder) {
   const calls = [];
