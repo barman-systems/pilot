@@ -8,13 +8,13 @@ const baseState=(extra={})=>({
   entities:{service:fact('svc'),branch:fact('branch','DATABASE_FACT',1)},
   missing_fields:['vehicle','location','date','time'],unresolved_references:[],invalid_fields:[],
   clarification_entity:'vehicle',requirement_loop:{key:'vehicle',count:1},
-  activity_requirements:{contract:{delivery_modes:['MOBILE']}},
+  activity_requirements:{contract:{service_id:'svc',delivery_modes:['MOBILE']}},
   cognition:{pending_field:'vehicle',pending_question:{field:'vehicle',text:'أي سيارة؟',presentation:'PROVIDER_ACCEPTED'},next_action:'CLARIFY'},
   ...extra,
 });
-const context=(body='ابا اغسل السيارة')=>({business:{business_type:'car_wash'},batch_messages:[{body}]});
+const context=(body='ابا اغسل السيارة',created_at='2026-09-10T12:31:44Z')=>({business:{business_type:'car_wash',timezone:'Asia/Dubai'},batch_messages:[{body,created_at}]});
 const result=state=>({state,decision:{action:'CLARIFY',intent:'BOOKING',confidence:.9,riskLevel:'LOW',missingFields:[...state.missing_fields],reasonCode:'MISSING_OR_AMBIGUOUS_FACT',reply:'legacy prompt'}});
-const plan=(state,previous=null,proposal=null,body)=>applyGoalDrivenConversationPlan({args:{context:context(body),previous,proposal},result:result(state)});
+const plan=(state,previous=null,proposal=null,body,created_at)=>applyGoalDrivenConversationPlan({args:{context:context(body,created_at),previous,proposal},result:result(state)});
 
 test('single database-authorized delivery mode is never exposed as a customer question',()=>{
   const state=baseState({missing_fields:['delivery_mode','vehicle','location','date','time'],clarification_entity:'delivery_mode',
@@ -22,8 +22,54 @@ test('single database-authorized delivery mode is never exposed as a customer qu
     cognition:{pending_field:null,next_action:'CLARIFY'}});
   const r=plan(state);
   assert.notEqual(r.state.clarification_entity,'delivery_mode');
+  assert.equal(r.state.entities.delivery_mode.value,'MOBILE');
+  assert.equal(r.state.entities.delivery_mode.source,'DATABASE_FACT');
   assert.match(r.decision.reply,/سيارة/);
   assert.equal(r.decision.action,'CLARIFY');
+});
+
+test('real WhatsApp phrase grounds single mobile mode and immediate time without asking either again',()=>{
+  const state=baseState({
+    missing_fields:['delivery_mode','vehicle','location','date','time'],invalid_fields:['delivery_mode'],clarification_entity:'delivery_mode',
+    entities:{service:fact('svc'),branch:fact('branch','DATABASE_FACT',1),delivery_mode:fact('AT_BUSINESS','AI_INFERENCE',.5),date:fact('2026-09-10','AI_INFERENCE',.5),time:fact('16:31','AI_INFERENCE',.5)},
+    cognition:{pending_field:'delivery_mode',inferred_facts:['delivery_mode','date','time'],unverified_facts:['delivery_mode','date','time'],next_action:'CLARIFY'}
+  });
+  const r=plan(state,null,{action:'CHECK_AVAILABILITY',confidence:.89},'اذا فاضي الحين تعال غسل السياره','2026-09-10T12:31:44Z');
+  assert.equal(r.state.entities.delivery_mode.value,'MOBILE');
+  assert.equal(r.state.entities.delivery_mode.source,'DATABASE_FACT');
+  assert.equal(r.state.entities.date.value,'2026-09-10');
+  assert.equal(r.state.entities.date.source,'CUSTOMER_STATED');
+  assert.equal(r.state.entities.time.value,'16:31');
+  assert.equal(r.state.entities.time.source,'CUSTOMER_STATED');
+  assert.ok(!r.state.missing_fields.includes('delivery_mode'));
+  assert.ok(!r.state.missing_fields.includes('date'));
+  assert.ok(!r.state.missing_fields.includes('time'));
+  assert.notEqual(r.state.clarification_entity,'delivery_mode');
+  assert.doesNotMatch(r.decision.reply,/وين تبا الخدمة|أي يوم|أي وقت|اليوم والوقت/);
+});
+
+test('bare الحين answers scheduling with the business-local message time instead of asking which day',()=>{
+  const previous=baseState({clarification_entity:'date',cognition:{pending_field:'date',pending_question:{field:'date',fields:['date','time'],text:'متى يناسبك؟ اذكر اليوم والوقت اللي تفضله.',presentation:'PROVIDER_ACCEPTED'}}});
+  const state=baseState({missing_fields:['vehicle','location','date','time'],clarification_entity:'date',
+    entities:{service:fact('svc'),branch:fact('branch','DATABASE_FACT',1),delivery_mode:fact('MOBILE','CUSTOMER_CONFIRMED',.99),date:fact('2026-09-10','AI_INFERENCE',.5),time:fact('16:32','AI_INFERENCE',.5)},
+    cognition:{pending_field:'date',inferred_facts:['date','time'],unverified_facts:['date','time'],next_action:'CLARIFY'}});
+  const r=plan(state,previous,{action:'CHECK_AVAILABILITY',confidence:.89},'الحين','2026-09-10T12:32:21Z');
+  assert.equal(r.state.entities.date.value,'2026-09-10');
+  assert.equal(r.state.entities.date.source,'CUSTOMER_STATED');
+  assert.equal(r.state.entities.time.value,'16:32');
+  assert.equal(r.state.entities.time.source,'CUSTOMER_STATED');
+  assert.ok(!r.state.missing_fields.includes('date'));
+  assert.ok(!r.state.missing_fields.includes('time'));
+  assert.doesNotMatch(r.decision.reply,/أي يوم|أي وقت|اليوم والوقت/);
+});
+
+test('negated immediate time is never silently grounded',()=>{
+  const state=baseState({missing_fields:['date','time'],clarification_entity:'date',
+    entities:{service:fact('svc'),branch:fact('branch','DATABASE_FACT',1),date:fact('2026-09-10','AI_INFERENCE',.5),time:fact('16:32','AI_INFERENCE',.5)},
+    cognition:{pending_field:'date',next_action:'CLARIFY'}});
+  const r=plan(state,null,null,'مب الحين');
+  assert.equal(r.state.entities.date.source,'AI_INFERENCE');
+  assert.equal(r.state.entities.time.source,'AI_INFERENCE');
 });
 
 test('an actually pending unanswered field stays coherent instead of jumping around the form',()=>{
