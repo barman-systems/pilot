@@ -62,3 +62,24 @@ test('Gemini semantic gateway hardening does not alter ordinary gateway replies'
   assert.equal(body.max_tokens,320);
   assert.equal(body.reasoning,undefined);
 });
+
+for(const [name,content,finishReason] of [
+  ['truncated transport success',JSON.stringify(semanticProposal),'length'],
+  ['malformed transport success','{"action":"CREATE_BOOKING"','stop'],
+])test('actual fallback remains closed after '+name,async()=>{
+  const requests=[];
+  await assert.rejects(interpretSemanticMessage({
+    message:'نفس اللي قلت لك',context:{},env:allProviders,
+    fetchImpl:async(url,options)=>{
+      requests.push({url:String(url),body:JSON.parse(options.body)});
+      if(!String(url).includes('ai-gateway.vercel.sh'))return new Response('{}',{status:429});
+      return new Response(JSON.stringify({
+        choices:[{message:{content},finish_reason:finishReason}],
+        usage:{prompt_tokens:1888,completion_tokens:2390,completion_tokens_details:{reasoning_tokens:2300}},
+      }),{status:200});
+    },
+  }),error=>error.code==='AI_PLANNER_UNAVAILABLE'&&error.telemetry.request_count===4);
+  assert.equal(requests.length,4,'no fifth attempt or unvalidated proposal is returned');
+  assert.equal(requests[3].body.max_tokens,2400);
+  assert.deepEqual(requests[3].body.reasoning,{effort:'low'});
+});

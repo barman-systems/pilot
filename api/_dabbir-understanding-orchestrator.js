@@ -300,7 +300,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   if(cognitive)assertBrainDecision(state,decision,c);
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
   if(committed.replay){state=committed.state;decision=cognitive&&state.cognition?.decision?state.cognition.decision:{...decision,action:state.pending_action||decision.action};if(!cognitive){if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);}}
-  const version=committed.version,lang=state.language;let executionReceipt=null;
+  let version=committed.version;const lang=state.language;let executionReceipt=null;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
   const recordDelivery=async(sent,field)=>{if(cognitive&&state.cognition){if(!sent?.providerMessageId)throw Object.assign(new Error('COGNITIVE_PRESENTATION_UNVERIFIED'),{code:'COGNITIVE_PRESENTATION_UNVERIFIED'});await rpc('dabbir_cognitive_record_delivery_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_provider_message_id:sent.providerMessageId,p_next_field:field||null});}};
@@ -321,7 +321,16 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   if(decision.action==='CHECK_AVAILABILITY'){
     budget();await assertCurrent();const appt=arr(c.upcoming_appointments).find(x=>x.id===val(state,'appointment'));
     const av=cognitive?await rpc('dabbir_semantic_check_availability_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version}):await rpc('dabbir_whatsapp_ai_check_availability',{p_business_id:c.business.id,p_conversation_id:c.conversation.id,p_service_id:appt?.service_id||val(state,'service'),p_worker_id:appt?.worker_id||val(state,'worker')||null,p_requested_local:`${val(state,'date')}T${val(state,'time')}:00`});
-    const slots=verifiedAvailability(av,c,state);if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots','time');}
+    let slots=verifiedAvailability(av,c,state);
+    if(cognitive&&!slots.length&&state.entities.date?.alternative_condition==='NO_AVAILABILITY'&&state.entities.date?.alternative_value){
+      budget();const expected=state.entities.date.alternative_value;
+      const advanced=await rpc('dabbir_semantic_advance_availability_date_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
+      if(advanced?.version!==version+1||advanced?.state?.entities?.date?.value!==expected||advanced?.state?.entities?.service?.value!==val(state,'service'))throw Object.assign(new Error('SEMANTIC_DATE_TRANSITION_UNVERIFIED'),{code:'SEMANTIC_DATE_TRANSITION_UNVERIFIED'});
+      state=advanced.state;version=advanced.version;assertBrainDecision(state,decision,c);
+      budget();const next=await rpc('dabbir_semantic_check_availability_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
+      slots=verifiedAvailability(next,c,state);
+    }
+    if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots','time');}
     else{const payload={activity_contract_version:state.activity_contract_version,mode:state.intent==='RESCHEDULE_BOOKING'?'reschedule':'booking',...(appt?{appointment_id:appt.id}:{}),slots,presented:false};await setPending('choose_slot',payload);const sent=await send(slotsText(slots,lang),'availability','slot');if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_slot',{...payload,presented:true,provider_message_id:sent.providerMessageId});}
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
   }

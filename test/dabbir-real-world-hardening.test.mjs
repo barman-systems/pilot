@@ -55,6 +55,7 @@ test('fixed multi-activity probe checks semantic facets without exposing any mut
   const q=message==='كم تاخذ وقت؟',medical=message.includes('تشخيص');
   return {provider:'fixture',model:'fixture',proposal:{action:q?'SERVICE_MENU':'REPLY',intent:q?'SERVICE_DISCOVERY':'SUPPORT',confidence:.99,riskLevel:medical?'HIGH':'LOW',entities:[],dialogue:{message_role:q?'SIDE_QUESTION':'CONTINUATION',evidence:message,invalidated_fields:[]},...(q?{serviceQuestion:{field:'duration_minutes',evidence:message,explicit_service:false}}:{})}};
  }});
- assert.equal(r.ok,true,JSON.stringify(r.results));assert.equal(r.results.length,4);assert.equal(r.external_side_effects,false);
+ assert.equal(r.ok,true,JSON.stringify(r.results));assert.equal(r.results.length,5);assert.equal(r.external_side_effects,false);
+ assert.equal(r.results.find(c=>c.id==='salon_conditional_date_preference').read_dates.length,2);
  for(const c of r.results)assert.equal(c.checks.no_mutating_tool,true);
 });
