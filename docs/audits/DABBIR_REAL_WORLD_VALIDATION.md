@@ -117,3 +117,43 @@ no Production locking function was changed. The first error report only retained
 The required Production journey now also invokes four fixed unseen live-model
 scenarios for services, clinic, laundry and salon. These diagnostics expose no
 mutating tool and do not claim to replace real database or Meta proof.
+
+### Fair baseline replay
+
+The corrected runner was replayed against a separate immutable worktree at
+`986379a1`, using the identical frozen specification. Comparable scores are
+**82/104 before → 101/104 candidate**. The earlier 81/104 report is retained as
+raw initial evidence, not used to claim an extra application improvement.
+
+| Metric | Baseline | Candidate | Scope |
+|---|---:|---:|---|
+| Goal continuity/understanding | 10/11 | 11/11 | Explicit goal assertions only |
+| Entity resolution | 146/153 | 152/153 | Labelled entity assertions |
+| Reference resolution | 27/28 | 28/28 | History/reference entity assertions |
+| Context carryover | 68/71 | 70/71 | Carry/history/complex assertions |
+| Next action | 53/68 | 66/68 | Explicit action expectations |
+| Tool selection | 14/20 | 19/20 | Expected tool vs actual fixture adapter call |
+| Unnecessary questions | 0/43 | 0/43 | Cases with explicit must-not-ask facts |
+
+End-to-end hallucinated-action and state-persistence rates are not estimated
+from a fixture adapter returning success. Receipt-negative unit regressions and
+the actual database proof are reported separately. The temporal spec erratum
+remains included in the raw failure count.
+
+### Actual database execution across activities
+
+Three additional rollback-only Production transactions passed for salon,
+services, and laundry using the existing activity schema and guarded RPCs.
+Each exercised context/load, CAS/replay, availability and canonical read receipt,
+booking/readback/idempotency, verified memory, reschedule, cancellation and stale
+message rejection. Laundry used PICKUP and required verified GPS; salon and
+services used AT_BUSINESS and did not require a vehicle. Inapplicable checks
+are null, not counted as passing. SQL and results are retained alongside this
+report. No production customer data or activity settings were changed.
+
+Live catalogue counts at inspection: car_wash 3 services, salon 4, services 2;
+laundry and clinic have existing businesses but zero configured services. The
+test catalogues for those activities are explicit synthetic QA setups exercising
+the real ontology, not claims of existing populated customer deployments.
+Store has one existing order and no services; conversational order execution
+still lacks a supported brain action.

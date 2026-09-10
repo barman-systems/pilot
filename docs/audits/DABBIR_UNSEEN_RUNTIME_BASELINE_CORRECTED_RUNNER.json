@@ -2,37 +2,37 @@
   "spec_sha256": "94be8589f0d718ddb67b18fa4fde45a9c3bd3a68bd33e18183a08f22c237b9e0",
   "scope": "Actual orchestrator, deterministic interpretation, fixture SQL/Meta adapters. No real provider or database execution claimed.",
   "cases": 104,
-  "passed": 101,
+  "passed": 82,
   "metrics": {
     "goal_understanding": {
-      "correct": 11,
+      "correct": 10,
       "total": 11,
-      "percent": 100
+      "percent": 90.91
     },
     "entity_resolution": {
-      "correct": 152,
+      "correct": 146,
       "total": 153,
-      "percent": 99.35
+      "percent": 95.42
     },
     "reference_resolution": {
-      "correct": 28,
+      "correct": 27,
       "total": 28,
-      "percent": 100
+      "percent": 96.43
     },
     "context_carryover": {
-      "correct": 70,
+      "correct": 68,
       "total": 71,
-      "percent": 98.59
+      "percent": 95.77
     },
     "next_action": {
-      "correct": 66,
+      "correct": 53,
       "total": 68,
-      "percent": 97.06
+      "percent": 77.94
     },
     "tool_selection": {
-      "correct": 19,
+      "correct": 14,
       "total": 20,
-      "percent": 95
+      "percent": 70
     },
     "hallucinated_action_rate": null,
     "state_persistence_accuracy": null,
@@ -897,7 +897,7 @@
         },
         {
           "turn": 15,
-          "text": "1) قص شعر — 65 AED"
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
         },
         {
           "turn": 16,
@@ -969,6 +969,11 @@
         },
         {
           "turn": 14,
+          "action": "CHECK_AVAILABILITY",
+          "verified": true
+        },
+        {
+          "turn": 15,
           "action": "CHECK_AVAILABILITY",
           "verified": true
         },
@@ -1070,7 +1075,7 @@
           "field": "time"
         },
         {
-          "action": "PRICING",
+          "action": "CHECK_AVAILABILITY",
           "goal": "BOOK_SERVICE",
           "field": "time"
         },
@@ -1213,13 +1218,13 @@
     {
       "id": "history/new-conversation",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "service",
           "expected": "10000000-0000-4000-8000-000000000005",
-          "actual": "10000000-0000-4000-8000-000000000005",
-          "pass": true
+          "actual": null,
+          "pass": false
         },
         {
           "field": "date",
@@ -1234,15 +1239,15 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي وقت يناسبك؟"
+          "text": "أي خدمة تقصد من آخر مرة؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
           "action": "CLARIFY",
-          "goal": "BOOK_SERVICE",
-          "field": "time"
+          "goal": "UNKNOWN",
+          "field": "verified_history"
         }
       ]
     },
@@ -1584,13 +1589,13 @@
     {
       "id": "reference/bare-this",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "REPLY",
+          "pass": false
         },
         {
           "field": "service",
@@ -1605,28 +1610,27 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي واحد تقصد؟"
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "UNKNOWN",
-          "field": "reference"
+          "action": "REPLY",
+          "goal": "UNKNOWN"
         }
       ]
     },
     {
       "id": "reference/bare-feminine",
       "activity": "laundry",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "REPLY",
+          "pass": false
         },
         {
           "field": "service",
@@ -1641,15 +1645,14 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي واحد تقصد؟"
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "UNKNOWN",
-          "field": "reference"
+          "action": "REPLY",
+          "goal": "UNKNOWN"
         }
       ]
     },
@@ -1728,7 +1731,7 @@
     {
       "id": "reference/pronoun-worker-unknown",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "worker",
@@ -1739,8 +1742,8 @@
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "REPLY",
+          "pass": false
         }
       ],
       "error": null,
@@ -1749,15 +1752,14 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي واحد تقصد؟"
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "UNKNOWN",
-          "field": "reference"
+          "action": "REPLY",
+          "goal": "UNKNOWN"
         }
       ]
     },
@@ -1794,13 +1796,13 @@
     {
       "id": "reference/restore-unknown",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "REPLY",
+          "pass": false
         }
       ],
       "error": null,
@@ -1809,15 +1811,14 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي واحد تقصد؟"
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "UNKNOWN",
-          "field": "reference"
+          "action": "REPLY",
+          "goal": "UNKNOWN"
         }
       ]
     },
@@ -2217,13 +2218,13 @@
     {
       "id": "correction/withdraw",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "goal",
           "expected": "UNKNOWN",
-          "actual": "UNKNOWN",
-          "pass": true
+          "actual": "BOOK_SERVICE",
+          "pass": false
         },
         {
           "field": "slot",
@@ -2242,12 +2243,17 @@
         },
         {
           "turn": 1,
-          "text": "تمام، وقفت متابعة الطلب الحالي."
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
         }
       ],
       "toolCalls": [
         {
           "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "verified": true
+        },
+        {
+          "turn": 1,
           "action": "CHECK_AVAILABILITY",
           "verified": true
         }
@@ -2258,8 +2264,8 @@
           "goal": "BOOK_SERVICE"
         },
         {
-          "action": "REPLY",
-          "goal": "UNKNOWN"
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
         }
       ]
     },
@@ -2315,7 +2321,7 @@
     {
       "id": "correction/conditional",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -2326,8 +2332,8 @@
         {
           "field": "date",
           "expected": "2026-09-10",
-          "actual": "2026-09-10",
-          "pass": true
+          "actual": "2026-09-11",
+          "pass": false
         }
       ],
       "error": null,
@@ -2350,7 +2356,7 @@
     {
       "id": "correction/reverse-conditional",
       "activity": "services",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -2361,8 +2367,8 @@
         {
           "field": "date",
           "expected": "2026-09-10",
-          "actual": "2026-09-10",
-          "pass": true
+          "actual": "2026-09-11",
+          "pass": false
         }
       ],
       "error": null,
@@ -2553,7 +2559,7 @@
     {
       "id": "correction/second-vehicle-same-service",
       "activity": "car_wash",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "service",
@@ -2564,8 +2570,8 @@
         {
           "field": "vehicle",
           "expected": null,
-          "actual": null,
-          "pass": true
+          "actual": "saloon",
+          "pass": false
         },
         {
           "field": "slot",
@@ -2584,7 +2590,7 @@
         },
         {
           "turn": 1,
-          "text": "أي سيارة تقصد؟"
+          "text": "أي خيار واحد تقصد؟"
         }
       ],
       "toolCalls": [],
@@ -2597,7 +2603,7 @@
         {
           "action": "CLARIFY",
           "goal": "BOOK_SERVICE",
-          "field": "vehicle"
+          "field": "location"
         }
       ]
     },
@@ -2818,7 +2824,7 @@
     {
       "id": "authority/quoted-price-history",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "service",
@@ -2829,8 +2835,8 @@
         {
           "field": "action",
           "expected": "PRICING",
-          "actual": "PRICING",
-          "pass": true
+          "actual": "CLARIFY",
+          "pass": false
         }
       ],
       "error": null,
@@ -2843,7 +2849,7 @@
         },
         {
           "turn": 1,
-          "text": "1) قص شعر — 65 AED\nأي يوم يناسبك؟"
+          "text": "أي يوم يناسبك؟"
         }
       ],
       "toolCalls": [],
@@ -2854,7 +2860,7 @@
           "field": "date"
         },
         {
-          "action": "PRICING",
+          "action": "CLARIFY",
           "goal": "BOOK_SERVICE",
           "field": "date"
         }
@@ -3360,13 +3366,13 @@
     {
       "id": "activity/store-order",
       "activity": "store",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "action",
           "expected": "HANDOFF",
-          "actual": "HANDOFF",
-          "pass": true
+          "actual": "CLARIFY",
+          "pass": false
         },
         {
           "field": "slot",
@@ -3378,25 +3384,25 @@
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [],
-      "toolCalls": [
+      "replies": [
         {
           "turn": 0,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أي خدمة تبا؟"
         }
       ],
+      "toolCalls": [],
       "trace": [
         {
-          "action": "HANDOFF",
-          "goal": "UNKNOWN"
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
         }
       ]
     },
     {
       "id": "activity/store-quantity-correction",
       "activity": "store",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -3407,41 +3413,41 @@
         {
           "field": "action",
           "expected": "HANDOFF",
-          "actual": "HANDOFF",
-          "pass": true
+          "actual": "CLARIFY",
+          "pass": false
         }
       ],
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [],
-      "toolCalls": [
+      "replies": [
         {
           "turn": 0,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أي خدمة تبا؟"
         },
         {
           "turn": 1,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أي خدمة تبا؟"
         }
       ],
+      "toolCalls": [],
       "trace": [
         {
-          "action": "HANDOFF",
-          "goal": "UNKNOWN"
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
         },
         {
-          "action": "HANDOFF",
-          "goal": "UNKNOWN"
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
         }
       ]
     },
     {
       "id": "activity/store-order-status",
       "activity": "store",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -3452,24 +3458,23 @@
         {
           "field": "action",
           "expected": "HANDOFF",
-          "actual": "HANDOFF",
-          "pass": true
+          "actual": "REPLY",
+          "pass": false
         }
       ],
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [],
-      "toolCalls": [
+      "replies": [
         {
           "turn": 0,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
         }
       ],
+      "toolCalls": [],
       "trace": [
         {
-          "action": "HANDOFF",
+          "action": "REPLY",
           "goal": "UNKNOWN"
         }
       ]
@@ -3477,7 +3482,7 @@
     {
       "id": "activity/property-request",
       "activity": "real_estate",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -3488,32 +3493,32 @@
         {
           "field": "action",
           "expected": "HANDOFF",
-          "actual": "HANDOFF",
-          "pass": true
+          "actual": "CLARIFY",
+          "pass": false
         }
       ],
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [],
-      "toolCalls": [
+      "replies": [
         {
           "turn": 0,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أي خيار واحد تقصد؟"
         }
       ],
+      "toolCalls": [],
       "trace": [
         {
-          "action": "HANDOFF",
-          "goal": "UNKNOWN"
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
         }
       ]
     },
     {
       "id": "activity/creator-request",
       "activity": "creator",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -3524,25 +3529,25 @@
         {
           "field": "action",
           "expected": "HANDOFF",
-          "actual": "HANDOFF",
-          "pass": true
+          "actual": "CLARIFY",
+          "pass": false
         }
       ],
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [],
-      "toolCalls": [
+      "replies": [
         {
           "turn": 0,
-          "action": "HANDOFF",
-          "verified": true
+          "text": "أي خدمة تبا؟"
         }
       ],
+      "toolCalls": [],
       "trace": [
         {
-          "action": "HANDOFF",
-          "goal": "UNKNOWN"
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
         }
       ]
     },
@@ -4112,36 +4117,36 @@
     {
       "id": "operations/other-customer",
       "activity": "salon",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "appointment",
           "expected": null,
-          "actual": null,
-          "pass": true
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": false
         },
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "HANDOFF",
+          "pass": false
         }
       ],
       "error": null,
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [
+      "replies": [],
+      "toolCalls": [
         {
           "turn": 0,
-          "text": "Which appointment do you mean?"
+          "action": "HANDOFF",
+          "verified": true
         }
       ],
-      "toolCalls": [],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "CANCEL_BOOKING",
-          "field": "appointment"
+          "action": "HANDOFF",
+          "goal": "CANCEL_BOOKING"
         }
       ]
     },
@@ -4223,7 +4228,7 @@
     {
       "id": "complex/one-cancel-one-new",
       "activity": "services",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -4234,8 +4239,8 @@
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "actual": "CANCEL_BOOKING",
+          "pass": false
         }
       ],
       "error": null,
@@ -4244,15 +4249,20 @@
       "replies": [
         {
           "turn": 0,
-          "text": "أي طلب تبانا نبدأ فيه؟"
+          "text": "تم إلغاء الموعد ✅."
         }
       ],
-      "toolCalls": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CANCEL_BOOKING",
+          "verified": true
+        }
+      ],
       "trace": [
         {
-          "action": "CLARIFY",
-          "goal": "CANCEL_BOOKING",
-          "field": "request"
+          "action": "CANCEL_BOOKING",
+          "goal": "CANCEL_BOOKING"
         }
       ]
     },
@@ -4295,13 +4305,13 @@
     {
       "id": "complex/no-vehicle-carry-from-history",
       "activity": "car_wash",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "service",
           "expected": "10000000-0000-4000-8000-000000000005",
-          "actual": "10000000-0000-4000-8000-000000000005",
-          "pass": true
+          "actual": null,
+          "pass": false
         },
         {
           "field": "vehicle",
@@ -4316,14 +4326,14 @@
       "replies": [
         {
           "turn": 0,
-          "text": "تمام، غسيل كامل. السيارة صالون ولا ستيشن/SUV؟"
+          "text": "أي سيارة تقصد؟"
         }
       ],
       "toolCalls": [],
       "trace": [
         {
           "action": "CLARIFY",
-          "goal": "BOOK_SERVICE",
+          "goal": "UNKNOWN",
           "field": "vehicle"
         }
       ]
@@ -4495,7 +4505,7 @@
     {
       "id": "complex/no-fabricated-branch",
       "activity": "laundry",
-      "pass": true,
+      "pass": false,
       "checks": [
         {
           "field": "slot",
@@ -4506,27 +4516,15 @@
         {
           "field": "action",
           "expected": "CLARIFY",
-          "actual": "CLARIFY",
-          "pass": true
+          "pass": false
         }
       ],
-      "error": null,
+      "error": "COGNITIVE_QUALITY_BLOCKED",
       "question_evaluated": false,
       "unnecessary_question": false,
-      "replies": [
-        {
-          "turn": 0,
-          "text": "أي فرع تقصد؟ هذه المحادثة مرتبطة بفرع محدد."
-        }
-      ],
+      "replies": [],
       "toolCalls": [],
-      "trace": [
-        {
-          "action": "CLARIFY",
-          "goal": "UNKNOWN",
-          "field": "branch"
-        }
-      ]
+      "trace": []
     },
     {
       "id": "complex/same-worker-after-removal",
