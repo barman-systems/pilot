@@ -52,11 +52,15 @@ export function resolveOrdinal(raw) {
   return {index:ids.length===1?ids[0]:null,ambiguous:ids.length>1,mentioned:matches.length>0};
 }
 
+function conditionalTodayTomorrow(t) {
+  t=t.split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1).trim();
+  return /(?:اذا|if)/.test(t)&&/(?:اليوم|today)/.test(t)&&/(?:باجر|tomorrow)/.test(t)&&/(?:ما فيه|فل|full|unavailable|no availability)/.test(t);
+}
 function parseDate(t,today) {
   // Only the last positive correction is active, including GCC double negation.
   t=t.split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1).trim();
   // A contingency is ordered preference, not a correction to the later day.
-  if(/(?:اذا|if)/.test(t)&&/(?:اليوم|today)/.test(t)&&/(?:باجر|tomorrow)/.test(t)&&/(?:ما فيه|فل|full|unavailable|no availability)/.test(t))return today;
+  if(conditionalTodayTomorrow(t))return today;
   if(/(?:عقب باجر|بعد باجر|بعد بكره|بعد غد|day after tomorrow)/.test(t))return addDays(today,2);
   if(/(?:^|\s)(?:باجر|باكر|بكره|غدا|tomorrow)(?:\s|$)/.test(t) && !/(?:مب|مو|not)\s+(?:باجر|tomorrow)\s*$/.test(t))return addDays(today,1);
   if(/(?:^|\s)(?:اليوم|اباليوم|باليوم|today)(?:\s|$)/.test(t))return today;
@@ -196,6 +200,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   if(refuse){s.intent='UNSUPPORTED';s.overall_confidence=1;return route('REPLY','UNTRUSTED_INSTRUCTION',s.language==='ar'?'أقدر أساعدك بخدمات هذا النشاط ومواعيدك فقط.':'I can help with this business and your own appointments only.');}
   if(/^(?:لا\s+)?(?:خلاص\s+)?(?:غيرت رايي|ما ابي اكمل|cancel this request|never mind|nevermind|i changed my mind)$/.test(all)){
     s.goal='UNKNOWN';s.intent='SUPPORT';s.intent_confirmed=false;s.goal_queue=[];
+    if(s.entities.date){delete s.entities.date.alternative_value;delete s.entities.date.alternative_condition;}
     invalidate(s,'slot',stamp);invalidate(s,'appointment',stamp);s.pending_action='REPLY';
     return route('REPLY','CUSTOMER_WITHDREW_REQUEST',s.language==='ar'?'تمام، وقفت متابعة الطلب الحالي.':'Okay, I have stopped the current request.');
   }
@@ -358,6 +363,11 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     }
     const candidates=scoped(c.services,c).filter(x=>[x.name,x.name_ar,x.name_en].some(n=>n&&normalizeSemanticText(n)===normalizeSemanticText(proposal.serviceName)));
     if(!supported(s.entities.service)&&candidates.length===1)fact(s,'service',candidates[0].id,'AI_INFERENCE',.5,stamp,{label:nameOf(candidates[0])});
+  }
+  // Preserve the explicit fallback after model proposals, so a quoted
+  // "tomorrow" cannot turn an ordered condition into a date correction.
+  if(conditionalTodayTomorrow(all)&&parseDate(all,today)===today){
+    fact(s,'date',today,'CUSTOMER_STATED',.99,stamp,{alternative_value:addDays(today,1),alternative_condition:'NO_AVAILABILITY'});
   }
   s.unresolved_references=[...new Set(s.unresolved_references)];
   let selected=supported(s.entities.slot) && arr(c.pending_state?.payload?.slots)[valueOf(s,'slot')];
