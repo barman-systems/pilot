@@ -1,7 +1,7 @@
 name: DABBIR Brain real database proof
 on:
   push:
-    branches: [codex/dabbir-real-world-validation-20260910, codex/dabbir-production-verification-fixes, fix/dabbir-greeting-requirement-loop, fix/dabbir-independent-read-loop]
+    branches: [codex/dabbir-real-world-validation-20260910, codex/dabbir-production-verification-fixes, fix/dabbir-greeting-requirement-loop, fix/dabbir-independent-read-loop, fix/dabbir-presented-delivery-confirmation]
   workflow_dispatch:
     inputs:
       acknowledgement:
