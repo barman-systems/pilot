@@ -97,10 +97,15 @@ export function applyActivityRequirements(state,context,now=new Date()) {
   const profile=context.activity_profile;
   const service=arr(context.services).find(x=>x.id===state.entities?.service?.value);
   const contract=arr(profile?.services).find(x=>x.service_id===service?.id);
+  const singleMode=arr(contract?.delivery_modes).length===1 && contract.delivery_modes[0]!=='HYBRID' ? contract.delivery_modes[0] : null;
   let mode=state.entities?.delivery_mode;
   if(mode?.service_id!==service?.id) {delete state.entities.delivery_mode;mode=null;}
-  if(!mode && arr(contract?.delivery_modes).length===1 && contract.delivery_modes[0]!=='HYBRID') {
-    mode=state.entities.delivery_mode={value:contract.delivery_modes[0],source:'DATABASE_FACT',confidence:1,status:'active',service_id:service.id,updated_at:now.toISOString()};
+  // A model guess that happens to equal the service's only database-authorized
+  // delivery mode must not shadow the stronger contract fact. Explicit conflicts
+  // remain unresolved so we never silently override what the customer asked for.
+  const explicitModeConflict=arr(state.unresolved_references).includes('delivery_mode');
+  if(singleMode && (!mode || (mode.source==='AI_INFERENCE' && mode.value===singleMode && !explicitModeConflict))) {
+    mode=state.entities.delivery_mode={value:singleMode,source:'DATABASE_FACT',confidence:1,status:'active',service_id:service.id,updated_at:now.toISOString()};
   }
   const resolution=resolveOperationalRequirements({business:context.business,service,delivery_mode:mode?.value,current_state:state,profile,now});
   state.business_type=context.business?.business_type;
