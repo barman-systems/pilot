@@ -1,0 +1,341 @@
+{
+  "baseline_sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+  "before": {
+    "canonical": {
+      "goal": "BOOK_SERVICE",
+      "intent": "BOOKING",
+      "pending_action": "handoff",
+      "requirement_loop": {
+        "count": 4,
+        "key": "intent_confirmation"
+      }
+    },
+    "connection": {
+      "has_credential": true,
+      "last_error": null,
+      "last_provider_status": 200,
+      "last_verified_at": "2026-09-10T06:47:46.384607+00:00",
+      "status": "connected"
+    },
+    "inbound": {
+      "created_at": "2026-09-10T06:47:46.384607+00:00",
+      "occurred_at": "2026-09-10T06:47:43+00:00",
+      "provider_id_sha256": "08d570a3e8f6387d2c8095dc7aa18a83b8175d6c38739e4fbc6ee23eb72d2746",
+      "provider_status": "received",
+      "provider_verified": true
+    },
+    "new_handoff_at": "2026-09-10T06:47:48.358733Z",
+    "outbound_since_greeting": 0,
+    "understanding": {
+      "action": "HANDOFF",
+      "created_at": "2026-09-10T06:47:47.980468+00:00",
+      "event_type": "UNDERSTOOD",
+      "message_role": "NEW_REQUEST",
+      "model_calls": "0",
+      "reason": "REPEATED_REQUIREMENT_EXTRACTION_FAILURE",
+      "version": 10
+    },
+    "worker": {
+      "attempt_count": 1,
+      "last_error": "REPEATED_REQUIREMENT_EXTRACTION_FAILURE",
+      "processing_started_at": "2026-09-10T06:47:47.661372Z",
+      "state": "HUMAN_REQUIRED"
+    }
+  },
+  "candidate_gates": [
+    {
+      "conclusion": "success",
+      "name": "Vercel Preview Comments",
+      "url": "https://github.com/barman-systems/pilot/runs/102779854649"
+    },
+    {
+      "conclusion": "success",
+      "name": "tenant privacy and security gate",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34448772409/job/102779389795"
+    },
+    {
+      "conclusion": "success",
+      "name": "promptfoo-security",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34448772352/job/102779388258"
+    },
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34448772279/job/102779388149"
+    },
+    {
+      "conclusion": "success",
+      "name": "Booking lifecycle browser regression",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34448772312/job/102779387961"
+    },
+    {
+      "conclusion": "success",
+      "name": "real-db",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34448741623/job/102779290546"
+    }
+  ],
+  "candidate_sha": "20042a3a68d135a854729b438b2579f71087322c",
+  "captured_at": "2026-09-10T07:52:34.641Z",
+  "ci": {
+    "candidate_tests": 2716,
+    "failed": 0,
+    "passed": 2716,
+    "production_dependency_vulnerabilities": 0,
+    "run_id": 34448772279,
+    "skipped": 0,
+    "syntax_passed": true
+  },
+  "deployment_id": "dpl_FYdvfC5WNxw1zF9zAeTHSUeRvtn4",
+  "implementation": {
+    "architecture_rebuilt": false,
+    "dependencies_added": 0,
+    "episode_idle_ms": 1800000,
+    "migration": false,
+    "threshold_after": 3,
+    "threshold_before": 3
+  },
+  "official_return_to_ai": {
+    "handoff_evidence_deleted": false,
+    "manual_table_edit": false,
+    "performed": true,
+    "rpc": "dabbir_return_conversation_to_ai",
+    "via": "Authenticated owner UI → POST /api/chat-control action=return_to_ai → governed RPC",
+    "returned_at": "2026-09-10T07:43:59.401815Z",
+    "state_after": "waiting_customer",
+    "pending_action_after": "none",
+    "understanding_revision_before": 67,
+    "understanding_revision_after": 68,
+    "goal_after": "BOOK_SERVICE",
+    "extraction_failure_handoffs_preserved": 2
+  },
+  "production_regression": {
+    "failed_probe": "15f_cognitive_context_references",
+    "failure": "Provider timeouts/quota; goal and facts retained, RETRY without execution.",
+    "first_attempt": 1,
+    "first_conclusion": "FAIL",
+    "first_run_id": 34449109093,
+    "independent_ar_required": {
+      "passed": 35,
+      "total": 35
+    },
+    "independent_artifact_id": 10141542230,
+    "independent_artifact_sha256": "6cb28d19c266b9b6a048a8207236ea5f63c1d66e21a973c350684a1d471168f2",
+    "independent_en_required": {
+      "passed": 33,
+      "total": 33
+    },
+    "independent_isolation": {
+      "passed": 13,
+      "total": 13
+    },
+    "independent_same_release_run_id": 34449423409,
+    "independent_status": "SUCCESS",
+    "queued_retry_attempt": 2,
+    "required_ar_pass": 34,
+    "required_ar_total": 35,
+    "optional_direct_provider_comparisons": {
+      "total": 3,
+      "failed": 3,
+      "required": false,
+      "providers": [
+        "google-gemini",
+        "groq",
+        "cloudflare-workers-ai"
+      ]
+    }
+  },
+  "production_sha": "d64815c2e1d7ad5a2491780585217eb323b21e9a",
+  "pull_request": 695,
+  "real_concurrency": {
+    "artifact_id": 10140677638,
+    "artifact_sha256": "13e1c80a0321e0eeee27dbb099608c4922c111e9b3cd9927adf5af3d0adda713",
+    "cleanup": {
+      "remaining_business": 0,
+      "remaining_owner": 0
+    },
+    "concurrent_booking": [
+      {
+        "session": 1053106,
+        "started": "2026-09-10T07:11:49.998424+00:00",
+        "finished": "2026-09-10T07:11:58.059312+00:00",
+        "ok": true,
+        "idempotent_replay": false
+      },
+      {
+        "session": 1053109,
+        "started": "2026-09-10T07:11:54.427472+00:00",
+        "finished": "2026-09-10T07:11:58.068938+00:00",
+        "ok": true,
+        "idempotent_replay": true
+      },
+      {
+        "session": 1053110,
+        "started": "2026-09-10T07:11:56.970939+00:00",
+        "finished": "2026-09-10T07:11:58.07769+00:00",
+        "ok": true,
+        "idempotent_replay": true
+      }
+    ],
+    "concurrent_outbound_denied": [
+      {
+        "blocked": true,
+        "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+        "finished": "2026-09-10T07:12:11.561538+00:00",
+        "session": 1053115,
+        "started": "2026-09-10T07:12:03.543452+00:00"
+      },
+      {
+        "blocked": true,
+        "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+        "finished": "2026-09-10T07:12:11.579453+00:00",
+        "session": 1053118,
+        "started": "2026-09-10T07:12:07.144895+00:00"
+      },
+      {
+        "blocked": true,
+        "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+        "finished": "2026-09-10T07:12:11.570892+00:00",
+        "session": 1053117,
+        "started": "2026-09-10T07:12:07.098223+00:00"
+      }
+    ],
+    "finished_at": "2026-09-10T07:12:25.168Z",
+    "late_decision": {
+      "blocked": true,
+      "error": "SEMANTIC_SUPERSEDED"
+    },
+    "message_revision": 3,
+    "meta_delivery_proven": false,
+    "outbound_new_reservations": 0,
+    "phase": "late_decision",
+    "readback": {
+      "bookings": 1,
+      "ledger_rows": 1
+    },
+    "run_id": 34448741623,
+    "scope": "Production PostgreSQL, isolated QA tenant, real semantic RPCs; synthetic presentation receipt; no Meta transport",
+    "started_at": "2026-09-10T07:11:46.307Z",
+    "verdict": "PASS"
+  },
+  "real_phone_retest": {
+    "performed": true,
+    "input": "مرحبا",
+    "simulated": false,
+    "meta_occurred_at": "2026-09-10T07:46:58Z",
+    "inbound_timestamp": "2026-09-10T07:46:59.413537Z",
+    "signature_verified": true,
+    "inbound_provider_id_sha256": "1ee7a0f58840aaece5855f14df5be0e7ba3bada71ab214470bbb4f377e07e310",
+    "worker_started_at": "2026-09-10T07:47:00.684005Z",
+    "worker_processed_at": "2026-09-10T07:47:02.385922Z",
+    "worker_state": "PROCESSED",
+    "attempt_count": 1,
+    "last_error": null,
+    "understanding": {
+      "version": 14,
+      "revision": 73,
+      "message_role": "SOCIAL",
+      "action": "REPLY",
+      "tool_selection": "GREETING",
+      "goal": "BOOK_SERVICE",
+      "goal_retained": true,
+      "requirement_loop": null,
+      "model_calls": 0,
+      "decision_latency_ms": 73,
+      "quality_violations": []
+    },
+    "outbound_reserved_at": "2026-09-10T07:47:01.031937Z",
+    "outbound_finalized_at": "2026-09-10T07:47:02.247581Z",
+    "outbound_state": "READ",
+    "outbound_error": null,
+    "provider_accepted": true,
+    "outbound_provider_id_sha256": "bbf7c9183bd339deeed8dc96c0bd52afa24ca71d52de65ee64d7c1fc6133cb28",
+    "reply": "هلا، حياك. كيف أقدر أساعدك؟",
+    "meta_delivery_status": [
+      "sent",
+      "read",
+      "delivered"
+    ],
+    "meta_read_occurred_at": "2026-09-10T07:47:03Z",
+    "meta_read_verified_at": "2026-09-10T07:47:03.938982Z",
+    "meta_delivered_occurred_at": "2026-09-10T07:47:03Z",
+    "meta_delivered_verified_at": "2026-09-10T07:47:04.153105Z",
+    "note": "Read arrived before delivered; reservation state remained READ. Raw provider_status reflected the later delivered callback.",
+    "inbound_ledger_count": 1,
+    "batch_item_count": 1,
+    "outbound_reservation_count": 1,
+    "new_handoffs_after_recovery": 0,
+    "conversation_after": "waiting_customer",
+    "pending_action_after": "none",
+    "visually_confirmed_on_real_phone": true,
+    "phone_confirmation_source": "Owner explicitly selected that the reply appeared after sending the exact word مرحبا in this task.",
+    "runtime_correlation": {
+      "deployment_id": "dpl_FYdvfC5WNxw1zF9zAeTHSUeRvtn4",
+      "window_start": "2026-09-10T07:46:58Z",
+      "window_end": "2026-09-10T07:47:06Z",
+      "worker_requests": 1,
+      "webhook_requests_including_statuses": 4
+    },
+    "additional_real_greeting": {
+      "input": "هلا",
+      "persisted_at": "2026-09-10T07:45:02.502207Z",
+      "worker_state": "PROCESSED",
+      "attempt_count": 1,
+      "outbound_state": "READ",
+      "phone_confirmed": true
+    }
+  },
+  "scope": "Greeting/stale requirement-loop incident. Real phone evidence is from signed Meta delivery plus database/runtime correlation and explicit owner confirmation; no synthetic ingress was used for the phone retest.",
+  "targeted": {
+    "actual_semantic_handoff_replay": {
+      "action": "REPLY",
+      "goal": "BOOK_SERVICE",
+      "previous_loop_count": 4,
+      "previous_loop_key": "intent_confirmation",
+      "previous_semantic_action": "HANDOFF",
+      "requirement_loop": null,
+      "result": "PROCESSED",
+      "verification": "actual orchestrator harness; not real-phone proof"
+    },
+    "baseline_failed": 15,
+    "baseline_passed": 2,
+    "candidate_failed": 0,
+    "candidate_passed": 17,
+    "total": 17
+  },
+  "ui_recovery_fix": {
+    "candidate_sha": "9a00c43d67f5d3e8d25e4b5747a9a1fbe8e5fae6",
+    "ci_fail": 0,
+    "ci_job_id": 102784194604,
+    "ci_pass": 2724,
+    "ci_run_id": 34450274754,
+    "ci_skipped": 0,
+    "ci_tests": 2724,
+    "deployment_id": "dpl_FYdvfC5WNxw1zF9zAeTHSUeRvtn4",
+    "merge_sha": "d64815c2e1d7ad5a2491780585217eb323b21e9a",
+    "pull_request": "https://github.com/barman-systems/pilot/pull/696",
+    "reason": "Queued handoff had no direct return-to-AI control; existing authorized RPC supports queued handoffs. Adds direct UI control without manual takeover or backend permission change.",
+    "targeted_ui_and_governance_pass": 19,
+    "ui_regressions": 8
+  },
+  "unseen_regression": {
+    "baseline_passed": 102,
+    "candidate_passed": 102,
+    "cases": 105,
+    "new_discrepancies": 0,
+    "scope": "Same deterministic fixture benchmark; three previously disclosed model/oracle discrepancies retained."
+  },
+  "verdict": "PENDING_FINAL_CURRENT_RELEASE_REGRESSION",
+  "core_merge_sha": "0ae7e93b54478c35fa3da55c8c8202e139b62b8b",
+  "core_deployment_id": "dpl_3De4C1Sy5etgSc6soyqjKYmh6hf5",
+  "concurrent_release": {
+    "sha": "155a2f0d9c322067ec9d7e7bc143b605db504925",
+    "pull_request": 697,
+    "scope": "Separate WhatsApp transport refactor merged by concurrent work; not authored or merged as part of this bugfix.",
+    "deployment_id": "dpl_D9HcdoiBy4pJP5rg1wzx8XjgJYya",
+    "ready_at": "2026-09-10T07:48:09.068Z",
+    "phone_test_completed_before_this_release": true,
+    "retains_fix": true,
+    "production_journey_run_id": 34451656218,
+    "production_journey_status": "PENDING"
+  }
+}
