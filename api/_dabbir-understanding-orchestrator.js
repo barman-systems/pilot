@@ -12,7 +12,7 @@ const SEMANTIC_INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING
 const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
 const DETERMINISTIC_AUTHORITY_REASONS=new Set(['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST']);
 export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
-const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
+const safeMetrics=(s,d)=>boundedMetrics({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   missing_fields:s.missing_fields,provider_trace:s.provider_trace||null,decision_latency_ms:s.decision_latency_ms??null,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
   clarification_count:d.action==='CLARIFY'?1:0,voice:s.transcription_confidence!=null,
@@ -28,6 +28,20 @@ const safeMetrics=(s,d)=>({intent:d.intent,action:d.action,missing_count:s.missi
   goal_retained:s.cognition?.do_not_reset===true,queued_goals:arr(s.goal_queue).length,queued_goal_resumed:!!s.goal_queue_resumed,shadow:s.cognitive_shadow||null,
   reference_resolution:s.context_resolution||null,
   service_question:d.serviceQuestion?{field:d.serviceQuestion.field,verified:d.serviceQuestion.verified,service_id:d.serviceQuestion.service_id}:null});
+function boundedMetrics(metrics){
+ // PostgreSQL limits event metrics to 2048 bytes. Pretty JSON is a conservative
+ // upper bound for its jsonb text representation. Full bounded provider and
+ // context metadata remains in the same transaction's canonical state.
+ const fits=value=>Buffer.byteLength(JSON.stringify(value,null,1),'utf8')<=2048;
+ if(fits(metrics))return metrics;
+ const compact={...metrics,details_in_canonical_state:true};
+ if(compact.provider_trace){const {attempts,...trace}=compact.provider_trace;compact.provider_trace={...trace,attempt_count:attempts.length};}
+ for(const key of ['supported_actions','required_entities','activity_contract_version','quality_violations','shadow','service_question'])delete compact[key];
+ if(compact.reference_resolution)compact.reference_resolution={source:compact.reference_resolution.source,
+  resolved:arr(compact.reference_resolution.resolved).map(r=>r.field),unresolved:compact.reference_resolution.unresolved};
+ if(!fits(compact))throw Object.assign(new Error('SEMANTIC_METRICS_TOO_LARGE'),{code:'SEMANTIC_METRICS_TOO_LARGE'});
+ return compact;
+}
 const serviceLabel=s=>String(s?.name_ar||s?.name||s?.name_en||'').trim().slice(0,180);
 export function safeProviderTrace(metadata){
  if(!metadata||typeof metadata!=='object')return null;

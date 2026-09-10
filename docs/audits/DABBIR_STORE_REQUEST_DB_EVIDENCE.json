@@ -1,0 +1,14 @@
+{
+  "activity": "store",
+  "order_count": 0,
+  "rolled_back": true,
+  "handoff_count": 1,
+  "context_loaded": true,
+  "appointment_count": 0,
+  "conversation_state": "action_required",
+  "meta_delivery_proven": false,
+  "real_handoff_verified": true,
+  "order_execution_proven": false,
+  "duplicate_handoff_count": 0,
+  "canonical_decision_persisted": true
+}

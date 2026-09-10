@@ -101,6 +101,10 @@ function parseVehicleClass(raw) {
   if(/(?:^|\s)(?:صالون|saloon|sedan)(?:\s|$)/.test(t))return {value:'saloon',label:'صالون'};
   return null;
 }
+function parseDeliveryMode(raw) {
+  const t=normalizeSemanticText(raw).split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1);
+  return /(?:في الفرع|عندكم|at (?:the )?branch|at your (?:shop|salon))/.test(t)?'AT_BUSINESS':/(?:عند البيت|تعال عندي|عندي بالبيت|home visit|at my home)/.test(t)?'AT_CUSTOMER':/(?:اونلاين|عن بعد|online|remote)/.test(t)?'REMOTE':null;
+}
 
 function resolveCatalog(s,c,text,now,source) {
   const services=scoped(c.services,c),workers=scoped(c.workers,c);
@@ -245,8 +249,7 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     }
     const receipt=arr(c.location_receipts).find(x=>x.message_id===turn.id && x.business_id===c.business.id && x.conversation_id===c.conversation.id);
     if(receipt && validLocation(receipt.value))fact(s,'location',receipt.value,'PROVIDER_VERIFIED',1,stamp,{receipt_id:receipt.message_id,grounded_by:'SIGNED_WHATSAPP_LOCATION'});
-    const modeText=t.split(/(?:لا قصدي|قصدي|i mean|actually|instead)/).at(-1);
-    const explicitMode=/(?:في الفرع|عندكم|at (?:the )?branch|at your (?:shop|salon))/.test(modeText)?'AT_BUSINESS':/(?:عند البيت|تعال عندي|عندي بالبيت|home visit|at my home)/.test(modeText)?'AT_CUSTOMER':/(?:اونلاين|عن بعد|online|remote)/.test(modeText)?'REMOTE':null;
+    const explicitMode=parseDeliveryMode(raw);
     if(explicitMode && contract) {
       const matching=arr(contract.delivery_modes).filter(m=>m===explicitMode || (explicitMode==='AT_CUSTOMER' && m==='MOBILE'));
       if(matching.length===1)fact(s,'delivery_mode',matching[0],source,.99,stamp,{service_id:valueOf(s,'service')});
@@ -339,10 +342,14 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
         value=normalizeDeliveryMode(value);
         const contract=arr(c.activity_profile?.services).find(x=>x.service_id===valueOf(s,'service'));
         if(!arr(contract?.delivery_modes).includes(value))continue;
+        const stated=parseDeliveryMode(evidence);
+        grounded=stated===value||(stated==='AT_CUSTOMER'&&value==='MOBILE');
+        if(!grounded)continue;
       }
       if(key==='vehicle') {
         if(!['saloon','station'].includes(value))continue;
         grounded=parseVehicleClass(evidence)?.value===value;
+        if(!grounded)continue;
       }
       if(key==='property_details'){if(typeof value!=='string'||value.length>300)continue;grounded=value===evidence;}
       if(key==='date'){if(!/^20\d{2}-\d{2}-\d{2}$/.test(value))continue;grounded=parseDate(normalizeSemanticText(evidence),today)===value;}
