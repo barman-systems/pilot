@@ -15,6 +15,7 @@ const script=String.raw`(()=>{
     '.dabbirTakeover{min-height:44px!important;padding:9px 12px!important;border-radius:11px!important;font-size:12px!important;line-height:1.35!important;white-space:nowrap}',
     '.dabbirTakeover.take{border:1px solid #52652c;background:#26331a;color:#d7ff5f;font-weight:900}',
     '.dabbirTakeover.return{border:1px solid #35546b;background:#172b3a;color:#b6dcff;font-weight:900}',
+    '#dabbirReturnToAiBtn{grid-column:1/-1;justify-content:center}#dabbirReturnToAiBtn[hidden]{display:none!important}',
     '#screen-conversations .chatPanel{background:linear-gradient(180deg,#111315,#0d0f11)}',
     '#screen-conversations .chatHead{background:#121416}',
     '#screen-conversations #translateAll{border:1px solid #30363d!important;background:#181b1f!important;color:#d8dde2!important;border-radius:10px!important;font-size:12px!important;padding:9px 11px!important;min-height:44px!important}',
@@ -93,10 +94,11 @@ const script=String.raw`(()=>{
     wrap=document.createElement('div');
     wrap.id='dabbirChatControl';
     wrap.className='dabbirChatControl';
-    wrap.innerHTML='<span id="dabbirChatOwner" class="dabbirOwnerChip"></span><button id="dabbirTakeoverBtn" class="dabbirTakeover" type="button"></button>';
+    wrap.innerHTML='<span id="dabbirChatOwner" class="dabbirOwnerChip"></span><button id="dabbirTakeoverBtn" class="dabbirTakeover" type="button"></button><button id="dabbirReturnToAiBtn" class="dabbirTakeover return" type="button" hidden></button>';
     const translate=q('#translateAll');
     if(translate)head.insertBefore(wrap,translate);else head.appendChild(wrap);
     q('#dabbirTakeoverBtn').addEventListener('click',toggleTakeover);
+    q('#dabbirReturnToAiBtn').addEventListener('click',()=>toggleTakeover(true));
     return wrap;
   }
 
@@ -156,6 +158,8 @@ const script=String.raw`(()=>{
     const state=String(conversation?conversation.state:'');
     const owner=q('#dabbirChatOwner');
     const control=q('#dabbirTakeoverBtn');
+    const directReturn=q('#dabbirReturnToAiBtn');
+    if(directReturn){directReturn.textContent=t.returnAi;directReturn.hidden=state!=='action_required';}
     const input=q('#composer');
     const send=q('#sendBtn');
     const compose=input?input.closest('.compose'):null;
@@ -209,14 +213,18 @@ const script=String.raw`(()=>{
     return payload;
   }
 
-  async function toggleTakeover(){
-    const button=q('#dabbirTakeoverBtn');
+  async function toggleTakeover(forceReturn=false){
+    const directReturn=forceReturn===true;
+    const button=q(directReturn?'#dabbirReturnToAiBtn':'#dabbirTakeoverBtn');
     const conversation=currentConversation();
     if(!conversation||(button&&button.disabled))return;
+    if(directReturn&&conversation.state!=='action_required')return;
+    const selectedBusiness=currentBusinessId(),selectedConversation=currentConversationId();
     const t=copy();
-    const returning=conversation.state==='human_active';
+    const returning=directReturn||conversation.state==='human_active';
     const confirmed=window.__dabbirConfirm?await window.__dabbirConfirm({title:returning?t.returnConfirmTitle:t.takeoverConfirmTitle,body:returning?t.returnConfirmBody:t.takeoverConfirmBody,accept:t.continueAction,cancel:t.cancelAction}):window.confirm(returning?t.returnConfirmTitle:t.takeoverConfirmTitle);
     if(!confirmed)return;
+    if(currentBusinessId()!==selectedBusiness||currentConversationId()!==selectedConversation)return;
     if(button)button.disabled=true;
     try{
       if(returning){
@@ -227,7 +235,7 @@ const script=String.raw`(()=>{
         notify(t.takeoverOk);
       }
       if(typeof loadRuntime==='function')await loadRuntime(currentBusinessId(),currentConversationId());
-    }catch(error){notify((conversation.state==='human_active'?t.returnFail:t.takeoverFail)+(error&&error.message?' — '+error.message:''))}
+    }catch(error){notify((returning?t.returnFail:t.takeoverFail)+(error&&error.message?' — '+error.message:''))}
     finally{if(button)button.disabled=false;queueHumanUi()}
   }
 
