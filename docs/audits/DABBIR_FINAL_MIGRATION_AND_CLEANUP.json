@@ -1,0 +1,11 @@
+{
+  "scope": "Actual additive migration privilege, migration ledger and post-diagnostic cleanup readback",
+  "release_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+  "captured_at": "2026-09-10T05:32:57Z",
+  "anon_can_execute": false,
+  "authenticated_can_execute": false,
+  "service_role_can_execute": true,
+  "cognitive_rollout_rows": 1,
+  "migration_ledger_matches": 1,
+  "residual_worker_qa_businesses": 0
+}

@@ -1,0 +1,377 @@
+{
+  "scope": "Separate platform-wide BAR-12 launch readiness, not the conversational brain regression suite. Gate results retained without weakening or manually changing them.",
+  "baseline_run_id": 34396326137,
+  "final_run_id": 34440762022,
+  "reports": [
+    {
+      "label": "baseline",
+      "report": {
+        "schema_version": "dabbir_bar12_readiness_v3",
+        "generated_at": "2026-09-09T19:56:03.687Z",
+        "release_stage": "deployed",
+        "release_ready": false,
+        "verdict": "BLOCKED",
+        "blocker_count": 12,
+        "gates": [
+          {
+            "key": "public_launch_contract",
+            "state": "PASS",
+            "detail": "Canonical public launch origin matches the approved live deployment contract.",
+            "evidence": {
+              "state": "PUBLIC_PRODUCTION_READY",
+              "origin": "https://dabbir.bmalman.com"
+            }
+          },
+          {
+            "key": "release_state_machine",
+            "state": "BLOCKED",
+            "detail": "Release stopped at deployed: PRODUCTION_JOURNEY_NOT_VERIFIED.",
+            "evidence": {
+              "stage": "deployed",
+              "ready": false,
+              "reason": "PRODUCTION_JOURNEY_NOT_VERIFIED",
+              "expected_main_sha": "986379a1efc1122a23991cdb46231ab9164a6efb"
+            }
+          },
+          {
+            "key": "production_deployment",
+            "state": "PASS",
+            "detail": "Production is READY on the exact expected main SHA.",
+            "evidence": {
+              "deployment_id": "dpl_GMUA2v9gwSpCKdaewySBBu8DmxkH",
+              "source_commit": "986379a1efc1122a23991cdb46231ab9164a6efb"
+            }
+          },
+          {
+            "key": "end_to_end_journey",
+            "state": "BLOCKED",
+            "detail": "A Web-only journey cannot satisfy BAR-12; real external connection, inbound message, and approved reply must all be verified.",
+            "evidence": null
+          },
+          {
+            "key": "iphone_safari_ar",
+            "state": "PASS",
+            "detail": "Arabic iPhone Safari journey passed.",
+            "evidence": {
+              "verdict": "PASS",
+              "source_commit": "986379a1efc1122a23991cdb46231ab9164a6efb",
+              "journey_source_commit": "986379a1efc1122a23991cdb46231ab9164a6efb",
+              "evidence_mode": "exact_sha",
+              "evidence": "25_mobile_webkit_owner_journey+ar-AE_fixture"
+            }
+          },
+          {
+            "key": "iphone_safari_en",
+            "state": "PASS",
+            "detail": "English iPhone Safari journey passed.",
+            "evidence": {
+              "verdict": "PASS",
+              "source_commit": "986379a1efc1122a23991cdb46231ab9164a6efb",
+              "journey_source_commit": "986379a1efc1122a23991cdb46231ab9164a6efb",
+              "evidence_mode": "exact_sha",
+              "evidence": "25_mobile_webkit_owner_journey+en-US_fixture"
+            }
+          },
+          {
+            "key": "whatsapp_connection",
+            "state": "PASS",
+            "detail": "At least one real tenant WhatsApp connection must be operational and provider-verified.",
+            "evidence": {
+              "operational_connections": 1,
+              "verified_connections": 1
+            }
+          },
+          {
+            "key": "whatsapp_inbound",
+            "state": "PASS",
+            "detail": "At least one non-simulated WhatsApp inbound conversation/message is required.",
+            "evidence": {
+              "inbound_conversations": 3,
+              "inbound_messages": 118
+            }
+          },
+          {
+            "key": "whatsapp_reply",
+            "state": "BLOCKED",
+            "detail": "At least one WhatsApp reply/action must have verified_external_result=true.",
+            "evidence": {
+              "verified_replies": 0
+            }
+          },
+          {
+            "key": "feature_voice_notes",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Voice Notes must not inherit text-WhatsApp readiness; exact-production external voice inbound/outcome plus fail-closed uncertainty, tenant isolation and service-role-only proof are required.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "runtime_error_monitoring",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Runtime error monitoring must be queried for the exact production artifact.",
+            "evidence": null
+          },
+          {
+            "key": "alerting",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "An actual alert delivery path must be verified; a dashboard alone is not alerting evidence.",
+            "evidence": null
+          },
+          {
+            "key": "setup_time_metric",
+            "state": "PASS",
+            "detail": "Setup time must be measured from real business creation to real channel connection.",
+            "evidence": {
+              "setup_time_seconds": 409808
+            }
+          },
+          {
+            "key": "connection_success_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Connection success rate requires a durable attempt denominator; do not infer it from connection rows.",
+            "evidence": {
+              "connection_success_rate": null
+            }
+          },
+          {
+            "key": "messages_processed_metric",
+            "state": "PASS",
+            "detail": "Real processed channel messages are required for the messages-processed KPI.",
+            "evidence": {
+              "messages_processed": 118
+            }
+          },
+          {
+            "key": "human_handoff_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Human handoff rate must be measured against real external conversations.",
+            "evidence": {
+              "handoff_rate": 2.6666666666666665,
+              "routed_to_human": 8
+            }
+          },
+          {
+            "key": "satisfaction_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "User satisfaction requires at least one durable real feedback sample.",
+            "evidence": {
+              "samples": 0,
+              "score": null
+            }
+          },
+          {
+            "key": "critical_security",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical security gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "critical_financial",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical financial gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "critical_legal",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical legal gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          }
+        ]
+      },
+      "artifact_sha256": "9e0b1d861994cc95467d3d0dc641a290c4108de17a0595008fdad9bbc43d7136"
+    },
+    {
+      "label": "final",
+      "report": {
+        "schema_version": "dabbir_bar12_readiness_v3",
+        "generated_at": "2026-09-10T05:36:51.115Z",
+        "release_stage": "deployed",
+        "release_ready": false,
+        "verdict": "BLOCKED",
+        "blocker_count": 12,
+        "gates": [
+          {
+            "key": "public_launch_contract",
+            "state": "PASS",
+            "detail": "Canonical public launch origin matches the approved live deployment contract.",
+            "evidence": {
+              "state": "PUBLIC_PRODUCTION_READY",
+              "origin": "https://dabbir.bmalman.com"
+            }
+          },
+          {
+            "key": "release_state_machine",
+            "state": "BLOCKED",
+            "detail": "Release stopped at deployed: PRODUCTION_JOURNEY_NOT_VERIFIED.",
+            "evidence": {
+              "stage": "deployed",
+              "ready": false,
+              "reason": "PRODUCTION_JOURNEY_NOT_VERIFIED",
+              "expected_main_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1"
+            }
+          },
+          {
+            "key": "production_deployment",
+            "state": "PASS",
+            "detail": "Production is READY on the exact expected main SHA.",
+            "evidence": {
+              "deployment_id": "dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ",
+              "source_commit": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1"
+            }
+          },
+          {
+            "key": "end_to_end_journey",
+            "state": "BLOCKED",
+            "detail": "A Web-only journey cannot satisfy BAR-12; real external connection, inbound message, and approved reply must all be verified.",
+            "evidence": null
+          },
+          {
+            "key": "iphone_safari_ar",
+            "state": "PASS",
+            "detail": "Arabic iPhone Safari journey passed.",
+            "evidence": {
+              "verdict": "PASS",
+              "source_commit": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+              "journey_source_commit": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+              "evidence_mode": "exact_sha",
+              "evidence": "25_mobile_webkit_owner_journey+ar-AE_fixture"
+            }
+          },
+          {
+            "key": "iphone_safari_en",
+            "state": "PASS",
+            "detail": "English iPhone Safari journey passed.",
+            "evidence": {
+              "verdict": "PASS",
+              "source_commit": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+              "journey_source_commit": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+              "evidence_mode": "exact_sha",
+              "evidence": "25_mobile_webkit_owner_journey+en-US_fixture"
+            }
+          },
+          {
+            "key": "whatsapp_connection",
+            "state": "PASS",
+            "detail": "At least one real tenant WhatsApp connection must be operational and provider-verified.",
+            "evidence": {
+              "operational_connections": 1,
+              "verified_connections": 1
+            }
+          },
+          {
+            "key": "whatsapp_inbound",
+            "state": "PASS",
+            "detail": "At least one non-simulated WhatsApp inbound conversation/message is required.",
+            "evidence": {
+              "inbound_conversations": 3,
+              "inbound_messages": 119
+            }
+          },
+          {
+            "key": "whatsapp_reply",
+            "state": "BLOCKED",
+            "detail": "At least one WhatsApp reply/action must have verified_external_result=true.",
+            "evidence": {
+              "verified_replies": 0
+            }
+          },
+          {
+            "key": "feature_voice_notes",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Voice Notes must not inherit text-WhatsApp readiness; exact-production external voice inbound/outcome plus fail-closed uncertainty, tenant isolation and service-role-only proof are required.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "runtime_error_monitoring",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Runtime error monitoring must be queried for the exact production artifact.",
+            "evidence": null
+          },
+          {
+            "key": "alerting",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "An actual alert delivery path must be verified; a dashboard alone is not alerting evidence.",
+            "evidence": null
+          },
+          {
+            "key": "setup_time_metric",
+            "state": "PASS",
+            "detail": "Setup time must be measured from real business creation to real channel connection.",
+            "evidence": {
+              "setup_time_seconds": 409808
+            }
+          },
+          {
+            "key": "connection_success_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Connection success rate requires a durable attempt denominator; do not infer it from connection rows.",
+            "evidence": {
+              "connection_success_rate": null
+            }
+          },
+          {
+            "key": "messages_processed_metric",
+            "state": "PASS",
+            "detail": "Real processed channel messages are required for the messages-processed KPI.",
+            "evidence": {
+              "messages_processed": 119
+            }
+          },
+          {
+            "key": "human_handoff_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Human handoff rate must be measured against real external conversations.",
+            "evidence": {
+              "handoff_rate": 3,
+              "routed_to_human": 9
+            }
+          },
+          {
+            "key": "satisfaction_metric",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "User satisfaction requires at least one durable real feedback sample.",
+            "evidence": {
+              "samples": 0,
+              "score": null
+            }
+          },
+          {
+            "key": "critical_security",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical security gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "critical_financial",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical financial gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          },
+          {
+            "key": "critical_legal",
+            "state": "INSUFFICIENT_EVIDENCE",
+            "detail": "Critical legal gate must explicitly PASS before launch.",
+            "evidence": {
+              "verdict": null
+            }
+          }
+        ]
+      },
+      "artifact_sha256": "15a4869a99fff1c56251cd9810565560a49b0b17d5325c13de8c8cfcd4de1024"
+    }
+  ]
+}

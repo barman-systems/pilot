@@ -1,0 +1,23 @@
+{
+  "scope": "Exact b9c9b0ed verification window, actual Vercel runtime queries. No chain-of-thought or customer PII.",
+  "sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+  "deployment_id": "dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ",
+  "since": "2026-09-10T05:23:30Z",
+  "until": "2026-09-10T05:36:32Z",
+  "errors": [
+    {
+      "route": "/api/dabbir-ai-billing-reconcile-cron",
+      "count": 2,
+      "code": "AI_BILLING_LEDGER_HTTP_400",
+      "times": [
+        "05:30:20",
+        "05:35:20"
+      ]
+    }
+  ],
+  "semantic_contract_rejection_count": 0,
+  "baseline_window_billing_errors": 0,
+  "root_cause": "Provider report retained a deleted QA business identifier; the protected ledger RPC rejected it. Reproduced on actual PostgreSQL without writes.",
+  "fix_pr": 693,
+  "remaining_status": "Fix under candidate CI; scheduled production cron must be verified after deployment."
+}

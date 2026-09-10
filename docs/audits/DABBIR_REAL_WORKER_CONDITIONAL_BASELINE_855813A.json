@@ -1,0 +1,85 @@
+{
+  "scope": "Direct deployed worker invoked through its existing dispatch token, synthetic isolated QA message. Actual configured model, canonical state and availability SQL; no Meta connection or phone delivery.",
+  "release_sha": "855813a151c832119600a4521a1006bf401af7dc",
+  "fixture": {
+    "batch": "f1eb237e-e639-440e-a39f-01050089a3b6",
+    "business": "5ac3f3e4-6e94-4e6a-b0c5-229903086409",
+    "conversation": "e955b80c-cdb1-47d9-a95f-ea118a399e15",
+    "expected_next_date": "2026-09-11",
+    "first_date": "2026-09-10",
+    "owner": "a272142c-9238-459c-904a-2b97c97eb6a3",
+    "preexisting_bookings": 1,
+    "request_id": 151,
+    "scope": "REAL_DEPLOYED_WORKER_MODEL_AND_DATABASE_NO_META_CONNECTION"
+  },
+  "http": {
+    "status_code": 202,
+    "timed_out": false
+  },
+  "readback": {
+    "action_ledger_rows": 0,
+    "appointments": 1,
+    "attempt_count": 1,
+    "batch_state": "RETRY",
+    "date": "2026-09-10",
+    "date_transition": null,
+    "goal": "BOOK_SERVICE",
+    "last_error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+    "last_tool_result": {
+      "action": "CHECK_AVAILABILITY",
+      "at": "2026-09-10T05:13:53.672152+00:00",
+      "slot_count": 0,
+      "source": "DATABASE_FACT"
+    },
+    "meta_connections": 0,
+    "missing_fields": [],
+    "outbound_reservations": 0,
+    "pending_action": "CHECK_AVAILABILITY",
+    "provider_trace": {
+      "actual_cost_usd": null,
+      "attempts": [
+        {
+          "latency_ms": 552,
+          "model": "gemini-3.7-flash",
+          "provider": "google-gemini",
+          "status": 429
+        },
+        {
+          "latency_ms": 1092,
+          "model": "openai/gpt-oss-20b",
+          "provider": "groq",
+          "status": 400
+        },
+        {
+          "latency_ms": 858,
+          "model": "openai/gpt-oss-20b",
+          "provider": "groq",
+          "status": 200
+        }
+      ],
+      "fallback_used": true,
+      "latency_ms": 2509,
+      "model": "openai/gpt-oss-20b",
+      "provider": "groq",
+      "tokens": {
+        "input": 1941,
+        "output": 273,
+        "reasoning": 56
+      }
+    },
+    "semantic_version": 1
+  },
+  "checks": {
+    "goal_retained": true,
+    "real_model_trace": true,
+    "real_empty_availability": true,
+    "second_date_executed": false,
+    "missing_connection_denied": true,
+    "no_outbound": true,
+    "no_new_bookings": true
+  },
+  "cleanup": {
+    "remaining_business": 0,
+    "remaining_owner": 0
+  }
+}

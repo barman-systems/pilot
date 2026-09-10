@@ -1,0 +1,146 @@
+{
+  "scope": "Direct existing deployed worker + actual model + actual canonical SQL + availability tools; isolated synthetic QA tenant with no Meta connection or phone. No real-device proof.",
+  "release": {
+    "commit_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+    "deployment_id": "dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ",
+    "environment": "production",
+    "git_provider": "github",
+    "git_ref": "main",
+    "ok": true,
+    "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
+    "repository": "barman-systems/pilot"
+  },
+  "fixture": {
+    "batch": "d9227387-545e-40ea-b220-9c47c24b50c1",
+    "business": "3fa80c17-eccd-4542-a7d6-39225abdc764",
+    "conversation": "614b1bf4-30bb-4c1f-b624-eb0be990491d",
+    "expected_next_date": "2026-09-11",
+    "first_date": "2026-09-10",
+    "owner": "db5dde39-fe8a-40d8-9ae3-aaa533621de6",
+    "preexisting_bookings": 1,
+    "request_id": 152,
+    "scope": "REAL_DEPLOYED_WORKER_MODEL_AND_DATABASE_NO_META_CONNECTION"
+  },
+  "first_attempt": {
+    "action_ledger_rows": 0,
+    "appointments": 1,
+    "attempt_count": 1,
+    "batch_state": "RETRY",
+    "date": "2026-09-11",
+    "date_transition": {
+      "at": "2026-09-10T05:24:15.362084+00:00",
+      "from": "2026-09-10",
+      "from_version": 1,
+      "reason": "EXPLICIT_ALTERNATIVE_AFTER_EMPTY_READ",
+      "to": "2026-09-11",
+      "to_version": 2
+    },
+    "goal": "BOOK_SERVICE",
+    "last_error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+    "last_tool_result": {
+      "action": "CHECK_AVAILABILITY",
+      "at": "2026-09-10T05:24:15.434385+00:00",
+      "slot_count": 3,
+      "source": "DATABASE_FACT"
+    },
+    "meta_connections": 0,
+    "missing_fields": [],
+    "outbound_reservations": 0,
+    "pending_action": "CHECK_AVAILABILITY",
+    "provider_trace": {
+      "actual_cost_usd": 0.00255825,
+      "attempts": [
+        {
+          "latency_ms": 582,
+          "model": "gemini-3.7-flash",
+          "provider": "google-gemini",
+          "status": 429
+        },
+        {
+          "latency_ms": 35,
+          "model": "openai/gpt-oss-20b",
+          "provider": "groq",
+          "status": 429
+        },
+        {
+          "latency_ms": 5002,
+          "model": null,
+          "provider": "cloudflare-workers-ai",
+          "status": 0
+        },
+        {
+          "latency_ms": 3257,
+          "model": "google/gemini-3.7-flash",
+          "provider": "vercel-ai-gateway",
+          "status": 200
+        }
+      ],
+      "fallback_used": true,
+      "latency_ms": 9073,
+      "model": "google/gemini-3.7-flash",
+      "provider": "vercel-ai-gateway",
+      "tokens": {
+        "input": 1986,
+        "output": 285,
+        "reasoning": 0
+      }
+    },
+    "semantic_version": 2
+  },
+  "retry_dispatch": {
+    "requests": [
+      153,
+      154
+    ],
+    "responses": [
+      {
+        "error_msg": null,
+        "id": 154,
+        "status_code": 202,
+        "timed_out": false
+      },
+      {
+        "error_msg": null,
+        "id": 153,
+        "status_code": 202,
+        "timed_out": false
+      }
+    ],
+    "readback": {
+      "appointments": 1,
+      "attempt_count": 3,
+      "batch_state": "RETRY",
+      "date": "2026-09-11",
+      "date_transitions": 1,
+      "goal": "BOOK_SERVICE",
+      "last_error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+      "last_tool_result": {
+        "action": "CHECK_AVAILABILITY",
+        "at": "2026-09-10T05:25:32.340505+00:00",
+        "slot_count": 3,
+        "source": "DATABASE_FACT"
+      },
+      "outbound_reservations": 0,
+      "semantic_version": 2
+    }
+  },
+  "checks": {
+    "goal_retained": true,
+    "real_model": true,
+    "canonical_date_advanced": true,
+    "real_second_date_slots": true,
+    "initial_empty_read_required": true,
+    "retry_preserves_date": true,
+    "retry_preserves_version": true,
+    "exactly_one_date_transition": true,
+    "no_new_booking": true,
+    "no_outbound_reservation": true,
+    "missing_connection_denied": true,
+    "cleanup": true
+  },
+  "cleanup": {
+    "remaining_business": 0,
+    "remaining_owner": 0
+  },
+  "meta_delivery_proven": false
+}

@@ -1,0 +1,135 @@
+{
+  "cleanup": {
+    "remaining_business": 0,
+    "remaining_owner": 0
+  },
+  "concurrent_booking": [
+    {
+      "finished": "2026-09-10T03:46:30.38702+00:00",
+      "result": {
+        "appointment_id": "a893e36c-096b-4226-9d57-6f8397ad2878",
+        "branch_id": "b07e5cda-a6b5-4b6c-a9d4-91ad5d0acb82",
+        "business_id": "aab6cae1-34a1-43ed-9c0e-596d4047e8c9",
+        "confirmation_gate": "none",
+        "currency_code": "AED",
+        "customer_id": "793c1b04-95da-431b-9484-77dcb33cd874",
+        "deposit_currency_code": "AED",
+        "deposit_required_amount": 0,
+        "ends_at": "2026-09-11T15:00:00+00:00",
+        "idempotent_replay": false,
+        "ok": true,
+        "payment_status": "unpaid",
+        "price": 50,
+        "provider_confirmation": "PENDING_DELIVERY",
+        "service_id": "20e54b66-bed3-4cc8-aab8-82de328df9a6",
+        "service_name": "\u063a\u0633\u064a\u0644 \u062a\u062c\u0631\u064a\u0628\u064a",
+        "starts_at": "2026-09-11T14:00:00+00:00",
+        "status": "confirmed",
+        "timezone": "Asia/Dubai",
+        "verified": true,
+        "worker_id": null,
+        "worker_name": null
+      },
+      "session": 1034986,
+      "started": "2026-09-10T03:46:22.319306+00:00"
+    },
+    {
+      "finished": "2026-09-10T03:46:30.406536+00:00",
+      "result": {
+        "appointment_id": "a893e36c-096b-4226-9d57-6f8397ad2878",
+        "branch_id": "b07e5cda-a6b5-4b6c-a9d4-91ad5d0acb82",
+        "business_id": "aab6cae1-34a1-43ed-9c0e-596d4047e8c9",
+        "confirmation_gate": "none",
+        "currency_code": "AED",
+        "customer_id": "793c1b04-95da-431b-9484-77dcb33cd874",
+        "deposit_currency_code": "AED",
+        "deposit_required_amount": 0,
+        "ends_at": "2026-09-11T15:00:00+00:00",
+        "idempotent_replay": true,
+        "ok": true,
+        "payment_status": "unpaid",
+        "price": 50,
+        "provider_confirmation": "PENDING_DELIVERY",
+        "service_id": "20e54b66-bed3-4cc8-aab8-82de328df9a6",
+        "service_name": "\u063a\u0633\u064a\u0644 \u062a\u062c\u0631\u064a\u0628\u064a",
+        "starts_at": "2026-09-11T14:00:00+00:00",
+        "status": "confirmed",
+        "timezone": "Asia/Dubai",
+        "verified": true,
+        "worker_id": null,
+        "worker_name": null
+      },
+      "session": 1034990,
+      "started": "2026-09-10T03:46:24.100867+00:00"
+    },
+    {
+      "finished": "2026-09-10T03:46:30.397692+00:00",
+      "result": {
+        "appointment_id": "a893e36c-096b-4226-9d57-6f8397ad2878",
+        "branch_id": "b07e5cda-a6b5-4b6c-a9d4-91ad5d0acb82",
+        "business_id": "aab6cae1-34a1-43ed-9c0e-596d4047e8c9",
+        "confirmation_gate": "none",
+        "currency_code": "AED",
+        "customer_id": "793c1b04-95da-431b-9484-77dcb33cd874",
+        "deposit_currency_code": "AED",
+        "deposit_required_amount": 0,
+        "ends_at": "2026-09-11T15:00:00+00:00",
+        "idempotent_replay": true,
+        "ok": true,
+        "payment_status": "unpaid",
+        "price": 50,
+        "provider_confirmation": "PENDING_DELIVERY",
+        "service_id": "20e54b66-bed3-4cc8-aab8-82de328df9a6",
+        "service_name": "\u063a\u0633\u064a\u0644 \u062a\u062c\u0631\u064a\u0628\u064a",
+        "starts_at": "2026-09-11T14:00:00+00:00",
+        "status": "confirmed",
+        "timezone": "Asia/Dubai",
+        "verified": true,
+        "worker_id": null,
+        "worker_name": null
+      },
+      "session": 1034989,
+      "started": "2026-09-10T03:46:24.078226+00:00"
+    }
+  ],
+  "concurrent_outbound_denied": [
+    {
+      "blocked": true,
+      "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+      "finished": "2026-09-10T03:46:43.48342+00:00",
+      "session": 1034993,
+      "started": "2026-09-10T03:46:35.463106+00:00"
+    },
+    {
+      "blocked": true,
+      "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+      "finished": "2026-09-10T03:46:43.501995+00:00",
+      "session": 1034999,
+      "started": "2026-09-10T03:46:39.053434+00:00"
+    },
+    {
+      "blocked": true,
+      "error": "WHATSAPP_TENANT_CONNECTION_NOT_FOUND",
+      "finished": "2026-09-10T03:46:43.493403+00:00",
+      "session": 1034998,
+      "started": "2026-09-10T03:46:38.952066+00:00"
+    }
+  ],
+  "finished_at": "2026-09-10T03:46:57.408Z",
+  "late_decision": {
+    "blocked": true,
+    "error": "SEMANTIC_SUPERSEDED"
+  },
+  "message_revision": 3,
+  "meta_delivery_proven": false,
+  "outbound_new_reservations": 0,
+  "phase": "late_decision",
+  "readback": {
+    "bookings": 1,
+    "ledger_rows": 1
+  },
+  "scope": "Real concurrent PostgreSQL sessions in an isolated synthetic QA tenant; actual booking deduplication and denied unverified-Meta outbound attempts, not successful phone delivery.",
+  "started_at": "2026-09-10T03:46:18.853Z",
+  "verdict": "PASS",
+  "workflow_run_id": 34434592942
+}

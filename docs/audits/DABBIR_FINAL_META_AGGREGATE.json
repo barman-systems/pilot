@@ -1,0 +1,66 @@
+{
+  "scope": "Read-only production event aggregates; no post-release real-phone round trip observed",
+  "events": [
+    {
+      "direction": "inbound",
+      "event_type": "message",
+      "provider_status": "received",
+      "provider_verified": true,
+      "events": 119,
+      "latest_recorded_at": "2026-09-10 02:14:43.899357+00"
+    },
+    {
+      "direction": "outbound",
+      "event_type": "message",
+      "provider_status": "delivered",
+      "provider_verified": true,
+      "events": 35,
+      "latest_recorded_at": "2026-09-09 10:09:40.231286+00"
+    },
+    {
+      "direction": "outbound",
+      "event_type": "message",
+      "provider_status": "read",
+      "provider_verified": true,
+      "events": 69,
+      "latest_recorded_at": "2026-09-09 14:21:54.743778+00"
+    },
+    {
+      "direction": "outbound",
+      "event_type": "message",
+      "provider_status": "sent",
+      "provider_verified": true,
+      "events": 1,
+      "latest_recorded_at": "2026-09-08 10:59:10.109163+00"
+    },
+    {
+      "direction": "status",
+      "event_type": "status",
+      "provider_status": "delivered",
+      "provider_verified": true,
+      "events": 105,
+      "latest_recorded_at": "2026-09-09 14:21:55.935838+00"
+    },
+    {
+      "direction": "status",
+      "event_type": "status",
+      "provider_status": "read",
+      "provider_verified": true,
+      "events": 105,
+      "latest_recorded_at": "2026-09-09 14:21:56.11136+00"
+    },
+    {
+      "direction": "status",
+      "event_type": "status",
+      "provider_status": "sent",
+      "provider_verified": false,
+      "events": 106,
+      "latest_recorded_at": "2026-09-09 14:21:55.58831+00"
+    }
+  ],
+  "browser_gate": "WHATSAPP_WEB_DEVICE_LINK_REQUIRED",
+  "browser_gate_rechecked": true,
+  "real_phone_proof": false,
+  "captured_at": "2026-09-10T05:32:57Z",
+  "release_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1"
+}

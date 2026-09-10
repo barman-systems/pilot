@@ -1,0 +1,84 @@
+{
+  "release": {
+    "commit_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+    "deployment_id": "dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ",
+    "environment": "production",
+    "git_provider": "github",
+    "git_ref": "main",
+    "ok": true,
+    "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
+    "repository": "barman-systems/pilot"
+  },
+  "scope": "Existing deployed worker and real database for a store request, with an unconfigured service catalogue. Deterministic safe handoff; no model call, no retail order execution, no Meta connection or phone delivery.",
+  "fixture": {
+    "batch": "75e2eb65-377f-426a-bac1-f42e365aab77",
+    "business": "bbd935f8-0ca1-422d-b277-500ac362fa8d",
+    "conversation": "211d8ece-c54e-4890-889c-b4c6f2e3f006",
+    "owner": "8bff2d0d-0dc0-469f-9705-372b88632118",
+    "request_id": 155,
+    "scope": "REAL_DEPLOYED_WORKER_STORE_REQUEST_NO_META_CONNECTION"
+  },
+  "first_attempt": {
+    "appointments": 0,
+    "attempt_count": 1,
+    "batch_state": "HUMAN_REQUIRED",
+    "conversation_state": "action_required",
+    "decision_action": "HANDOFF",
+    "goal": "UNKNOWN",
+    "handoffs": 1,
+    "last_error": "NO_CONFIGURED_SERVICE_CAPABILITY",
+    "orders": 0,
+    "outbound_reservations": 0,
+    "pending_action": "handoff",
+    "provider_trace": null,
+    "semantic_version": 1
+  },
+  "duplicate_dispatch": {
+    "request_id": 156,
+    "http": [
+      {
+        "error_msg": null,
+        "id": 155,
+        "status_code": 202,
+        "timed_out": false
+      },
+      {
+        "error_msg": null,
+        "id": 156,
+        "status_code": 202,
+        "timed_out": false
+      }
+    ],
+    "readback": {
+      "appointments": 0,
+      "attempt_count": 1,
+      "batch_state": "HUMAN_REQUIRED",
+      "conversation_state": "action_required",
+      "decision_action": "HANDOFF",
+      "goal": "UNKNOWN",
+      "handoffs": 1,
+      "last_error": "NO_CONFIGURED_SERVICE_CAPABILITY",
+      "orders": 0,
+      "outbound_reservations": 0,
+      "pending_action": "handoff",
+      "provider_trace": null,
+      "semantic_version": 1
+    }
+  },
+  "checks": {
+    "durable_handoff": true,
+    "conversation_requires_action": true,
+    "canonical_pending_handoff": true,
+    "terminal_batch": true,
+    "duplicate_did_not_reprocess": true,
+    "no_invented_order": true,
+    "no_booking": true,
+    "no_outbound": true,
+    "cleanup": true
+  },
+  "cleanup": {
+    "remaining_business": 0,
+    "remaining_owner": 0
+  },
+  "limitation": "Goal remains UNKNOWN. This demonstrates safe request escalation based on business capability, not an order management brain."
+}
