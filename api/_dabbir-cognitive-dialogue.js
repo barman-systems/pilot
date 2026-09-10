@@ -1,4 +1,4 @@
-import {normalizeSemanticText,clarification} from './_dabbir-semantic-engine-core.js';
+import {normalizeSemanticText,clarification,greetingOnly} from './_dabbir-semantic-engine-core.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {partitionGoalRequests} from './_dabbir-goal-queue.js';
 import {answerServiceQuestion} from './_dabbir-service-question.js';
@@ -82,6 +82,7 @@ export function cognitiveReduce(args,reduce){
    dialogue:{message_role:activeJourney(previous)?'SIDE_QUESTION':'ANSWER_TO_PENDING_QUESTION',evidence:continuation.evidence,invalidated_fields:[]}}};
  }
  const d=groundedDialogue(args.proposal,c);
+ const social=greetingOnly(c.batch_messages);
  let prepared=previous?structuredClone(previous):previous;
  // Invalidating a fact can only remove authority. The model cannot replace it
 // with business truth or invalidate an unrelated tenant's saved state.
@@ -91,10 +92,19 @@ export function cognitiveReduce(args,reduce){
    delete prepared.entities.slot;
   }
  }
- let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:d?.message_role||null}});
+ let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:social?'SOCIAL':d?.message_role||(args.proposal?.serviceQuestion?'SIDE_QUESTION':null)}});
  let {state,decision}=result;
  if(continuation&&previous?.language)state.language=previous.language;
  if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
+ if((social||d?.message_role==='SOCIAL')&&!state.unresolved_references.includes('voice_transcript')){
+  state.requirement_loop=null;state.pending_action='REPLY';state.sub_intent='GREETING';
+  // Keep known facts, the unresolved requirement and the unconfirmed intent.
+  // No slot/tool authority can be obtained from a greeting.
+  delete state.entities.slot;
+  const salam=/^(?:و?عليكم السلام|السلام)/.test(normalizeSemanticText(text(c)));
+  decision={...decision,action:'REPLY',confidence:1,riskLevel:'LOW',reasonCode:'GREETING',reply:state.language==='en'?'Hello. How can I help you?':salam?'وعليكم السلام، حياك. كيف أقدر أساعدك؟':'هلا، حياك. كيف أقدر أساعدك؟'};
+  return decisionView(state,decision,previous,c,'SOCIAL');
+ }
  const partition=partitionGoalRequests(args,reduce);
  if(partition?.invalid){
   state.intent_confirmed=false;delete state.entities.slot;delete state.entities.appointment;
