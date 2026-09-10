@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
+import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate, captureSidebarFailure } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
 import {runOwnerAiBookingJourney} from '../.github/scripts/dabbir-owner-ai-booking-journey.mjs';
 import { runBookingOwnerJourney } from '../.github/scripts/dabbir-booking-owner-journey.mjs';
 
@@ -591,6 +591,7 @@ async function browserJourney() {
       if (activeEntry && activeEntry.status !== 'BROKEN_TARGET') activeEntry.status = 'ACTION_FAILED';
       visual.interrupted = true;
       visual.error = String(error.message);
+      visual.sidebar_failure = await captureSidebarFailure(page);
       throw error;
     } finally {
       // Emit even on a failed click/wait/screenshot, before writing the artifact.
