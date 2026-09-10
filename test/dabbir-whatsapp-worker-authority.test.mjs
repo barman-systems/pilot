@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { processClaimedWhatsAppAiBatch } from '../api/_dabbir-whatsapp-ai-core.js';
 import { processWhatsAppDispatchWithServiceMenu, processWhatsAppRecoveryWithServiceMenu } from '../api/_dabbir-whatsapp-dispatch.js';
-import { context, offered, slots } from './fixtures/understanding/cases.mjs';
+import { context, offered, slots, ids } from './fixtures/understanding/cases.mjs';
 
 const fetchBefore = global.fetch;
 const credentialName = 'SUPABASE_SERVICE_ROLE_KEY';
@@ -66,6 +66,23 @@ test('optional operator telemetry failure does not create an alternate booking e
   const h = worker({ failure: 'dabbir_record_ai_operator_decision_v1' });
   assert.equal((await h.run()).action, 'CREATE_BOOKING');
   assert.equal(h.calls.filter(c => c.name === 'dabbir_semantic_execute_v2').length, 1);
+});
+
+test('the active decision ledger is tenant-scoped and records the authorized mutation before execution', async () => {
+  const h = worker();
+  await h.run();
+  const ledgers = h.calls.filter(c => c.name === 'dabbir_record_ai_operator_decision_v1');
+  assert.equal(ledgers.length, 1);
+  const args = ledgers[0].args;
+  assert.equal(args.p_business_id, ids.business);
+  assert.equal(args.p_conversation_id, ids.conversation);
+  assert.equal(args.p_batch_id, 'fixture-batch');
+  assert.equal(args.p_action, 'CREATE_BOOKING');
+  assert.equal(args.p_intent, 'BOOKING');
+  assert.equal(args.p_risk_level, 'MEDIUM');
+  assert.deepEqual(args.p_missing_fields, []);
+  assert.ok(Number.isFinite(args.p_confidence) && args.p_confidence > 0 && args.p_confidence <= 1);
+  assert.ok(h.calls.indexOf(ledgers[0]) < h.calls.findIndex(c => c.name === 'dabbir_semantic_execute_v2'));
 });
 
 for (const entry of ['dispatch', 'recovery']) {

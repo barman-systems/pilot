@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import {
   isConversationNudge,
   looksLikeServiceIntent,
@@ -11,7 +10,8 @@ import {
 
 const fixedNow=new Date('2026-09-07T07:31:00.000Z'); // 11:31 Asia/Dubai
 const timezone='Asia/Dubai';
-const menuSource=fs.readFileSync(new URL('../api/_dabbir-whatsapp-service-menu.js',import.meta.url),'utf8');
+// These helpers are still imported by the active semantic engine.
+// Live presentation/selection is covered by the service-presentation suite.
 
 test('Gulf no-space service discovery wording opens the deterministic menu',()=>{
   for(const text of ['شوعندكم','شو عندكم','وشعندكم','شنو عندكم','ايش تقدمون','شو خدماتكم']){
@@ -53,13 +53,9 @@ test('punctuation nudge can recover the previous customer time instead of invoki
   ]);
   assert.equal(previous,'اليوم الساعه 5');
   assert.equal(resolveRequestedLocal(previous,timezone,{now:fixedNow}).local,'2026-09-07T17:00:00');
-  assert.match(menuSource,/previousCustomerText\(context\?\.history\)/);
-  assert.match(menuSource,/isConversationNudge\(text\)/);
 });
 
-test('an unavailable service-like request routes to the verified catalog instead of planner guessing',()=>{
+test('service-intent helper recognizes service wording without consuming human requests',()=>{
   assert.equal(looksLikeServiceIntent('ابي اغسل سياره'),true);
   assert.equal(looksLikeServiceIntent('ابي اكلم شخص'),false);
-  assert.match(menuSource,/if\(looksLikeServiceIntent\(text\)\)/);
-  assert.match(menuSource,/sendServiceMenu\(claim,context,lang\)/);
 });

@@ -2,21 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// Native bounded role history and invalid provider envelopes are behavior-tested
+// by dabbir-semantic-role-history and dabbir-semantic-provider-contract suites.
 const ai=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
-const menu=fs.readFileSync(new URL('../api/_dabbir-whatsapp-service-menu.js',import.meta.url),'utf8');
+const menu=fs.readFileSync(new URL('../api/_dabbir-whatsapp-dispatch.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907095800_dabbir_whatsapp_ai_service_selected_state_v1.sql',import.meta.url),'utf8');
-
-test('planner receives bounded conversation history and filters legacy control envelopes',()=>{
-  assert.match(ai,/conversation_history:plannerHistory\(context\)/);
-  assert.match(ai,/sender==='ai'&&looksLikePlannerEnvelope\(body\)/);
-  assert.match(ai,/Use conversation_history and pending state for short follow-ups/);
-});
-
-test('malformed planner output can never be sent verbatim to a customer',()=>{
-  assert.match(ai,/AI_PLANNER_CONTRACT_INVALID/);
-  assert.match(ai,/function customerReply/);
-  assert.doesNotMatch(ai,/parseDecision\(ai\.reply\)\|\|\{action:'REPLY',reply:clean\(ai\.reply/);
-});
 
 test('general AI delivery is conversation and branch scoped',()=>{
   assert.match(ai,/loadConversationConnectionWithServiceKey/);
@@ -25,7 +15,8 @@ test('general AI delivery is conversation and branch scoped',()=>{
 });
 
 test('service selection is a valid durable AI state',()=>{
-  assert.match(menu,/setState\(context,'service_selected'/);
+  // The SQL compatibility state remains valid; active service presentation is
+  // exercised with version/lock/receipt assertions in the presentation suite.
   assert.match(migration,/service_selected/);
   assert.match(migration,/dabbir_ai_conversation_state_action_check/);
   assert.match(migration,/v_action not in \('none','service_selected','choose_slot'/);

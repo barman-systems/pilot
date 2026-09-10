@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
 const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 const imports = source => [...source.matchAll(/(?:\bfrom\s*|\bimport\s*)['"]([^'"]+)['"]/g)].map(m => m[1]);
@@ -28,7 +28,7 @@ test('worker and recovery route through the same dispatch owner', () => {
 test('new API modules cannot create another direct Meta messages sender', () => {
   // Explicit migration inventory. Each exception must disappear only after its
   // callers move and exact-SHA Production proof is retained.
-  const allowed = new Set(['api/_whatsapp-message-transport.js', 'api/_dabbir-whatsapp-service-menu.js']);
+  const allowed = new Set(['api/_whatsapp-message-transport.js']);
   function visit(directory) {
     for (const entry of readdirSync(new URL('../' + directory, import.meta.url), { withFileTypes: true })) {
       const file = directory + '/' + entry.name;
@@ -39,4 +39,11 @@ test('new API modules cannot create another direct Meta messages sender', () => 
     }
   }
   visit('api');
+});
+
+test('claimed WhatsApp worker cannot regain a parallel booking executor or retired dispatcher', () => {
+  const source = read('api/_dabbir-whatsapp-ai-core.js');
+  assert.doesNotMatch(source, /dabbir_whatsapp_ai_(?:create|cancel|reschedule)_booking/);
+  assert.doesNotMatch(source, /export\s+async\s+function\s+processWhatsAppAi(?:DispatchToken|Recovery)/);
+  assert.equal(existsSync(new URL('../api/_dabbir-whatsapp-service-menu.js', import.meta.url)), false);
 });

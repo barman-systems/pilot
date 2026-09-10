@@ -40,6 +40,30 @@ for state versions, tenant and branch scope, activity requirements and mutations
 The deployment topology remains the existing modular monolith plus PostgreSQL
 and its existing scheduled/Edge adapters. No framework or service is added.
 
+## Channel entrypoints and scope of convergence
+
+| Channel / operation | Actual caller path | Shared authority today | Remaining separation |
+|---|---|---|---|
+| Meta customer message | Signed webhook → live-core ingestion RPC → durable worker/cron → claimed core → `runUnderstandingTurn` | Database batch/CAS/activity/execution boundaries | Legacy JS retained until deployed caller proof |
+| Meta app contact/history/echo | Signed webhook → `_whatsapp-coexistence.js::persistCoexistenceEvent` → existing Coexistence RPCs | Signature/connection scope and event ledger | Customer resolver migration prepared in #701 |
+| Human WhatsApp reply | `dabbir-whatsapp-reply.js` → owner authorization → reserve → `sendMetaText` → finalizer/readback | Shared text transport; DB reservation/receipt | Human attribution and approval remain at the human adapter |
+| Reminder template | `salon-reminders-cron.js` → protected claim → `sendMetaTemplate` → notification finalizer | Shared template transport | Notification claim/outcome is a distinct operation |
+| Web customer message | `app.js`, `chat-customer.js`, `mobile/chat-send.js` → `chat-send.js` | Auth/RLS, handoff policy, `_ai-core.js` provider | Separate catalog/read/reply logic; it does not call the WhatsApp Brain |
+| Owner AI booking | `ai-business-operator.js` → `_dabbir-owner-booking.js` → `dabbir_owner_activity_booking_v1` | Activity/confirmation/appointment database guards | Quote/approval/idempotency entrypoint remains separate |
+| Salon booking/update | `salon-operations.js` → quick-book/transition/rebook RPCs or authenticated appointment PATCH | RLS and mandatory appointment triggers | Operation semantics require per-operation consolidation |
+| General runtime booking | `dabbir-runtime.js::createAppointment` → authenticated appointment POST | RLS and mandatory appointment triggers | Separate writer remains under investigation |
+
+The full Production browser journey exercises the web/owner paths and protected
+real-provider probes. It does not prove an actual customer Meta round trip.
+Shared transport/worker behavior has separate isolated contract tests. Web reply
+logic has not been silently replaced by the WhatsApp conversation pipeline.
+
+Oversized-module inventory at the integrated pre-removal tree: daily operator
+665 lines, runtime 602, embedded completion 532, customer activation UI 524,
+embedded UI 514, web chat 482, embedded core 472, semantic engine core 471,
+provider core 438 and fast runtime 435. Size is a review signal, not sufficient
+reason to split a verified module. The Brain is not restructured for line count.
+
 ## Contracts and canonical owners
 
 | Boundary | Current owner | Input → output | Allowed dependencies | Failure behavior | Verification |
@@ -232,10 +256,10 @@ It uses the parser shipped in the pinned Node 24 runtime, introduces no producti
 dependency, and fails on import cycles. Its local reachability is conservative
 and limited to top-level function declarations; nonliteral imports/eval are
 listed as hazards. It is an inspection tool, not an automatic deletion tool.
-Prepared tree: 290 API JS modules, 522 literal import edges, zero cycles, 44 local
+Pre-removal tree: 290 API JS modules, 522 literal import edges, zero cycles, 44 local
 unreachable candidates. The complete 2822-test integrated local suite passes, zero skipped, including
 the concurrently deployed independent-read fix without alteration.
-Seven new worker cases exercise the actual claimed worker and versioned executor,
+Eight new worker cases exercise the actual claimed worker and versioned executor,
 so future legacy deletion cannot rely only on matching strings in dead code.
 
 `verification-checkpoint.json` retains exact deployment/run/artifact identity,
@@ -248,6 +272,40 @@ conversation authority. These replace no security or Production gate.
 
 Slice 2 functional journeys all passed, including 13 isolation checks, but its
 first final release identity check failed because concurrent main advanced to
-`4ef4fb47ac7474757ce8b5972a14b4293501a7b6`. The complete current-main journey
-must pass before a subsequent merge or legacy deletion; partial success is
-not used as deletion permission.
+`4ef4fb47ac7474757ce8b5972a14b4293501a7b6`. The subsequent complete journey on
+that exact current-main SHA passed Arabic, iPhone, iPad, 13/13 isolation and
+stable release identity (run 34455759835, artifact 10144266397). This allowed
+the next transport merge and preparation of the separate legacy deletion PR.
+
+## Slice 5: proven superseded WhatsApp paths
+
+After deployed caller proof, the cleanup branch removes the 287-line service-menu
+module, 24 unreachable private AI-core functions and its two unused dispatch
+exports. The core shrinks from 297 to 138 lines before final whitespace cleanup.
+The 13 retained function bodies have identical SHA-256 hashes before/after;
+`legacy-removal-proof.json` records them. No live SQL RPC or Brain implementation
+is removed. The direct meter import is redundant with the active semantic
+interpreter's existing meter import; provider metering remains active.
+
+`post-removal-call-map.json`: 289 API modules, 513 import edges, no cycles,
+1405 top-level functions and four remaining local unreachable candidates.
+The initial task baseline was 288/517/1445/44 respectively. The pre-removal
+slice tree was 290/522/1453/44. No actual repair or owner-lookup time is claimed.
+
+| Retired source-only assertion | Active behavioral replacement |
+|---|---|
+| Old planner prompt/guard/ledger strings | Structured contract and Brain guard execution; scoped worker ledger and telemetry failure tests |
+| Old interactive-list renderer and time-first question | Current tenant prices, receipt-bound choices, foreign/stale selection and activity-required question tests |
+| Old unversioned slot create/cancel/reschedule strings | Actual worker → versioned semantic executor; PostgreSQL CAS/replay/confirmation suites |
+| Old planner history/raw reply filtering | Native role-history privacy and invalid semantic-provider contract tests |
+| Old direct meter import/context strings | Active core → semantic interpreter → meter attribution checks and existing cost behavior tests |
+| Old recent-booking helper string | Actual SQL scoped history filtering and stale-history rejection before mutation |
+| Old catalog-list fallback strings | Active native product/Flow transport, foreign/multiple product routing and receipt-bound text fallback tests |
+
+Eight obsolete source-only test cases were removed/replaced while preserving
+their applicable invariants at the actual execution boundaries. The full local
+suite after those replacements passed 2815/2815; the subsequent new architecture
+gate passed with its five-case suite. Required CI repeats the complete suite.
+The lower test count is explicitly retained, not hidden as a test-gate success.
+No CI/security/Production acceptance check, retry limit or authorization gate is
+relaxed. The cleanup is not Production verified until its own release completes.

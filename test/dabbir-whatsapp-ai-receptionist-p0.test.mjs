@@ -48,14 +48,9 @@ test('AI booking inserts whatsapp source and never overrides confirmation or dep
   must(core,/Your booking is confirmed/);
 });
 
-test('LLM cannot supply arbitrary UUIDs to final booking; selected verified pending slot is authoritative',()=>{
-  must(core,/slots=pendingSlots\(context\),slot=slots\[index\]/);
-  must(core,/p_service_id:slot\.service_id/);
-  must(core,/p_worker_id:safeUuid\(slot\.worker_id\)/);
-  must(core,/p_starts_at:slot\.starts_at/);
-  assert.doesNotMatch(core,/decision\.serviceId|decision\.workerId|decision\.appointmentId/);
-  must(core,/service_name and worker_name must exactly match a name in VERIFIED CONTEXT/);
-});
+// Arbitrary provider identifiers and missing/ungrounded mutation state are
+// behavior-tested in dabbir-brain-contract, semantic-provider-contract and
+// dabbir-whatsapp-worker-authority suites against the actual executor.
 
 test('availability and booking confirmation use verified business timezone without Dubai fallback',()=>{
   must(actions,/select b\.timezone into v_timezone/);
@@ -83,8 +78,10 @@ test('cancel and reschedule are scoped to the conversation customer and stop aft
 test('same-as-last-time is grounded from customer booking history',()=>{
   must(actions,/dabbir_whatsapp_ai_customer_recent_bookings/);
   must(actions,/a\.customer_id=v_customer_id/);
-  must(core,/reuse_last/);
-  must(core,/recentBookings\(context\)/);
+  const resolver=fs.readFileSync(path.join(root,'api/_dabbir-context-resolver.js'),'utf8');
+  must(resolver,/operational_history/);
+  // dabbir-understanding-v2-db executes live SQL history filtering and rejects
+  // stale historical selection before any appointment write.
 });
 
 test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{

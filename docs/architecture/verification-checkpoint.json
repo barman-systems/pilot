@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-09-10T08:50:00Z",
+  "observed_at": "2026-09-10T09:05:00Z",
   "status": "PARTIALLY_VERIFIED",
-  "production_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
-  "deployment_id": "dpl_HWynqR7WyTV5ycjn6vz7wHxuQcUs",
+  "production_sha": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
+  "deployment_id": "dpl_DpHJkW3FaotQGyAHTDk8aZ8x3ooW",
   "slice1": {
     "pr": 697,
     "local_baseline_tests": 2716,
@@ -42,7 +42,7 @@
   "prepared_slices": [
     {
       "pr": 698,
-      "status": "FUNCTIONAL_PASS_RELEASE_DRIFT_REVERIFY_CURRENT_MAIN",
+      "status": "PRODUCTION_VERIFIED_ON_CURRENT_MAIN",
       "scope": "worker/cron dispatch owner; old module retained",
       "production_sha": "8826d37ed15aac45550a34f2f3b00b76c9cc07ba",
       "production_journey_run": 34455112211,
@@ -62,15 +62,24 @@
       "current_main_verification": {
         "run_id": 34455759835,
         "job_id": 102804642358,
-        "status": "IN_PROGRESS",
-        "sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6"
+        "status": "PASS",
+        "sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+        "stable_release": true,
+        "arabic": "PASS",
+        "english_iphone": "PASS",
+        "ipad": "PASS",
+        "isolation": "PASS 13/13",
+        "artifact_id": 10144266397,
+        "artifact_sha256": "963cdb45e9f1bcc027283225f7aff3793764b184a1e8300f6a5c9d240e694246"
       }
     },
     {
       "pr": 699,
-      "status": "CURRENT_MAIN_INTEGRATED_CI_RUNNING_PRODUCTION_PENDING",
+      "status": "MERGED_PRODUCTION_VERIFICATION_RUNNING",
       "scope": "shared HTTP transport for all active message types",
-      "head": "b85b2879b93550db2ca4c03993889fbe82a31295"
+      "head": "b85b2879b93550db2ca4c03993889fbe82a31295",
+      "production_sha": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
+      "production_journey_run": 34458064190
     },
     {
       "pr": 701,
@@ -79,9 +88,38 @@
     }
   ],
   "deletion_gate": {
-    "legacy_files_removed": [],
-    "unreachable_core_functions_removed": [],
-    "reason": "Wait for deployed caller migration and exact-SHA complete Production proof."
+    "legacy_files_removed": [
+      "api/_dabbir-whatsapp-service-menu.js"
+    ],
+    "unreachable_core_functions_removed": [
+      "language",
+      "norm",
+      "exactNamed",
+      "choiceIndex",
+      "safeUuid",
+      "looksLikePlannerEnvelope",
+      "customerReply",
+      "plannerHistory",
+      "localNow",
+      "defaultIntent",
+      "defaultRisk",
+      "parseDecision",
+      "guardDecision",
+      "compactContext",
+      "decide",
+      "recordDecision",
+      "resultState",
+      "setState",
+      "recentBookings",
+      "availability",
+      "resolveService",
+      "resolveWorker",
+      "pendingSlots",
+      "executeSelectedSlot",
+      "processWhatsAppAiDispatchToken",
+      "processWhatsAppAiRecovery"
+    ],
+    "reason": "Caller migration Production verified on 4ef4fb47ac7474757ce8b5972a14b4293501a7b6; deletion prepared in separate PR702, NOT YET DEPLOYED."
   },
   "limitations": [
     "Real-phone Meta proof is separate and not claimed.",
@@ -106,7 +144,14 @@
       1
     ],
     "future_bug_repair_time": "NOT_MEASURED",
-    "owner_lookup_time": "NOT_MEASURED"
+    "owner_lookup_time": "NOT_MEASURED",
+    "prepared_cleanup": {
+      "modules": 289,
+      "import_edges": 513,
+      "cycles": 0,
+      "functions": 1405,
+      "unreachable_local_candidates": 4
+    }
   },
   "prepared_local_regression": {
     "passed": 2822,
@@ -114,5 +159,12 @@
     "skipped": 0,
     "includes_concurrent_main_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
     "scope": "Slices 1-4 plus caller/behavior proof, not all changes deployed"
+  },
+  "prepared_cleanup_regression": {
+    "full_passed": 2815,
+    "failed": 0,
+    "skipped": 0,
+    "later_architecture_gate": "5/5 targeted; required CI will run complete suite",
+    "active_core_functions_byte_identical": 13
   }
 }
