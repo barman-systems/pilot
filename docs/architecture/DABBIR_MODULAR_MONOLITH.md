@@ -121,3 +121,29 @@ Every deployment must retain required CI/mobile/security gates, exact release
 identity before/after the full Arabic/English iPhone/iPad journey, and isolation
 checks. A real-phone Meta round trip is a separate acceptance item and is not
 claimed by mocked transport or protected Production journey evidence.
+
+## Slice 2: canonical dispatch owner (migration, no deletion)
+
+The public worker and recovery cron now import
+`_dabbir-whatsapp-dispatch.js`. Its claim/wait/recovery and failure functions are
+copied byte-for-byte from the existing active service-menu wrapper, keeping
+its default recovery limit of 12, cap of 25, claim lock, failure mapping and
+fallback behavior. The old module is retained unchanged for the deletion gate.
+No decision/Brain behavior or SQL is changed.
+
+18 executable contract cases cover non-claims, WAIT re-claim, denied context,
+claim storage failure, recovery termination, exact lock propagation and limits.
+Four architecture gates prevent a new transport dependency, direct provider
+access from the Brain, divergence between worker/cron owners, and introduction
+of another direct Meta messages sender outside the explicit migration inventory.
+
+`live-sql-ownership.json` records a read-only catalog scan of 227 live functions
+with qualified calls/writes. A shared table is not proof of duplicated business
+logic: privacy cleanup, name editing, payment status triggers and appointment
+creation are different operations. Dynamic SQL and unqualified calls are
+explicit blind spots. No database object is removed based on this scan.
+
+Production verification of this slice must complete before removing the old
+service-menu module or the AI core's unreachable local functions. Temporary
+source duplication during caller migration is intentional and time-bounded by
+that gate; no second dispatcher is enabled by the worker/cron.
