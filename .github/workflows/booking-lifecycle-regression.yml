@@ -5,6 +5,7 @@ on:
       - 'api/**'
       - 'test/dabbir-booking-lifecycle*.test.mjs'
       - 'scripts/qa-booking-lifecycle-browser.mjs'
+      - 'scripts/qa-webkit-sidebar-navigation.mjs'
       - '.github/workflows/booking-lifecycle-regression.yml'
 permissions:
   contents: read
@@ -35,6 +36,15 @@ jobs:
           done
           npm install --prefix "$RUNNER_TEMP/booking-playwright" --no-audit --no-fund --ignore-scripts playwright@1.63.0
           node "$RUNNER_TEMP/booking-playwright/node_modules/playwright/cli.js" install --with-deps chromium webkit
+      - name: Production-pinned WebKit sidebar navigation regression
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/navigation-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
+        run: |
+          npm install --prefix "$RUNNER_TEMP/navigation-playwright" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          node "$PLAYWRIGHT_PATH/cli.js" install webkit
+          node scripts/build-dabbir-ui-bundles.mjs
+          node scripts/qa-webkit-sidebar-navigation.mjs
       - name: iPhone and iPad browser matrix over real served UI
         env:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
