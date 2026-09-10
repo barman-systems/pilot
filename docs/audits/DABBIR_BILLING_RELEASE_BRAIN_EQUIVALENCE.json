@@ -1,0 +1,14 @@
+{
+  "release_sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+  "parent_sha": "b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1",
+  "scope": "Repository diff of the billing-only release; previously verified brain modules and SQL migration are byte-identical",
+  "changed_paths": [
+    "api/dabbir-ai-billing-reconcile-cron.js",
+    "docs/audits/DABBIR_BILLING_DELETED_TENANT_HARDENING.md",
+    "test/dabbir-billing-deleted-business.test.mjs"
+  ],
+  "unchanged_brain_and_tool_code": true,
+  "previous_worker_evidence": "DABBIR_REAL_WORKER_CONDITIONAL_B9C9B0ED.json",
+  "previous_store_evidence": "DABBIR_REAL_WORKER_STORE_B9C9B0ED.json",
+  "new_full_production_journey": 34442947321
+}

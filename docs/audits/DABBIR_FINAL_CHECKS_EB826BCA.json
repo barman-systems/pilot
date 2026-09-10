@@ -1,0 +1,91 @@
+{
+  "release_sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+  "captured_at": "2026-09-10T06:19:16.039Z",
+  "checks": [
+    {
+      "name": "revert-failed-main",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34444072065/job/102764951340"
+    },
+    {
+      "name": "Runtime capacity — manual public-production 1000-customer gate",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947321/job/102764938753"
+    },
+    {
+      "name": "AI capacity — manual public-production gate",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947321/job/102764938067"
+    },
+    {
+      "name": "revert-failed-main",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34443106318/job/102762063082"
+    },
+    {
+      "name": "revert-failed-main",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34443028999/job/102761835130"
+    },
+    {
+      "name": "revert-failed-main",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442958275/job/102761626275"
+    },
+    {
+      "name": "verify",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947361/job/102761593137"
+    },
+    {
+      "name": "Production owner + customer + employee + AI journey",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947321/job/102761592882"
+    },
+    {
+      "name": "tenant privacy and security gate",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947250/job/102761592825"
+    },
+    {
+      "name": "require-governed-main-lineage",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947333/job/102761592759"
+    },
+    {
+      "name": "ci-non-pr",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947310/job/102761592653"
+    },
+    {
+      "name": "execute",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947276/job/102761592628"
+    },
+    {
+      "name": "Protected production iPhone smoke",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/actions/runs/34442947252/job/102761592488"
+    },
+    {
+      "name": "Trigger.dev deployment (proj_xjuzxmngkrrookqpenll:prod)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/barman-systems/pilot/runs/102761592034"
+    }
+  ],
+  "note": "Skipped jobs are not counted as successes. The separately observed BAR-12 launch gate remains blocked with the same 12 baseline prerequisites."
+}

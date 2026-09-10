@@ -1,0 +1,2407 @@
+{
+  "scope": "Actual deployed model/application verification with synthetic contexts. Separate actual worker and SQL artifacts prove live database execution. No real-phone Meta round trip.",
+  "sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+  "deployment_id": "dpl_8svUgU3GKcWENuoaYjpwdUFgFLVT",
+  "workflow_run_id": 34442947321,
+  "artifact_id": 10138969446,
+  "artifact_sha256": "bb3d015230f5bc092b8e23511956dd8bdf4514960efcda42d1a0d1e49f4d69c3",
+  "release_locked_at": "2026-09-10T05:56:40.1852328Z",
+  "release_stable_at": "2026-09-10T06:10:34.2857283Z",
+  "reports": {
+    "ar": {
+      "verdict": "PASS",
+      "started_at": "2026-09-10T05:57:22.586Z",
+      "completed_at": "2026-09-10T06:03:08.184Z",
+      "required_failures": 0,
+      "cleanup": [
+        {
+          "item": "qa_booking_business",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "Disposable booking tenant deleted."
+        },
+        {
+          "item": "qa_booking_business",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "Disposable booking tenant deleted."
+        },
+        {
+          "item": "qa_tenant_and_auth_users",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "QA business data and disposable identities deleted."
+        }
+      ],
+      "required_checks": {
+        "total": 35,
+        "passed": 35
+      },
+      "optional_checks": [
+        {
+          "name": "15c_compare_google-gemini",
+          "status": "FAIL",
+          "detail": "Error: COGNITIVE_CANDIDATE_FAILED:google-gemini:CHECK_FAILURE\n    at assert (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:56:25)\n    at step.required (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:878:9)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async step (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:131:20)\n    at async runJourney (file:///home/runner/work/pilot/pilot/test/ai-full-…"
+        },
+        {
+          "name": "15c_compare_groq",
+          "status": "FAIL",
+          "detail": "Error: COGNITIVE_CANDIDATE_FAILED:groq:CHECK_FAILURE\n    at assert (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:56:25)\n    at step.required (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:878:9)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async step (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:131:20)\n    at async runJourney (file:///home/runner/work/pilot/pilot/test/ai-full-customer-…"
+        },
+        {
+          "name": "15c_compare_cloudflare-workers-ai",
+          "status": "FAIL",
+          "detail": "Error: COGNITIVE_CANDIDATE_FAILED:cloudflare-workers-ai:CHECK_FAILURE\n    at assert (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:56:25)\n    at step.required (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:878:9)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async step (file:///home/runner/work/pilot/pilot/test/ai-full-customer-journey-v2.mjs:131:20)\n    at async runJourney (file:///home/runner/work/pilot/pilot/test/…"
+        }
+      ],
+      "cognitive_goal_continuity_evidence": {
+        "status": 200,
+        "checks": {
+          "catalog": true,
+          "vehicle_question": true,
+          "goal_retained": true,
+          "service_retained": true,
+          "vehicle_resolved": true,
+          "next_required_field": true,
+          "no_generic_reply": true,
+          "no_execution": true,
+          "real_provider": true
+        },
+        "providers": [
+          {
+            "turn": 1,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7691,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1443,
+                "outputTokens": 91,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0014235,
+              "latency_ms": 7689,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 413
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 26
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5001
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2101
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "SERVICE_MENU",
+              "intent": "SERVICE_DISCOVERY",
+              "confidence": 0.99,
+              "risk": "LOW",
+              "message_role": "NEW_REQUEST",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 2,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7108,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1922,
+                "outputTokens": 154,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.002019,
+              "latency_ms": 7107,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 329
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 27
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5001
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 1745
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "REPLY",
+              "intent": "BOOKING",
+              "confidence": 0.98,
+              "risk": "LOW",
+              "message_role": "NEW_REQUEST",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY",
+        "turns": [
+          {
+            "action": "SERVICE_MENU",
+            "goal": "UNKNOWN",
+            "pending_field": null,
+            "service_preserved": false,
+            "vehicle": null,
+            "reply": "1) خارجي — 40 AED\n2) VIP — 100 AED"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "vehicle",
+            "service_preserved": true,
+            "vehicle": null,
+            "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          }
+        ]
+      },
+      "cognitive_context_reference_evidence": {
+        "status": 200,
+        "checks": {
+          "history_resolved": true,
+          "goal_retained": true,
+          "vehicle_retained": true,
+          "known_service_not_asked": true,
+          "known_vehicle_not_asked": true,
+          "next_requirement": true,
+          "no_generic_reply": true,
+          "no_execution": true,
+          "real_provider": true
+        },
+        "providers": [
+          {
+            "turn": 1,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7633,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1888,
+                "outputTokens": 179,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.00208725,
+              "latency_ms": 7631,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 379
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 98
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5001
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2149
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CREATE_BOOKING",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "MEDIUM",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 3,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7198,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1984,
+                "outputTokens": 102,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0018705,
+              "latency_ms": 7198,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 390
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 37
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5000
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 1765
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 4,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 13158,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1994,
+                "outputTokens": 704,
+                "reasoningTokens": 559
+              },
+              "actual_cost_usd": 0.0041355,
+              "latency_ms": 13157,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 546
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 37
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5002
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 7465
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.85,
+              "risk": "LOW",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 5,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 8340,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 2044,
+                "outputTokens": 266,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0025305,
+              "latency_ms": 8339,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 349
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 36
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5001
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2948
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "ANSWER_TO_PENDING_QUESTION",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY",
+        "turns": [
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "vehicle",
+            "service_preserved": true,
+            "vehicle": null,
+            "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          }
+        ]
+      },
+      "unseen_multi_activity_evidence": {
+        "checks": {
+          "services_duration_side_question": true,
+          "clinic_administrative_boundary": true,
+          "laundry_pickup_requirements": true,
+          "salon_typed_worker_reference": true,
+          "salon_conditional_date_preference": true
+        },
+        "results": [
+          {
+            "id": "services_duration_side_question",
+            "activity": "services",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "REPLY",
+                "reply": "استشارة مدته 30 دقيقة.\nأي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1879,
+                    "outputTokens": 392,
+                    "reasoningTokens": 178
+                  },
+                  "actual_cost_usd": 0.00287925,
+                  "latency_ms": 10160,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 415
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 36
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5000
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 4705
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1909,
+                    "outputTokens": 172,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00207675,
+                  "latency_ms": 7341,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 355
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 42
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5002
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 1938
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "clinic_administrative_boundary",
+            "activity": "clinic",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true
+            },
+            "turns": [
+              {
+                "action": "HANDOFF",
+                "reply": null,
+                "goal": "UNKNOWN",
+                "service_retained": false
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1453,
+                    "outputTokens": 236,
+                    "reasoningTokens": 137
+                  },
+                  "actual_cost_usd": 0.00197475,
+                  "latency_ms": 10711,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 395
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 48
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5002
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 5264
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "laundry_pickup_requirements",
+            "activity": "laundry",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "تمام، كوي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "location",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "تمام، كوي، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "location",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1888,
+                    "outputTokens": 302,
+                    "reasoningTokens": 174
+                  },
+                  "actual_cost_usd": 0.0025485,
+                  "latency_ms": 9880,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 357
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 29
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 4491
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 2000,
+                    "outputTokens": 127,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00197625,
+                  "latency_ms": 7153,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 325
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 29
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 1790
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "salon_typed_worker_reference",
+            "activity": "salon",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "أي موظف تقصد؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1879,
+                    "outputTokens": 212,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00220425,
+                  "latency_ms": 7819,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 379
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 31
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2406
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1925,
+                    "outputTokens": 144,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00198375,
+                  "latency_ms": 7377,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 333
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 42
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5002
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 1998
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1945,
+                    "outputTokens": 181,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.0021375,
+                  "latency_ms": 7727,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 411
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 29
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2282
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "salon_conditional_date_preference",
+            "activity": "salon",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي يوم يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "date",
+                "service_retained": true
+              },
+              {
+                "action": "CHECK_AVAILABILITY",
+                "reply": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "date",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1884,
+                    "outputTokens": 499,
+                    "reasoningTokens": 369
+                  },
+                  "actual_cost_usd": 0.00328425,
+                  "latency_ms": 10578,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 297
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 31
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 5245
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [
+              "2026-09-10",
+              "2026-09-11"
+            ],
+            "ok": true
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_CONTEXT_NO_DATABASE_OR_META_EXECUTION",
+        "external_side_effects": false,
+        "synthetic_probe": true,
+        "data_mode": "SYNTHETIC_ONLY"
+      }
+    },
+    "en": {
+      "verdict": "PASS",
+      "started_at": "2026-09-10T06:03:08.258Z",
+      "completed_at": "2026-09-10T06:06:37.790Z",
+      "required_failures": 0,
+      "cleanup": [
+        {
+          "item": "qa_booking_business",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "Disposable booking tenant deleted."
+        },
+        {
+          "item": "qa_booking_business",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "Disposable booking tenant deleted."
+        },
+        {
+          "item": "qa_tenant_and_auth_users",
+          "status": "PASS",
+          "http_status": 200,
+          "detail": "QA business data and disposable identities deleted."
+        }
+      ],
+      "required_checks": {
+        "total": 33,
+        "passed": 33
+      },
+      "optional_checks": [],
+      "ipad_webkit": {
+        "verdict": "PASS",
+        "required_failures": 0,
+        "mobile_step_status": "PASS",
+        "viewport": {
+          "width": 820,
+          "height": 1180
+        },
+        "navigation_contract": "menu-opened-responsive-sidebar",
+        "report_path": "dabbir-ai-customer-journey-report-ipad.json"
+      },
+      "cognitive_goal_continuity_evidence": {
+        "status": 200,
+        "checks": {
+          "catalog": true,
+          "vehicle_question": true,
+          "goal_retained": true,
+          "service_retained": true,
+          "vehicle_resolved": true,
+          "next_required_field": true,
+          "no_generic_reply": true,
+          "no_execution": true,
+          "real_provider": true
+        },
+        "providers": [
+          {
+            "turn": 1,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7508,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1443,
+                "outputTokens": 147,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0016335,
+              "latency_ms": 7508,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 388
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 31
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5000
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2083
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "SERVICE_MENU",
+              "intent": "SERVICE_DISCOVERY",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "NEW_REQUEST",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 2,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7461,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1922,
+                "outputTokens": 97,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.00180525,
+              "latency_ms": 7461,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 391
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 49
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5002
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2016
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.98,
+              "risk": "LOW",
+              "message_role": "NEW_REQUEST",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY",
+        "turns": [
+          {
+            "action": "SERVICE_MENU",
+            "goal": "UNKNOWN",
+            "pending_field": null,
+            "service_preserved": false,
+            "vehicle": null,
+            "reply": "1) خارجي — 40 AED\n2) VIP — 100 AED"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "vehicle",
+            "service_preserved": true,
+            "vehicle": null,
+            "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          }
+        ]
+      },
+      "cognitive_context_reference_evidence": {
+        "status": 200,
+        "checks": {
+          "history_resolved": true,
+          "goal_retained": true,
+          "vehicle_retained": true,
+          "known_service_not_asked": true,
+          "known_vehicle_not_asked": true,
+          "next_requirement": true,
+          "no_generic_reply": true,
+          "no_execution": true,
+          "real_provider": true
+        },
+        "providers": [
+          {
+            "turn": 1,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7608,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1888,
+                "outputTokens": 178,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0020835,
+              "latency_ms": 7607,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 406
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 38
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5002
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2157
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 3,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7488,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1984,
+                "outputTokens": 102,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0018705,
+              "latency_ms": 7488,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 374
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 42
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5000
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2067
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 4,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 7949,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 1994,
+                "outputTokens": 88,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0018255,
+              "latency_ms": 7949,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 314
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 38
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5000
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2591
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.9,
+              "risk": "LOW",
+              "message_role": "REFERENCE",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          },
+          {
+            "turn": 5,
+            "provider": "vercel-ai-gateway",
+            "model": "google/gemini-3.7-flash",
+            "latency_ms": 8089,
+            "telemetry": {
+              "final_request_usage": {
+                "inputTokens": 2044,
+                "outputTokens": 266,
+                "reasoningTokens": 0
+              },
+              "actual_cost_usd": 0.0025305,
+              "latency_ms": 8088,
+              "request_count": 4,
+              "attempts": [
+                {
+                  "provider": "google-gemini",
+                  "model": "gemini-3.7-flash",
+                  "status": 429,
+                  "latency_ms": 296
+                },
+                {
+                  "provider": "groq",
+                  "model": "openai/gpt-oss-20b",
+                  "status": 429,
+                  "latency_ms": 43
+                },
+                {
+                  "provider": "cloudflare-workers-ai",
+                  "model": null,
+                  "status": 0,
+                  "latency_ms": 5001
+                },
+                {
+                  "provider": "vercel-ai-gateway",
+                  "model": "google/gemini-3.7-flash",
+                  "status": 200,
+                  "latency_ms": 2745
+                }
+              ],
+              "skipped_attempts": []
+            },
+            "proposal_summary": {
+              "action": "CLARIFY",
+              "intent": "BOOKING",
+              "confidence": 0.95,
+              "risk": "LOW",
+              "message_role": "ANSWER_TO_PENDING_QUESTION",
+              "independent_requests": 0,
+              "service_question": null
+            }
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_ORCHESTRATOR_NO_DATABASE_OR_WHATSAPP_DELIVERY",
+        "turns": [
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "vehicle",
+            "service_preserved": true,
+            "vehicle": null,
+            "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟"
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          },
+          {
+            "action": "CLARIFY",
+            "goal": "BOOK_SERVICE",
+            "pending_field": "location",
+            "service_preserved": true,
+            "vehicle": "station",
+            "reply": "تمام، خارجي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+          }
+        ]
+      },
+      "unseen_multi_activity_evidence": {
+        "checks": {
+          "services_duration_side_question": true,
+          "clinic_administrative_boundary": true,
+          "laundry_pickup_requirements": true,
+          "salon_typed_worker_reference": true,
+          "salon_conditional_date_preference": true
+        },
+        "results": [
+          {
+            "id": "services_duration_side_question",
+            "activity": "services",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "REPLY",
+                "reply": "استشارة مدته 30 دقيقة.\nأي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1879,
+                    "outputTokens": 214,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00221175,
+                  "latency_ms": 8191,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 377
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 37
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5000
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2773
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1909,
+                    "outputTokens": 172,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00207675,
+                  "latency_ms": 8165,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 328
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 44
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5000
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2790
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "clinic_administrative_boundary",
+            "activity": "clinic",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true
+            },
+            "turns": [
+              {
+                "action": "HANDOFF",
+                "reply": null,
+                "goal": "UNKNOWN",
+                "service_retained": false
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1453,
+                    "outputTokens": 235,
+                    "reasoningTokens": 81
+                  },
+                  "actual_cost_usd": 0.001971,
+                  "latency_ms": 9451,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 352
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 37
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 4056
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "laundry_pickup_requirements",
+            "activity": "laundry",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "تمام، كوي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "location",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "تمام، كوي، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "location",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1888,
+                    "outputTokens": 127,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00189225,
+                  "latency_ms": 8183,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 365
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 30
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5000
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2784
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 2000,
+                    "outputTokens": 210,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.0022875,
+                  "latency_ms": 8412,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 381
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 28
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5002
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2998
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "salon_typed_worker_reference",
+            "activity": "salon",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "أي وقت يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              },
+              {
+                "action": "CLARIFY",
+                "reply": "أي موظف تقصد؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "time",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1879,
+                    "outputTokens": 128,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00188925,
+                  "latency_ms": 9813,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 357
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 35
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 4415
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1925,
+                    "outputTokens": 144,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.00198375,
+                  "latency_ms": 7634,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 342
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 35
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2248
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              },
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1945,
+                    "outputTokens": 105,
+                    "reasoningTokens": 0
+                  },
+                  "actual_cost_usd": 0.0018525,
+                  "latency_ms": 7866,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 302
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 36
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5000
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 2523
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [],
+            "ok": true
+          },
+          {
+            "id": "salon_conditional_date_preference",
+            "activity": "salon",
+            "checks": {
+              "expected_outcome": true,
+              "real_provider": true,
+              "no_mutating_tool": true,
+              "service_retained": true
+            },
+            "turns": [
+              {
+                "action": "CLARIFY",
+                "reply": "أي يوم يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "date",
+                "service_retained": true
+              },
+              {
+                "action": "CHECK_AVAILABILITY",
+                "reply": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟",
+                "goal": "BOOK_SERVICE",
+                "pending_field": "date",
+                "service_retained": true
+              }
+            ],
+            "providers": [
+              {
+                "provider": "vercel-ai-gateway",
+                "model": "google/gemini-3.7-flash",
+                "telemetry": {
+                  "final_request_usage": {
+                    "inputTokens": 1884,
+                    "outputTokens": 436,
+                    "reasoningTokens": 221
+                  },
+                  "actual_cost_usd": 0.003048,
+                  "latency_ms": 11594,
+                  "request_count": 4,
+                  "attempts": [
+                    {
+                      "provider": "google-gemini",
+                      "model": "gemini-3.7-flash",
+                      "status": 429,
+                      "latency_ms": 371
+                    },
+                    {
+                      "provider": "groq",
+                      "model": "openai/gpt-oss-20b",
+                      "status": 429,
+                      "latency_ms": 51
+                    },
+                    {
+                      "provider": "cloudflare-workers-ai",
+                      "model": null,
+                      "status": 0,
+                      "latency_ms": 5001
+                    },
+                    {
+                      "provider": "vercel-ai-gateway",
+                      "model": "google/gemini-3.7-flash",
+                      "status": 200,
+                      "latency_ms": 6165
+                    }
+                  ],
+                  "skipped_attempts": []
+                }
+              }
+            ],
+            "read_dates": [
+              "2026-09-10",
+              "2026-09-11"
+            ],
+            "ok": true
+          }
+        ],
+        "evidence_scope": "REAL_MODEL_SYNTHETIC_CONTEXT_NO_DATABASE_OR_META_EXECUTION",
+        "external_side_effects": false,
+        "synthetic_probe": true,
+        "data_mode": "SYNTHETIC_ONLY"
+      }
+    }
+  },
+  "isolation": {
+    "test": "DABBIR_CROSS_TENANT_AND_WHATSAPP_ISOLATION_V1",
+    "started_at": "2026-09-10T06:10:18.788Z",
+    "completed_at": "2026-09-10T06:10:33.890Z",
+    "verdict": "PASS",
+    "required_failures": 0,
+    "checks": [
+      {
+        "name": "01_create_two_disposable_identity_sets",
+        "status": "PASS",
+        "duration_ms": 1625,
+        "http_status": 200,
+        "detail": "Two independent disposable QA identity sets created with distinct run scopes."
+      },
+      {
+        "name": "02_login_two_independent_owners",
+        "status": "PASS",
+        "duration_ms": 1233,
+        "http_status": 200,
+        "detail": "Owner A and Owner B authenticated in separate cookie jars."
+      },
+      {
+        "name": "03_create_two_isolated_tenants",
+        "status": "PASS",
+        "duration_ms": 552,
+        "http_status": 200,
+        "detail": "Two distinct disposable businesses created under different owners."
+      },
+      {
+        "name": "04_each_owner_can_read_only_own_runtime",
+        "status": "PASS",
+        "duration_ms": 1251,
+        "http_status": 200,
+        "detail": "Each owner resolves their own tenant normally."
+      },
+      {
+        "name": "05_owner_a_cannot_read_tenant_b_runtime",
+        "status": "PASS",
+        "duration_ms": 302,
+        "http_status": 200,
+        "detail": "Foreign business id is neutralized to NO_TENANT_SELECTED with no Tenant B business or membership data."
+      },
+      {
+        "name": "06_owner_b_cannot_read_tenant_a_runtime",
+        "status": "PASS",
+        "duration_ms": 376,
+        "http_status": 200,
+        "detail": "Reverse foreign tenant read is neutralized with no Tenant A data leakage."
+      },
+      {
+        "name": "07_own_whatsapp_status_is_tenant_scoped",
+        "status": "PASS",
+        "duration_ms": 1067,
+        "http_status": 200,
+        "detail": "Each owner can resolve only their own tenant WhatsApp state; no global identity is inherited."
+      },
+      {
+        "name": "08_owner_a_whatsapp_tenant_b_denied",
+        "status": "PASS",
+        "duration_ms": 318,
+        "http_status": 403,
+        "detail": "Owner A is denied before Tenant B WhatsApp connection metadata can be loaded."
+      },
+      {
+        "name": "09_owner_b_whatsapp_tenant_a_denied",
+        "status": "PASS",
+        "duration_ms": 309,
+        "http_status": 403,
+        "detail": "Reverse WhatsApp cross-tenant access is denied without WABA/phone leakage."
+      },
+      {
+        "name": "10_owner_a_service_catalog_tenant_b_read_denied",
+        "status": "PASS",
+        "duration_ms": 357,
+        "http_status": 403,
+        "detail": "Owner A cannot enumerate Tenant B services."
+      },
+      {
+        "name": "11_owner_b_service_catalog_tenant_a_read_denied",
+        "status": "PASS",
+        "duration_ms": 309,
+        "http_status": 403,
+        "detail": "Owner B cannot enumerate Tenant A services."
+      },
+      {
+        "name": "12_owner_a_service_catalog_tenant_b_write_denied",
+        "status": "PASS",
+        "duration_ms": 306,
+        "http_status": 403,
+        "detail": "Owner A cannot create or mutate a service inside Tenant B."
+      },
+      {
+        "name": "13_owner_b_service_catalog_tenant_a_write_denied",
+        "status": "PASS",
+        "duration_ms": 307,
+        "http_status": 403,
+        "detail": "Owner B cannot create or mutate a service inside Tenant A."
+      }
+    ],
+    "cleanup": [
+      {
+        "item": "tenant_b_and_identities",
+        "status": "PASS",
+        "http_status": 200
+      },
+      {
+        "item": "tenant_a_and_identities",
+        "status": "PASS",
+        "http_status": 200
+      }
+    ]
+  },
+  "provider_summary": {
+    "scope": "Retained goal, reference and five fixed activity probes in Arabic/English journey reports. Excludes direct-provider comparisons, other probes, direct worker diagnostics and the full iPad report absent from the ZIP.",
+    "interpretations": 30,
+    "successful": 30,
+    "providers": {
+      "vercel-ai-gateway": 30
+    },
+    "known_cost_usd": 0.066093,
+    "unknown_cost_samples": 0,
+    "latency_ms": {
+      "min": 7108,
+      "max": 13158,
+      "mean": 8102.58
+    },
+    "reasoning_tokens_max": 559,
+    "fallback_used_samples": 30
+  },
+  "response_review": {
+    "method": "Independent reading of every retained nonempty reply text after extraction; no unsupported execution or future action claim found. These are nonmutating diagnostic outputs, not post-mutation real-phone replies.",
+    "reviewed_responses": 34,
+    "observed_unsupported_claims": 0,
+    "responses": [
+      {
+        "run": "ar",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 0,
+        "action": "SERVICE_MENU",
+        "reply": "1) خارجي — 40 AED\n2) VIP — 100 AED",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 3,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 4,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "services_duration_side_question",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "services_duration_side_question",
+        "turn": 1,
+        "action": "REPLY",
+        "reply": "استشارة مدته 30 دقيقة.\nأي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "laundry_pickup_requirements",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "تمام، كوي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "laundry_pickup_requirements",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، كوي، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "salon_typed_worker_reference",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "salon_typed_worker_reference",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "salon_typed_worker_reference",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "أي موظف تقصد؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "salon_conditional_date_preference",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي يوم يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "ar",
+        "case": "salon_conditional_date_preference",
+        "turn": 1,
+        "action": "CHECK_AVAILABILITY",
+        "reply": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 0,
+        "action": "SERVICE_MENU",
+        "reply": "1) خارجي — 40 AED\n2) VIP — 100 AED",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_goal_continuity_evidence",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. السيارة صالون ولا ستيشن/SUV؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 3,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "cognitive_context_reference_evidence",
+        "turn": 4,
+        "action": "CLARIFY",
+        "reply": "تمام، خارجي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "services_duration_side_question",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "services_duration_side_question",
+        "turn": 1,
+        "action": "REPLY",
+        "reply": "استشارة مدته 30 دقيقة.\nأي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "laundry_pickup_requirements",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "تمام، كوي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "laundry_pickup_requirements",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "تمام، كوي، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب.",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "salon_typed_worker_reference",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "salon_typed_worker_reference",
+        "turn": 1,
+        "action": "CLARIFY",
+        "reply": "أي وقت يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "salon_typed_worker_reference",
+        "turn": 2,
+        "action": "CLARIFY",
+        "reply": "أي موظف تقصد؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "salon_conditional_date_preference",
+        "turn": 0,
+        "action": "CLARIFY",
+        "reply": "أي يوم يناسبك؟",
+        "unsupported_operational_claim": false
+      },
+      {
+        "run": "en",
+        "case": "salon_conditional_date_preference",
+        "turn": 1,
+        "action": "CHECK_AVAILABILITY",
+        "reply": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟",
+        "unsupported_operational_claim": false
+      }
+    ]
+  }
+}

@@ -2,11 +2,16 @@
 
 This report continues the verified `986379a1` baseline. It does not claim that a
 synthetic webhook, direct API call or fixture is a real-phone WhatsApp test.
-Overall verdict is pending final deployment verification of the billing
-side-effect fix in PR #693 (`eb826bca7f08b7b5b58bba06639f31b21a23c0c4`, merged after all candidate gates passed). The exact `b9c9b0ed` brain regression and real-worker
-proof passed, but the runtime audit found a deleted-business provider-cost
-reconciliation failure; that failure must be fixed and verified before closeout.
-Real-phone Meta acceptance remains blocked by test-phone device linking.
+Overall verdict: **CONDITIONAL PASS for this conversational-brain validation
+scope**. Exact Production `eb826bca7f08b7b5b58bba06639f31b21a23c0c4` passed its
+full required journey after the discovered billing side effect was fixed and
+verified on the real scheduled cron. CI passed **2699/2699** tests. The strengthened
+independent benchmark is **102/105**, versus **82/105** at the original baseline;
+the three raw semantic/oracle discrepancies are disclosed below.
+Real-phone Meta acceptance remains blocked by test-phone device linking. This
+is the outstanding acceptance condition for the complete phone chain. Separately,
+the platform-wide BAR-12 launch gate retains its 12 baseline prerequisites; this
+report does not grant platform launch approval.
 
 This does not certify global rollout, an unimplemented retail order engine, or
 a fabricated zero-error rate across all real customers. Limits and raw results
@@ -22,7 +27,8 @@ are retained below.
 | Concurrent independent single-mode authority fix, PR [689](https://github.com/barman-systems/pilot/pull/689) | `bff9d58da4ee89dfb7f9dce9b6b673e1d05423b0`, preserved in #688 |
 | Concurrent independent semantic generation correction, PR [690](https://github.com/barman-systems/pilot/pull/690) | `855813a151c832119600a4521a1006bf401af7dc` |
 | Previous fully verified deployed application | `855813a151c832119600a4521a1006bf401af7dc`, deployment `dpl_8diFgZmhZ7AkccD1cvqpcR697tca` |
-| Current verified Production, conditional date execution PR [692](https://github.com/barman-systems/pilot/pull/692) | `b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1`, deployment `dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ` |
+| Verified conditional date execution PR [692](https://github.com/barman-systems/pilot/pull/692) | `b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1`, deployment `dpl_AGrYTSHtu8fvyu63y3qSMRkUpGDZ` |
+| Final verified Production, billing lifecycle PR [693](https://github.com/barman-systems/pilot/pull/693) | `eb826bca7f08b7b5b58bba06639f31b21a23c0c4`, deployment `dpl_8svUgU3GKcWENuoaYjpwdUFgFLVT` |
 | Overlapping alternative, PR [691](https://github.com/barman-systems/pilot/pull/691) | Closed without merge after #690 arrived; never deployed |
 
 One additive service-role-only database migration was applied in this phase:
@@ -130,7 +136,7 @@ found that the original benchmark only checked the first conditional date; it
 did not require checking tomorrow after an empty result. The 105-case variant
 retains the frozen 104 cases and requires two availability calls in order.
 Results: **82/105 original baseline → 101/105 unmodified `855813a` → 102/105
-conditional candidate**. Ordered fallback execution improved **0/1 → 1/1**.
+conditional candidate → 102/105 final `eb826bca`**. Ordered fallback execution improved **0/1 → 1/1**.
 The same three disclosed semantic/oracle discrepancies remain.
 
 The repair preserves the explicitly stated alternative in the canonical date
@@ -226,7 +232,9 @@ outbound → delivered/read chain from a real phone has been observed.
 
 The stored Meta connection has a credential; the blocker is not a missing
 GitHub, Supabase or Vercel login. The browser is at WhatsApp's **Scan to log in**
-device-link screen. The precise human step is to link an authorized test phone
+device-link screen, independently rechecked at **06:08:07 UTC** after the final
+deployment. A final SQL aggregate refresh still found no newer inbound or
+outbound event. The precise human step is to link an authorized independent test phone
 through WhatsApp's device-link flow, or originate the agreed test conversation
 from that phone. No QR authentication or message on the owner's behalf is
 fabricated. Existing fixtures and direct API diagnostics are explicitly excluded
@@ -246,6 +254,11 @@ from real-device proof.
 - `DABBIR_REAL_WORKER_CONDITIONAL_SETUP.sql`: reproducible isolated direct-worker setup; no Meta credential or dispatch token is exposed.
 - `DABBIR_CONDITIONAL_AVAILABILITY_DB_EVIDENCE.json` and `DABBIR_CONDITIONAL_AVAILABILITY_PRODUCTION_SMOKE.sql`: actual guarded date transition and SQL read proof.
 - `DABBIR_REAL_WORLD_VALIDATION.md`: chronological audit, confirmed defects and earlier verification stages.
+- `DABBIR_UNSEEN_FINAL_EB826BCA.json`: final-source strengthened 105-case benchmark, including all raw discrepancies.
+- `DABBIR_REAL_MODEL_PRODUCTION_EB826BCA.json`: final exact-release browser/application/model evidence and scoped reply review.
+- `DABBIR_FINAL_RELEASE_EB826BCA.json` and `DABBIR_FINAL_CHECKS_EB826BCA.json`: exact release, CI checks, phone gate and runtime error aggregate.
+- `DABBIR_REAL_BILLING_CRON_EB826BCA.json` and `DABBIR_BILLING_RELEASE_BRAIN_EQUIVALENCE.json`: actual scheduled cost reconciliation and unchanged brain/tool source proof.
+- `DABBIR_FINAL_VALIDATION_SHA256SUMS.txt`: SHA256 checksums for the final evidence branch's audit files.
 
 ### Changed implementation and regression files
 
@@ -272,7 +285,7 @@ Real PostgreSQL concurrency lives in `scripts/dabbir-brain-real-db.mjs`,
 `.github/workflows/dabbir-brain-real-db.yml`. The independent benchmark runners
 are `scripts/dabbir-unseen-evaluate.mjs` and `scripts/dabbir-unseen-runtime.mjs`.
 
-### Final exact-release result
+### Earlier exact-release results
 
 Workflow [34436236376](https://github.com/barman-systems/pilot/actions/runs/34436236376)
 completed successfully on exact Production `855813a`: Arabic **35/35**, English
@@ -281,7 +294,7 @@ QA cleanup passed. The release was locked at 04:14:09 UTC and rechecked unchange
 at 04:27:40 UTC. Artifact `10136614461` SHA256:
 `ce6e4468d301b6695e2786eef0ccca92d2d94e86dc00dcc5a21c7ec012e69210`.
 
-The current release **`b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1`** independently
+The intermediate release **`b9c9b0ed3b90bde29a64c73ca7b22bd63d2830b1`** independently
 passed [workflow 34440762057](https://github.com/barman-systems/pilot/actions/runs/34440762057):
 Arabic **35/35**, English iPhone **33/33**, iPad WebKit passed, tenant/WhatsApp
 isolation **13/13**, all QA cleanup passed. The release was locked at
@@ -356,7 +369,8 @@ delivery address, or resolved previous-order identity. The setup is retained in
 
 The aggregate success of these layers is not represented as a fabricated
 real-phone chain. Real-device acceptance retains this outstanding
-phone gate; billing regression closeout is pending separately below. The precise human action is to link an authorized
+phone gate. The discovered billing regression is now closed by the verified
+scheduled cron below. The precise human action is to link an authorized
 independent test phone through the open WhatsApp device-link screen. The agent
 can then perform the technical test and correlate the resulting message,
 canonical transition, action receipt and delivery/status records. Existing real
@@ -364,11 +378,11 @@ customer conversations under human takeover must remain untouched.
 
 ## Final provider and reply measurements
 
-The current release's retained goal/reference/five-activity model probes passed
+The final `eb826bca` release's retained goal/reference/five-activity model probes passed
 **30/30** interpretations via the configured Gateway fallback. Reported final
-request cost for that subset is **$0.06517425**, with no unknown-cost sample in
-that subset; latency **6.940–10.520 seconds**, mean **8.107 seconds**, maximum
-reasoning-token count **233**. The separate direct worker proof and optional
+request cost for that subset is **$0.066093**, with no unknown-cost sample in
+that subset; latency **7.108–13.158 seconds**, mean **8.103 seconds**, maximum
+reasoning-token count **559**. The separate direct worker proof and optional
 provider comparisons are excluded from those totals. Prior baseline worker
 execution also demonstrated successful Groq compatibility repair; direct
 provider availability remains intermittent, and HTTP 429 billing/rate causes
@@ -378,7 +392,10 @@ Every nonempty reply in the retained current-release subset was independently
 read: **0 unsupported operational claims among 34 nonmutating replies (0/34)**.
 This narrow measurement, and the zero duplicate mutation in actual concurrent
 SQL proof, must not be promoted to unmeasured population-wide or real-phone
-rates. Detailed current evidence: `DABBIR_REAL_MODEL_PRODUCTION_B9C9B0ED.json`.
+rates. Detailed current evidence: `DABBIR_REAL_MODEL_PRODUCTION_EB826BCA.json`.
+The Arabic and English labels identify the browser journeys; the retained fixed
+semantic probes use the same Arabic customer utterances in both runs. Their
+counts are repeated actual executions, not 30 distinct unseen conversations.
 
 The 105-case deployed-source benchmark reports goal accuracy **12/12 (100%)**,
 entity accuracy **154/155 (99.35%)**, reference resolution **28/28 (100%)**,
@@ -418,5 +435,42 @@ writing, reconciles existing businesses using unchanged RPC/idempotency keys,
 and reports unattributable spend explicitly as PARTIAL_UNATTRIBUTED. Lookup,
 provider-report and live-tenant ledger errors still fail closed. Seven permanent
 transport regressions were added; full suite **2699/2699**, syntax passed. No
-additional migration/dependency or conversational change. The new scheduled
-production cron and exact-release journey remain to be verified after merge.
+additional migration/dependency or conversational change. Both the actual
+scheduled production cron and exact-release journey are now verified below.
+
+## Billing correction on Production
+
+PR [693](https://github.com/barman-systems/pilot/pull/693) merged as
+`eb826bca7f08b7b5b58bba06639f31b21a23c0c4` and deployed to
+`dpl_8svUgU3GKcWENuoaYjpwdUFgFLVT`. The actual scheduled cron at **06:00:20 UTC**
+returned **HTTP 200**, state **PARTIAL_UNATTRIBUTED**, with **1 unassigned
+business / 7989 micro-USD ($0.007989)** from the provider report. No live-business
+row was present in this cycle, and no customer ledger amount was fabricated or
+transferred. This replaces the repeated absent-business HTTP 400 failure while
+keeping the orphan spend visible. Evidence: `DABBIR_REAL_BILLING_CRON_EB826BCA.json`.
+
+Only the cost cron, its tests and its audit note changed from `b9c9b0ed`; all
+brain/tool modules and the canonical migration are byte-identical. This is
+recorded in `DABBIR_BILLING_RELEASE_BRAIN_EQUIVALENCE.json`. The new exact-release
+journey is run [34442947321](https://github.com/barman-systems/pilot/actions/runs/34442947321).
+It completed successfully at **06:10:39 UTC**: Arabic **35/35**, English iPhone
+**33/33**, iPad WebKit passed, and tenant/WhatsApp isolation **13/13**. All retained
+QA cleanup checks passed. The exact SHA/deployment was locked at **05:56:40 UTC**
+and rechecked unchanged at **06:10:34 UTC**; an independent release endpoint
+readback agreed at **06:11:31 UTC**. Artifact `10138969446` SHA256:
+`bb3d015230f5bc092b8e23511956dd8bdf4514960efcda42d1a0d1e49f4d69c3`.
+
+The exact-deployment runtime query for **05:57:00–06:10:40 UTC** returned zero
+error/fatal log entries. This is a scoped log observation, not a guarantee that
+every production call succeeded. Three optional direct-provider comparisons
+still failed; the required semantic path succeeded through Gateway fallback.
+The required main CI, security, governed lineage, independent verifier, protected
+iPhone smoke, persistent execution and Trigger.dev checks completed successfully.
+Capacity/manual guardian jobs were skipped under their existing conditions and
+are not reported as passed. The separate BAR-12 result was not reclassified.
+
+No further application change is included in this final evidence branch. The
+verified Production SHA remains fixed while the audit artifacts are published
+for review. The complete real-phone round trip must still be run after the
+authorized independent test phone is linked; successful fixtures, live SQL
+transactions and direct worker dispatches are not substitutes for that evidence.

@@ -1,0 +1,36 @@
+{
+  "scope": "Exact last-release verification and runtime error/fatal aggregate query; no population-wide guarantee.",
+  "release": {
+    "commit_sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+    "deployment_id": "dpl_8svUgU3GKcWENuoaYjpwdUFgFLVT",
+    "environment": "production",
+    "git_provider": "github",
+    "git_ref": "main",
+    "ok": true,
+    "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
+    "repository": "barman-systems/pilot"
+  },
+  "workflow_run_id": 34442947321,
+  "artifact_id": 10138969446,
+  "artifact_sha256": "bb3d015230f5bc092b8e23511956dd8bdf4514960efcda42d1a0d1e49f4d69c3",
+  "release_locked_at": "2026-09-10T05:56:40.1852328Z",
+  "release_stable_at": "2026-09-10T06:10:34.2857283Z",
+  "runtime_window": {
+    "since": "2026-09-10T05:57:00Z",
+    "until": "2026-09-10T06:10:40Z",
+    "error_or_fatal_entries": 0
+  },
+  "ci": {
+    "tests": 2699,
+    "passed": 2699,
+    "failed": 0,
+    "skipped": 0,
+    "production_dependency_vulnerabilities": 0
+  },
+  "billing_cron": "DABBIR_REAL_BILLING_CRON_EB826BCA.json",
+  "phone_gate": {
+    "device_link_required": true,
+    "observed_at": "2026-09-10T06:08:07.406Z",
+    "phone_link_option_present": true
+  }
+}

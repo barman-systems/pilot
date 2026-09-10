@@ -1,0 +1,33 @@
+{
+  "scope": "Actual scheduled Production cron after the deleted-business fix; real provider billing report and trusted database lookup, not a mocked request.",
+  "release": {
+    "commit_sha": "eb826bca7f08b7b5b58bba06639f31b21a23c0c4",
+    "deployment_id": "dpl_8svUgU3GKcWENuoaYjpwdUFgFLVT",
+    "environment": "production",
+    "git_provider": "github",
+    "git_ref": "main",
+    "ok": true,
+    "project_id": "prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq",
+    "repository": "barman-systems/pilot"
+  },
+  "timestamp": "2026-09-10T06:00:20Z",
+  "route": "/api/dabbir-ai-billing-reconcile-cron",
+  "http_status": 200,
+  "result": {
+    "state": "PARTIAL_UNATTRIBUTED",
+    "dates": [
+      "2026-09-10"
+    ],
+    "businesses": 0,
+    "models": 0,
+    "total_microusd": 0,
+    "unattributed_businesses": 1,
+    "unattributed_microusd": 7989,
+    "auth_mode": "secret"
+  },
+  "unattributed_cost_usd": 0.007989,
+  "interpretation": "The current-day report contained one deleted QA business. Its actual spend remains visible and unassigned; there were no live-business rows in this cycle. No cost was invented, transferred or falsely marked reconciled.",
+  "previous_error": "AI_BILLING_LEDGER_HTTP_400",
+  "fix_pr": 693,
+  "scope_limit": "This cycle verifies orphan report handling. Mixed live/deleted reconciliation is covered by executable transport regressions; the existing SQL ledger guards are unchanged."
+}
