@@ -96,14 +96,17 @@ test('catalog transport uses native Meta product and product_list messages with 
 });
 
 test('service flow prefers mapped catalog but fails closed for ambiguous business actions', () => {
-  const source = read('api/_dabbir-whatsapp-service-menu.js');
+  const source = read('api/_dabbir-whatsapp-ai-core.js');
+  const router = read('api/_dabbir-understanding-orchestrator.js');
   assert.match(source, /catalogMenuForContext/);
   assert.match(source, /sendMetaCatalogProducts/);
   assert.match(source, /resolveCatalogService/);
-  assert.match(source, /WHATSAPP_CATALOG_MULTI_ITEM_REQUIRES_HUMAN/);
-  assert.match(source, /WHATSAPP_CATALOG_PRODUCT_UNMAPPED/);
+  assert.match(router, /CATALOG_MULTIPLE_ITEMS/);
+  assert.match(router, /CATALOG_UNMAPPED/);
   assert.match(source, /WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH/);
-  assert.match(source, /type:'list'/); // deterministic fallback remains available
+  assert.match(router, /setPending\('choose_service'/); // receipt-bound text fallback
+  // Native mapping, foreign service and multiple items execute through this
+  // router in dabbir-understanding-v2-orchestrator.test.mjs.
 });
 
 test('catalog schema is tenant scoped, RLS protected and service RPCs are fail closed', () => {

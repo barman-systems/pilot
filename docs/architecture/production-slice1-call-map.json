@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "source_ref": "0ae7e93b54478c35fa3da55c8c8202e139b62b8b",
-  "revision": "0ae7e93b54478c35fa3da55c8c8202e139b62b8b",
+  "source_ref": "155a2f0d9c322067ec9d7e7bc143b605db504925",
+  "revision": "155a2f0d9c322067ec9d7e7bc143b605db504925",
   "node": "v24.19.0",
   "scope": "API JavaScript AST: literal imports, static RPC references, literal routes, conservative local reachability. External callers, dynamic SQL and remote Edge functions require separate evidence; unreachable is NOT deletion permission.",
   "metrics": {
-    "modules": 288,
-    "import_edges": 517,
+    "modules": 289,
+    "import_edges": 518,
     "cycles": 0,
-    "functions": 1445,
+    "functions": 1446,
     "unreachable_local_candidates": 41
   },
   "cycles": [],
@@ -825,27 +825,33 @@
     },
     {
       "from": "api/_whatsapp-live-core.js",
-      "to": "api/_whatsapp-embedded-core.js",
+      "to": "api/_whatsapp-message-transport.js",
       "kind": "import",
       "line": 1
     },
     {
       "from": "api/_whatsapp-live-core.js",
-      "to": "api/_dabbir-meta-public-config.js",
+      "to": "api/_whatsapp-embedded-core.js",
       "kind": "import",
       "line": 2
     },
     {
       "from": "api/_whatsapp-live-core.js",
-      "to": "api/_server-read-timeout.js",
+      "to": "api/_dabbir-meta-public-config.js",
       "kind": "import",
       "line": 3
     },
     {
       "from": "api/_whatsapp-live-core.js",
-      "to": "api/_supabase-key-auth.js",
+      "to": "api/_server-read-timeout.js",
       "kind": "import",
       "line": 4
+    },
+    {
+      "from": "api/_whatsapp-live-core.js",
+      "to": "api/_supabase-key-auth.js",
+      "kind": "import",
+      "line": 5
     },
     {
       "from": "api/_whatsapp-service-connection.js",
@@ -5414,7 +5420,7 @@
     },
     {
       "file": "api/_whatsapp-live-core.js",
-      "lines": 331,
+      "lines": 256,
       "exports": [
         "whatsappLiveServerCapability",
         "serviceRpc",
@@ -5429,19 +5435,49 @@
       "rpcs": [
         {
           "name": "dabbir_whatsapp_reserve_outbound",
-          "line": 109
+          "line": 110
         },
         {
           "name": "dabbir_whatsapp_finalize_outbound",
-          "line": 135
+          "line": 136
         },
         {
           "name": "dabbir_whatsapp_mark_outbound_result",
-          "line": 153
+          "line": 154
         },
         {
           "name": "dabbir_whatsapp_apply_status",
-          "line": 166
+          "line": 167
+        }
+      ]
+    },
+    {
+      "file": "api/_whatsapp-message-transport.js",
+      "dynamic": [],
+      "lines": 55,
+      "imports": [],
+      "exports": [
+        "sendMetaMessage"
+      ],
+      "rpcs": [],
+      "routes": [],
+      "functions": [
+        {
+          "name": "sendMetaMessage",
+          "line": 10,
+          "end": 55,
+          "exported": true,
+          "rpcs": [],
+          "fetches": [
+            {
+              "line": 14,
+              "expression": "fetch(`https://graph.facebook.com/${encodeURIComponent(graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`, {\n      method: 'POST',\n      cache: 'no-store',\n      signal: controller.signal,\n      headers: {\n   "
+            }
+          ],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "sendMetaMessage"
+          ]
         }
       ]
     },
@@ -6057,7 +6093,7 @@
     },
     {
       "file": "api/chat-human-ui.js",
-      "lines": 283,
+      "lines": 291,
       "exports": [
         "handler"
       ],

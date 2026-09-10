@@ -1,8 +1,8 @@
 # WebKit Today Production gate investigation
 
-Status: **BLOCKED — original persistent failure not yet reproduced; no application fix claimed.**
+Status: **PARTIALLY VERIFIED — complete Production gates now PASS; original persistent failure remains unreproduced and no application fix is claimed.**
 
-## Live baseline
+## Historical investigation baseline
 
 - Production/main: `a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd`.
 - Deployment: `dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j`.
@@ -91,7 +91,7 @@ The metadata is added to the existing artifact, not to the public UI.
 Tests cover offscreen geometry/privacy, a rejected or stalled diagnostic read,
 the original failure being retained, and existing visual-gate semantics.
 
-## Remaining gates
+## Original investigation goals
 
 1. Reproduce against the unchanged live application with failure-state evidence.
 2. Classify the proven cause, then implement only its fix.
@@ -103,3 +103,11 @@ the original failure being retained, and existing visual-gate semantics.
 
 No legacy path, duplicate writer or canonical authority is removed by this
 diagnostic slice. Real-phone Meta proof remains separate and unclaimed.
+
+## Subsequent complete Production evidence
+
+PR #705 merged as `e099c3f8a656c06fd60d832d5b87ea39a593d8a1`. Final CI passed 2810/2810; both browser jobs passed, including the complete unchanged matrix and 11 additional native timing sequences. Run 34467199606 attempt 1 passed Arabic, English iPhone, iPad/WebKit, isolation 13/13 and stable exact e099c3f. Artifact 10148572189 SHA256 `e95412e85a216f324045259cc739c95d3382839b3b78c182fa955ac47fc65b60`.
+
+The complete gate allowed #701 to resume. Its migration was applied once and Production-readback verified; final CI passed 2822/2822. Its own run 34469891361 attempt 1 passed all the same required journeys and isolation on stable exact `25ac57b47026f60f65ec431d0be413dc0ef516ca`, deployment `dpl_ESV166hqtxKae6F1daWgNMks8CjY`. Artifact 10149609692 SHA256 `6506522feb8ccef363089a44bb4440b643a620ebaec3a816b84824b531c52174`. #702 resumed only after this complete PASS. Three optional provider comparisons failed in each full run; required gates all passed within each individual run.
+
+Neither PASS establishes the cause of the original intermittent Today failure. The permanent fixture is characterization coverage and the failure-only diagnostic awaits a recurrence. No timeout, assertion, Brain/provider routing or security behavior was changed.

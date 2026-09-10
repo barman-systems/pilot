@@ -1,50 +1,39 @@
-import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { validSemanticContract } from '../api/_dabbir-semantic-contract.js';
+import { evaluateSemanticProbe } from '../api/_dabbir-semantic-interpreter.js';
+import { assertBrainDecision } from '../api/_dabbir-brain-contract.js';
+import { understandConversation } from '../api/_dabbir-semantic-engine.js';
+import { context, offered, now } from './fixtures/understanding/cases.mjs';
 
-const core=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
-
-const router=fs.readFileSync(new URL('../api/_dabbir-understanding-orchestrator.js',import.meta.url),'utf8');
-const semantic=fs.readFileSync(new URL('../api/_dabbir-semantic-engine.js',import.meta.url),'utf8');
-const migration=fs.readFileSync(new URL('../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql',import.meta.url),'utf8');
-const must=(needle,msg)=>assert.ok(core.includes(needle),msg||`missing ${needle}`);
-
-test('planner requests structured intent, confidence, risk and missing facts',()=>{
-  must('"intent":"SUPPORT|SERVICE_DISCOVERY|BOOKING|CANCEL_BOOKING|RESCHEDULE_BOOKING|HUMAN_ASSISTANCE"');
-  must('"confidence":0.0');
-  must('"risk_level":"LOW|MEDIUM|HIGH"');
-  must('"missing_fields":[]');
-  must('"reason_code":"SHORT_CODE"');
-  must('confidence means confidence that the chosen action is supported by VERIFIED CONTEXT');
+// Exercise the deployed authority; the previous tests matched an unreachable planner.
+const proposal = { action:'CHECK_AVAILABILITY', intent:'BOOKING', confidence:.98, risk_level:'LOW', service_name:null, knowledge_key:null, entities:[] };
+test('active provider contract requires structured intent, confidence and risk', () => {
+  assert.equal(validSemanticContract(JSON.stringify(proposal)), true);
+  for (const key of ['intent','confidence','risk_level']) {
+    const invalid = { ...proposal }; delete invalid[key];
+    assert.equal(validSemanticContract(JSON.stringify(invalid)), false, key);
+  }
+  assert.equal(validSemanticContract('Your booking is confirmed'), false);
 });
-
-test('high-risk and incomplete mutations cannot execute silently',()=>{
-  must("decision.riskLevel==='HIGH'&&decision.action!=='HANDOFF'");
-  must("action:'HANDOFF'");
-  must("reasonCode:'HIGH_RISK_ESCALATION'");
-  must('MUTATING_ACTIONS.has(decision.action)&&decision.missingFields.length');
-  must("action:'REPLY'");
-  must("reasonCode:'MUTATION_BLOCKED_MISSING_FIELDS'");
+test('high-risk interpretation routes to human authority', () => {
+  const result = evaluateSemanticProbe({ ...proposal, riskLevel:'HIGH', serviceName:null });
+  assert.equal(result.policy_action, 'HANDOFF');
+  assert.equal(result.passed, false);
 });
-
-test('every AI planner decision is persisted to the operator ledger RPC',()=>{
-  must("serviceRpc('dabbir_record_ai_operator_decision_v1'");
-  must('p_confidence:Number.isFinite(Number(decision.confidence))');
-  must('p_risk_level:decision.riskLevel');
-  must('p_missing_fields:arr(decision.missingFields)');
-  assert.match(core,/return runUnderstandingTurn/);
-  assert.match(router,/rpc\('dabbir_record_ai_operator_decision_v1'/);
+test('an incomplete conversation cannot authorize a mutation', () => {
+  const c = context({ batch_messages:[{ body:'ابا غسيل باجر' }] });
+  const { state, decision } = understandConversation({ context:c, now });
+  assert.equal(decision.action, 'CLARIFY');
+  assert.throws(() => assertBrainDecision(state, { ...decision, action:'CREATE_BOOKING' }, c), /BRAIN_MUTATION_NOT_AUTHORIZED/);
 });
-
-test('deterministic human and verified slot choices also produce decisions',()=>{
-  assert.match(semantic,/CUSTOMER_REQUESTED_HUMAN/);
-  assert.match(semantic,/VERIFIED_SLOT_SELECTION/);
-  assert.match(router,/p_confidence:decision.confidence/);
+test('human requests and presented slot choices use the active deterministic decision authority', () => {
+  const human = understandConversation({ context:context({ batch_messages:[{ body:'human please' }] }), now });
+  assert.equal(human.decision.action, 'HANDOFF');
+  assert.equal(human.decision.reasonCode, 'CUSTOMER_REQUESTED_HUMAN');
+  const selected = understandConversation({ context:context({ pending_state:offered, batch_messages:[{ body:'الثاني' }] }), now });
+  assert.equal(selected.decision.action, 'CREATE_BOOKING');
+  assert.equal(selected.decision.reasonCode, 'VERIFIED_SLOT_SELECTION');
 });
-
-test('structured telemetry failure remains non-blocking while deterministic actions remain authoritative',()=>{
-  must('}).catch(()=>null);');
-  must("serviceRpc('dabbir_whatsapp_ai_create_booking'");
-  assert.match(migration,/public.dabbir_whatsapp_ai_cancel_booking/);
-  must("serviceRpc('dabbir_whatsapp_ai_reschedule_booking'");
-});
+// Scoped operator-ledger persistence and optional telemetry failure are exercised
+// through the actual worker in dabbir-whatsapp-worker-authority.test.mjs.

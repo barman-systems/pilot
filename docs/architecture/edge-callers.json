@@ -1,0 +1,119 @@
+{
+  "scope": "Read-only deployed source inspection of four relevant Edge adapters; string RPC candidates require operation review, not deletion permission.",
+  "functions": [
+    {
+      "files": [
+        {
+          "keys": [
+            "name",
+            "content"
+          ],
+          "localApiImport": false,
+          "metaMessageSender": false,
+          "name": "index.ts",
+          "rpcs": [
+            "dabbir_claim_workflow_notifications",
+            "dabbir_whatsapp_connections",
+            "dabbir_finalize_workflow_notification",
+            "dabbir_salon_reminder_worker_auth_rejected",
+            "dabbir_salon_reminder_worker_failed"
+          ]
+        }
+      ],
+      "hash": "fbbe9675ef4aa1da3f05cecb3c7c456e6b4d529f05b9277c6cb6f776050ae090",
+      "slug": "dabbir-salon-reminder-worker",
+      "version": 4
+    },
+    {
+      "files": [
+        {
+          "keys": [
+            "name",
+            "content"
+          ],
+          "localApiImport": false,
+          "metaMessageSender": false,
+          "name": "index.ts",
+          "rpcs": [
+            "dabbir_platform_login_identity_v1",
+            "dabbir_owner_session_verify_v1",
+            "dabbir_owner_otp_complete_v1",
+            "dabbir_owner_session_revoke_v1",
+            "dabbir_platform_auth_user_by_email_v1",
+            "dabbir_platform_staff_list_v2",
+            "dabbir_platform_staff_invite_delivery_v3",
+            "dabbir_platform_staff_invite_create_v2",
+            "dabbir_platform_staff_invite_resend_v2",
+            "dabbir_platform_staff_invite_revoke_v2",
+            "dabbir_platform_staff_governance_update_v2",
+            "dabbir_platform_staff_update_v1",
+            "dabbir_platform_incident_read_scoped_v1",
+            "dabbir_platform_incident_create_authorized_v1",
+            "dabbir_platform_incident_update_authorized_v1",
+            "dabbir_platform_command_center_overview_v1",
+            "dabbir_platform_owner_executive_v2",
+            "dabbir_platform_customer_search_v2",
+            "dabbir_platform_customer_360_scoped_v2",
+            "dabbir_platform_support_list_v2",
+            "dabbir_platform_support_reply_customer",
+            "dabbir_platform_support_action_v2",
+            "dabbir_platform_feedback_list_v1",
+            "dabbir_platform_feedback_update_v1",
+            "dabbir_platform_feedback_convert_v1",
+            "dabbir_platform_audit_list_v1",
+            "dabbir_platform_operational_snapshot_v1",
+            "dabbir_platform_operational_entities_v1",
+            "dabbir_platform_operational_action_v2",
+            "dabbir_ceo_commands_authorized_v1",
+            "dabbir_ceo_command_create_authorized_v1",
+            "dabbir_ceo_command_update_authorized_v1",
+            "dabbir_owner_decisions_recent_v1",
+            "dabbir_owner_decision_resolve_v1"
+          ]
+        }
+      ],
+      "hash": "62bd607e6d099669b8a18364e7f478472caca56e8c46a97f42083c9ef8dad9d3",
+      "slug": "dabbir-owner-broker",
+      "version": 17
+    },
+    {
+      "files": [
+        {
+          "keys": [
+            "name",
+            "content"
+          ],
+          "localApiImport": false,
+          "metaMessageSender": false,
+          "name": "index.ts",
+          "rpcs": [
+            "dabbir_vercel_runtime_broker_auth_rejected"
+          ]
+        }
+      ],
+      "hash": "85b0272da65ddac17d8d4ad44630a864dd65df046b1ce2a309a41a535d05a24c",
+      "slug": "dabbir-vercel-runtime-broker",
+      "version": 4
+    },
+    {
+      "files": [
+        {
+          "keys": [
+            "name",
+            "content"
+          ],
+          "localApiImport": false,
+          "metaMessageSender": false,
+          "name": "index.ts",
+          "rpcs": []
+        }
+      ],
+      "hash": "3d51030b22c89ffee93914e2237f5d6eb5f57b47c8b615e722ccae7e11465144",
+      "slug": "dabbir-owner-ceo-command",
+      "version": 4
+    }
+  ],
+  "revalidated_at": "2026-09-10T11:39:03.631965+00:00",
+  "current_main": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+  "deployed_inventory_unchanged": true
+}

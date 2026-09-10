@@ -31,9 +31,11 @@ const whatsapp=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',impo
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907133700_dabbir_ai_customer_cost_metering_v1.sql',import.meta.url),'utf8');
 
 test('WhatsApp AI routes through the per-business meter',()=>{
-  assert.match(whatsapp,/\.\/_dabbir-whatsapp-ai-meter\.js/);
-  assert.match(whatsapp,/business:\{id:clean\(context\?\.business\?\.id/);
-  assert.match(whatsapp,/conversation:\{id:clean\(context\?\.conversation\?\.id/);
+  const interpreter=fs.readFileSync(new URL('../api/_dabbir-semantic-interpreter.js',import.meta.url),'utf8');
+  assert.match(whatsapp,/\.\/_dabbir-semantic-interpreter\.js/);
+  assert.match(interpreter,/\.\/_dabbir-whatsapp-ai-meter\.js/);
+  assert.match(whatsapp,/meteringContext:\{business:\{id:c\.business\.id/);
+  assert.match(whatsapp,/conversation:\{id:c\.conversation\.id/);
   assert.match(whatsapp,/batch_message_created_at/);
 });
 

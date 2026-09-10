@@ -1,5 +1,5 @@
 {
-  "status": "DATABASE_APPLIED_AND_READBACK_VERIFIED_JOURNEY_PENDING",
+  "status": "PRODUCTION_VERIFIED",
   "scope": "Two existing service-only Coexistence RPCs reuse the existing private customer resolver; no backfill.",
   "pr": 701,
   "verified_before_apply_production": {
@@ -223,5 +223,30 @@
   },
   "post_apply_exact_sha_journey": "PENDING_FINAL_HEAD_CI_MERGE_AND_DEPLOY",
   "real_phone_meta_evidence": "NOT_CLAIMED",
-  "remaining_ui_investigation": "Original WebKit timeout not reproduced; no speculative application fix claimed."
+  "remaining_ui_investigation": "Original WebKit timeout not reproduced; no speculative application fix claimed.",
+  "complete_production_journey": {
+    "run_id": 34469891361,
+    "attempt": 1,
+    "job_id": 102847075543,
+    "verdict": "PASS",
+    "sha": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+    "deployment_id": "dpl_ESV166hqtxKae6F1daWgNMks8CjY",
+    "arabic": "PASS",
+    "english_iphone": "PASS",
+    "ipad_webkit": "PASS",
+    "tenant_whatsapp_isolation": {
+      "passed": 13,
+      "required_failures": 0
+    },
+    "stable_release": true,
+    "artifact_id": 10149609692,
+    "artifact_sha256": "6506522feb8ccef363089a44bb4440b643a620ebaec3a816b84824b531c52174",
+    "optional_provider_comparison_failures": [
+      "google-gemini",
+      "groq",
+      "cloudflare"
+    ],
+    "required_journey_failures": 0
+  },
+  "post_journey_function_readback": "Same three definition hashes and service-only ACLs verified after complete run"
 }
