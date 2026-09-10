@@ -168,3 +168,38 @@ Local full suite at this slice's original base: 2785/2785, zero failures/skips.
 Concurrent main added eight direct-return-to-AI UI cases; required CI on the
 rebased branch verifies those changes too. No Brain, authorization, database,
 confirmation, branch selection, reservation or delivery-status behavior changes.
+
+
+## Slice 4: Coexistence customer identity authority
+
+Read-only Production inspection proved the contact/history writers bypassed
+`dabbir_private.resolve_whatsapp_customer_v1`, the current text/voice resolver.
+An isolated PostgreSQL reproduction using the deployed definitions fails with
+23505 when an owner-created phone-only customer receives a contact sync. The
+same call through the existing resolver reuses that customer. This is a proven
+identity defect; the resolver and name-protection trigger are unchanged.
+
+The two existing service-only Coexistence RPC signatures now call that resolver
+and then add their channel metadata. No customer backfill/deletion, schema,
+RLS, connection selection, signature verification, ledger, idempotency or
+privilege expansion is included. The migration also qualifies ambiguous tenant
+columns in the existing echo/mutation updates: the previous echo call fails
+with 42702 under Production's verified `plpgsql.variable_conflict=error`.
+The predicates and intended handoff/batch behavior remain the same.
+
+Input: existing authenticated service RPC arguments; connection determines
+business/branch, normalized handle determines customer. Output: the same RPC
+JSON/row shapes with the canonical customer ID. Dependencies: existing private
+resolver and name guard, tenant-scoped customer/conversation/event tables.
+Failure: reject unknown/disconnected connection, wrong service role and split
+phone/handle identity; PostgreSQL rolls back the whole failed statement.
+
+12 isolated PostgreSQL cases cover the two before/after reproductions, shared
+text/voice/contact/history identity, explicit owner-name priority, provider name
+refresh, tenant/branch separation, replay, conflicting identity, removal and
+re-add, app echo/handoff, pending edits, service-only privileges and retained
+RLS flag. The fixture models relevant constraints and actual function/trigger
+bodies; it does not replace the existing Production isolation gate.
+
+This PR is prepared in the sequence after slices 1–3. Database application and
+Production verification must be recorded before calling this slice verified.
