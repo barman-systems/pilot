@@ -10,7 +10,7 @@ for another time without checking the customer's stated alternative.
 The frozen 104 cases are retained. The optional
 `--require-conditional-fallback` variant adds one independent case with service
 and time supplied on turn 1, followed by the explicit conditional message on
-turn 2. Its oracle requires two real adapter calls in the requested date order
+turn 2. Its oracle requires two availability adapter calls in the requested date order
 after the first empty result. The unmodified `855813a` result remains saved as
 `DABBIR_UNSEEN_STRICT_FINAL_855813A.json` (101/105). It is not counted as passing.
 
@@ -31,7 +31,7 @@ orchestrator checks availability again using that new version. No extra model
 call or booking mutation is introduced.
 
 The service-role-only additive migration is
-`20260910043500_dabbir_conditional_availability_date_v1.sql`. Existing functions,
+`20260910045420_dabbir_conditional_availability_date_v1.sql`. Existing functions,
 tables, RLS and commit/replay behavior are preserved. It locks conversation then
 canonical state using the established guard, rechecks the version after the row
 lock, and rejects stale/duplicate transitions. Rollback: revert the application
@@ -60,3 +60,21 @@ rolls back. This is not a Meta or real-phone proof.
 
 Migration application, actual SQL results, deployment SHA and the next exact
 Production journey are recorded after execution. No success is presumed here.
+
+## Actual migration and database result
+
+After candidate CI, tenant security and Promptfoo passed on `29e1f8e`, the
+additive function was applied successfully. Supabase recorded migration version
+`20260910045420`; the repository filename was aligned with that actual ledger
+version, with unchanged SQL content.
+
+The rollback-only Production proof passed: first-date availability was genuinely
+empty; advancing without that read was denied; the canonical date/version moved
+from September 11/version 1 to September 12/version 2; the existing original
+commit replay returned the advanced state instead of overwriting it; the old
+advance version was denied; the second actual availability read returned three
+slots on September 12; a newer customer message superseded the old batch; zero
+new bookings were created. All fixture writes rolled back.
+
+This verifies the new SQL transition and existing read tools on Production.
+Application deployment and its exact-release journey remain to be verified.

@@ -1,0 +1,18 @@
+{
+  "scope": "REAL_POSTGRESQL_ROLLBACK_ONLY_NO_MODEL_OR_META",
+  "migration_version": "20260910045420",
+  "migration_name": "dabbir_conditional_availability_date_v1",
+  "first_date": "2026-09-11",
+  "next_date": "2026-09-12",
+  "version_before": 1,
+  "version_after": 2,
+  "real_empty_read": true,
+  "advance_without_read_denied": true,
+  "canonical_date_readback": true,
+  "same_version_replay_denied": true,
+  "original_commit_replay_preserves_date": true,
+  "next_date_actual_slots": 3,
+  "new_message_supersedes": true,
+  "new_bookings": 0,
+  "rolled_back": true
+}

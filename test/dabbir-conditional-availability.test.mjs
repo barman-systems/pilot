@@ -71,7 +71,7 @@ for(const config of [{failAdvance:true},{failSecond:true}])test('conditional fai
 });
 
 const ids={business:'10000000-0000-4000-8000-000000000001',conversation:'10000000-0000-4000-8000-000000000002',batch:'10000000-0000-4000-8000-000000000003',lock:'10000000-0000-4000-8000-000000000004'};
-const sql=fs.readFileSync(new URL('../supabase/migrations/20260910043500_dabbir_conditional_availability_date_v1.sql',import.meta.url),'utf8');
+const sql=fs.readFileSync(new URL('../supabase/migrations/20260910045420_dabbir_conditional_availability_date_v1.sql',import.meta.url),'utf8');
 test('PostgreSQL date transition validates receipt, source, revision and consumes the alternative once',async()=>{
  const db=new PGlite();
  try{

@@ -9,7 +9,7 @@ declare biz uuid:=gen_random_uuid();br uuid:=gen_random_uuid();cust uuid:=gen_ra
  conv uuid:=gen_random_uuid();msg uuid:=gen_random_uuid();batch uuid:=gen_random_uuid();
  lock uuid:=gen_random_uuid();svc uuid:=gen_random_uuid();busy uuid:=gen_random_uuid();
  first_date date:=(now() at time zone 'Asia/Dubai')::date+1;
- s jsonb;loaded jsonb;initial_read jsonb;advanced jsonb;next_read jsonb;blocked boolean:=false;
+ s jsonb;loaded jsonb;initial_read jsonb;advanced jsonb;next_read jsonb;replayed jsonb;blocked boolean:=false;
 begin
  insert into public.dabbir_businesses(id,slug,name,business_type,demo_mode,timezone,currency_code)
  values(biz,'qa-conditional-'||biz,'Understanding conditional rollback QA','salon',true,'Asia/Dubai','AED');
@@ -48,6 +48,12 @@ begin
  advanced:=public.dabbir_semantic_advance_availability_date_v1(batch,lock,1);
  if advanced->>'version'<>'2' or advanced#>>'{state,entities,date,value}' is distinct from (first_date+1)::text
   or advanced#>'{state,entities,date}' ? 'alternative_value' then raise exception 'QA_DATE_NOT_PERSISTED';end if;
+ -- Simulate a worker restart with its original pre-tool interpretation. The
+ -- existing idempotent commit must return the advanced truth, not overwrite it.
+ replayed:=public.dabbir_semantic_commit_v2(batch,lock,0,(loaded->>'message_revision')::bigint,s,'{}');
+ if replayed->>'replay'<>'true' or replayed->>'version'<>'2'
+  or replayed#>>'{state,entities,date,value}' is distinct from (first_date+1)::text
+ then raise exception 'QA_RESTART_OVERWROTE_DATE';end if;
  blocked:=false;
  begin perform public.dabbir_semantic_advance_availability_date_v1(batch,lock,1);
  exception when others then if sqlerrm='SEMANTIC_VERSION_CONFLICT' then blocked:=true;else raise;end if;end;
@@ -67,7 +73,7 @@ begin
  if not blocked then raise exception 'QA_NEW_MESSAGE_NOT_SUPERSEDING';end if;
  perform set_config('dabbir.conditional_proof',jsonb_build_object('real_empty_read',true,
   'advance_without_read_denied',true,'canonical_date_readback',true,'next_date_actual_slots',jsonb_array_length(next_read->'slots'),
-  'same_version_replay_denied',true,'new_message_supersedes',true,'new_bookings',0,
+  'same_version_replay_denied',true,'original_commit_replay_preserves_date',true,'new_message_supersedes',true,'new_bookings',0,
   'first_date',first_date::text,'next_date',(first_date+1)::text,'version_before',1,'version_after',2,
   'scope','REAL_POSTGRESQL_ROLLBACK_ONLY_NO_MODEL_OR_META')::text,true);
 end $proof$;
