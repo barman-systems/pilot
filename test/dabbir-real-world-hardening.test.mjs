@@ -7,6 +7,7 @@ import {unseenSpec} from './fixtures/understanding/unseen-spec.mjs';
 import {evaluateUnseen} from '../scripts/dabbir-unseen-evaluate.mjs';
 import {dialogueHarness} from './fixtures/understanding/dialogue-harness.mjs';
 import {safeProviderTrace} from '../api/_dabbir-understanding-orchestrator.js';
+import {probeCognitiveDialogue} from '../api/_dabbir-cognitive-probe.js';
 
 test('unseen corpus retains 104 individually authored cases across 8 actual business types',()=>{
  assert.equal(unseenSpec.length,104);assert.equal(new Set(unseenSpec.map(x=>x[0])).size,104);
@@ -48,4 +49,12 @@ test('decision telemetry keeps provider facts and never copies arbitrary provide
  assert.equal(meta.fallback_used,true);assert.equal(meta.actual_cost_usd,null);assert.equal(meta.tokens.output,10);
  assert.doesNotMatch(JSON.stringify(meta),/do-not-store|secret|chain_of_thought/);
  assert.equal(safeProviderTrace({provider:'secret@example.com?token=x'}).provider,null);
+});
+test('fixed multi-activity probe checks semantic facets without exposing any mutation tool',async()=>{
+ const r=await probeCognitiveDialogue({scenario:'unseen_multi_activity',interpret:async({message})=>{
+  const q=message==='كم تاخذ وقت؟',medical=message.includes('تشخيص');
+  return {provider:'fixture',model:'fixture',proposal:{action:q?'SERVICE_MENU':'REPLY',intent:q?'SERVICE_DISCOVERY':'SUPPORT',confidence:.99,riskLevel:medical?'HIGH':'LOW',entities:[],dialogue:{message_role:q?'SIDE_QUESTION':'CONTINUATION',evidence:message,invalidated_fields:[]},...(q?{serviceQuestion:{field:'duration_minutes',evidence:message,explicit_service:false}}:{})}};
+ }});
+ assert.equal(r.ok,true,JSON.stringify(r.results));assert.equal(r.results.length,4);assert.equal(r.external_side_effects,false);
+ for(const c of r.results)assert.equal(c.checks.no_mutating_tool,true);
 });

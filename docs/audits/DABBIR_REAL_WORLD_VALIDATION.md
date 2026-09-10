@@ -96,3 +96,24 @@ No dependency or database migration was added. Production rollout flags,
 customer conversation ownership, provider order and budget are unchanged.
 This document is not a final PASS; release and real-device evidence must be
 appended after execution.
+
+### Independent transaction result
+
+Workflow `34430813094`, job `102725746783`, on candidate `ca9659cc` passed.
+Three distinct backend sessions overlapped: the holder transaction ran from
+02:47:39.389 to 02:47:47.458 UTC; competitors started at 02:47:45.512 and
+02:47:45.581. All returned the same appointment. One result was a fresh execution
+and two were idempotent replays. Readback: one booking and one action ledger row.
+The delayed decision was rejected with `SEMANTIC_SUPERSEDED` after B/C advanced
+the conversation revision to 3. Cleanup verified zero tenant and owner rows.
+The full artifact is retained in `DABBIR_REAL_DB_CONCURRENCY_EVIDENCE.json`.
+
+An earlier workflow `34430589359` failed and cleaned up. Its harness took a batch
+row lock ahead of the application's canonical lock order. The revised harness
+acquires the existing `dabbir_semantic_assert_current_v2` guard before waiting;
+no Production locking function was changed. The first error report only retained
+`DB_QUERY_FAILED`, so the exact server error class was not independently captured.
+
+The required Production journey now also invokes four fixed unseen live-model
+scenarios for services, clinic, laundry and salon. These diagnostics expose no
+mutating tool and do not claim to replace real database or Meta proof.
