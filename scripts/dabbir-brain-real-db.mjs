@@ -12,22 +12,28 @@ const prefix=`begin; set local statement_timeout='25s'; set local request.jwt.cl
 async function sql(query){
  const response=await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query}),signal:AbortSignal.timeout(35000)});
  const body=await response.json();
- if(!response.ok){const code=String(body.message||'').match(/SEMANTIC_[A-Z_]+|QA_[A-Z_]+/);throw Object.assign(Error(code?.[0]||`DB_QUERY_HTTP_${response.status}`),{code:code?.[0]||'DB_QUERY_FAILED'});}
+ if(!response.ok){const message=String(body.message||''),code=message.match(/SEMANTIC_[A-Z_]+|QA_[A-Z_]+/);const kind=/deadlock detected/i.test(message)?'DB_DEADLOCK':/statement timeout/i.test(message)?'DB_STATEMENT_TIMEOUT':/permission denied/i.test(message)?'DB_PERMISSION_DENIED':`DB_QUERY_HTTP_${response.status}`;throw Object.assign(Error(code?.[0]||kind),{code:code?.[0]||kind});}
  if(!Array.isArray(body))throw Error('DB_RESULT_INVALID');return body;
 }
-let fixture;
+let fixture;const inFlight=[];
 try{
- fixture=(await sql(fs.readFileSync(new URL('../test/fixtures/understanding/production-concurrency-setup.sql',import.meta.url),'utf8')))[0]?.fixture;
+ evidence.phase='setup';fixture=(await sql(fs.readFileSync(new URL('../test/fixtures/understanding/production-concurrency-setup.sql',import.meta.url),'utf8')))[0]?.fixture;
  assert.ok(fixture&&Object.values(fixture).every(v=>typeof v==='string'&&uuid.test(v)),'fixture identifiers are server generated UUIDs');
  const {batch,lock,business,past,conversation}=fixture;
- const execute=i=>sql(`${prefix} ${i===0?`/* DABBIR_CONCURRENT_HOLDER */ select id from public.dabbir_message_batches where id='${batch}' for update; select pg_sleep(8);`:''} select jsonb_build_object('session',pg_backend_pid(),'started',transaction_timestamp(),'result',public.dabbir_semantic_execute_v2('${batch}','${lock}',1,'CREATE_BOOKING'),'finished',clock_timestamp()) as evidence; commit;`);
- const holder=execute(0);holder.catch(()=>{});
+ evidence.phase='concurrent_booking';
+ // Acquire locks through the application's own guard, in its actual order.
+ // Locking the batch first would create an artificial reverse-order deadlock.
+ const execute=i=>sql(`${prefix} ${i===0?`/* DABBIR_CONCURRENT_HOLDER */ select public.dabbir_semantic_assert_current_v2('${batch}','${lock}',1); select pg_sleep(8);`:''} select jsonb_build_object('session',pg_backend_pid(),'started',transaction_timestamp(),'result',public.dabbir_semantic_execute_v2('${batch}','${lock}',1,'CREATE_BOOKING'),'finished',clock_timestamp()) as evidence; commit;`);
+ const holder=execute(0);inFlight.push(holder);holder.catch(()=>{});
  let active=false;
  for(let i=0;i<8&&!active;i++){
   active=Number((await sql("select count(*) as active from pg_stat_activity where pid<>pg_backend_pid() and state='active' and query like '%DABBIR_CONCURRENT_HOLDER%'"))[0].active)>0;
  }
  assert.ok(active,'holder transaction must be active before competitors start');
- const outcomes=await Promise.all([holder,execute(1),execute(2)]);
+ const competitors=[execute(1),execute(2)];inFlight.push(...competitors);
+ const settled=await Promise.allSettled([holder,...competitors]);
+ if(settled.some(x=>x.status==='rejected'))throw settled.find(x=>x.status==='rejected').reason;
+ const outcomes=settled.map(x=>x.value);
  evidence.concurrent_booking=outcomes.map(x=>x[0].evidence);
  assert.equal(new Set(evidence.concurrent_booking.map(x=>x.session)).size,3);
  assert.ok(evidence.concurrent_booking.slice(1).some(x=>Date.parse(x.started)<Date.parse(evidence.concurrent_booking[0].finished)),'independent transaction intervals must overlap');
@@ -37,13 +43,16 @@ try{
  assert.equal(Number(readback.bookings),1);assert.equal(Number(readback.ledger_rows),1);evidence.readback=readback;
  // A is already interpreted. B/C arrive before A's delayed next operation.
  // This tests the existing revision trigger against an old decision overwrite.
+ evidence.phase='late_decision';
  const late=sql(`${prefix} /* DABBIR_LATE_DECISION */ select pg_sleep(8); select public.dabbir_semantic_assert_current_v2('${batch}','${lock}',1); commit;`).then(()=>({blocked:false}),error=>({blocked:error.code==='SEMANTIC_SUPERSEDED',error:error.code}));
+ inFlight.push(late);
  const inserted=await sql(`${prefix} insert into public.dabbir_messages(business_id,conversation_id,sender_type,body,simulated) values('${business}','${conversation}','customer','لا قصدي عقب باجر',false),('${business}','${conversation}','customer','الساعة 19:00',false); select understanding_revision from public.dabbir_conversations where id='${conversation}'; commit;`);
  evidence.late_decision=await late;assert.equal(evidence.late_decision.blocked,true);assert.equal(Number(inserted[0].understanding_revision),3);
  evidence.message_revision=Number(inserted[0].understanding_revision);
  evidence.verdict='PASS';
 }catch(error){evidence.verdict='FAIL';evidence.error=error.code||error.message;process.exitCode=1;}
 finally{
+ await Promise.allSettled(inFlight);
  if(fixture){
   const {business,owner}=fixture;
   try{

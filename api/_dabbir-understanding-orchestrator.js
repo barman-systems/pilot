@@ -35,7 +35,7 @@ export function safeProviderTrace(metadata){
  const number=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0?v:null;
  const attempts=arr(metadata.attempts).slice(0,4).map(a=>({provider:label(a.provider),model:label(a.model),status:number(a.status),latency_ms:number(a.latency_ms)}));
  const usage=metadata.final_request_usage;
- return {provider:label(metadata.provider),model:label(metadata.model),fallback_used:new Set(attempts.map(a=>a.provider).filter(Boolean)).size>1,attempts,
+ return {provider:label(metadata.provider)||attempts.at(-1)?.provider||null,model:label(metadata.model)||attempts.at(-1)?.model||null,fallback_used:new Set(attempts.map(a=>[a.provider,a.model].join(':'))).size>1,attempts,
   latency_ms:number(metadata.latency_ms),actual_cost_usd:number(metadata.actual_cost_usd),
   tokens:usage?{input:number(usage.inputTokens),output:number(usage.outputTokens),reasoning:number(usage.reasoningTokens)}:null};
 }
@@ -235,7 +235,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const shouldInterpret=!!(planner&&shortcutAllowed&&!isGreeting&&!orphanChoice&&!groundedMenuSelection&&!pendingResolved&&!DETERMINISTIC_AUTHORITY_REASONS.has(decision.reasonCode)&&state.intent!=='UNSUPPORTED'&&(!constrainedContinuation(c.batch_messages,semanticPrevious)||semanticPrevious?.recovery_required===true)&&naturalLanguageTurn(c.batch_messages));
   if(shouldInterpret){
     budget();let proposal,plannerFailure;
-    try{proposal=await planner(c,aiFirstPlannerContext(c,state,semanticPrevious));providerTrace=safeProviderTrace(proposal?.executionMetadata);observedProposal=proposal;}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;plannerFailure=error.code;}
+    try{proposal=await planner(c,aiFirstPlannerContext(c,state,semanticPrevious));providerTrace=safeProviderTrace(proposal?.executionMetadata);observedProposal=proposal;}catch(error){if(!RECOVERABLE_PLANNER_ERRORS.has(error?.code))throw error;providerTrace=safeProviderTrace(error.telemetry);plannerFailure=error.code;}
     if(plannerFailure){
       // Until interpretation succeeds, the first parse is provisional. A
       // catalog name in a side question must not replace the active booking
@@ -247,6 +247,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
         checkpointState.revision=state.revision;checkpointState.updated_at=turnNow.toISOString();
         if(checkpointState.cognition)checkpointState.cognition={...checkpointState.cognition,revision:state.revision,journey_stage:'RETRY',next_action:'WAIT',response_strategy:'RETRY_INTERPRETATION'};
       }
+      checkpointState.provider_trace=providerTrace;checkpointState.decision_latency_ms=Date.now()-started;
       await rpc('dabbir_semantic_checkpoint_failure_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,
         p_expected_version:load.version,p_message_revision:load.message_revision,p_state:checkpointState,p_error:plannerFailure});
       if(Number(claim.attempt_count||1)<2){await finish(claim,'RETRY',plannerFailure);return {state:'RETRY',action:'RETRY',error:plannerFailure};}
