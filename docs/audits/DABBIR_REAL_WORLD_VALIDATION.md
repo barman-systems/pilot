@@ -208,3 +208,12 @@ See `DABBIR_BRAIN_STORE_REQUEST_SMOKE.sql` and its JSON evidence.
 Rollout remains one business at 100% canary; businesses without an explicit
 rollout retain shadow mode. No real customer's human takeover was reset and no
 new activity was globally enabled to obtain a passing test.
+
+The added concurrent outbound experiment initially failed at
+`dabbir_whatsapp_connected_requires_verification`: its isolated connection has
+never completed Meta authorization. Workflow `34434320596` cleaned all fixture
+rows after that failure. No verification timestamp was fabricated. The retained
+test instead requires three overlapping attempts to be denied by that real
+connection gate and zero new send reservations. Successful outbound duplicate
+suppression on an authorized real-phone path remains unproven; this rejection
+test is not used to claim otherwise.

@@ -12,7 +12,7 @@ const prefix=`begin; set local statement_timeout='25s'; set local request.jwt.cl
 async function sql(query){
  const response=await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query}),signal:AbortSignal.timeout(35000)});
  const body=await response.json();
- if(!response.ok){const message=String(body.message||''),code=message.match(/SEMANTIC_[A-Z_]+|QA_[A-Z_]+/);const kind=/deadlock detected/i.test(message)?'DB_DEADLOCK':/statement timeout/i.test(message)?'DB_STATEMENT_TIMEOUT':/permission denied/i.test(message)?'DB_PERMISSION_DENIED':`DB_QUERY_HTTP_${response.status}`;throw Object.assign(Error(code?.[0]||kind),{code:code?.[0]||kind});}
+ if(!response.ok){const message=String(body.message||''),code=message.match(/(?:SEMANTIC|QA|WHATSAPP|DABBIR|ACTIVITY)_[A-Z_0-9]+/);const kind=/deadlock detected/i.test(message)?'DB_DEADLOCK':/statement timeout/i.test(message)?'DB_STATEMENT_TIMEOUT':/permission denied/i.test(message)?'DB_PERMISSION_DENIED':`DB_QUERY_HTTP_${response.status}`;throw Object.assign(Error(code?.[0]||kind),{code:code?.[0]||kind});}
  if(!Array.isArray(body))throw Error('DB_RESULT_INVALID');return body;
 }
 let fixture;const inFlight=[];
@@ -41,11 +41,12 @@ try{
  assert.equal(evidence.concurrent_booking.filter(x=>x.result.idempotent_replay===false).length,1);
  const readback=(await sql(`select (select count(*) from public.dabbir_appointments where business_id='${business}' and id<>'${past}') as bookings,(select count(*) from public.dabbir_ai_action_ledger where business_id='${business}') as ledger_rows;`))[0];
  assert.equal(Number(readback.bookings),1);assert.equal(Number(readback.ledger_rows),1);evidence.readback=readback;
- // Exercise the actual send reservation under overlapping transactions. This
- // script has no Meta transport: should_send authorizes one attempt, not delivery.
- evidence.phase='concurrent_outbound';
- await sql(`${prefix} update public.dabbir_customers set channel_handle='qa-synthetic' where business_id='${business}' and id=(select customer_id from public.dabbir_conversations where id='${conversation}' and business_id='${business}'); update public.dabbir_whatsapp_connections set status='connected' where business_id='${business}' and waba_id like 'qa-%' and access_token_ciphertext='SYNTHETIC-NOT-A-CREDENTIAL'; commit;`);
- const reserve=i=>sql(`${prefix} ${i===0?`/* DABBIR_OUTBOUND_HOLDER */ select public.dabbir_semantic_assert_current_v2('${batch}','${lock}',1); select pg_sleep(8);`:''} select jsonb_build_object('session',pg_backend_pid(),'started',transaction_timestamp(),'result',public.dabbir_semantic_reserve_outbound_v2('${batch}','${lock}',1,'wa-understanding:${batch}:qa-proof',repeat('b',64),'Synthetic no-transport proof'),'finished',clock_timestamp()) as evidence; commit;`);
+ // The isolated fixture has no Meta authorization. Keep that truth intact:
+ // concurrent attempts must all be denied, with no new send reservation.
+ // Successful real-device outbound idempotency remains a separate acceptance gap.
+ evidence.phase='concurrent_outbound_connection_gate';
+ await sql(`${prefix} update public.dabbir_customers set channel_handle='qa-synthetic' where business_id='${business}' and id=(select customer_id from public.dabbir_conversations where id='${conversation}' and business_id='${business}'); commit;`);
+ const reserve=i=>sql(`${prefix} ${i===0?`/* DABBIR_OUTBOUND_HOLDER */ select public.dabbir_semantic_assert_current_v2('${batch}','${lock}',1); select pg_sleep(8);`:''} do $gate$ begin perform public.dabbir_semantic_reserve_outbound_v2('${batch}','${lock}',1,'wa-understanding:${batch}:qa-proof',repeat('b',64),'Synthetic no-transport proof'); raise exception 'QA_UNVERIFIED_CONNECTION_AUTHORIZED'; exception when others then if sqlerrm<>'WHATSAPP_TENANT_CONNECTION_NOT_FOUND' then raise; end if; end $gate$; select jsonb_build_object('session',pg_backend_pid(),'started',transaction_timestamp(),'blocked',true,'error','WHATSAPP_TENANT_CONNECTION_NOT_FOUND','finished',clock_timestamp()) as evidence; commit;`);
  const outboundHolder=reserve(0);inFlight.push(outboundHolder);outboundHolder.catch(()=>{});
  active=false;
  for(let i=0;i<8&&!active;i++)active=Number((await sql("select count(*) as active from pg_stat_activity where pid<>pg_backend_pid() and state='active' and query like '%DABBIR_OUTBOUND_HOLDER%'"))[0].active)>0;
@@ -53,11 +54,12 @@ try{
  const outboundCompetitors=[reserve(1),reserve(2)];inFlight.push(...outboundCompetitors);
  const outbound=await Promise.allSettled([outboundHolder,...outboundCompetitors]);
  if(outbound.some(x=>x.status==='rejected'))throw outbound.find(x=>x.status==='rejected').reason;
- evidence.concurrent_outbound=outbound.map(x=>{const row=x.value[0].evidence;return {session:row.session,started:row.started,finished:row.finished,reservation_id:row.result.reservation_id,should_send:row.result.should_send};});
- assert.equal(new Set(evidence.concurrent_outbound.map(x=>x.session)).size,3);
- assert.ok(evidence.concurrent_outbound.slice(1).every(x=>Date.parse(x.started)<Date.parse(evidence.concurrent_outbound[0].finished)));
- assert.equal(new Set(evidence.concurrent_outbound.map(x=>x.reservation_id)).size,1);
- assert.equal(evidence.concurrent_outbound.filter(x=>x.should_send===true).length,1);
+ evidence.concurrent_outbound_denied=outbound.map(x=>x.value[0].evidence);
+ assert.equal(new Set(evidence.concurrent_outbound_denied.map(x=>x.session)).size,3);
+ assert.ok(evidence.concurrent_outbound_denied.slice(1).every(x=>Date.parse(x.started)<Date.parse(evidence.concurrent_outbound_denied[0].finished)));
+ assert.ok(evidence.concurrent_outbound_denied.every(x=>x.blocked===true));
+ evidence.outbound_new_reservations=Number((await sql(`select count(*) as count from public.dabbir_whatsapp_outbound_reservations where business_id='${business}' and idempotency_key='wa-understanding:${batch}:qa-proof';`))[0].count);
+ assert.equal(evidence.outbound_new_reservations,0);
  evidence.meta_delivery_proven=false;
  // A is already interpreted. B/C arrive before A's delayed next operation.
  // This tests the existing revision trigger against an old decision overwrite.
