@@ -52,7 +52,11 @@ export function resolveOperationalRequirements({business,service,delivery_mode,c
   result.contract=contract;
   const mode=normalizeDeliveryMode(delivery_mode);
   if(!DELIVERY_MODES.includes(mode) || mode==='HYBRID' || !arr(contract.delivery_modes).includes(mode)) {
-    result.required=['delivery_mode'];result.missing=['delivery_mode'];return result;
+    // Confirmed provenance cannot make an unsupported business mode valid.
+    // Keep that distinction explicit so the quality gate can ask to correct it.
+    result.required=['delivery_mode'];result.missing=['delivery_mode'];
+    if(delivery_mode!=null)result.invalid=['delivery_mode'];
+    return result;
   }
   const rules=contract.mode_requirements?.[mode];
   if(!rules || !Array.isArray(rules.required) || !Array.isArray(contract.collection_priority)) {block('ACTIVITY_CONTRACT_INVALID');return result;}
