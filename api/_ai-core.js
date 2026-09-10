@@ -13,8 +13,14 @@ const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
 const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
+// Routing is independent of hosting. Runtime OIDC is a credential source only.
+const gatewayTestRequested = env => env.DABBIR_AI_GATEWAY_TEST === '1';
+const hasGatewayCredential = env => Boolean(String(env.AI_GATEWAY_API_KEY || '').trim() || String(env.VERCEL_OIDC_TOKEN || '').trim());
+const gatewayAvailable = env => hasGatewayCredential(env) || Boolean(env.VERCEL_ENV);
+const gatewaySelected = env => gatewayTestRequested(env) || gatewayAvailable(env);
+
 export function getDABBIRAiConfig(env = process.env) {
-  if (env.GEMINI_API_KEY) {
+  if (!gatewayTestRequested(env) && env.GEMINI_API_KEY) {
     return {
       provider: 'google-gemini',
       endpoint: GEMINI_ENDPOINT,
@@ -25,7 +31,7 @@ export function getDABBIRAiConfig(env = process.env) {
     };
   }
 
-  if (env.GROQ_API_KEY) {
+  if (!gatewayTestRequested(env) && env.GROQ_API_KEY) {
     return {
       provider: 'groq',
       endpoint: GROQ_ENDPOINT,
@@ -36,7 +42,7 @@ export function getDABBIRAiConfig(env = process.env) {
     };
   }
 
-  if (env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID) {
+  if (!gatewayTestRequested(env) && env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID) {
     return {
       provider: 'cloudflare-workers-ai',
       endpoint: cloudflareEndpoint(env),
@@ -47,18 +53,17 @@ export function getDABBIRAiConfig(env = process.env) {
     };
   }
 
-  const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
-  if (env.VERCEL_ENV) {
+  if (gatewaySelected(env)) {
     return {
       provider: 'vercel-ai-gateway',
       endpoint: GATEWAY_ENDPOINT,
       model: String(env.DABBIR_AI_GATEWAY_MODEL || DEFAULT_GATEWAY_MODEL),
-      configured: Boolean(gatewayCredential || env.VERCEL_ENV),
-      auth_mode: env.AI_GATEWAY_API_KEY
+      configured: gatewayAvailable(env),
+      auth_mode: String(env.AI_GATEWAY_API_KEY || '').trim()
         ? 'API_KEY'
-        : env.VERCEL_OIDC_TOKEN
+        : String(env.VERCEL_OIDC_TOKEN || '').trim()
           ? 'OIDC_ENV'
-          : 'VERCEL_PROJECT_OIDC_RUNTIME',
+          : env.VERCEL_ENV ? 'VERCEL_PROJECT_OIDC_RUNTIME' : 'MISSING',
       cost_mode: 'FREE_TIER_ONLY',
     };
   }
@@ -79,7 +84,7 @@ export function getDABBIRAiRedundancy(env = process.env) {
     Boolean(env.GROQ_API_KEY),
     Boolean(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID),
   ].filter(Boolean).length;
-  const gatewayFallbackConfigured = Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
+  const gatewayFallbackConfigured = gatewayAvailable(env);
   const configuredProviderCount = directProviderCount + (gatewayFallbackConfigured ? 1 : 0);
   return {
     direct_provider_count: directProviderCount,
@@ -90,8 +95,8 @@ export function getDABBIRAiRedundancy(env = process.env) {
 }
 
 async function resolveGatewayCredential(env = process.env, oidcGetter) {
-  if (env.AI_GATEWAY_API_KEY) return { credential: String(env.AI_GATEWAY_API_KEY), auth_mode: 'API_KEY' };
-  if (env.VERCEL_OIDC_TOKEN) return { credential: String(env.VERCEL_OIDC_TOKEN), auth_mode: 'OIDC_ENV' };
+  if (String(env.AI_GATEWAY_API_KEY || '').trim()) return { credential: String(env.AI_GATEWAY_API_KEY).trim(), auth_mode: 'API_KEY' };
+  if (String(env.VERCEL_OIDC_TOKEN || '').trim()) return { credential: String(env.VERCEL_OIDC_TOKEN).trim(), auth_mode: 'OIDC_ENV' };
   if (!env.VERCEL_ENV) return null;
 
   let getter = oidcGetter;
@@ -310,7 +315,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     { role: 'user', content: input },
   ];
 
-  if (geminiKey) {
+  if (!gatewayTestRequested(env) && geminiKey) {
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GEMINI_ENDPOINT,
@@ -330,7 +335,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         });
       }
 
-      if (groqKey || cloudflareReady || env.VERCEL_ENV) {
+      if (groqKey || cloudflareReady || gatewayAvailable(env)) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({
           project: normalizedProject,
@@ -354,7 +359,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         cost_mode: config.cost_mode,
       };
     } catch (error) {
-      if (groqKey || cloudflareReady || env.VERCEL_ENV) {
+      if (groqKey || cloudflareReady || gatewayAvailable(env)) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({
           project: normalizedProject,
@@ -380,17 +385,17 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     }
   }
 
-  if (groqKey) {
+  if (!gatewayTestRequested(env) && groqKey) {
     try {
       const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
-      if (cloudflareReady || env.VERCEL_ENV) {
+      if (cloudflareReady || gatewayAvailable(env)) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
-      if (cloudflareReady || env.VERCEL_ENV) {
+      if (cloudflareReady || gatewayAvailable(env)) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
@@ -398,17 +403,17 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     }
   }
 
-  if (cloudflareReady) {
+  if (!gatewayTestRequested(env) && cloudflareReady) {
     try {
       const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
-      if (env.VERCEL_ENV) {
+      if (gatewaySelected(env)) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
       return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `cloudflare_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
-      if (env.VERCEL_ENV) {
+      if (gatewaySelected(env)) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
         return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
       }
@@ -416,14 +421,17 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     }
   }
 
-  if (env.VERCEL_ENV) {
+  if (gatewaySelected(env)) {
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
-    if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
+    if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', error_code: 'GATEWAY_AUTH_MISSING', gateway_route: 'SELECTED', auth_status: 'MISSING', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
     const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl, semantic });
     if (!result.ok) {
       return {
         ok: false,
         state: result.status === 429 ? 'RATE_LIMITED' : result.error === 'gateway_timeout' ? 'TIMEOUT' : 'PROVIDER_ERROR',
+        error_code: result.status === 401 ? 'GATEWAY_AUTH_INVALID' : result.status === 403 ? 'GATEWAY_ACCESS_DENIED' : 'GATEWAY_REQUEST_FAILED',
+        gateway_route: 'SELECTED',
+        auth_status: result.status === 401 ? 'REJECTED' : 'PRESENT_UNVERIFIED',
         error: result.error,
         provider: config.provider,
         model: result.model,
@@ -434,5 +442,6 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     return finalizeReply({ reply: String(result.payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, authMode: gatewayAuth.auth_mode, model: result.model });
   }
 
-  return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+  return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', gateway_route: 'NOT_SELECTED', gateway_reason: 'NO_CREDENTIALS_OR_RUNTIME_OIDC_AND_TEST_NOT_ENABLED', error_code: 'GATEWAY_NOT_SELECTED', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
 }
+
