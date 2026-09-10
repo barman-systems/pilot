@@ -11,21 +11,41 @@
     "production_attempt_1": {
       "run_id": 34451656218,
       "job_id": 102790676514,
-      "arabic": "PASS",
-      "english_iphone": "PASS",
-      "ipad": "FAIL: 15f_cognitive_context_references, 502, real_provider=false, no_execution=true",
+      "arabic": "PASS 35 required checks; three supplementary provider comparisons failed as in baseline",
+      "english_iphone": "PASS 33/33",
+      "ipad": "32/33; 15f_cognitive_context_references failed: 502, real_provider=false, no_execution=true",
       "isolation": "NOT_RUN: previous step failed",
       "release_identity_before_after": "MATCH",
       "artifact_id": 10142527271,
       "artifact_sha256": "8ff91b57e56c029af3932be676ee7f624c33a08536ff9ebd8eb91e19859f3319"
     },
-    "retry": "One unchanged exact-SHA full gate rerun started; no gates changed."
+    "retry": "PASS on unchanged SHA, attempt 2; original failure retained.",
+    "production_ci": {
+      "run_id": 34451656146,
+      "job_id": 102788534639,
+      "passed": 2752,
+      "failed": 0,
+      "skipped": 0
+    },
+    "production_attempt_2": {
+      "run_id": 34451656218,
+      "job_id": 102795071503,
+      "arabic": "PASS",
+      "english_iphone": "PASS",
+      "ipad": "PASS",
+      "isolation": "PASS 13/13",
+      "stable_release": true,
+      "artifact_id": 10143085284,
+      "artifact_sha256": "74d862765dc97237005933a8a1328ab3ebb963edeca4f05b8bc0d0b0b4eb97c4"
+    }
   },
   "prepared_slices": [
     {
       "pr": 698,
-      "status": "CI_PASS_PRODUCTION_PENDING",
-      "scope": "worker/cron dispatch owner; old module retained"
+      "status": "MERGED_PRODUCTION_VERIFICATION_RUNNING",
+      "scope": "worker/cron dispatch owner; old module retained",
+      "production_sha": "8826d37ed15aac45550a34f2f3b00b76c9cc07ba",
+      "production_journey_run": 34455112211
     },
     {
       "pr": 699,
@@ -47,5 +67,25 @@
     "Real-phone Meta proof is separate and not claimed.",
     "Actual future repair time and owner lookup time have not been measured.",
     "SQL inventory excludes dynamic SQL, REST writers and external callers unless separately enumerated."
-  ]
+  ],
+  "measurements": {
+    "baseline": {
+      "modules": 288,
+      "imports": 517,
+      "cycles": 0,
+      "text_template_transport_implementations": 2
+    },
+    "production_slice1": {
+      "modules": 289,
+      "imports": 518,
+      "cycles": 0,
+      "text_template_transport_implementations": 1
+    },
+    "common_transport_bug_source_files_before_after": [
+      1,
+      1
+    ],
+    "future_bug_repair_time": "NOT_MEASURED",
+    "owner_lookup_time": "NOT_MEASURED"
+  }
 }
