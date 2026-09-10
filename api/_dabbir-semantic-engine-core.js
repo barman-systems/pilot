@@ -14,12 +14,6 @@ export function normalizeSemanticText(v = '') {
     .replace(/[٠-٩]/g, n => String('٠١٢٣٤٥٦٧٨٩'.indexOf(n))).replace(/[أإآ]/g,'ا').replace(/ة/g,'ه')
     .toLowerCase().replace(/[^\p{L}\p{N}:\-]+/gu,' ').replace(/\s+/g,' ').trim();
 }
-// Whole-turn social language cannot answer a pending operational question.
-// Mixed messages ("هلا، باجر") still go through normal fact resolution.
-export function greetingOnly(messages) {
-  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.language_body??x?.body??'')).filter(Boolean).join(' '));
-  return /^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?|مرحبا(?: بك)?|هلا(?: والله)?|اهلا(?: وسهلا)?|شلونكم|شلونك|كيف الحال|شخباركم|شخبارك|hello|hi|hey|how are you|good morning|good evening)$/.test(text);
-}
 const nameOf = s => clean(s?.name_ar || s?.name || s?.name_en || s?.display_name);
 const valueOf = (s,k) => s.entities[k]?.status === 'active' ? s.entities[k].value : null;
 const supported = f => f?.status === 'active' && f?.value != null && f.confidence >= .9 && TRUST[f.source] > 0;
@@ -204,9 +198,8 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
   if(c.catalog_error)return route('HANDOFF',c.catalog_error);
   if(['human_active','action_required'].includes(c.conversation.state)||c.human_takeover){return route('HANDOFF','HUMAN_TAKEOVER_ACTIVE');}
   if(refuse){s.intent='UNSUPPORTED';s.overall_confidence=1;return route('REPLY','UNTRUSTED_INSTRUCTION',s.language==='ar'?'أقدر أساعدك بخدمات هذا النشاط ومواعيدك فقط.':'I can help with this business and your own appointments only.');}
-  if(/^(?:لا\s+)?(?:خلاص\s+)?(?:غيرت رايي|ما ابي اكمل|ما (?:ابي|ابغي|ابا) احجز|cancel this request|never mind|nevermind|i changed my mind)$/.test(all)){
+  if(/^(?:لا\s+)?(?:خلاص\s+)?(?:غيرت رايي|ما ابي اكمل|cancel this request|never mind|nevermind|i changed my mind)$/.test(all)){
     s.goal='UNKNOWN';s.intent='SUPPORT';s.intent_confirmed=false;s.goal_queue=[];
-    s.requirement_loop=null;s.clarification_entity=null;
     if(s.entities.date){delete s.entities.date.alternative_value;delete s.entities.date.alternative_condition;}
     invalidate(s,'slot',stamp);invalidate(s,'appointment',stamp);s.pending_action='REPLY';
     return route('REPLY','CUSTOMER_WITHDREW_REQUEST',s.language==='ar'?'تمام، وقفت متابعة الطلب الحالي.':'Okay, I have stopped the current request.');

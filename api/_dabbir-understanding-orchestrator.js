@@ -1,7 +1,7 @@
-import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, understandLegacyConversation, semanticPlannerContext, greetingOnly } from './_dabbir-semantic-engine.js';
+import { BUDGET, normalizeSemanticText, resolveOrdinal, understandConversation, understandLegacyConversation, semanticPlannerContext } from './_dabbir-semantic-engine.js';
 import {activeJourney,resolvesPending,mayReplaceGoal,situationSnapshot,qualityGate} from './_dabbir-cognitive-dialogue.js';
 import {resumeQueuedGoal,queuedGoalPrompt} from './_dabbir-goal-queue.js';
-import {verifiedOperationalFact,REQUIREMENT_LOOP_IDLE_MS} from './_dabbir-activity-intelligence.js';
+import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {assertBrainDecision,verifiedAvailability,assertResponseGrounding} from './_dabbir-brain-contract.js';
 import {ordinalReferenceField} from './_dabbir-context-resolver.js';
 
@@ -11,7 +11,7 @@ const MUTATIONS=new Set(['CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING']
 const SEMANTIC_INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE']);
 const RECOVERABLE_PLANNER_ERRORS=new Set(['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID','SEMANTIC_PROVIDER_BUDGET']);
 const DETERMINISTIC_AUTHORITY_REASONS=new Set(['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST']);
-export const SEMANTIC_SESSION_IDLE_MS=REQUIREMENT_LOOP_IDLE_MS;
+export const SEMANTIC_SESSION_IDLE_MS=30*60*1000;
 const safeMetrics=(s,d)=>boundedMetrics({intent:d.intent,action:d.action,missing_count:s.missing_fields.length,
   missing_fields:s.missing_fields,provider_trace:s.provider_trace||null,decision_latency_ms:s.decision_latency_ms??null,
   unresolved_count:s.unresolved_references.length,correction_count:s.user_corrections.length,
@@ -109,6 +109,10 @@ function sessionPrevious(previous,c,at){
   const idle=!Number.isFinite(updated)||at.getTime()-updated>SEMANTIC_SESSION_IDLE_MS;
   if((expired||idle)&&!pendingStateLive(c,at)&&!(previous.recovery_required===true&&!expired)&&!(activeJourney(previous)&&!expired))return {previous:null,reset:true};
   return {previous,reset:false};
+}
+function greetingOnly(messages){
+  const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
+  return /^(?:السلام (?:عليكم|علیکم)(?: ورحمه الله(?: وبركاته)?)?|وعليكم السلام|وعلیکم السلام|سلام(?: (?:عليكم|علیکم))?|مرحبا(?: بك)?|هلا(?: والله)?|hello|hi|hey|good morning|good evening)$/.test(text);
 }
 function orphanChoiceOnly(messages){
   const text=normalizeSemanticText(arr(messages).map(x=>String(x?.body||'')).filter(Boolean).join(' '));
@@ -237,10 +241,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   const newScope=!sameSemanticScope(load.semantic_state,c);const orphanChoice=session.reset&&!pendingStateLive(c,turnNow)&&!groundedMenuSelection&&orphanChoiceOnly(c.batch_messages);
   state.model_calls=0;state.semantic_interpreter='deterministic';delete state.planner_failure_code;delete state.semantic_ai_override;
   if(decision.action==='SUPERSEDED'){await finish(claim,'CANCELLED','SEMANTIC_SUPERSEDED');return {state:'CANCELLED',action:'SUPERSEDED'};}
-  // Failed extraction is provisional until this turn's semantic role is known.
-  // Every other handoff/security decision still prevents interpretation.
-  const provisionalLoop=cognitive&&decision.action==='HANDOFF'&&decision.reasonCode==='REPEATED_REQUIREMENT_EXTRACTION_FAILURE';
-  const shortcutAllowed=(!['HANDOFF','SUPERSEDED'].includes(decision.action)||provisionalLoop)&&!state.unresolved_references.includes('voice_transcript');
+  const shortcutAllowed=!['HANDOFF','SUPERSEDED'].includes(decision.action)&&!state.unresolved_references.includes('voice_transcript');
   if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting&&!(cognitive&&activeJourney(state)))decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);
   const deterministic={state:structuredClone(state),decision:{...decision}};
   const pendingResolved=cognitive&&resolvesPending(semanticPrevious,state);

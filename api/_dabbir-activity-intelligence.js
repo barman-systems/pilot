@@ -122,26 +122,15 @@ export function applyActivityRequirements(state,context,now=new Date()) {
   state.business_constraints=resolution.required.filter(x=>!['service','branch','delivery_mode','date','time','slot'].includes(x));
   return resolution;
 }
-export const REQUIREMENT_LOOP_IDLE_MS=30*60*1000;
 export function detectRequirementLoop(state,previous,messageRole=null) {
   const key=state.clarification_entity;
   if(!key || state.pending_action!=='CLARIFY'){state.requirement_loop=null;return false;}
-  // A social interruption ends the failed-answer episode, not the business goal.
-  if(messageRole==='SOCIAL'){state.requirement_loop=null;return false;}
   const current=JSON.stringify(state.entities?.[key]||null),before=JSON.stringify(previous?.entities?.[key]||null);
   const progressed=Object.entries(state.entities||{}).some(([field,f])=>field!=='branch'&&verifiedOperationalFact(f)&&JSON.stringify(f.value)!==JSON.stringify(previous?.entities?.[field]?.value));
-  const last=previous?.requirement_loop;
-  const age=Date.parse(state.updated_at)-Date.parse(last?.updated_at||previous?.updated_at);
-  const sameEpisode=Number.isFinite(age)&&age>=0&&age<=REQUIREMENT_LOOP_IDLE_MS&&
-    previous?.pending_action==='CLARIFY'&&previous?.goal===state.goal&&
-    previous?.entities?.service?.value===state.entities?.service?.value&&(!last?.key||last.key===key);
-  const repeated=sameEpisode&&!progressed && previous?.clarification_entity===key && current===before;
+  const repeated=!progressed && previous?.clarification_entity===key && current===before;
   const references=state.context_resolution;
   const answeredOtherFact=(references?.resolved||[]).length>0&&!(references?.resolved||[]).some(r=>r.field===key)&&!(references?.unresolved||[]).includes(key);
-  const nonAnswer=['SIDE_QUESTION','TOPIC_SWITCH'].includes(messageRole)||answeredOtherFact;
-  // Side questions start a fresh attempt episode. An inherited count at the
-  // threshold must never escalate a message which did not fail this question.
-  const count=repeated&&!nonAnswer?(last?.count||1)+1:1;
-  state.requirement_loop={key,count,updated_at:state.updated_at,revision:state.revision};
-  return !nonAnswer&&count>=3;
+  const count=repeated?(previous.requirement_loop?.count||1)+(messageRole==='SIDE_QUESTION'||answeredOtherFact?0:1):1;
+  state.requirement_loop={key,count};
+  return count>=3;
 }
