@@ -53,13 +53,13 @@ test('semantic side question can be interpreted at the old loop threshold before
  const h=dialogueHarness({planner:body=>{calls++;return proposal(body,body==='وش معنى اسم النشاط؟'?'SIDE_QUESTION':'ANSWER_TO_PENDING_QUESTION');}});
  await h.turn('أبي خارجي');staleLoop(h,'vehicle',2);const before=calls;
  const r=await h.turn('وش معنى اسم النشاط؟');assert.equal(calls,before+1);
- assert.notEqual(r.result.action,'HANDOFF');assert.ok(r.state.requirement_loop.count<=2);assert.equal(r.state.goal,'BOOK_SERVICE');
+ assert.notEqual(r.result.action,'HANDOFF');assert.equal(r.state.requirement_loop,null);assert.equal(r.state.goal,'BOOK_SERVICE');
  assert.equal(r.state.clarification_entity,'vehicle');
 });
 
 test('a grounded side question cannot hand off just because an inherited count was already four',async()=>{
  const h=dialogueHarness({planner:body=>proposal(body,'SIDE_QUESTION')});await h.turn('أبي خارجي');staleLoop(h,'vehicle',4);
- const r=await h.turn('هل أقدر أقرأ سياسة الخصوصية؟');assert.notEqual(r.result.action,'HANDOFF');assert.ok(r.state.requirement_loop.count<=4);
+ const r=await h.turn('هل أقدر أقرأ سياسة الخصوصية؟');assert.notEqual(r.result.action,'HANDOFF');assert.equal(r.state.requirement_loop,null);
  assert.equal(r.state.clarification_entity,'vehicle');
 });
 
