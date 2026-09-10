@@ -75,7 +75,7 @@
     }
   ],
   "candidate_sha": "20042a3a68d135a854729b438b2579f71087322c",
-  "captured_at": "2026-09-10T07:52:34.641Z",
+  "captured_at": "2026-09-10T08:39:31.325Z",
   "ci": {
     "candidate_tests": 2716,
     "failed": 0,
@@ -85,7 +85,63 @@
     "skipped": 0,
     "syntax_passed": true
   },
+  "concurrent_release": {
+    "ci": {
+      "fail": 0,
+      "job_id": 102788534639,
+      "pass": 2752,
+      "production_dependency_vulnerabilities": 0,
+      "skipped": 0,
+      "tests": 2752
+    },
+    "deployment_id": "dpl_D9HcdoiBy4pJP5rg1wzx8XjgJYya",
+    "phone_test_completed_before_this_release": true,
+    "production_journey_failure": {
+      "artifact_id": 10142527271,
+      "artifact_sha256": "8ff91b57e56c029af3932be676ee7f624c33a08536ff9ebd8eb91e19859f3319",
+      "error": "Provider timeouts/quota; RETRY preserves history/goal/vehicle and executes nothing.",
+      "isolated_checks_skipped_after_failure": true,
+      "job_id": 102790676514,
+      "probe": "15f_cognitive_context_references",
+      "release_stable": true,
+      "retry_attempt": 2,
+      "retry_status": "SUCCESS",
+      "step": "English/iPad WebKit wrapper: iPad reference probe failed; the separate English iPhone report was PASS."
+    },
+    "production_journey_retry_artifact": {
+      "artifact_id": 10143085284,
+      "sha256": "74d862765dc97237005933a8a1328ab3ebb963edeca4f05b8bc0d0b0b4eb97c4"
+    },
+    "production_journey_run_id": 34451656218,
+    "production_journey_status": "SUCCESS_ON_RETRY",
+    "pull_request": 697,
+    "ready_at": "2026-09-10T07:48:09.068Z",
+    "retains_fix": true,
+    "scope": "Separate WhatsApp transport refactor merged by concurrent work; not authored or merged as part of this bugfix.",
+    "sha": "155a2f0d9c322067ec9d7e7bc143b605db504925"
+  },
+  "core_deployment_id": "dpl_3De4C1Sy5etgSc6soyqjKYmh6hf5",
+  "core_merge_sha": "0ae7e93b54478c35fa3da55c8c8202e139b62b8b",
   "deployment_id": "dpl_FYdvfC5WNxw1zF9zAeTHSUeRvtn4",
+  "final_release": {
+    "artifact_id": 10144266397,
+    "artifact_sha256": "963cdb45e9f1bcc027283225f7aff3793764b184a1e8300f6a5c9d240e694246",
+    "deployment_id": "dpl_HWynqR7WyTV5ycjn6vz7wHxuQcUs",
+    "fresh_phone_confirmation": "No answer to the final physical phone prompt; earlier phone confirmations remain recorded separately.",
+    "fresh_phone_retest_status": "NO_NEW_INBOUND_AFTER_FINAL_DEPLOYMENT",
+    "full_journey_run_id": 34455759835,
+    "full_journey_status": "PENDING",
+    "main_ci": "SUCCESS",
+    "main_independent_verifier": "SUCCESS",
+    "main_protected_iphone_smoke": "SUCCESS",
+    "main_security": "SUCCESS",
+    "production_journey": "PASS",
+    "production_journey_run": 34455759835,
+    "pull_request": 703,
+    "sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+    "superseded_by_photo_bug": true
+  },
+  "fresh_phone_retest_status": "OWNER_PHOTO_CONFIRMS_GREETING_AND_REQUEST_REPLY; CONFIRMATION_BUG_UNDER_FIX",
   "implementation": {
     "architecture_rebuilt": false,
     "dependencies_added": 0,
@@ -94,19 +150,194 @@
     "threshold_after": 3,
     "threshold_before": 3
   },
+  "independent_read_followup": {
+    "base_sha": "155a2f0d9c322067ec9d7e7bc143b605db504925",
+    "candidate_sha": "84c4a4ab133d546fe004d2a0b50e56a67061e11e",
+    "candidate_tree": "d230a5ab8c5c8a517e1f9fd1e3ef3fea99d40b2b",
+    "combined_targeted_pass": 51,
+    "combined_targeted_total": 51,
+    "final_candidate_ci": {
+      "fail": 0,
+      "job_id": 102800385651,
+      "pass": 2779,
+      "run_id": 34455365111,
+      "skip": 0
+    },
+    "final_candidate_real_db": {
+      "artifact_id": 10143252660,
+      "run_id": 34455360356,
+      "sha256": "f36c47c6f60c720773751d5351de84ba42c3e8ff3ba4f26bbb1a77682acf8a89",
+      "status": "PASS"
+    },
+    "initial_candidate_ci": {
+      "fail": 0,
+      "job_id": 102797942472,
+      "pass": 2757,
+      "run_id": 34454597841,
+      "skip": 0
+    },
+    "initial_candidate_real_db": {
+      "artifact_id": 10142933573,
+      "bookings": 1,
+      "late_decision": "SEMANTIC_SUPERSEDED",
+      "ledger_rows": 1,
+      "remaining_business": 0,
+      "remaining_owner": 0,
+      "run_id": 34454568757,
+      "sha256": "2de40be961dded78b1208777c7e744661691b138c5e5013bd5df348876def5a0",
+      "verdict": "PASS"
+    },
+    "local_full_fail": 0,
+    "local_full_pass": 2757,
+    "local_full_skip": 0,
+    "local_full_tests": 2757,
+    "merge_sha": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+    "new_targeted_after": 5,
+    "new_targeted_before": 0,
+    "new_targeted_total": 5,
+    "new_unseen_regressions": 0,
+    "pull_request": 703,
+    "refreshed_base_sha": "8826d37ed15aac45550a34f2f3b00b76c9cc07ba",
+    "refreshed_candidate_sha": "78a2e79a65c35c565625787d0a9547879206c108",
+    "requires_final_real_phone_retest": true,
+    "root_cause": "Known reads routed after missing booking facts; side questions also seeded count=1 without a failed answer.",
+    "syntax": true,
+    "threshold": 3,
+    "trigger": "Actual real-phone catalog question شو عندكم at 2026-09-10T07:45:30.651578Z was understood as SERVICE_DISCOVERY but prompted stale intent_confirmation.",
+    "unseen_pass": 102,
+    "unseen_total": 105
+  },
   "official_return_to_ai": {
+    "extraction_failure_handoffs_preserved": 2,
+    "goal_after": "BOOK_SERVICE",
     "handoff_evidence_deleted": false,
     "manual_table_edit": false,
-    "performed": true,
-    "rpc": "dabbir_return_conversation_to_ai",
-    "via": "Authenticated owner UI → POST /api/chat-control action=return_to_ai → governed RPC",
-    "returned_at": "2026-09-10T07:43:59.401815Z",
-    "state_after": "waiting_customer",
     "pending_action_after": "none",
-    "understanding_revision_before": 67,
+    "performed": true,
+    "returned_at": "2026-09-10T07:43:59.401815Z",
+    "rpc": "dabbir_return_conversation_to_ai",
+    "state_after": "waiting_customer",
     "understanding_revision_after": 68,
-    "goal_after": "BOOK_SERVICE",
-    "extraction_failure_handoffs_preserved": 2
+    "understanding_revision_before": 67,
+    "via": "Authenticated owner UI → POST /api/chat-control action=return_to_ai → governed RPC"
+  },
+  "photo_regression": {
+    "answer": {
+      "attempts_observed": 5,
+      "error_before_fix": "COGNITIVE_QUALITY_BLOCKED",
+      "exhausted_at": "2026-09-10T09:00:33.682936Z",
+      "false_requirement_handoffs": 0,
+      "handoff_reason": "AI processing exhausted safe retry attempts",
+      "outbound_reservations": 0,
+      "persisted_at": "2026-09-10T08:41:47.173360Z",
+      "reply_visible_in_photo": false,
+      "text": "هي",
+      "worker_state_before_deployment": "HUMAN_REQUIRED",
+      "worker_state_before_fix": "RETRY"
+    },
+    "current_release": "4ef4fb47ac7474757ce8b5972a14b4293501a7b6",
+    "fix": {
+      "after_targeted": {
+        "pass": 80,
+        "total": 80
+      },
+      "baseline_new_tests": {
+        "pass": 0,
+        "total": 10
+      },
+      "candidate": "9e6ee77fa1dca23436059283c360501356cf681d",
+      "candidate_gates": "ALL_PASS",
+      "deployment": {
+        "id": "dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j",
+        "production_journey_run": 34458663288,
+        "production_journey_status": "RETRYING_FAILED_JOB_ON_UNCHANGED_RELEASE",
+        "public_release_verified": true,
+        "ready_at": "2026-09-10T09:07:18.509Z",
+        "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+        "production_journey_attempts": [
+          {
+            "attempt": 1,
+            "verdict": "FAIL",
+            "run": 34458663288,
+            "job": 102814368319,
+            "required_failure": "15d_cognitive_independent_goals",
+            "cause": "AI_PLANNER_UNAVAILABLE: Google/Groq 429, Cloudflare 5001ms timeout, Gateway 12001ms timeout on turn 3",
+            "business_mutation": false,
+            "artifact": 10145251516,
+            "sha256": "2b297eb82e11f15c9df7537d7efd4d59cedc02185cd859e64b54ca65901cc55d"
+          },
+          {
+            "attempt": 2,
+            "status": "RUNNING",
+            "unchanged_code": true,
+            "unchanged_gates": true
+          }
+        ]
+      },
+      "full_local": {
+        "failures": 0,
+        "pass": 2789,
+        "skips": 0,
+        "total": 2789
+      },
+      "full_refreshed": {
+        "ci_job": 102809683034,
+        "ci_run": 34458262677,
+        "failures": 0,
+        "pass": 2808,
+        "production_dependency_vulnerabilities": 0,
+        "skips": 0,
+        "total": 2808
+      },
+      "merge_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+      "pr": 704,
+      "real_db": {
+        "artifact": 10144420870,
+        "artifact_sha256": "346bf5c7b1c660af90df3c69dfd30fc31405b2e702137ac8ddfb43a07c94078f",
+        "job": 102809666365,
+        "run": 34458257446,
+        "verdict": "PASS"
+      },
+      "refreshed_base": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
+      "refreshed_candidate": "1de540bbf50babaf2367aecc266bb4195509c0b4",
+      "refreshed_tree": "6930a929eee29876240d3dd9b3529faa0028feb4",
+      "syntax": "PASS",
+      "tree": "748b7898a13a02239b652cc3a017b1623476ea26"
+    },
+    "greeting": {
+      "attempt_count": 1,
+      "persisted_at": "2026-09-10T08:41:09.563412Z",
+      "processed_at": "2026-09-10T08:41:12.946762Z",
+      "text": "السلام عليكم",
+      "visible_on_owner_phone": true,
+      "worker_state": "PROCESSED"
+    },
+    "official_recovery": {
+      "at": "2026-09-10T09:24:17.294640Z",
+      "goal": "BOOK_SERVICE",
+      "handoff_evidence_preserved": true,
+      "handoff_state": "RETURNED_TO_AI",
+      "manual_database_write": false,
+      "method": "authenticated official owner return_to_ai UI",
+      "semantic_version": 16,
+      "state": "waiting_customer",
+      "understanding_revision_after": 77,
+      "understanding_revision_before": 76
+    },
+    "photo_phone_time": "12:43 Asia/Dubai",
+    "reported_by_owner": true,
+    "request": {
+      "persisted_at": "2026-09-10T08:41:28.506060Z",
+      "reply": "وين تبا الخدمة: عندك؟",
+      "text": "ابا اغسل السياره",
+      "visible_on_owner_phone": true,
+      "worker_state": "PROCESSED"
+    },
+    "phone_retest": {
+      "requested_after_official_return": true,
+      "user_tool_answer_received": false,
+      "status": "AWAITING_NEW_INBOUND"
+    }
   },
   "production_regression": {
     "failed_probe": "15f_cognitive_context_references",
@@ -130,19 +361,27 @@
     },
     "independent_same_release_run_id": 34449423409,
     "independent_status": "SUCCESS",
-    "queued_retry_attempt": 2,
-    "required_ar_pass": 34,
-    "required_ar_total": 35,
     "optional_direct_provider_comparisons": {
-      "total": 3,
       "failed": 3,
-      "required": false,
       "providers": [
         "google-gemini",
         "groq",
         "cloudflare-workers-ai"
-      ]
-    }
+      ],
+      "required": false,
+      "total": 3
+    },
+    "queued_retry_attempt": 2,
+    "queued_retry_result": {
+      "artifact_id": 10142031083,
+      "artifact_sha256": "77a64c901ca640a4ef041dc27414e3fca8ecabaf2b0ad711cc16623e3a18597f",
+      "attempt": 2,
+      "conclusion": "FAIL",
+      "failed_step": "Prove Production release did not move during journey",
+      "reason": "Production changed during the retry because concurrent releases were published. Gate correctly rejected evidence; not counted as a full PASS."
+    },
+    "required_ar_pass": 34,
+    "required_ar_total": 35
   },
   "production_sha": "d64815c2e1d7ad5a2491780585217eb323b21e9a",
   "pull_request": 695,
@@ -155,25 +394,25 @@
     },
     "concurrent_booking": [
       {
-        "session": 1053106,
-        "started": "2026-09-10T07:11:49.998424+00:00",
         "finished": "2026-09-10T07:11:58.059312+00:00",
+        "idempotent_replay": false,
         "ok": true,
-        "idempotent_replay": false
+        "session": 1053106,
+        "started": "2026-09-10T07:11:49.998424+00:00"
       },
       {
-        "session": 1053109,
-        "started": "2026-09-10T07:11:54.427472+00:00",
         "finished": "2026-09-10T07:11:58.068938+00:00",
+        "idempotent_replay": true,
         "ok": true,
-        "idempotent_replay": true
+        "session": 1053109,
+        "started": "2026-09-10T07:11:54.427472+00:00"
       },
       {
-        "session": 1053110,
-        "started": "2026-09-10T07:11:56.970939+00:00",
         "finished": "2026-09-10T07:11:58.07769+00:00",
+        "idempotent_replay": true,
         "ok": true,
-        "idempotent_replay": true
+        "session": 1053110,
+        "started": "2026-09-10T07:11:56.970939+00:00"
       }
     ],
     "concurrent_outbound_denied": [
@@ -218,71 +457,80 @@
     "verdict": "PASS"
   },
   "real_phone_retest": {
-    "performed": true,
-    "input": "مرحبا",
-    "simulated": false,
-    "meta_occurred_at": "2026-09-10T07:46:58Z",
-    "inbound_timestamp": "2026-09-10T07:46:59.413537Z",
-    "signature_verified": true,
-    "inbound_provider_id_sha256": "1ee7a0f58840aaece5855f14df5be0e7ba3bada71ab214470bbb4f377e07e310",
-    "worker_started_at": "2026-09-10T07:47:00.684005Z",
-    "worker_processed_at": "2026-09-10T07:47:02.385922Z",
-    "worker_state": "PROCESSED",
-    "attempt_count": 1,
-    "last_error": null,
-    "understanding": {
-      "version": 14,
-      "revision": 73,
-      "message_role": "SOCIAL",
-      "action": "REPLY",
-      "tool_selection": "GREETING",
-      "goal": "BOOK_SERVICE",
-      "goal_retained": true,
-      "requirement_loop": null,
-      "model_calls": 0,
-      "decision_latency_ms": 73,
-      "quality_violations": []
+    "additional_real_greeting": {
+      "attempt_count": 1,
+      "input": "هلا",
+      "outbound_state": "READ",
+      "persisted_at": "2026-09-10T07:45:02.502207Z",
+      "phone_confirmed": true,
+      "understanding": {
+        "action": "REPLY",
+        "goal": "BOOK_SERVICE",
+        "goal_retained": true,
+        "model_calls": 0,
+        "role": "SOCIAL",
+        "tool_selection": "GREETING",
+        "version": 11
+      },
+      "worker_state": "PROCESSED"
     },
-    "outbound_reserved_at": "2026-09-10T07:47:01.031937Z",
-    "outbound_finalized_at": "2026-09-10T07:47:02.247581Z",
-    "outbound_state": "READ",
-    "outbound_error": null,
-    "provider_accepted": true,
-    "outbound_provider_id_sha256": "bbf7c9183bd339deeed8dc96c0bd52afa24ca71d52de65ee64d7c1fc6133cb28",
-    "reply": "هلا، حياك. كيف أقدر أساعدك؟",
+    "attempt_count": 1,
+    "batch_item_count": 1,
+    "conversation_after": "waiting_customer",
+    "inbound_ledger_count": 1,
+    "inbound_provider_id_sha256": "1ee7a0f58840aaece5855f14df5be0e7ba3bada71ab214470bbb4f377e07e310",
+    "inbound_timestamp": "2026-09-10T07:46:59.413537Z",
+    "input": "مرحبا",
+    "last_error": null,
+    "meta_delivered_occurred_at": "2026-09-10T07:47:03Z",
+    "meta_delivered_verified_at": "2026-09-10T07:47:04.153105Z",
     "meta_delivery_status": [
       "sent",
       "read",
       "delivered"
     ],
+    "meta_occurred_at": "2026-09-10T07:46:58Z",
     "meta_read_occurred_at": "2026-09-10T07:47:03Z",
     "meta_read_verified_at": "2026-09-10T07:47:03.938982Z",
-    "meta_delivered_occurred_at": "2026-09-10T07:47:03Z",
-    "meta_delivered_verified_at": "2026-09-10T07:47:04.153105Z",
-    "note": "Read arrived before delivered; reservation state remained READ. Raw provider_status reflected the later delivered callback.",
-    "inbound_ledger_count": 1,
-    "batch_item_count": 1,
-    "outbound_reservation_count": 1,
     "new_handoffs_after_recovery": 0,
-    "conversation_after": "waiting_customer",
+    "note": "Read arrived before delivered; reservation state remained READ. Raw provider_status reflected the later delivered callback.",
+    "outbound_error": null,
+    "outbound_finalized_at": "2026-09-10T07:47:02.247581Z",
+    "outbound_provider_id_sha256": "bbf7c9183bd339deeed8dc96c0bd52afa24ca71d52de65ee64d7c1fc6133cb28",
+    "outbound_reservation_count": 1,
+    "outbound_reserved_at": "2026-09-10T07:47:01.031937Z",
+    "outbound_state": "READ",
     "pending_action_after": "none",
-    "visually_confirmed_on_real_phone": true,
+    "performed": true,
     "phone_confirmation_source": "Owner explicitly selected that the reply appeared after sending the exact word مرحبا in this task.",
+    "provider_accepted": true,
+    "reply": "هلا، حياك. كيف أقدر أساعدك؟",
     "runtime_correlation": {
       "deployment_id": "dpl_FYdvfC5WNxw1zF9zAeTHSUeRvtn4",
-      "window_start": "2026-09-10T07:46:58Z",
+      "webhook_requests_including_statuses": 4,
       "window_end": "2026-09-10T07:47:06Z",
-      "worker_requests": 1,
-      "webhook_requests_including_statuses": 4
+      "window_start": "2026-09-10T07:46:58Z",
+      "worker_requests": 1
     },
-    "additional_real_greeting": {
-      "input": "هلا",
-      "persisted_at": "2026-09-10T07:45:02.502207Z",
-      "worker_state": "PROCESSED",
-      "attempt_count": 1,
-      "outbound_state": "READ",
-      "phone_confirmed": true
-    }
+    "signature_verified": true,
+    "simulated": false,
+    "understanding": {
+      "action": "REPLY",
+      "decision_latency_ms": 73,
+      "goal": "BOOK_SERVICE",
+      "goal_retained": true,
+      "message_role": "SOCIAL",
+      "model_calls": 0,
+      "quality_violations": [],
+      "requirement_loop": null,
+      "revision": 73,
+      "tool_selection": "GREETING",
+      "version": 14
+    },
+    "visually_confirmed_on_real_phone": true,
+    "worker_processed_at": "2026-09-10T07:47:02.385922Z",
+    "worker_started_at": "2026-09-10T07:47:00.684005Z",
+    "worker_state": "PROCESSED"
   },
   "scope": "Greeting/stale requirement-loop incident. Real phone evidence is from signed Meta delivery plus database/runtime correlation and explicit owner confirmation; no synthetic ingress was used for the phone retest.",
   "targeted": {
@@ -324,18 +572,5 @@
     "new_discrepancies": 0,
     "scope": "Same deterministic fixture benchmark; three previously disclosed model/oracle discrepancies retained."
   },
-  "verdict": "PENDING_FINAL_CURRENT_RELEASE_REGRESSION",
-  "core_merge_sha": "0ae7e93b54478c35fa3da55c8c8202e139b62b8b",
-  "core_deployment_id": "dpl_3De4C1Sy5etgSc6soyqjKYmh6hf5",
-  "concurrent_release": {
-    "sha": "155a2f0d9c322067ec9d7e7bc143b605db504925",
-    "pull_request": 697,
-    "scope": "Separate WhatsApp transport refactor merged by concurrent work; not authored or merged as part of this bugfix.",
-    "deployment_id": "dpl_D9HcdoiBy4pJP5rg1wzx8XjgJYya",
-    "ready_at": "2026-09-10T07:48:09.068Z",
-    "phone_test_completed_before_this_release": true,
-    "retains_fix": true,
-    "production_journey_run_id": 34451656218,
-    "production_journey_status": "PENDING"
-  }
+  "verdict": "PENDING_CURRENT_RELEASE_AND_PHONE_PROOF"
 }
