@@ -203,3 +203,38 @@ bodies; it does not replace the existing Production isolation gate.
 
 This PR is prepared in the sequence after slices 1–3. Database application and
 Production verification must be recorded before calling this slice verified.
+
+
+## Database side effects and remaining operation owners
+
+`trigger-callers.json` records 27 enabled trigger callers on the critical live
+tables. Appointment creation/update is already serialized by
+`lock_booking_calendar_business`; shared triggers enforce calendar conflicts,
+branch resources, past-time rules, deposit snapshots and confirmation gates.
+The activity invariant is an INSERT trigger. These are existing authorities,
+not newly introduced refactor abstractions. Workflow, calendar outbox, funnel,
+operator and recovery capture are hidden write side effects of an appointment
+change and must be included in future mutation tests.
+
+Owner, WhatsApp, salon and other operational writers still have distinct
+entrypoints. In addition to SQL RPCs, `salon-operations.js::patchAppointment`
+writes the appointment through authenticated REST, preserving RLS and triggering
+the common database invariants. REST writer candidates also exist in clinic,
+home-service, adaptive appointment, calendar and runtime modules; a shared table
+name alone does not prove duplicated operation semantics. No existing writer is
+declared dead or removed without per-operation caller/contract proof.
+
+The prepared audit can be repeated with:
+`node scripts/dabbir-architecture-audit.mjs working /tmp/dabbir-call-map.json`.
+It uses the parser shipped in the pinned Node 24 runtime, introduces no production
+dependency, and fails on import cycles. Its local reachability is conservative
+and limited to top-level function declarations; nonliteral imports/eval are
+listed as hazards. It is an inspection tool, not an automatic deletion tool.
+Prepared tree: 290 API JS modules, 522 literal import edges, zero cycles, 44 local
+unreachable candidates. The complete 2810-test local suite passes, zero skipped.
+Five new worker cases exercise the actual claimed worker and versioned executor,
+so future legacy deletion cannot rely only on matching strings in dead code.
+
+`verification-checkpoint.json` retains exact deployment/run/artifact identity,
+including failed attempts. A failed model probe remains failed; successful
+Arabic/iPhone stages do not convert the complete iPad/isolation gate into PASS.

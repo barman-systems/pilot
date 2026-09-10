@@ -1,0 +1,221 @@
+{
+  "scope": "Read-only current PostgreSQL trigger catalog for critical tables. Function hashes allow drift checks; this is a caller map, not permission to drop database objects.",
+  "triggers": [
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_00_booking_calendar_lock",
+      "enabled": "O",
+      "function_name": "dabbir_private.lock_booking_calendar_business",
+      "function_md5": "7c947e2cee4caafcc3607bc96866aceb",
+      "definition": "CREATE TRIGGER dabbir_00_booking_calendar_lock BEFORE INSERT OR DELETE OR UPDATE ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.lock_booking_calendar_business()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_activity_booking_invariant_v1",
+      "enabled": "O",
+      "function_name": "dabbir_private.activity_booking_invariant_v1",
+      "function_md5": "0b422b1655051c79d0beefed133468d2",
+      "definition": "CREATE TRIGGER dabbir_activity_booking_invariant_v1 BEFORE INSERT ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.activity_booking_invariant_v1()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_ai_booking_funnel_appointment_event",
+      "enabled": "O",
+      "function_name": "dabbir_private.ai_booking_funnel_appointment_trigger",
+      "function_md5": "33ed8aa16e179ce81e9bb5651ec0604b",
+      "definition": "CREATE TRIGGER dabbir_ai_booking_funnel_appointment_event AFTER UPDATE OF status, payment_status ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.ai_booking_funnel_appointment_trigger()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_ai_operator_appointment_event",
+      "enabled": "O",
+      "function_name": "dabbir_private.ai_operator_appointment_event_trigger",
+      "function_md5": "93cedb8b0bcb6b19f7d23952a8b8b69f",
+      "definition": "CREATE TRIGGER dabbir_ai_operator_appointment_event AFTER UPDATE OF status ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.ai_operator_appointment_event_trigger()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointment_calendar_conflict_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.prevent_appointment_calendar_conflict",
+      "function_md5": "160387f3b2048f368bf0a407d21ab7d0",
+      "definition": "CREATE TRIGGER dabbir_appointment_calendar_conflict_guard BEFORE INSERT OR UPDATE OF starts_at, ends_at, status, worker_id ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.prevent_appointment_calendar_conflict()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointment_deposit_snapshot_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.guard_appointment_deposit_snapshot",
+      "function_md5": "938e3241e63332979c3e4fa2ce1bd6d3",
+      "definition": "CREATE TRIGGER dabbir_appointment_deposit_snapshot_guard BEFORE UPDATE OF deposit_required_amount, deposit_currency_code ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.guard_appointment_deposit_snapshot()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointment_past_time_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.prevent_past_appointment",
+      "function_md5": "6f87e1be698d5d5989e5bfe8c8601dfa",
+      "definition": "CREATE TRIGGER dabbir_appointment_past_time_guard BEFORE INSERT OR UPDATE OF starts_at ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.prevent_past_appointment()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointment_workflow_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.capture_appointment_workflow",
+      "function_md5": "2ba933b5ee3148661885632b9943b326",
+      "definition": "CREATE TRIGGER dabbir_appointment_workflow_capture AFTER INSERT OR UPDATE ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.capture_appointment_workflow()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointments_branch_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.ensure_operational_branch",
+      "function_md5": "7533955a51140f7c8de0c803592ef77e",
+      "definition": "CREATE TRIGGER dabbir_appointments_branch_guard BEFORE INSERT OR UPDATE OF business_id, branch_id ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.ensure_operational_branch()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_appointments_branch_resource_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.validate_appointment_branch_resources",
+      "function_md5": "a67b9384f416dec0577635fd312ba765",
+      "definition": "CREATE TRIGGER dabbir_appointments_branch_resource_guard BEFORE INSERT OR UPDATE OF business_id, branch_id, service_id, worker_id ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.validate_appointment_branch_resources()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_external_booking_confirmation_gate",
+      "enabled": "O",
+      "function_name": "dabbir_private.enforce_external_booking_confirmation_gate",
+      "function_md5": "ffb337be07df957847c4b67e85ce1a62",
+      "definition": "CREATE TRIGGER dabbir_external_booking_confirmation_gate BEFORE INSERT ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.enforce_external_booking_confirmation_gate()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_owner_booking_decision_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.guard_owner_booking_decision",
+      "function_md5": "c6f9d934cec7ecc55af95734e4f76454",
+      "definition": "CREATE TRIGGER dabbir_owner_booking_decision_guard BEFORE UPDATE OF status, confirmation_gate, owner_approval_status ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.guard_owner_booking_decision()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "dabbir_recovery_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.recovery_capture_change",
+      "function_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "definition": "CREATE TRIGGER dabbir_recovery_capture AFTER INSERT OR DELETE OR UPDATE ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.recovery_capture_change()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "trg_dabbir_guard_appointment_business_type",
+      "enabled": "O",
+      "function_name": "public.dabbir_guard_appointment_business_type",
+      "function_md5": "91cb76a24e7504d59e6f8b93b0d0a00e",
+      "definition": "CREATE TRIGGER trg_dabbir_guard_appointment_business_type BEFORE INSERT OR UPDATE OF business_id ON public.dabbir_appointments FOR EACH ROW WHEN ((NOT dabbir_private.recovery_is_active())) EXECUTE FUNCTION dabbir_guard_appointment_business_type()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "zz_dabbir_appointment_calendar_outbox",
+      "enabled": "O",
+      "function_name": "dabbir_private.enqueue_calendar_sync_from_appointment",
+      "function_md5": "da7bc2a3a2a1bac974be0da4d1f5436f",
+      "definition": "CREATE TRIGGER zz_dabbir_appointment_calendar_outbox AFTER INSERT OR UPDATE ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.enqueue_calendar_sync_from_appointment()"
+    },
+    {
+      "table_name": "dabbir_appointments",
+      "trigger_name": "zz_dabbir_booking_confirmation_gate_notifications",
+      "enabled": "O",
+      "function_name": "dabbir_private.handle_booking_confirmation_gate_notifications",
+      "function_md5": "d31713647623233a1847a34ea2dab069",
+      "definition": "CREATE TRIGGER zz_dabbir_booking_confirmation_gate_notifications AFTER INSERT OR UPDATE OF status, owner_approval_status, confirmation_gate, deposit_paid_at ON public.dabbir_appointments FOR EACH ROW EXECUTE FUNCTION dabbir_private.handle_booking_confirmation_gate_notifications()"
+    },
+    {
+      "table_name": "dabbir_conversations",
+      "trigger_name": "dabbir_conversation_return_to_ai_v3",
+      "enabled": "O",
+      "function_name": "dabbir_private.conversation_return_to_ai_v3",
+      "function_md5": "5ea349146e6e12071072d2e17c73c801",
+      "definition": "CREATE TRIGGER dabbir_conversation_return_to_ai_v3 BEFORE UPDATE OF state ON public.dabbir_conversations FOR EACH ROW WHEN ((old.state IS DISTINCT FROM new.state)) EXECUTE FUNCTION dabbir_private.conversation_return_to_ai_v3()"
+    },
+    {
+      "table_name": "dabbir_conversations",
+      "trigger_name": "dabbir_conversations_branch_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.ensure_operational_branch",
+      "function_md5": "7533955a51140f7c8de0c803592ef77e",
+      "definition": "CREATE TRIGGER dabbir_conversations_branch_guard BEFORE INSERT OR UPDATE OF business_id, branch_id ON public.dabbir_conversations FOR EACH ROW EXECUTE FUNCTION dabbir_private.ensure_operational_branch()"
+    },
+    {
+      "table_name": "dabbir_conversations",
+      "trigger_name": "dabbir_recovery_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.recovery_capture_change",
+      "function_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "definition": "CREATE TRIGGER dabbir_recovery_capture AFTER INSERT OR DELETE OR UPDATE ON public.dabbir_conversations FOR EACH ROW EXECUTE FUNCTION dabbir_private.recovery_capture_change()"
+    },
+    {
+      "table_name": "dabbir_customers",
+      "trigger_name": "dabbir_customer_whatsapp_display_name_guard",
+      "enabled": "O",
+      "function_name": "dabbir_private.guard_customer_whatsapp_display_name",
+      "function_md5": "c6759536813a71a91ffc636968929ab6",
+      "definition": "CREATE TRIGGER dabbir_customer_whatsapp_display_name_guard BEFORE INSERT OR UPDATE OF display_name, metadata ON public.dabbir_customers FOR EACH ROW EXECUTE FUNCTION dabbir_private.guard_customer_whatsapp_display_name()"
+    },
+    {
+      "table_name": "dabbir_customers",
+      "trigger_name": "dabbir_privacy_scrub_retained_customer_records",
+      "enabled": "O",
+      "function_name": "dabbir_private.dabbir_scrub_retained_customer_records",
+      "function_md5": "9f28795e05da91d9e67a636fb86be5e0",
+      "definition": "CREATE TRIGGER dabbir_privacy_scrub_retained_customer_records BEFORE DELETE ON public.dabbir_customers FOR EACH ROW EXECUTE FUNCTION dabbir_private.dabbir_scrub_retained_customer_records()"
+    },
+    {
+      "table_name": "dabbir_customers",
+      "trigger_name": "dabbir_recovery_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.recovery_capture_change",
+      "function_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "definition": "CREATE TRIGGER dabbir_recovery_capture AFTER INSERT OR DELETE OR UPDATE ON public.dabbir_customers FOR EACH ROW EXECUTE FUNCTION dabbir_private.recovery_capture_change()"
+    },
+    {
+      "table_name": "dabbir_message_batches",
+      "trigger_name": "dabbir_ai_operator_batch_event",
+      "enabled": "O",
+      "function_name": "dabbir_private.ai_operator_batch_event_trigger",
+      "function_md5": "daa042bcc2126a5e7c7218f9d35dde19",
+      "definition": "CREATE TRIGGER dabbir_ai_operator_batch_event AFTER INSERT OR UPDATE OF state, attempt_count ON public.dabbir_message_batches FOR EACH ROW EXECUTE FUNCTION dabbir_private.ai_operator_batch_event_trigger()"
+    },
+    {
+      "table_name": "dabbir_message_batches",
+      "trigger_name": "dabbir_recovery_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.recovery_capture_change",
+      "function_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "definition": "CREATE TRIGGER dabbir_recovery_capture AFTER INSERT OR DELETE OR UPDATE ON public.dabbir_message_batches FOR EACH ROW EXECUTE FUNCTION dabbir_private.recovery_capture_change()"
+    },
+    {
+      "table_name": "dabbir_messages",
+      "trigger_name": "dabbir_messages_capture_safe_internal_followup",
+      "enabled": "O",
+      "function_name": "dabbir_private.capture_safe_internal_followup",
+      "function_md5": "3dcd6cb9489455504b1726e662a39e26",
+      "definition": "CREATE TRIGGER dabbir_messages_capture_safe_internal_followup AFTER INSERT ON public.dabbir_messages FOR EACH ROW WHEN ((NOT dabbir_private.recovery_is_active())) EXECUTE FUNCTION dabbir_private.capture_safe_internal_followup()"
+    },
+    {
+      "table_name": "dabbir_messages",
+      "trigger_name": "dabbir_recovery_capture",
+      "enabled": "O",
+      "function_name": "dabbir_private.recovery_capture_change",
+      "function_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "definition": "CREATE TRIGGER dabbir_recovery_capture AFTER INSERT OR DELETE OR UPDATE ON public.dabbir_messages FOR EACH ROW EXECUTE FUNCTION dabbir_private.recovery_capture_change()"
+    },
+    {
+      "table_name": "dabbir_messages",
+      "trigger_name": "dabbir_understanding_message_revision",
+      "enabled": "O",
+      "function_name": "dabbir_private.understanding_message_revision_v2",
+      "function_md5": "61097c215cb667c8712855a8de35d7db",
+      "definition": "CREATE TRIGGER dabbir_understanding_message_revision BEFORE INSERT ON public.dabbir_messages FOR EACH ROW EXECUTE FUNCTION dabbir_private.understanding_message_revision_v2()"
+    }
+  ]
+}
