@@ -82,11 +82,33 @@ try{
       await page.locator('#side [data-screen="more"]:visible').click();nav=page.locator(`#screen-more [data-screen="${screen}"]:visible`);
      }
      entry.beforeClick=await state();
+     if(screen==='dashboard')console.log('SIDEBAR_BEFORE_TODAY='+JSON.stringify(entry));
      await nav.click({timeout:10000});
      await page.locator(`#screen-${screen}.active`).waitFor({state:'visible',timeout:10000});
      await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
      await page.waitForTimeout(350); // Same visual sampling boundary as the existing Production matrix.
      await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${screen}.png`),animations:'disabled',timeout:15000});
+     if(['dashboard','settings'].includes(screen)&&width===390){
+      await page.evaluate(()=>{
+       const nodes=[...document.querySelectorAll('#appShell *')].filter(el=>el.getClientRects().length);
+       const sizes=nodes.map(el=>parseFloat(getComputedStyle(el).fontSize)*2);
+       nodes.forEach((el,i)=>{el.dataset.qaOldStyle=el.getAttribute('style')??'__absent__';el.style.setProperty('font-size',sizes[i]+'px','important')});
+      });
+      await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${screen}-text200.png`),timeout:15000});
+      await page.evaluate(()=>document.querySelectorAll('[data-qa-old-style]').forEach(el=>{const old=el.dataset.qaOldStyle;delete el.dataset.qaOldStyle;if(old==='__absent__')el.removeAttribute('style');else el.setAttribute('style',old)}));
+     }
+     if(screen==='operations'){
+      await page.locator('#opsAddProduct').click();await page.locator('#opsProductModal.open').waitFor();
+      await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-product-dialog.png`),timeout:15000});
+      await page.locator('#opsProductCancel').click();
+     }
+     if(screen==='settings')for(const id of ['dabbirBillingCard','dkSave']){
+      const target=page.locator('#'+id);
+      if(await target.count()){
+       await target.scrollIntoViewIfNeeded();
+       await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${id}.png`),timeout:15000});
+      }
+     }
      entry.status='PASS';
     }
    }
