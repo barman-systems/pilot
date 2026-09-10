@@ -262,7 +262,7 @@ async function processClaim(claim){
       const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},
         referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,
         meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});
-      return result.proposal;
+      return {...result.proposal,executionMetadata:{provider:result.provider,model:result.model,...result.telemetry}};
     }});
 }
 

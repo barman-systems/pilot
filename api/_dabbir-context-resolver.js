@@ -14,6 +14,15 @@ const catalog=(rows,c)=>arr(rows).filter(r=>(!r.business_id||r.business_id===c.b
 // not turn "the second car" into approval to book the second slot.
 export function ordinalReferenceField(raw){
  const t=normalize(raw),matches=[];
+ // Bind a typed ordinal locally. In "same service but the second car", the
+ // service noun describes what to retain, not what "second" selects.
+ const words=t.replace(/[^\p{L}\p{N}]+/gu,' ').trim().split(/\s+/);
+ const ordinals=words.flatMap((w,i)=>/^(?:الاول|الاولى|الثاني|الثانيه|الثالث|الثالثه|first|second|third|[123])$/.test(w)?[i]:[]);
+ const local=words.filter((_,i)=>ordinals.some(j=>Math.abs(i-j)===1)).join(' ');
+ if(local&&local!==words.join(' ')){
+  const field=ordinalReferenceField(local);
+  if(field)return field;
+ }
  for(const [field,pattern] of [['vehicle',/سيار|\b(?:car|vehicle)s?\b/],['worker',/عامل|موظف|\b(?:worker|staff|employee)\b/],['service',/خدم|\bservice\b/],['branch',/فرع|\bbranch\b/],['appointment',/موعد|حجز|\b(?:appointment|booking|slot)\b/]])if(pattern.test(t))matches.push(field);
  return matches.length===1?matches[0]:matches.length?'multiple_options':null;
 }
@@ -23,9 +32,10 @@ export function referenceRequest(raw,proposal=null){
  const reference=/(?:نفس|اللي قلت|قلت لك|اللي قبل|مثل اخر|مثل آخر|same|last time|told you|as before)/i.test(t);
  if(!reference)return null;
  // Explicit temporal anchors outrank a provider's proposed source category.
- const source=/امس|yesterday/.test(t)?'YESTERDAY':/(?:اخر مره|المره اللي طافت|اللي قبل|last time|last visit|as before)/.test(t)?'LAST_COMPLETED':'ACTIVE_OR_MEMORY';
+ const source=/امس|yesterday/.test(t)?'YESTERDAY':/(?:اخر مره|المره اللي طافت|اللي قبل|الخدمه السابقه|last time|last visit|previous service|as before)/.test(t)?'LAST_COMPLETED':'ACTIVE_OR_MEMORY';
  const requested=[];
- for(const [field,pattern] of [['vehicle',/سيار|vehicle|\bcar\b/],['worker',/عامل|موظف|worker|staff/],['location',/مكان|موقع|location|place|address/],['service',/خدم|service/]])if(pattern.test(t))requested.push(field);
+ const referenceClause=t.split(/\s+(?:بس|لكن|ولكن|but|except)\s+/)[0];
+ for(const [field,pattern] of [['vehicle',/سيار|vehicle|\bcar\b/],['worker',/عامل|موظف|worker|staff/],['location',/مكان|موقع|location|place|address/],['service',/خدم|service/]])if(pattern.test(referenceClause))requested.push(field);
  const p=proposal?.contextReference;
  if(!requested.length&&p&&p.confidence>=.9&&typeof p.evidence==='string'&&p.evidence.trim()&&String(raw).includes(p.evidence)&&arr(p.fields).every(k=>fields.includes(k)))requested.push(...p.fields);
  return {source,fields:[...new Set(requested.length?requested:fields)],explicitFields:requested.length>0};
