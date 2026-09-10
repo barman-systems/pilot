@@ -15,8 +15,8 @@ const root=new URL('../',import.meta.url);
 const businessId='10000000-0000-4000-8000-000000000001';
 const workspace={ok:true,user:{id:'20000000-0000-4000-8000-000000000001',email:'synthetic@example.invalid'},membership:{role:'owner'},
  business:{id:businessId,name:'Synthetic sidebar verification',business_type:'store',timezone:'Asia/Dubai',currency_code:'AED',country_code:'AE'},
- customers:[],conversations:[],appointments:[],messages:[],tasks:[],handoffs:[],followups:[],inventory:[],orders:[],services:[],workers:[],branches:[],ai:{configured:false},whatsapp:{state:'NOT_CONNECTED'},
- verified_metrics:{state:'VERIFIED_EXACT_COUNTS',customers:0,active_chats:0,ai_messages:0,appointments:0}};
+ customers:[{id:'30000000-0000-4000-8000-000000000001',business_id:businessId,display_name:'AI Journey Customer',phone_e164:'+000000000001',created_at:'2026-09-10T00:00:00Z'}],conversations:[],appointments:[],messages:[],tasks:[],handoffs:[],followups:[],inventory:[],orders:[],services:[],workers:[],branches:[],ai:{configured:false},whatsapp:{state:'NOT_CONNECTED'},
+ verified_metrics:{state:'VERIFIED_EXACT_COUNTS',customers:1,active_chats:0,ai_messages:0,appointments:0}};
 let html='';const headers=new Map();
 rootHandler({method:'GET',headers:{}},{setHeader(k,v){headers.set(k.toLowerCase(),v)},end(body){html=String(body)},statusCode:200});
 assert.ok(html.includes('data-dabbir-design-authority-head'));
@@ -75,9 +75,8 @@ try{
   await page.evaluate(()=>{
    const side=document.querySelector('#side');window.__sidebarEvents=[];
    const capture=(type)=>{
-    const rect=side.getBoundingClientRect(),target=side.querySelector('[data-screen="dashboard"]').getBoundingClientRect();
-    window.__sidebarEvents.push({type,time:performance.now(),lang:document.documentElement.lang,open:side.classList.contains('open'),active:document.querySelector('.screen.active')?.id,
-     side:{x:rect.x,y:rect.y,width:rect.width,height:rect.height,scrollTop:side.scrollTop},target:{x:target.x,y:target.y},viewport:{width:innerWidth,left:visualViewport.offsetLeft,scrollX,scrollY}});
+    // Record state changes without forcing style/layout during pointer dispatch.
+    window.__sidebarEvents.push({type,time:performance.now(),lang:document.documentElement.lang,open:side.classList.contains('open'),active:document.querySelector('.screen.active')?.id});
     if(window.__sidebarEvents.length>80)window.__sidebarEvents.shift();
    };
    new MutationObserver(()=>capture('side-class')).observe(side,{attributes:true,attributeFilter:['class']});
@@ -96,18 +95,18 @@ try{
   console.log('SIDEBAR_EXACT_MATRIX='+JSON.stringify({cases:report.cases.length,status:'PASS'}));
   await page.setViewportSize({width:768,height:1024});
   // Reproduce the language/open transition at bounded frame offsets. Setup invokes
-  // the shipped button handlers; the Today action retains the native pointer check.
+  // the shipped screen handler; language, menu and Today use native pointer checks.
   for(const delay of [0,8,16,24,32,48,64,96,128,176,208]){
    await page.evaluate(()=>{showScreen('analytics');setLang('ar')});
    await page.waitForFunction(()=>{
     const side=document.querySelector('#side'),css=getComputedStyle(side);
     return !side.classList.contains('open')&&Math.abs(parseFloat(css.left)-482)<1&&!side.getAnimations().some(a=>a.playState==='running');
    },null,{timeout:10000});
-   await page.evaluate(delay=>new Promise(resolve=>{
-    document.querySelector('#enBtn').click();
-    setTimeout(()=>{document.querySelector('#menuBtn').click();resolve()},delay);
-   }),delay);
-   const entry={width:768,height:1024,language:'en',screen:'dashboard',open_delay_ms:delay,status:'RUNNING',beforeClick:await state()};report.cases.push(entry);
+   await page.locator('#enBtn').click();
+   if(delay)await page.waitForTimeout(delay); // Controlled input offset, not a larger action timeout.
+   const entry={width:768,height:1024,language:'en',screen:'dashboard',open_delay_ms:delay,status:'RUNNING'};report.cases.push(entry);
+   // Both menu and Today use native pointer dispatch, exactly as Production.
+   if(!(await page.locator('#side.open').count()))await page.locator('#menuBtn').click();
    await page.locator('#side [data-screen="dashboard"]:visible').click({timeout:10000});
    await page.locator('#screen-dashboard.active').waitFor({state:'visible',timeout:10000});
    assert.equal(await page.locator('#side.open').count(),0,'navigation closes the sidebar');
