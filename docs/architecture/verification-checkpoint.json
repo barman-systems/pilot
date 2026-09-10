@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-09-10T09:05:00Z",
+  "observed_at": "2026-09-10T09:19:00Z",
   "status": "PARTIALLY_VERIFIED",
-  "production_sha": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
-  "deployment_id": "dpl_DpHJkW3FaotQGyAHTDk8aZ8x3ooW",
+  "production_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+  "deployment_id": "dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j",
   "slice1": {
     "pr": 697,
     "local_baseline_tests": 2716,
@@ -75,16 +75,43 @@
     },
     {
       "pr": 699,
-      "status": "MERGED_PRODUCTION_VERIFICATION_RUNNING",
+      "status": "FUNCTIONAL_PASS_RELEASE_DRIFT_REVERIFY_CURRENT_MAIN",
       "scope": "shared HTTP transport for all active message types",
       "head": "b85b2879b93550db2ca4c03993889fbe82a31295",
       "production_sha": "81cacbcf94d02a14a08dca65a33c0bb5ecfe1cf8",
-      "production_journey_run": 34458064190
+      "production_journey_run": 34458064190,
+      "production_attempt_1": {
+        "run_id": 34458064190,
+        "job_id": 102809035360,
+        "arabic": "PASS",
+        "english_iphone": "PASS",
+        "ipad": "PASS",
+        "isolation": "PASS 13/13",
+        "stable_release": false,
+        "failure": "Concurrent presented-delivery confirmation fix advanced Production during the journey.",
+        "actual_final_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+        "artifact_id": 10144978014,
+        "artifact_sha256": "ff344197f590d19fc55edba09208a7548aa17eb816959e2219a7d77244499c5b"
+      },
+      "current_main_verification": {
+        "run_id": 34458663288,
+        "job_id": 102814368319,
+        "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+        "status": "IN_PROGRESS"
+      },
+      "production_ci": {
+        "run_id": 34458064289,
+        "job_id": 102809035573,
+        "passed": 2798,
+        "failed": 0,
+        "skipped": 0
+      }
     },
     {
       "pr": 701,
-      "status": "CI_PASS_NOT_APPLIED_TO_DATABASE",
-      "scope": "Coexistence existing customer resolver, 12 SQL behavior cases; total 2805 local passes"
+      "status": "CURRENT_MAIN_INTEGRATED_CI_PASS_NOT_APPLIED_TO_DATABASE",
+      "scope": "Coexistence existing customer resolver, 12 SQL behavior cases; total 2805 local passes",
+      "head": "fe4e8dc83da4bdf5b31c382223daf91f143873c8"
     }
   ],
   "deletion_gate": {
@@ -161,10 +188,18 @@
     "scope": "Slices 1-4 plus caller/behavior proof, not all changes deployed"
   },
   "prepared_cleanup_regression": {
-    "full_passed": 2815,
+    "full_passed": 2826,
     "failed": 0,
     "skipped": 0,
     "later_architecture_gate": "5/5 targeted; required CI will run complete suite",
-    "active_core_functions_byte_identical": 13
+    "active_core_functions_byte_identical": 13,
+    "includes_concurrent_main_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
+    "earlier_ci": {
+      "run_id": 34458894675,
+      "job_id": 102811727394,
+      "passed": 2816,
+      "failed": 0,
+      "skipped": 0
+    }
   }
 }

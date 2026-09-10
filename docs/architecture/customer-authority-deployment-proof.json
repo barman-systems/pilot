@@ -1,0 +1,94 @@
+{
+  "status": "PREPARED_NOT_APPLIED",
+  "scope": "Two existing service-only Coexistence RPCs reuse existing private customer resolver; no backfill.",
+  "before_functions": [
+    {
+      "schema": "public",
+      "name": "dabbir_whatsapp_apply_coexistence_contact_sync",
+      "definition_md5": "62c2538647b8e90a9dafe13d5c5c852e",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "schema": "public",
+      "name": "dabbir_whatsapp_persist_coexistence_message",
+      "definition_md5": "9dd9b3b1a8202ed19b0987b857968d58",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  ],
+  "before_rls": [
+    {
+      "table_name": "dabbir_conversations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "309f0e129853f87dcd55c8146b66dc7f"
+    },
+    {
+      "table_name": "dabbir_customers",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "c7a154f6c23061eb5572eb6072b9e90d"
+    },
+    {
+      "table_name": "dabbir_handoffs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "58709aad6e2c367e2983ab249a22535c"
+    },
+    {
+      "table_name": "dabbir_message_batches",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "b97f24f502a3bf649a260061c36b3d64"
+    },
+    {
+      "table_name": "dabbir_messages",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "c7d41da689dfe1908a5970020a7e4cd4"
+    },
+    {
+      "table_name": "dabbir_whatsapp_coexistence_mutations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47"
+    },
+    {
+      "table_name": "dabbir_whatsapp_connections",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "7f72ccd38cc502bc892cc343ea1ae3f4"
+    },
+    {
+      "table_name": "dabbir_whatsapp_event_ledger",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "policy_hash": "a593d37905a1621d19fd0bab36f9ba47"
+    }
+  ],
+  "advisor_baseline": {
+    "security": [
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "title": "Signed-In Users Can Execute SECURITY DEFINER Function"
+      }
+    ],
+    "performance": [
+      {
+        "name": "unused_index",
+        "level": "INFO",
+        "title": "Unused Index"
+      },
+      {
+        "name": "auth_db_connections_absolute",
+        "level": "INFO",
+        "title": "Auth DB Connection Strategy is not Percentage"
+      }
+    ]
+  },
+  "production_test": "test/fixtures/architecture/coexistence-production-rollback.sql",
+  "production_test_status": "NOT_RUN",
+  "source_migration": "supabase/migrations/20260910075409_dabbir_coexistence_customer_authority_v1.sql",
+  "migration_version_note": "Created with Supabase CLI. If MCP assigns the deployment version, reconcile the unmerged filename and test reference with that actual version before merge; never edit existing migration history.",
+  "real_phone_meta_evidence": "NOT_CLAIMED"
+}

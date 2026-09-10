@@ -281,7 +281,7 @@ the next transport merge and preparation of the separate legacy deletion PR.
 
 After deployed caller proof, the cleanup branch removes the 287-line service-menu
 module, 24 unreachable private AI-core functions and its two unused dispatch
-exports. The core shrinks from 297 to 138 lines before final whitespace cleanup.
+exports. The core shrinks from 297 to 137 lines.
 The 13 retained function bodies have identical SHA-256 hashes before/after;
 `legacy-removal-proof.json` records them. No live SQL RPC or Brain implementation
 is removed. The direct meter import is redundant with the active semantic
@@ -309,3 +309,9 @@ gate passed with its five-case suite. Required CI repeats the complete suite.
 The lower test count is explicitly retained, not hidden as a test-gate success.
 No CI/security/Production acceptance check, retry limit or authorization gate is
 relaxed. The cleanup is not Production verified until its own release completes.
+
+The later concurrent presented-delivery fix `a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd`
+was integrated unchanged into the prepared branches. Complete local regression
+then passed 2826/2826. Slice 3 also passed all functional Production journeys and
+13 isolation checks, but its final SHA check failed due to that concurrent
+deployment; run 34458663288 re-verifies the current release before further rollout.
