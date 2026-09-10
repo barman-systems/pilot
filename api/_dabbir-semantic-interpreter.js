@@ -5,6 +5,9 @@ import { applyDeterministicSemanticIntentPolicy } from './_dabbir-semantic-inten
 import { understandConversation } from './_dabbir-semantic-engine.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
+const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
+const GATEWAY_GEMINI_SEMANTIC_MAX_TOKENS=2400;
+
 function groundedServiceName(x,message,context) {
   // Catalog membership proves existence, never customer selection. Missing
   // evidence drops the proposal; existing verified state/memory stays in the
@@ -45,6 +48,25 @@ function providerSemanticContext(context,referenceTime) {
   return sanitizeSemanticContext({...rest,reference_time:referenceTime});
 }
 
+function gatewaySemanticOptions(url,options={}) {
+  if(String(url)!==GATEWAY_ENDPOINT || !options.body)return options;
+  try{
+    const body=JSON.parse(String(options.body));
+    const model=String(body?.model||'');
+    // Vercel AI Gateway counts Gemini reasoning tokens against max output.
+    // Semantic extraction is a bounded structured task, so use low reasoning
+    // and leave enough output headroom for the JSON contract. This avoids a
+    // transport-200 response ending as TRUNCATED after spending nearly the
+    // entire output budget on hidden reasoning.
+    if(body?.response_format?.type==='json_object' && model.startsWith('google/gemini-')){
+      body.max_tokens=Math.max(Number(body.max_tokens)||0,GATEWAY_GEMINI_SEMANTIC_MAX_TOKENS);
+      body.reasoning={effort:'low'};
+      return {...options,body:JSON.stringify(body)};
+    }
+  }catch{}
+  return options;
+}
+
 export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
   const deadline=Date.now()+18000; let attempts=0;
   const fetchBounded=async(url,options={})=>{
@@ -53,11 +75,12 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     // Direct-provider schema repair shares the four-request budget. Reserve one
     // request and the existing gateway primary deadline for the already-enabled
     // final fallback, instead of exhausting both before it can be reached.
-    const reserve=env.VERCEL_ENV&&String(url)!=='https://ai-gateway.vercel.sh/v1/chat/completions'?6000:0;
+    const reserve=env.VERCEL_ENV&&String(url)!==GATEWAY_ENDPOINT?6000:0;
     if(reserve&&(attempts>=3||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
     attempts++;
+    const nextOptions=gatewaySemanticOptions(url,options);
     const signal=AbortSignal.timeout(Math.max(1,remaining-reserve));
-    return fetchImpl(url,{...options,signal:options.signal?AbortSignal.any([signal,options.signal]):signal});
+    return fetchImpl(url,{...nextOptions,signal:nextOptions.signal?AbortSignal.any([signal,nextOptions.signal]):signal});
   };
   const result=await generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
     message:sanitizeSemanticText(message).slice(0,2000),
