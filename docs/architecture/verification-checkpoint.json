@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-09-10T11:39:03.631965+00:00",
-  "status": "CUSTOMER_IDENTITY_PRODUCTION_VERIFIED_CLEANUP_REVALIDATING",
-  "production_sha": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
-  "deployment_id": "dpl_ESV166hqtxKae6F1daWgNMks8CjY",
+  "observed_at": "2026-09-10T12:06:39.684762+00:00",
+  "status": "LEGACY_CLEANUP_PRODUCTION_VERIFIED_NEXT_SLICE_PREPARED",
+  "production_sha": "67429babf48c0426157a2729ce444126752c5355",
+  "deployment_id": "dpl_6962Drn3GBeTKNGnDo7Svh9x7pJG",
   "slice1": {
     "pr": 697,
     "local_baseline_tests": 2716,
@@ -368,9 +368,26 @@
   },
   "cleanup_current_main": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
   "remaining_gates": [
-    "PR702 complete regression and security/browser checks",
-    "PR702 merge/deployment and one complete exact-SHA Production journey",
-    "Original intermittent WebKit root cause remains unresolved",
-    "Continue operation-specific booking/writer/SQL debt from proven callers"
-  ]
+    "Shared appointment time-window slice regression and Production journey",
+    "Original WebKit root cause unresolved and unreproduced",
+    "Operation-specific booking writers/CAS, web conversation, dynamic SQL and other proven legacy debt"
+  ],
+  "slice5_production": {
+    "run_id": 34473014165,
+    "attempt": 1,
+    "job_id": 102857092084,
+    "verdict": "PASS",
+    "sha": "67429babf48c0426157a2729ce444126752c5355",
+    "deployment_id": "dpl_6962Drn3GBeTKNGnDo7Svh9x7pJG",
+    "arabic": "PASS",
+    "english_iphone": "PASS",
+    "ipad_webkit": "PASS",
+    "isolation_passed": 13,
+    "required_failures": 0,
+    "stable_release": true,
+    "report_entries": 38,
+    "optional_provider_comparison_failures": 3,
+    "artifact_id": 10150865443,
+    "artifact_sha256": "5a0ea2ad05c861f43e32f07b937b6a6570d5904b2b639799faada264335c293b"
+  }
 }

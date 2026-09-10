@@ -10,7 +10,7 @@ test('appointment management does not rewrite an unchanged historical timestamp'
   assert.match(api,/function validStart\(value\)/);
   assert.match(api,/const currentStart=validStart\(current\.starts_at\)/);
   assert.match(api,/start\.getTime\(\)!==currentStart\.getTime\(\)/);
-  assert.match(api,/patch\.starts_at=start\.toISOString\(\)/);
+  assert.match(api,/Object\.assign\(patch,appointmentTimeWindow\(start,durationMs\(current\)\)\)/);
   assert.match(api,/state:'NO_CHANGE'/);
 });
 

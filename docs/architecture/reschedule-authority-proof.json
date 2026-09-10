@@ -1,0 +1,151 @@
+{
+  "status": "LOCAL_VERIFIED_CI_AND_PRODUCTION_PENDING",
+  "base_production": {
+    "run_id": 34473014165,
+    "attempt": 1,
+    "job_id": 102857092084,
+    "verdict": "PASS",
+    "sha": "67429babf48c0426157a2729ce444126752c5355",
+    "deployment_id": "dpl_6962Drn3GBeTKNGnDo7Svh9x7pJG",
+    "arabic": "PASS",
+    "english_iphone": "PASS",
+    "ipad_webkit": "PASS",
+    "isolation_passed": 13,
+    "required_failures": 0,
+    "stable_release": true,
+    "report_entries": 38,
+    "optional_provider_comparison_failures": 3,
+    "artifact_id": 10150865443,
+    "artifact_sha256": "5a0ea2ad05c861f43e32f07b937b6a6570d5904b2b639799faada264335c293b"
+  },
+  "original_defect": {
+    "source_sha": "67429babf48c0426157a2729ce444126752c5355",
+    "failing_before_local_commit": "efb0f9b81a61cd027d67acfe3b5644643d1f21d5",
+    "tests": 8,
+    "failed": 6,
+    "passed_controls": 2,
+    "observed": "Google/Outlook start-only PATCH leaves old ends_at. Forward movement fails actual PostgreSQL INVALID_APPOINTMENT_RANGE; backward movement changes duration.",
+    "failing_before_remote_commit": "e4a90cbdfece1366252888293be58c9a9f6fb12f",
+    "before_tree_sha": "54633c7e68e1ef9b19e188d8f30c913669485af7"
+  },
+  "canonical_owner": "api/_appointment-time-window.js::appointmentTimeWindow",
+  "input_contract": "Validated start instant (ISO string or Date) and finite positive durationMs from existing caller authority",
+  "output_contract": "Both starts_at and ends_at ISO instants, finite and end > start",
+  "allowed_dependencies": [],
+  "failure_behavior": "RangeError before any write for invalid/unrepresentable interval; existing database/provider failure propagation unchanged",
+  "tests_added": 15,
+  "postgres_scope": "Isolated PGlite executes an exact snapshot of unchanged live range/conflict trigger plus table CHECK; not a claim of live Google/Outlook OAuth validation",
+  "before_metrics": {
+    "modules": 289,
+    "import_edges": 513,
+    "functions": 1405,
+    "cycles": 0,
+    "unreachable_local_candidates": 1
+  },
+  "after_metrics": {
+    "modules": 290,
+    "import_edges": 515,
+    "cycles": 0,
+    "functions": 1406,
+    "unreachable_local_candidates": 1
+  },
+  "edges": [
+    {
+      "from": "api/_calendar-sync-core.js",
+      "to": "node:crypto",
+      "kind": "import",
+      "line": 1
+    },
+    {
+      "from": "api/_calendar-sync-core.js",
+      "to": "api/_appointment-time-window.js",
+      "kind": "import",
+      "line": 2
+    },
+    {
+      "from": "api/_calendar-sync-core.js",
+      "to": "api/_calendar-core.js",
+      "kind": "import",
+      "line": 3
+    },
+    {
+      "from": "api/appointment-management.js",
+      "to": "api/_request-query.js",
+      "kind": "import",
+      "line": 1
+    },
+    {
+      "from": "api/appointment-management.js",
+      "to": "api/_branch-scope.js",
+      "kind": "import",
+      "line": 2
+    },
+    {
+      "from": "api/appointment-management.js",
+      "to": "api/_booking-query.js",
+      "kind": "import",
+      "line": 3
+    },
+    {
+      "from": "api/appointment-management.js",
+      "to": "api/_appointment-time-window.js",
+      "kind": "import",
+      "line": 4
+    },
+    {
+      "from": "api/appointment-management.js",
+      "to": "api/_auth-core.js",
+      "kind": "import",
+      "line": 5
+    },
+    {
+      "from": "api/calendar-oauth-callback.js",
+      "to": "api/_calendar-sync-core.js",
+      "kind": "import",
+      "line": 13
+    },
+    {
+      "from": "api/calendar-outbox-cron.js",
+      "to": "api/_calendar-sync-core.js",
+      "kind": "import",
+      "line": 4
+    },
+    {
+      "from": "api/calendar-sync.js",
+      "to": "api/_calendar-sync-core.js",
+      "kind": "import",
+      "line": 4
+    },
+    {
+      "from": "api/salon-operations.js",
+      "to": "api/_calendar-sync-core.js",
+      "kind": "import",
+      "line": 11
+    }
+  ],
+  "active_brain_or_sql_changes": false,
+  "unchanged_policies": [
+    "Owner durationMs legacy 5-minute/24-hour/60-minute fallback behavior",
+    "Calendar persisted positive duration including short and multi-day services; existing 60-minute missing-duration fallback",
+    "JWT/RLS path for owner; authorized business-scoped service path for calendar",
+    "Status, authorization, confirmation, idempotency, CAS, Meta and provider selection gates"
+  ],
+  "remaining_debt": [
+    "Database writers are not consolidated by this arithmetic slice",
+    "Manual and provider update concurrency still requires operation-specific CAS review",
+    "Salon resize/move and other activity writers retain their active contracts"
+  ],
+  "historical_repair_and_owner_lookup_time": "NOT_MEASURED",
+  "local_final_regression": {
+    "passed": 2845,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "initial_full_regression": {
+    "passed": 2844,
+    "failed": 1,
+    "reason": "Historical edit source assertion still referenced the former inline assignment. Updated to require the shared constructor inside the unchanged timestamp-change guard; all behavior assertions retained."
+  },
+  "owner_duration_helper_retained_sha256": "66116972c2353d7e5ed97f6de1730c199cb9d3a07b2af6ee6a35752c29f2492c"
+}

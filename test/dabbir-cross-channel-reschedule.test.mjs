@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
+import {Readable} from 'node:stream';
+import {appointmentTimeWindow} from '../api/_appointment-time-window.js';
 
 process.env.SUPABASE_URL='https://reschedule-fixture.invalid';
 process.env.SUPABASE_SERVICE_ROLE_KEY='synthetic-calendar-service-key-for-tests';
@@ -12,14 +14,15 @@ process.env.DABBIR_MICROSOFT_CALENDAR_CLIENT_ID='synthetic-client';
 process.env.DABBIR_MICROSOFT_CALENDAR_CLIENT_SECRET='synthetic-secret';
 const {encryptTokenPayload}=await import('../api/_calendar-core.js');
 const {syncCalendarConnection}=await import('../api/_calendar-sync-core.js');
+const {default:ownerHandler}=await import('../api/appointment-management.js');
 const B='10000000-0000-4000-8000-000000000001',A='20000000-0000-4000-8000-000000000001',C='30000000-0000-4000-8000-000000000001';
 const day=new Date(Date.now()+3*86400000).toISOString().slice(0,10);
 const oldStart=day+'T09:00:00.000Z',oldEnd=day+'T10:30:00.000Z';
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 
-function fixture(t,provider,newStart,{rejectDatabase=false,writeAppointment}={}){
-  const calls=[],appointment={id:A,customer_id:C,starts_at:oldStart,ends_at:oldEnd,status:'confirmed'};
-  const expectedEnd=new Date(new Date(newStart).getTime()+90*60000).toISOString();
+function fixture(t,provider,newStart,{rejectDatabase=false,writeAppointment,durationMinutes=90}={}){
+  const calls=[],appointment={id:A,customer_id:C,starts_at:oldStart,ends_at:new Date(new Date(oldStart).getTime()+durationMinutes*60000).toISOString(),status:'confirmed'};
+  const expectedEnd=new Date(new Date(newStart).getTime()+durationMinutes*60000).toISOString();
   const event=provider==='google'?{id:'synthetic-event',status:'confirmed',start:{dateTime:newStart},end:{dateTime:expectedEnd}}:{id:'synthetic-event',isCancelled:false,start:{dateTime:newStart},end:{dateTime:expectedEnd}};
   const sealed=encryptTokenPayload({access_token:'synthetic-provider-token'});
   const credential={token_ciphertext:sealed.ciphertext,token_iv:sealed.iv,token_tag:sealed.tag,token_expires_at:new Date(Date.now()+3600000).toISOString()};
@@ -71,6 +74,40 @@ for(const provider of ['google','outlook'])test(`${provider} database rejection 
   assert.equal(f.appointment.starts_at,oldStart);
   assert.equal(f.appointment.ends_at,oldEnd);
   assert.equal(f.calls.some(c=>c.method!=='GET'&&['www.googleapis.com','graph.microsoft.com'].includes(c.url.hostname)),false);
+});
+
+for(const provider of ['google','outlook'])for(const durationMinutes of [2,2880])test(`${provider} preserves a persisted ${durationMinutes}-minute service duration`,async t=>{
+  const f=fixture(t,provider,day+'T12:00:00.000Z',{durationMinutes});
+  assert.equal((await f.run()).provider_updates,1);
+  assert.equal(new Date(f.appointment.ends_at)-new Date(f.appointment.starts_at),durationMinutes*60000);
+});
+
+for(const [durationMinutes,expectedMinutes] of [[90,90],[2,60]])test(`owner reschedule retains its existing ${durationMinutes}-minute duration policy`,async t=>{
+  const current={id:A,business_id:B,customer_id:C,starts_at:oldStart,ends_at:new Date(new Date(oldStart).getTime()+durationMinutes*60000).toISOString(),status:'confirmed'},writes=[];
+  t.mock.method(globalThis,'fetch',async(input,options={})=>{
+    const url=new URL(input),path=url.pathname;
+    if(path==='/auth/v1/user')return response({id:C});
+    if(path.endsWith('/account_access_state'))return response([{status:'active'}]);
+    if(path.endsWith('/dabbir_memberships'))return response([{business_id:B,status:'active',role:'owner',permissions:[]}]);
+    if(path.endsWith('/dabbir_appointments')){
+      assert.equal(url.searchParams.get('business_id'),'eq.'+B);assert.equal(url.searchParams.get('id'),'eq.'+A);
+      assert.equal(options.headers.get('authorization'),'Bearer synthetic-owner-session');
+      if(options.method==='PATCH'){const patch=JSON.parse(options.body);writes.push(patch);return response([{...current,...patch}]);}
+      return response([current]);
+    }
+    throw new Error('UNEXPECTED_FIXTURE_REQUEST '+path);
+  });
+  const next=day+'T12:00:00.000Z',body={business_id:B,appointment_id:A,action:'update',starts_at:next};
+  const req=Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]),{method:'POST',url:'/',headers:{host:'reschedule-fixture.invalid',origin:'https://reschedule-fixture.invalid',cookie:'__Host-dabbir_access=synthetic-owner-session'}});
+  const res={statusCode:200,setHeader(){},end(text){this.body=JSON.parse(text)}};
+  await ownerHandler(req,res);
+  assert.equal(res.statusCode,200);assert.equal(res.body.state,'VERIFIED_PERSISTED');assert.equal(writes.length,1);
+  assert.deepEqual(writes[0],{starts_at:next,ends_at:new Date(new Date(next).getTime()+expectedMinutes*60000).toISOString()});
+});
+
+test('shared interval contract rejects unverified or unrepresentable time inputs',()=>{
+  for(const start of [null,undefined,'', 'invalid',new Date(NaN)])assert.throws(()=>appointmentTimeWindow(start,60000),/APPOINTMENT_TIME_WINDOW_INVALID/);
+  for(const duration of [0,-1,NaN,Infinity,'60000',0.1,Number.MAX_VALUE])assert.throws(()=>appointmentTimeWindow(oldStart,duration),/APPOINTMENT_TIME_WINDOW_INVALID/);
 });
 
 for(const provider of ['google','outlook'])test(`${provider} reschedule passes the actual PostgreSQL range trigger without weakening it`,async t=>{
