@@ -5,6 +5,7 @@ import {
   normalizeSemanticText,
 } from './_dabbir-semantic-engine-core.js';
 import {cognitiveReduce} from './_dabbir-cognitive-dialogue.js';
+import {applyGoalDrivenConversationPlan} from './_dabbir-goal-driven-planner.js';
 
 export {
   SEMANTIC_VERSION,
@@ -124,7 +125,10 @@ export function understandLegacyConversation(args){
   return result;
 }
 
-export function understandConversation(args){return cognitiveReduce(args,understandLegacyConversation);}
+export function understandConversation(args){
+  const result=cognitiveReduce(args,understandLegacyConversation);
+  return applyGoalDrivenConversationPlan({args,result});
+}
 
 // Source-contract sentinels retained for static safety tests. Enforcement remains
 // in _dabbir-semantic-engine-core.js: newer_customer_message_exists,
