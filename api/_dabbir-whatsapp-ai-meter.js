@@ -40,8 +40,6 @@ export function actualGatewayCost(payload={},response){
     response?.headers?.get?.('x-vercel-ai-gateway-cost'),
   ];
   for(const value of candidates){
-    // A missing header returns null. Number(null), blank strings and booleans
-    // are not provider evidence of a free request.
     if(typeof value!=='number'&&(typeof value!=='string'||!value.trim()))continue;
     const number=Number(value);
     if(Number.isFinite(number)&&number>=0)return number;
@@ -49,7 +47,7 @@ export function actualGatewayCost(payload={},response){
   return null;
 }
 
-async function recordUsage({businessId,operationKey,result,attempts,usage,actualCostUsd}){
+async function recordUsage({businessId,conversationId,operationKey,result,attempts,usage,actualCostUsd}){
   const key=clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);
   if(!businessId||!key||key.startsWith('sb_publishable_'))return {ok:false,state:'METER_NOT_CONFIGURED'};
   const provider=clean(result?.provider,120)||'unknown';
@@ -77,8 +75,11 @@ async function recordUsage({businessId,operationKey,result,attempts,usage,actual
       attempts:attempts.slice(0,8),
       billing_note:gateway?'Paid fallback is attributed to business_id in Vercel AI Gateway; exact report cost remains authoritative when response cost is absent.':'Direct-provider calls are metered by tokens; monetary cost is not guessed when the provider response has no billing amount.',
     },
+    p_conversation_id:conversationId||null,
+    p_customer_id:null,
+    p_branch_id:null,
   };
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_record_ai_usage_v1`,{
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_record_ai_usage_v2`,{
     method:'POST',cache:'no-store',redirect:'manual',
     headers:supabaseKeyHeaders(key,{accept:'application/json','content-type':'application/json',prefer:'return=representation'}),
     body:JSON.stringify(body),signal:AbortSignal.timeout(8000),
@@ -139,7 +140,6 @@ export async function generateDABBIRAiReply(args={}){
   const result={...coreResult,telemetry:{final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
     latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms})),skipped_attempts:skippedAttempts}};
   if(!result?.ok){
-    // Fixed categories and numeric statuses only: no upstream body, URL, IDs or credentials.
     console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),configured_attempts:attempts.length});
     return result;
   }
@@ -147,7 +147,7 @@ export async function generateDABBIRAiReply(args={}){
 
   const usage=usageFromPayload(successfulPayload||{});
   const operationKey=`wa-ai-usage:${hash([identity.businessId,identity.conversationId,identity.messageTimestamp,clean(args.message,2000)].join('|')).slice(0,48)}`;
-  await recordUsage({businessId:identity.businessId,operationKey,result,attempts,usage,actualCostUsd}).catch(error=>{
+  await recordUsage({businessId:identity.businessId,conversationId:identity.conversationId,operationKey,result,attempts,usage,actualCostUsd}).catch(error=>{
     console.warn('dabbir_whatsapp_ai_meter_failed',{error:clean(error?.message||error,120),provider:clean(result?.provider,80)});
   });
   return result;
