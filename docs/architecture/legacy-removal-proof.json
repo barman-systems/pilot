@@ -52,6 +52,7 @@
     "import_edges": 513,
     "cycles": 0,
     "functions": 1405,
-    "unreachable_local_candidates": 4
-  }
+    "unreachable_local_candidates": 1
+  },
+  "parameter_default_callers_rechecked": true
 }

@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "source_ref": "working",
-  "revision": "c43360bb69ce30f52355e2d05cbd60fde4a1b4fc",
+  "revision": "37e79be4b5fd3de8d520acdf6c0d8506ebda15f1",
   "node": "v24.19.0",
-  "scope": "API JavaScript AST: literal imports, static RPC references, literal routes, conservative local reachability. External callers, dynamic SQL and remote Edge functions require separate evidence; unreachable is NOT deletion permission. Prepared cleanup branch; not a Production deployment claim.",
+  "scope": "API JavaScript AST: literal imports, static RPC references, literal routes, conservative local reachability. External callers, dynamic SQL and remote Edge functions require separate evidence; unreachable is NOT deletion permission.",
   "metrics": {
     "modules": 289,
     "import_edges": 513,
     "cycles": 0,
     "functions": 1405,
-    "unreachable_local_candidates": 4
+    "unreachable_local_candidates": 1
   },
   "cycles": [],
   "edges": [
@@ -3271,7 +3271,7 @@
     },
     {
       "file": "api/_dabbir-activity-intelligence.js",
-      "lines": 148,
+      "lines": 152,
       "exports": [
         "activityActionAuthority",
         "validLocation",
@@ -3558,7 +3558,7 @@
     },
     {
       "file": "api/_dabbir-semantic-engine-core.js",
-      "lines": 471,
+      "lines": 485,
       "exports": [
         "normalizeSemanticText",
         "greetingOnly",
@@ -3833,7 +3833,9 @@
           "rpcs": [],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "serviceKey"
+          ]
         },
         {
           "name": "latestText",
@@ -3843,7 +3845,9 @@
           "rpcs": [],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "latestText"
+          ]
         },
         {
           "name": "fmtWhen",
@@ -3853,7 +3857,9 @@
           "rpcs": [],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "fmtWhen"
+          ]
         },
         {
           "name": "slotsText",
@@ -3864,7 +3870,8 @@
           "fetches": [],
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
-            "fmtWhen"
+            "fmtWhen",
+            "slotsText"
           ]
         },
         {
@@ -3876,6 +3883,7 @@
           "fetches": [],
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
+            "bookingText",
             "fmtWhen"
           ]
         },
@@ -3889,7 +3897,9 @@
           ],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "handoff"
+          ]
         },
         {
           "name": "reserveReply",
@@ -3902,7 +3912,9 @@
           ],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "reserveReply"
+          ]
         },
         {
           "name": "deliver",
@@ -3913,6 +3925,7 @@
           "fetches": [],
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
+            "deliver",
             "reserveReply",
             "serviceKey"
           ]
@@ -3927,7 +3940,9 @@
           ],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "finish"
+          ]
         },
         {
           "name": "processClaim",
@@ -3945,6 +3960,7 @@
             "finish",
             "handoff",
             "latestText",
+            "processClaim",
             "serviceKey",
             "slotsText"
           ]
@@ -3961,7 +3977,8 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "finish",
-            "handoff"
+            "handoff",
+            "requireHumanForFailure"
           ]
         },
         {
@@ -3974,6 +3991,7 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "finish",
+            "handleFailure",
             "requireHumanForFailure"
           ]
         },
@@ -3987,7 +4005,8 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "handleFailure",
-            "processClaim"
+            "processClaim",
+            "processClaimedWhatsAppAiBatch"
           ]
         }
       ]
@@ -4127,7 +4146,9 @@
           ],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "finish"
+          ]
         },
         {
           "name": "serviceHandoff",
@@ -4141,7 +4162,8 @@
           "fetches": [],
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
-            "finish"
+            "finish",
+            "serviceHandoff"
           ]
         },
         {
@@ -4154,6 +4176,7 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "finish",
+            "handleServiceFailure",
             "serviceHandoff"
           ]
         },
@@ -4165,7 +4188,9 @@
           "rpcs": [],
           "fetches": [],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "tryServiceFlow"
+          ]
         },
         {
           "name": "processWhatsAppDispatchWithServiceMenu",
@@ -4180,6 +4205,7 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "handleServiceFailure",
+            "processWhatsAppDispatchWithServiceMenu",
             "tryServiceFlow"
           ]
         },
@@ -4195,6 +4221,7 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "handleServiceFailure",
+            "processWhatsAppRecoveryWithServiceMenu",
             "tryServiceFlow"
           ]
         }
@@ -4672,7 +4699,9 @@
             }
           ],
           "reachable_from_export_or_initializer": true,
-          "local_dependencies": []
+          "local_dependencies": [
+            "requestMetaMessage"
+          ]
         },
         {
           "name": "sendMetaMessage",
@@ -4683,7 +4712,8 @@
           "fetches": [],
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
-            "requestMetaMessage"
+            "requestMetaMessage",
+            "sendMetaMessage"
           ]
         }
       ]
@@ -6759,5 +6789,9 @@
       ],
       "rpcs": []
     }
-  ]
+  ],
+  "audit_correction": {
+    "previous_unreachable_count": 4,
+    "reason": "Function parameter defaults are executable caller references; three live helpers were previously false-positive candidates and were never deleted."
+  }
 }

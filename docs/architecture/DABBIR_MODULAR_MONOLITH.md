@@ -12,7 +12,7 @@ Status: PARTIALLY VERIFIED. This is an implementation ledger, not launch approva
 - No replay of PRs #687–#693; #694 remains evidence-only.
 - `baseline-call-map.json`: 288 API JS modules, 517 literal import edges,
   1445 top-level functions, zero import strongly-connected components.
-  44 local unreachable candidates, including 24 in the old AI core and 16
+  41 local unreachable candidates, including 24 in the old AI core and 16
   in the service-menu wrapper. Candidate status alone does not permit deletion.
 - The AST audit includes literal dynamic imports and RPC call sites. It does
   not prove absence of externally deployed callers, dynamic SQL or reflective
@@ -256,7 +256,7 @@ It uses the parser shipped in the pinned Node 24 runtime, introduces no producti
 dependency, and fails on import cycles. Its local reachability is conservative
 and limited to top-level function declarations; nonliteral imports/eval are
 listed as hazards. It is an inspection tool, not an automatic deletion tool.
-Pre-removal tree: 290 API JS modules, 522 literal import edges, zero cycles, 44 local
+Pre-removal tree: 290 API JS modules, 522 literal import edges, zero cycles, 41 local
 unreachable candidates. The complete 2822-test integrated local suite passes, zero skipped, including
 the concurrently deployed independent-read fix without alteration.
 Eight new worker cases exercise the actual claimed worker and versioned executor,
@@ -288,9 +288,9 @@ is removed. The direct meter import is redundant with the active semantic
 interpreter's existing meter import; provider metering remains active.
 
 `post-removal-call-map.json`: 289 API modules, 513 import edges, no cycles,
-1405 top-level functions and four remaining local unreachable candidates.
-The initial task baseline was 288/517/1445/44 respectively. The pre-removal
-slice tree was 290/522/1453/44. No actual repair or owner-lookup time is claimed.
+1405 top-level functions and one remaining local unreachable candidate.
+The initial task baseline was 288/517/1445/41 respectively. The pre-removal
+slice tree was 290/522/1453/41. No actual repair or owner-lookup time is claimed.
 
 | Retired source-only assertion | Active behavioral replacement |
 |---|---|
@@ -315,3 +315,11 @@ was integrated unchanged into the prepared branches. Complete local regression
 then passed 2826/2826. Slice 3 also passed all functional Production journeys and
 13 isolation checks, but its final SHA check failed due to that concurrent
 deployment; run 34458663288 re-verifies the current release before further rollout.
+
+Audit correction: parameter-default expressions are real callers. Three helpers
+(`budgetRpc`, its credential resolver and `adminRest`) were incorrectly counted
+as unreachable by the initial body-only scan. They were never deleted. The
+corrected baseline/pre-removal candidate count is 41, and the prepared cleanup
+count is one. Rechecking the actual deleted WhatsApp functions gives the same
+24 private functions and two externally unreferenced exports. Two regression
+tests now protect parameter-default reachability and self-import cycle detection.

@@ -26,7 +26,8 @@ for(const file of files.sort()){
   if(node.type.startsWith('Export'))exports.push(...(decl.id?[decl.id.name]:node.specifiers?.map(s=>s.local?.name)||[]));
   if(decl.type==='FunctionDeclaration'&&decl.id){
    const refs=new Set(),rpc=[],fetches=[];
-   walk(decl.body,n=>{if(n.type==='Identifier')refs.add(n.name);if(n.type==='CallExpression'){
+   // Parameter defaults can invoke or select helpers before the body runs.
+   walk(decl,n=>{if(n.type==='Identifier')refs.add(n.name);if(n.type==='CallExpression'){
     const callee=n.callee.type==='Identifier'?n.callee.name:n.callee.property?.name;
     if(/rpc/i.test(callee||'')){const a=n.arguments.find(a=>a.type==='Literal'&&typeof a.value==='string'&&a.value.startsWith('dabbir_'));if(a)rpc.push(a.value);}
     if(callee==='fetch')fetches.push({line:n.loc.start.line,expression:source.slice(n.start,Math.min(n.end,n.start+220))});

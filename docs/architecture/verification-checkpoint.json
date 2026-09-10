@@ -177,7 +177,7 @@
       "import_edges": 513,
       "cycles": 0,
       "functions": 1405,
-      "unreachable_local_candidates": 4
+      "unreachable_local_candidates": 1
     }
   },
   "prepared_local_regression": {
@@ -201,5 +201,14 @@
       "failed": 0,
       "skipped": 0
     }
+  },
+  "audit_correction": {
+    "baseline_unreachable": 41,
+    "after_unreachable": 1,
+    "previous_reported": [
+      44,
+      4
+    ],
+    "reason": "Included references in function parameter defaults; all actual removed functions still pass caller proof."
   }
 }
