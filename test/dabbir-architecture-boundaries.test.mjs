@@ -28,7 +28,7 @@ test('worker and recovery route through the same dispatch owner', () => {
 test('new API modules cannot create another direct Meta messages sender', () => {
   // Explicit migration inventory. Each exception must disappear only after its
   // callers move and exact-SHA Production proof is retained.
-  const allowed = new Set(['api/_whatsapp-message-transport.js', 'api/_dabbir-whatsapp-catalog.js', 'api/_dabbir-whatsapp-flows.js', 'api/_dabbir-whatsapp-service-menu.js']);
+  const allowed = new Set(['api/_whatsapp-message-transport.js', 'api/_dabbir-whatsapp-service-menu.js']);
   function visit(directory) {
     for (const entry of readdirSync(new URL('../' + directory, import.meta.url), { withFileTypes: true })) {
       const file = directory + '/' + entry.name;

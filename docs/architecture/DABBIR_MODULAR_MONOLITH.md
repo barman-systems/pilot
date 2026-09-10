@@ -147,3 +147,24 @@ Production verification of this slice must complete before removing the old
 service-menu module or the AI core's unreachable local functions. Temporary
 source duplication during caller migration is intentional and time-bounded by
 that gate; no second dispatcher is enabled by the worker/cron.
+
+## Slice 3: all active message HTTP attempts
+
+Text, templates, catalog products and booking Flows now use the single
+`requestMetaMessage` HTTP owner in `_whatsapp-message-transport.js`. It preserves
+the exact normalized payload, authentication headers, 10-second deadline and
+one-attempt behavior. Catalog read APIs and Flow provisioning are different
+operations and retain their existing adapters. Domain-specific error names,
+provider diagnostics and Flow session finalization remain compatible.
+
+19 additional behavioral tests cover catalog wire payload, tenant-bound Flow
+session before send, token-hash correspondence, receipt-before-sent ordering,
+4xx/5xx, malformed responses, network failures and timeout. The architecture
+inventory removes catalog/Flow exceptions, so neither can regain a direct
+messages endpoint. The sole remaining direct-send exception is the retained,
+unreachable legacy service-menu implementation awaiting the deletion gate.
+
+Local full suite at this slice's original base: 2785/2785, zero failures/skips.
+Concurrent main added eight direct-return-to-AI UI cases; required CI on the
+rebased branch verifies those changes too. No Brain, authorization, database,
+confirmation, branch selection, reservation or delivery-status behavior changes.

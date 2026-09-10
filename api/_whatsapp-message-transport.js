@@ -1,13 +1,11 @@
 /**
- * Meta message transport. Callers must authorize and durably reserve first.
- * Owns exactly one HTTP attempt, provider acceptance and ambiguous-send detection.
- * Does not resolve tenants, decrypt credentials, reserve, finalize or retry.
- *
- * @param {{ graphVersion: string, phoneNumberId: string, token: string,
- *   message: object, errors: { failed: string, withoutId: string, timeout: string } }} input
- * @returns {Promise<{providerMessageId: string, providerStatus: number}>}
+ * One HTTP attempt for every active WhatsApp message adapter. The supplied
+ * message is already normalized and authorized by its caller. Provider-specific
+ * domain error names and durable session receipts stay with those adapters.
+ * No retries, database writes, credential lookup or logging occur here.
+ * @returns {Promise<{response: Response, payload: object}>}
  */
-export async function sendMetaMessage({ graphVersion, phoneNumberId, token, message, errors }) {
+export async function requestMetaMessage({ graphVersion, phoneNumberId, token, message }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -23,6 +21,24 @@ export async function sendMetaMessage({ graphVersion, phoneNumberId, token, mess
       body: JSON.stringify(message),
     });
     const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Meta message transport. Callers must authorize and durably reserve first.
+ * Owns exactly one HTTP attempt, provider acceptance and ambiguous-send detection.
+ * Does not resolve tenants, decrypt credentials, reserve, finalize or retry.
+ *
+ * @param {{ graphVersion: string, phoneNumberId: string, token: string,
+ *   message: object, errors: { failed: string, withoutId: string, timeout: string } }} input
+ * @returns {Promise<{providerMessageId: string, providerStatus: number}>}
+ */
+export async function sendMetaMessage({ graphVersion, phoneNumberId, token, message, errors }) {
+  try {
+    const { response, payload } = await requestMetaMessage({ graphVersion, phoneNumberId, token, message });
     if (!response.ok) {
       const error = new Error(errors.failed);
       error.status = response.status >= 500 ? 502 : 409;
@@ -49,7 +65,5 @@ export async function sendMetaMessage({ graphVersion, phoneNumberId, token, mess
     }
     if (error instanceof TypeError && error?.ambiguous !== false) error.ambiguous = true;
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
 }
