@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "source_ref": "working",
-  "revision": "72a5163e53516c67230276f53d1ee73d780b912f",
+  "source_ref": "origin/main",
+  "revision": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
   "node": "v24.19.0",
   "scope": "API JavaScript AST: literal imports, static RPC references, literal routes, conservative local reachability. External callers, dynamic SQL and remote Edge functions require separate evidence; unreachable is NOT deletion permission.",
   "metrics": {
-    "modules": 289,
-    "import_edges": 513,
+    "modules": 290,
+    "import_edges": 522,
     "cycles": 0,
-    "functions": 1405,
-    "unreachable_local_candidates": 1
+    "functions": 1453,
+    "unreachable_local_candidates": 41
   },
   "cycles": [],
   "edges": [
@@ -489,15 +489,21 @@
     },
     {
       "from": "api/_dabbir-whatsapp-ai-core.js",
-      "to": "api/_whatsapp-live-core.js",
+      "to": "api/_dabbir-whatsapp-ai-meter.js",
       "kind": "import",
       "line": 7
     },
     {
       "from": "api/_dabbir-whatsapp-ai-core.js",
-      "to": "api/_whatsapp-service-connection.js",
+      "to": "api/_whatsapp-live-core.js",
       "kind": "import",
       "line": 8
+    },
+    {
+      "from": "api/_dabbir-whatsapp-ai-core.js",
+      "to": "api/_whatsapp-service-connection.js",
+      "kind": "import",
+      "line": 9
     },
     {
       "from": "api/_dabbir-whatsapp-ai-meter.js",
@@ -612,6 +618,54 @@
       "to": "api/_supabase-key-auth.js",
       "kind": "import",
       "line": 6
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "node:crypto",
+      "kind": "import",
+      "line": 1
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_dabbir-meta-public-config.js",
+      "kind": "import",
+      "line": 2
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_whatsapp-embedded-core.js",
+      "kind": "import",
+      "line": 3
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_whatsapp-live-core.js",
+      "kind": "import",
+      "line": 4
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_whatsapp-service-connection.js",
+      "kind": "import",
+      "line": 10
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_dabbir-whatsapp-ai-core.js",
+      "kind": "import",
+      "line": 11
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_dabbir-whatsapp-catalog.js",
+      "kind": "import",
+      "line": 12
+    },
+    {
+      "from": "api/_dabbir-whatsapp-service-menu.js",
+      "to": "api/_dabbir-whatsapp-understanding.js",
+      "kind": "import",
+      "line": 17
     },
     {
       "from": "api/_dabbir-whatsapp-voice.js",
@@ -9710,7 +9764,7 @@
     {
       "file": "api/_dabbir-whatsapp-ai-core.js",
       "dynamic": [],
-      "lines": 137,
+      "lines": 297,
       "imports": [
         {
           "source": "./_dabbir-semantic-interpreter.js",
@@ -9785,6 +9839,16 @@
           ]
         },
         {
+          "source": "./_dabbir-whatsapp-ai-meter.js",
+          "target": "api/_dabbir-whatsapp-ai-meter.js",
+          "names": [
+            {
+              "local": "generateDABBIRAiReply",
+              "imported": "generateDABBIRAiReply"
+            }
+          ]
+        },
+        {
           "source": "./_whatsapp-live-core.js",
           "target": "api/_whatsapp-live-core.js",
           "names": [
@@ -9819,40 +9883,78 @@
       ],
       "exports": [
         "bookingText",
-        "processClaimedWhatsAppAiBatch"
+        "processClaimedWhatsAppAiBatch",
+        "processWhatsAppAiDispatchToken",
+        "processWhatsAppAiRecovery"
       ],
       "rpcs": [
         {
+          "name": "dabbir_record_ai_operator_decision_v1",
+          "line": 157
+        },
+        {
+          "name": "dabbir_whatsapp_ai_set_state",
+          "line": 188
+        },
+        {
           "name": "dabbir_whatsapp_ai_handoff",
-          "line": 61
+          "line": 189
+        },
+        {
+          "name": "dabbir_whatsapp_ai_customer_recent_bookings",
+          "line": 190
         },
         {
           "name": "dabbir_semantic_reserve_outbound_v2",
-          "line": 65
+          "line": 194
         },
         {
           "name": "dabbir_whatsapp_ai_reserve_outbound",
-          "line": 65
+          "line": 194
         },
         {
           "name": "dabbir_whatsapp_ai_finish_batch",
-          "line": 88
+          "line": 217
+        },
+        {
+          "name": "dabbir_whatsapp_ai_check_availability",
+          "line": 218
+        },
+        {
+          "name": "dabbir_whatsapp_ai_reschedule_booking",
+          "line": 227
+        },
+        {
+          "name": "dabbir_whatsapp_ai_create_booking",
+          "line": 232
         },
         {
           "name": "dabbir_whatsapp_ai_context",
-          "line": 92
+          "line": 239
         },
         {
           "name": "dabbir_whatsapp_ai_context",
-          "line": 123
+          "line": 270
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_dispatch",
+          "line": 287
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_dispatch",
+          "line": 289
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_next",
+          "line": 295
         }
       ],
       "routes": [],
       "functions": [
         {
           "name": "serviceKey",
-          "line": 41,
-          "end": 41,
+          "line": 49,
+          "end": 49,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -9862,9 +9964,58 @@
           ]
         },
         {
+          "name": "language",
+          "line": 50,
+          "end": 50,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "language"
+          ]
+        },
+        {
+          "name": "norm",
+          "line": 51,
+          "end": 51,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "norm"
+          ]
+        },
+        {
+          "name": "exactNamed",
+          "line": 52,
+          "end": 52,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "exactNamed",
+            "norm"
+          ]
+        },
+        {
+          "name": "choiceIndex",
+          "line": 53,
+          "end": 53,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "choiceIndex"
+          ]
+        },
+        {
           "name": "latestText",
-          "line": 42,
-          "end": 42,
+          "line": 54,
+          "end": 54,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -9874,9 +10025,170 @@
           ]
         },
         {
+          "name": "safeUuid",
+          "line": 55,
+          "end": 55,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "safeUuid"
+          ]
+        },
+        {
+          "name": "looksLikePlannerEnvelope",
+          "line": 56,
+          "end": 59,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "looksLikePlannerEnvelope"
+          ]
+        },
+        {
+          "name": "customerReply",
+          "line": 60,
+          "end": 60,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "customerReply",
+            "looksLikePlannerEnvelope"
+          ]
+        },
+        {
+          "name": "plannerHistory",
+          "line": 61,
+          "end": 69,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "looksLikePlannerEnvelope",
+            "plannerHistory"
+          ]
+        },
+        {
+          "name": "localNow",
+          "line": 70,
+          "end": 76,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "localNow"
+          ]
+        },
+        {
+          "name": "defaultIntent",
+          "line": 77,
+          "end": 83,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "defaultIntent"
+          ]
+        },
+        {
+          "name": "defaultRisk",
+          "line": 84,
+          "end": 84,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "defaultRisk"
+          ]
+        },
+        {
+          "name": "parseDecision",
+          "line": 85,
+          "end": 107,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "customerReply",
+            "defaultIntent",
+            "defaultRisk",
+            "parseDecision"
+          ]
+        },
+        {
+          "name": "guardDecision",
+          "line": 108,
+          "end": 113,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "guardDecision"
+          ]
+        },
+        {
+          "name": "compactContext",
+          "line": 114,
+          "end": 128,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "compactContext",
+            "localNow",
+            "plannerHistory"
+          ]
+        },
+        {
+          "name": "decide",
+          "line": 129,
+          "end": 155,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "compactContext",
+            "decide",
+            "guardDecision",
+            "language",
+            "latestText",
+            "localNow",
+            "parseDecision"
+          ]
+        },
+        {
+          "name": "recordDecision",
+          "line": 156,
+          "end": 168,
+          "exported": false,
+          "rpcs": [
+            "dabbir_record_ai_operator_decision_v1"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "defaultIntent",
+            "defaultRisk",
+            "recordDecision"
+          ]
+        },
+        {
           "name": "fmtWhen",
-          "line": 43,
-          "end": 45,
+          "line": 169,
+          "end": 171,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -9887,8 +10199,8 @@
         },
         {
           "name": "slotsText",
-          "line": 46,
-          "end": 50,
+          "line": 172,
+          "end": 176,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -9900,8 +10212,8 @@
         },
         {
           "name": "bookingText",
-          "line": 51,
-          "end": 60,
+          "line": 177,
+          "end": 186,
           "exported": true,
           "rpcs": [],
           "fetches": [],
@@ -9912,9 +10224,35 @@
           ]
         },
         {
+          "name": "resultState",
+          "line": 187,
+          "end": 187,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "resultState"
+          ]
+        },
+        {
+          "name": "setState",
+          "line": 188,
+          "end": 188,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_set_state"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "setState"
+          ]
+        },
+        {
           "name": "handoff",
-          "line": 61,
-          "end": 61,
+          "line": 189,
+          "end": 189,
           "exported": false,
           "rpcs": [
             "dabbir_whatsapp_ai_handoff"
@@ -9926,9 +10264,23 @@
           ]
         },
         {
+          "name": "recentBookings",
+          "line": 190,
+          "end": 190,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_customer_recent_bookings"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "recentBookings"
+          ]
+        },
+        {
           "name": "reserveReply",
-          "line": 63,
-          "end": 68,
+          "line": 192,
+          "end": 197,
           "exported": false,
           "rpcs": [
             "dabbir_semantic_reserve_outbound_v2",
@@ -9942,8 +10294,8 @@
         },
         {
           "name": "deliver",
-          "line": 69,
-          "end": 87,
+          "line": 198,
+          "end": 216,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -9956,8 +10308,8 @@
         },
         {
           "name": "finish",
-          "line": 88,
-          "end": 88,
+          "line": 217,
+          "end": 217,
           "exported": false,
           "rpcs": [
             "dabbir_whatsapp_ai_finish_batch"
@@ -9969,9 +10321,83 @@
           ]
         },
         {
+          "name": "availability",
+          "line": 218,
+          "end": 218,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_check_availability"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "availability"
+          ]
+        },
+        {
+          "name": "resolveService",
+          "line": 219,
+          "end": 219,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "exactNamed",
+            "resolveService"
+          ]
+        },
+        {
+          "name": "resolveWorker",
+          "line": 220,
+          "end": 220,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "exactNamed",
+            "resolveWorker"
+          ]
+        },
+        {
+          "name": "pendingSlots",
+          "line": 221,
+          "end": 221,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "pendingSlots"
+          ]
+        },
+        {
+          "name": "executeSelectedSlot",
+          "line": 223,
+          "end": 236,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_reschedule_booking",
+            "dabbir_whatsapp_ai_create_booking"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "bookingText",
+            "deliver",
+            "executeSelectedSlot",
+            "fmtWhen",
+            "pendingSlots",
+            "resultState",
+            "safeUuid",
+            "setState"
+          ]
+        },
+        {
           "name": "processClaim",
-          "line": 91,
-          "end": 120,
+          "line": 238,
+          "end": 267,
           "exported": false,
           "rpcs": [
             "dabbir_whatsapp_ai_context"
@@ -9991,8 +10417,8 @@
         },
         {
           "name": "requireHumanForFailure",
-          "line": 122,
-          "end": 125,
+          "line": 269,
+          "end": 272,
           "exported": false,
           "rpcs": [
             "dabbir_whatsapp_ai_context"
@@ -10007,8 +10433,8 @@
         },
         {
           "name": "handleFailure",
-          "line": 126,
-          "end": 136,
+          "line": 273,
+          "end": 283,
           "exported": false,
           "rpcs": [],
           "fetches": [],
@@ -10021,8 +10447,8 @@
         },
         {
           "name": "processClaimedWhatsAppAiBatch",
-          "line": 137,
-          "end": 137,
+          "line": 284,
+          "end": 284,
           "exported": true,
           "rpcs": [],
           "fetches": [],
@@ -10031,6 +10457,37 @@
             "handleFailure",
             "processClaim",
             "processClaimedWhatsAppAiBatch"
+          ]
+        },
+        {
+          "name": "processWhatsAppAiDispatchToken",
+          "line": 286,
+          "end": 293,
+          "exported": true,
+          "rpcs": [
+            "dabbir_whatsapp_ai_claim_dispatch",
+            "dabbir_whatsapp_ai_claim_dispatch"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "processClaimedWhatsAppAiBatch",
+            "processWhatsAppAiDispatchToken"
+          ]
+        },
+        {
+          "name": "processWhatsAppAiRecovery",
+          "line": 294,
+          "end": 297,
+          "exported": true,
+          "rpcs": [
+            "dabbir_whatsapp_ai_claim_next"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "processClaimedWhatsAppAiBatch",
+            "processWhatsAppAiRecovery"
           ]
         }
       ]
@@ -11075,6 +11532,499 @@
           "reachable_from_export_or_initializer": true,
           "local_dependencies": [
             "persistBookingFlowReply"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "api/_dabbir-whatsapp-service-menu.js",
+      "dynamic": [],
+      "lines": 287,
+      "imports": [
+        {
+          "source": "node:crypto",
+          "target": "node:crypto",
+          "names": [
+            {
+              "local": "createHash",
+              "imported": "createHash"
+            }
+          ]
+        },
+        {
+          "source": "./_dabbir-meta-public-config.js",
+          "target": "api/_dabbir-meta-public-config.js",
+          "names": [
+            {
+              "local": "applyDabbirMetaPublicIdentifiers",
+              "imported": "applyDabbirMetaPublicIdentifiers"
+            }
+          ]
+        },
+        {
+          "source": "./_whatsapp-embedded-core.js",
+          "target": "api/_whatsapp-embedded-core.js",
+          "names": [
+            {
+              "local": "embeddedPlatformConfig",
+              "imported": "embeddedPlatformConfig"
+            },
+            {
+              "local": "openAccessToken",
+              "imported": "openAccessToken"
+            }
+          ]
+        },
+        {
+          "source": "./_whatsapp-live-core.js",
+          "target": "api/_whatsapp-live-core.js",
+          "names": [
+            {
+              "local": "finalizeOutboundReply",
+              "imported": "finalizeOutboundReply"
+            },
+            {
+              "local": "markOutboundResult",
+              "imported": "markOutboundResult"
+            },
+            {
+              "local": "sendMetaText",
+              "imported": "sendMetaText"
+            },
+            {
+              "local": "serviceRpc",
+              "imported": "serviceRpc"
+            }
+          ]
+        },
+        {
+          "source": "./_whatsapp-service-connection.js",
+          "target": "api/_whatsapp-service-connection.js",
+          "names": [
+            {
+              "local": "loadConversationConnectionWithServiceKey",
+              "imported": "loadConversationConnectionWithServiceKey"
+            }
+          ]
+        },
+        {
+          "source": "./_dabbir-whatsapp-ai-core.js",
+          "target": "api/_dabbir-whatsapp-ai-core.js",
+          "names": [
+            {
+              "local": "processClaimedWhatsAppAiBatch",
+              "imported": "processClaimedWhatsAppAiBatch"
+            }
+          ]
+        },
+        {
+          "source": "./_dabbir-whatsapp-catalog.js",
+          "target": "api/_dabbir-whatsapp-catalog.js",
+          "names": [
+            {
+              "local": "catalogMenuForContext",
+              "imported": "catalogMenuForContext"
+            },
+            {
+              "local": "resolveCatalogService",
+              "imported": "resolveCatalogService"
+            },
+            {
+              "local": "sendMetaCatalogProducts",
+              "imported": "sendMetaCatalogProducts"
+            }
+          ]
+        },
+        {
+          "source": "./_dabbir-whatsapp-understanding.js",
+          "target": "api/_dabbir-whatsapp-understanding.js",
+          "names": [
+            {
+              "local": "isConversationNudge",
+              "imported": "isConversationNudge"
+            },
+            {
+              "local": "looksLikeServiceIntent",
+              "imported": "looksLikeServiceIntent"
+            },
+            {
+              "local": "previousCustomerText",
+              "imported": "previousCustomerText"
+            },
+            {
+              "local": "resolveRequestedLocal",
+              "imported": "resolveRequestedLocal"
+            },
+            {
+              "local": "wantsServiceMenu",
+              "imported": "wantsServiceMenu"
+            }
+          ]
+        }
+      ],
+      "exports": [
+        "processWhatsAppDispatchWithServiceMenu",
+        "processWhatsAppRecoveryWithServiceMenu"
+      ],
+      "rpcs": [
+        {
+          "name": "dabbir_whatsapp_ai_reserve_outbound",
+          "line": 120
+        },
+        {
+          "name": "dabbir_whatsapp_ai_set_state",
+          "line": 191
+        },
+        {
+          "name": "dabbir_whatsapp_ai_finish_batch",
+          "line": 192
+        },
+        {
+          "name": "dabbir_whatsapp_ai_context",
+          "line": 195
+        },
+        {
+          "name": "dabbir_whatsapp_ai_handoff",
+          "line": 196
+        },
+        {
+          "name": "dabbir_whatsapp_ai_context",
+          "line": 218
+        },
+        {
+          "name": "dabbir_whatsapp_ai_check_availability",
+          "line": 251
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_dispatch",
+          "line": 268
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_dispatch",
+          "line": 271
+        },
+        {
+          "name": "dabbir_whatsapp_ai_claim_next",
+          "line": 282
+        }
+      ],
+      "routes": [],
+      "functions": [
+        {
+          "name": "latestText",
+          "line": 57,
+          "end": 59,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "latestText"
+          ]
+        },
+        {
+          "name": "serviceBySelection",
+          "line": 60,
+          "end": 68,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "serviceBySelection"
+          ]
+        },
+        {
+          "name": "decodeRetailer",
+          "line": 69,
+          "end": 69,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "decodeRetailer"
+          ]
+        },
+        {
+          "name": "catalogSelection",
+          "line": 70,
+          "end": 81,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "catalogSelection",
+            "decodeRetailer"
+          ]
+        },
+        {
+          "name": "serviceDetails",
+          "line": 82,
+          "end": 97,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "serviceDetails"
+          ]
+        },
+        {
+          "name": "slotText",
+          "line": 98,
+          "end": 107,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "slotText"
+          ]
+        },
+        {
+          "name": "timingReply",
+          "line": 108,
+          "end": 117,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "timingReply"
+          ]
+        },
+        {
+          "name": "reserve",
+          "line": 119,
+          "end": 127,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_reserve_outbound"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "reserve"
+          ]
+        },
+        {
+          "name": "key",
+          "line": 128,
+          "end": 128,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "key"
+          ]
+        },
+        {
+          "name": "connectionFor",
+          "line": 129,
+          "end": 134,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "connectionFor",
+            "key"
+          ]
+        },
+        {
+          "name": "finalizeReservation",
+          "line": 135,
+          "end": 138,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "finalizeReservation"
+          ]
+        },
+        {
+          "name": "sendReservedText",
+          "line": 139,
+          "end": 145,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "connectionFor",
+            "finalizeReservation",
+            "reserve",
+            "sendReservedText"
+          ]
+        },
+        {
+          "name": "tryCatalogMenu",
+          "line": 146,
+          "end": 163,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "connectionFor",
+            "finalizeReservation",
+            "reserve",
+            "tryCatalogMenu"
+          ]
+        },
+        {
+          "name": "sendServiceMenu",
+          "line": 164,
+          "end": 190,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [
+            {
+              "line": 179,
+              "expression": "fetch(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`,{\n      method:'POST',cache:'no-store',signal:controller.signal,\n      headers:{authorization:"
+            }
+          ],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "connectionFor",
+            "finalizeReservation",
+            "reserve",
+            "sendReservedText",
+            "sendServiceMenu",
+            "tryCatalogMenu"
+          ]
+        },
+        {
+          "name": "setState",
+          "line": 191,
+          "end": 191,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_set_state"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "setState"
+          ]
+        },
+        {
+          "name": "finish",
+          "line": 192,
+          "end": 192,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_finish_batch"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "finish"
+          ]
+        },
+        {
+          "name": "serviceHandoff",
+          "line": 193,
+          "end": 200,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_context",
+            "dabbir_whatsapp_ai_handoff"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "finish",
+            "serviceHandoff"
+          ]
+        },
+        {
+          "name": "handleServiceFailure",
+          "line": 201,
+          "end": 209,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "finish",
+            "handleServiceFailure",
+            "serviceHandoff"
+          ]
+        },
+        {
+          "name": "tryServiceFlow",
+          "line": 211,
+          "end": 214,
+          "exported": false,
+          "rpcs": [],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "tryServiceFlow"
+          ]
+        },
+        {
+          "name": "legacyServiceRendering",
+          "line": 217,
+          "end": 265,
+          "exported": false,
+          "rpcs": [
+            "dabbir_whatsapp_ai_context",
+            "dabbir_whatsapp_ai_check_availability"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": false,
+          "local_dependencies": [
+            "catalogSelection",
+            "finish",
+            "latestText",
+            "legacyServiceRendering",
+            "sendReservedText",
+            "sendServiceMenu",
+            "serviceBySelection",
+            "serviceDetails",
+            "serviceHandoff",
+            "setState",
+            "slotText",
+            "timingReply"
+          ]
+        },
+        {
+          "name": "processWhatsAppDispatchWithServiceMenu",
+          "line": 267,
+          "end": 277,
+          "exported": true,
+          "rpcs": [
+            "dabbir_whatsapp_ai_claim_dispatch",
+            "dabbir_whatsapp_ai_claim_dispatch"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "handleServiceFailure",
+            "processWhatsAppDispatchWithServiceMenu",
+            "tryServiceFlow"
+          ]
+        },
+        {
+          "name": "processWhatsAppRecoveryWithServiceMenu",
+          "line": 279,
+          "end": 287,
+          "exported": true,
+          "rpcs": [
+            "dabbir_whatsapp_ai_claim_next"
+          ],
+          "fetches": [],
+          "reachable_from_export_or_initializer": true,
+          "local_dependencies": [
+            "handleServiceFailure",
+            "processWhatsAppRecoveryWithServiceMenu",
+            "tryServiceFlow"
           ]
         }
       ]

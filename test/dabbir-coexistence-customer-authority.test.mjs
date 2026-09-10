@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = file => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-const migration = read('supabase/migrations/20260910075409_dabbir_coexistence_customer_authority_v1.sql');
+const migration = read('supabase/migrations/20260910110354_dabbir_coexistence_customer_authority_v1.sql');
 const old = read('supabase/migrations/20260908080500_dabbir_whatsapp_coexistence_sync_v1.sql');
 function definition(source, name) {
   const start = source.indexOf('create or replace function ' + name);

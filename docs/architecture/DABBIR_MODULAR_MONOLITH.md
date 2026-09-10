@@ -354,3 +354,13 @@ The final prepared cleanup CI on `afdcdc8d4bf52c6d9804569decf0b06b74ce7920`
 passed 2828/2828, zero failed/skipped (run 34460497327). The two audit regression
 cases account for the increase from the 2826-test integrated local run. This is
 branch regression evidence, not proof that the deletion has reached Production.
+
+## Current-main revalidation after #701 Production PASS
+
+On 2026-09-10, #702 was integrated with current main `25ac57b47026f60f65ec431d0be413dc0ef516ca` only after #701 completed Production run 34469891361 attempt 1. `customer-authority-deployment-proof.json` records the applied migration, real rollback-only database fixture, unchanged RLS/ACLs and full exact-SHA journey. #705 separately completed run 34467199606 on e099c3f; the original WebKit root cause remains unresolved and no UI fix is claimed.
+
+`pre-removal-current-main-call-map.json` rechecks current main: 290 modules, 522 imports, 1453 function declarations, 41 local unreachable candidates, zero import cycles. Proposed removal: 289 / 513 / 1405 / 1 / zero. All 13 retained core function declarations are byte-identical to current main; `legacy-removal-proof.json` now explicitly defines the hash extraction method. No SQL migration is added or reapplied by #702.
+
+The four deployed Edge adapters retain their versions/hashes and all 27 critical-table triggers are unchanged. `current-live-sql-ownership.json` expands the earlier focused 227-function inventory to all 445 public dabbir_* and private function signatures, including concurrent measurement migrations. Eleven dynamic-SQL candidates remain active and untouched. The sole name-level cycle candidate is an existing three-argument business-creation wrapper delegating to the four-argument overload; source inspection confirms no cycle. Regex findings remain candidates, not deletion authority.
+
+Customer creation is canonical for the migrated WhatsApp/Coexistence identity paths. Coexistence still owns its metadata update; the existing recovery-capture trigger can record an additional transactional journal row. This side effect is retained and is not another messaging or booking executor. Cross-channel booking, other customer writers, web conversation and dynamic SQL remain operation-specific debt; none is declared dead from a table-name match or source size.

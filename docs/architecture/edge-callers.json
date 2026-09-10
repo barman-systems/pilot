@@ -112,5 +112,8 @@
       "slug": "dabbir-owner-ceo-command",
       "version": 4
     }
-  ]
+  ],
+  "revalidated_at": "2026-09-10T11:39:03.631965+00:00",
+  "current_main": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+  "deployed_inventory_unchanged": true
 }

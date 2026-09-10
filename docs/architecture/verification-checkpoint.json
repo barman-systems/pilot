@@ -1,8 +1,8 @@
 {
-  "observed_at": "2026-09-10T09:35:00Z",
-  "status": "PARTIALLY_VERIFIED_ROLLOUT_BLOCKED",
-  "production_sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
-  "deployment_id": "dpl_BKFfLDrH9j4NwV6zfqT955t8BP7j",
+  "observed_at": "2026-09-10T11:39:03.631965+00:00",
+  "status": "CUSTOMER_IDENTITY_PRODUCTION_VERIFIED_CLEANUP_REVALIDATING",
+  "production_sha": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+  "deployment_id": "dpl_ESV166hqtxKae6F1daWgNMks8CjY",
   "slice1": {
     "pr": 697,
     "local_baseline_tests": 2716,
@@ -307,7 +307,7 @@
     "skipped": 0,
     "security_and_booking_browser_gates": "PASS"
   },
-  "rollout_blocker": {
+  "historical_rollout_blocker": {
     "run_id": 34458663288,
     "attempts": 2,
     "sha": "a3cfe51bffd487e708bf1a1bce3a8a61229f8bbd",
@@ -324,6 +324,53 @@
       "No legacy deletion deployed",
       "No real-phone Meta claim"
     ],
-    "next_evidence_needed": "Diagnose the required English iPad dashboard navigation timeout and complete the unchanged mandatory full Production journey with stable release identity before resuming rollout."
-  }
+    "next_evidence_needed": "Diagnose the required English iPad dashboard navigation timeout and complete the unchanged mandatory full Production journey with stable release identity before resuming rollout.",
+    "status": "Historical failed attempts retained; full gate subsequently passed on unchanged UI"
+  },
+  "pr705": {
+    "pr": 705,
+    "sha": "e099c3f8a656c06fd60d832d5b87ea39a593d8a1",
+    "run_id": 34467199606,
+    "attempt": 1,
+    "verdict": "PASS",
+    "arabic": "PASS",
+    "english_iphone": "PASS",
+    "ipad_webkit": "PASS",
+    "isolation": "13/13",
+    "stable_release": true,
+    "artifact_id": 10148572189,
+    "artifact_sha256": "e95412e85a216f324045259cc739c95d3382839b3b78c182fa955ac47fc65b60",
+    "root_cause": "UNRESOLVED; original persistent WebKit failure not reproduced, no application fix claimed"
+  },
+  "slice4_production": {
+    "run_id": 34469891361,
+    "attempt": 1,
+    "job_id": 102847075543,
+    "verdict": "PASS",
+    "sha": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+    "deployment_id": "dpl_ESV166hqtxKae6F1daWgNMks8CjY",
+    "arabic": "PASS",
+    "english_iphone": "PASS",
+    "ipad_webkit": "PASS",
+    "tenant_whatsapp_isolation": {
+      "passed": 13,
+      "required_failures": 0
+    },
+    "stable_release": true,
+    "artifact_id": 10149609692,
+    "artifact_sha256": "6506522feb8ccef363089a44bb4440b643a620ebaec3a816b84824b531c52174",
+    "optional_provider_comparison_failures": [
+      "google-gemini",
+      "groq",
+      "cloudflare"
+    ],
+    "required_journey_failures": 0
+  },
+  "cleanup_current_main": "25ac57b47026f60f65ec431d0be413dc0ef516ca",
+  "remaining_gates": [
+    "PR702 complete regression and security/browser checks",
+    "PR702 merge/deployment and one complete exact-SHA Production journey",
+    "Original intermittent WebKit root cause remains unresolved",
+    "Continue operation-specific booking/writer/SQL debt from proven callers"
+  ]
 }
