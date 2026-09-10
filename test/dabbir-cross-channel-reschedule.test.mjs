@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {Readable} from 'node:stream';
+import {randomBytes} from 'node:crypto';
 import {appointmentTimeWindow} from '../api/_appointment-time-window.js';
 
 process.env.SUPABASE_URL='https://reschedule-fixture.invalid';
-process.env.SUPABASE_SERVICE_ROLE_KEY='synthetic-calendar-service-key-for-tests';
-process.env.DABBIR_CALENDAR_TOKEN_KEY='synthetic-calendar-encryption-key-for-tests';
+// Ephemeral fixture credentials: no reusable key material is committed.
+Object.assign(process.env,{
+  SUPABASE_SERVICE_ROLE_KEY:randomBytes(32).toString('hex'),
+  DABBIR_CALENDAR_TOKEN_KEY:randomBytes(32).toString('hex'),
+});
 process.env.DABBIR_GOOGLE_CALENDAR_CLIENT_ID='synthetic-client';
 process.env.DABBIR_GOOGLE_CALENDAR_CLIENT_SECRET='synthetic-secret';
 process.env.DABBIR_MICROSOFT_CALENDAR_CLIENT_ID='synthetic-client';

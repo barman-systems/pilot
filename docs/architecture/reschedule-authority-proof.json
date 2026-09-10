@@ -147,5 +147,14 @@
     "failed": 1,
     "reason": "Historical edit source assertion still referenced the former inline assignment. Updated to require the shared constructor inside the unchanged timestamp-change guard; all behavior assertions retained."
   },
-  "owner_duration_helper_retained_sha256": "66116972c2353d7e5ed97f6de1730c199cb9d3a07b2af6ee6a35752c29f2492c"
+  "owner_duration_helper_retained_sha256": "66116972c2353d7e5ed97f6de1730c199cb9d3a07b2af6ee6a35752c29f2492c",
+  "first_pr_ci": {
+    "run": 34475289160,
+    "job": 102864475469,
+    "tests_passed": 2845,
+    "tests_failed": 0,
+    "tests_skipped": 0,
+    "verdict": "FAILED_SECRET_PATTERN_GATE",
+    "cause": "A committed synthetic fixture key assignment matched the unchanged secret pattern rule. Replaced with ephemeral keys generated at runtime; no secret scan exclusion or rule change."
+  }
 }
