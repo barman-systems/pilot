@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {scopedVisualCapabilities,visualAvailability} from '../.github/scripts/dabbir-internal-visual-summary.mjs';
 import rootHandler from '../api/app-safari-recovery.js';
 const require=createRequire(import.meta.url);
 const {webkit}=require(process.env.PLAYWRIGHT_PATH||'playwright');
@@ -69,50 +70,31 @@ try{
   await page.goto(origin,{waitUntil:'domcontentloaded'});
   await page.locator('#appShell:not(.hidden)').waitFor();
   await page.waitForFunction(()=>window.__dabbirUiLifecycle&&window.__dabbirContextualNavigation);
-  for(const [width,height] of [[390,844],[430,932],[768,1024]]){
-   await page.setViewportSize({width,height});
-   for(const language of ['ar','en']){
-    const beforeLanguage=await state();await page.locator('#'+language+'Btn').click();
-    for(const screen of ['dashboard','tasks','notifications','customers','operations','integrations','settings','automations','analytics']){
-     const entry={width,height,language,screen,status:'RUNNING'};report.cases.push(entry);
-     if(screen==='dashboard'){entry.beforeLanguage=beforeLanguage;entry.afterLanguage=await state()}
-     if(await page.locator('#menuBtn:visible').count()&&!(await page.locator('#side.open').count()))await page.locator('#menuBtn').click();
-     let nav=page.locator(`#side [data-screen="${screen}"]:visible`);
-     if(!(await nav.count())&&await page.locator('#side [data-screen="more"]:visible').count()){
-      await page.locator('#side [data-screen="more"]:visible').click();nav=page.locator(`#screen-more [data-screen="${screen}"]:visible`);
-     }
-     entry.beforeClick=await state();
-     if(screen==='dashboard')console.log('SIDEBAR_BEFORE_TODAY='+JSON.stringify(entry));
-     await nav.click({timeout:10000});
-     await page.locator(`#screen-${screen}.active`).waitFor({state:'visible',timeout:10000});
-     await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
-     await page.waitForTimeout(350); // Same visual sampling boundary as the existing Production matrix.
-     await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${screen}.png`),animations:'disabled',timeout:15000});
-     if(['dashboard','settings'].includes(screen)&&width===390){
-      await page.evaluate(()=>{
-       const nodes=[...document.querySelectorAll('#appShell *')].filter(el=>el.getClientRects().length);
-       const sizes=nodes.map(el=>parseFloat(getComputedStyle(el).fontSize)*2);
-       nodes.forEach((el,i)=>{el.dataset.qaOldStyle=el.getAttribute('style')??'__absent__';el.style.setProperty('font-size',sizes[i]+'px','important')});
-      });
-      await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${screen}-text200.png`),timeout:15000});
-      await page.evaluate(()=>document.querySelectorAll('[data-qa-old-style]').forEach(el=>{const old=el.dataset.qaOldStyle;delete el.dataset.qaOldStyle;if(old==='__absent__')el.removeAttribute('style');else el.setAttribute('style',old)}));
-     }
-     if(screen==='operations'){
-      await page.locator('#opsAddProduct').click();await page.locator('#opsProductModal.open').waitFor();
-      await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-product-dialog.png`),timeout:15000});
-      await page.locator('#opsProductCancel').click();
-     }
-     if(screen==='settings')for(const id of ['dabbirBillingCard','dkSave']){
-      const target=page.locator('#'+id);
-      if(await target.count()){
-       await target.scrollIntoViewIfNeeded();
-       await page.screenshot({path:path.join(output,`sidebar-${width}-${language}-${id}.png`),timeout:15000});
-      }
-     }
-     entry.status='PASS';
-    }
-   }
-  }
+  // Execute the existing Production matrix verbatim: protocol reads inserted
+  // between language, menu and navigation clicks can hide an interaction race.
+  await page.evaluate(()=>{
+   const side=document.querySelector('#side');window.__sidebarEvents=[];
+   const capture=(type)=>{
+    const rect=side.getBoundingClientRect(),target=side.querySelector('[data-screen="dashboard"]').getBoundingClientRect();
+    window.__sidebarEvents.push({type,time:performance.now(),lang:document.documentElement.lang,open:side.classList.contains('open'),active:document.querySelector('.screen.active')?.id,
+     side:{x:rect.x,y:rect.y,width:rect.width,height:rect.height,scrollTop:side.scrollTop},target:{x:target.x,y:target.y},viewport:{width:innerWidth,left:visualViewport.offsetLeft,scrollX,scrollY}});
+    if(window.__sidebarEvents.length>80)window.__sidebarEvents.shift();
+   };
+   new MutationObserver(()=>capture('side-class')).observe(side,{attributes:true,attributeFilter:['class']});
+   document.addEventListener('click',event=>{if(event.target.closest('#arBtn,#enBtn,#menuBtn,#side [data-screen]'))capture('click:'+event.target.closest('button')?.id+':'+event.target.closest('[data-screen]')?.dataset.screen)},true);
+  });
+  const productionSource=await fs.readFile(new URL('test/ai-full-customer-journey-v2.mjs',root),'utf8');
+  const matrixStart=productionSource.indexOf("      for (const [device, width, height] of [['iphone',390,844]");
+  const matrixEnd=productionSource.indexOf('      // Read-only inspection of the separate team/permissions surface;',matrixStart);
+  assert.ok(matrixStart>0&&matrixEnd>matrixStart,'canonical visual matrix boundaries present');
+  const matrix=productionSource.slice(matrixStart,matrixEnd);
+  const executeMatrix=new (Object.getPrototypeOf(async function(){}).constructor)('page','dir','visual','capabilities','visualAvailability',
+   "let activeEntry=null; const screens=['dashboard','tasks','notifications','customers','appointments','operations','integrations','settings','automations','analytics'];\n"+matrix);
+  const capabilities=scopedVisualCapabilities({ok:true,json:{ok:true,business_id:businessId,profile:{show_appointments:false}}},businessId);
+  await executeMatrix(page,output,{cases:report.cases},capabilities,visualAvailability);
+  assert.ok(report.cases.every(entry=>['PASS','NOT_APPLICABLE'].includes(entry.status)),'all applicable canonical matrix cases pass with no overflow');
+  console.log('SIDEBAR_EXACT_MATRIX='+JSON.stringify({cases:report.cases.length,status:'PASS'}));
+  await page.setViewportSize({width:768,height:1024});
   // Reproduce the language/open transition at bounded frame offsets. Setup invokes
   // the shipped button handlers; the Today action retains the native pointer check.
   for(const delay of [0,8,16,24,32,48,64,96,128,176,208]){
@@ -133,9 +115,9 @@ try{
   }
   assert.equal(report.blocked.length,0,'no external requests');
  }catch(error){
-  report.status='FAIL';report.error=String(error.message);report.state=await state();report.pageErrors=pageErrors;
+  report.status='FAIL';report.error=String(error.message);report.state=await state();report.pageErrors=pageErrors;report.events=await page.evaluate(()=>window.__sidebarEvents||[]);
   const last=report.cases.at(-1);if(last)last.status='FAIL';
-  console.log('SIDEBAR_FAILURE='+JSON.stringify({error:report.error,state:report.state,last,pageErrors}));
+  console.log('SIDEBAR_FAILURE='+JSON.stringify({error:report.error,state:report.state,last,pageErrors,events:report.events}));
   await page.screenshot({path:path.join(output,'sidebar-failure.png')}).catch(()=>{});throw error;
  }finally{await context.tracing.stop({path:path.join(output,'sidebar-trace.zip')});await context.close()}
  report.status='PASS';console.log('SIDEBAR_NAVIGATION='+JSON.stringify({status:report.status,cases:report.cases.length,playwright:report.playwright}));
