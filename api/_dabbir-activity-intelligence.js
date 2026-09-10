@@ -134,14 +134,15 @@ export function detectRequirementLoop(state,previous,messageRole=null) {
   const age=Date.parse(state.updated_at)-Date.parse(last?.updated_at||previous?.updated_at);
   const sameEpisode=Number.isFinite(age)&&age>=0&&age<=REQUIREMENT_LOOP_IDLE_MS&&
     previous?.pending_action==='CLARIFY'&&previous?.goal===state.goal&&
-    previous?.entities?.service?.value===state.entities?.service?.value&&(!last?.key||last.key===key);
+    previous?.entities?.service?.value===state.entities?.service?.value&&last?.key===key&&Number(last.count)>=1;
   const repeated=sameEpisode&&!progressed && previous?.clarification_entity===key && current===before;
   const references=state.context_resolution;
   const answeredOtherFact=(references?.resolved||[]).length>0&&!(references?.resolved||[]).some(r=>r.field===key)&&!(references?.unresolved||[]).includes(key);
   const nonAnswer=['SIDE_QUESTION','TOPIC_SWITCH'].includes(messageRole)||answeredOtherFact;
-  // Side questions start a fresh attempt episode. An inherited count at the
-  // threshold must never escalate a message which did not fail this question.
-  const count=repeated&&!nonAnswer?(last?.count||1)+1:1;
+  // No failed answer occurred on a side question or an answer to another fact.
+  // The next actual failed answer starts at one, even if clarification remains.
+  if(nonAnswer){state.requirement_loop=null;return false;}
+  const count=repeated?last.count+1:1;
   state.requirement_loop={key,count,updated_at:state.updated_at,revision:state.revision};
-  return !nonAnswer&&count>=3;
+  return count>=3;
 }
