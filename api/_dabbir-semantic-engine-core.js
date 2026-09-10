@@ -271,7 +271,21 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
     if(/^(?:هي|هيه|نعم|تمام|ماشي|yes|yeah|ok|okay|correct)$/.test(t)) {
       if(previous?.clarification_entity==='intent_confirmation')s.intent_confirmed=true;
       const confirmedKey=previous?.clarification_entity;
-      if(['delivery_mode','vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp,{...(confirmedKey==='delivery_mode'?{service_id:valueOf(s,'service')}:{})});
+      // A yes answers the question actually presented, never a hidden old
+      // inference. A delivery menu with multiple choices remains ambiguous.
+      if(confirmedKey==='delivery_mode' && c.cognitive_active) {
+        const question=previous?.cognition?.pending_question,modes=arr(contract?.delivery_modes);
+        const presented=previous.pending_action==='CLARIFY' && question?.field==='delivery_mode' &&
+          question.presentation==='PROVIDER_ACCEPTED' && question.provider_message_id &&
+          previous.cognition.revision===previous.revision && valueOf(previous,'service')===valueOf(s,'service') &&
+          contract?.contract_version && previous.activity_contract_version===contract.contract_version &&
+          question.text===clarification(previous,c);
+        if(presented && modes.length===1 && modes[0]!=='HYBRID') {
+          invalidate(s,'slot',stamp);
+          fact(s,'delivery_mode',modes[0],'CUSTOMER_CONFIRMED',.99,stamp,{service_id:valueOf(s,'service')});
+        }
+      }
+      if(['vehicle','property_details','date','time'].includes(confirmedKey) && s.entities[confirmedKey]?.source==='AI_INFERENCE')fact(s,confirmedKey,s.entities[confirmedKey].value,'CUSTOMER_CONFIRMED',.99,stamp);
       if(previous?.clarification_entity==='service' && s.entities.service?.source==='AI_INFERENCE' && scoped(c.services,c).some(x=>x.id===s.entities.service.value))fact(s,'service',s.entities.service.value,'CUSTOMER_CONFIRMED',.99,stamp,{label:s.entities.service.label,grounded_by:'DATABASE_FACT'});
     }
     if(valueOf(s,'service') && s.entities.service?.updated_at===stamp && s.goal==='UNKNOWN' && s.intent==='SUPPORT' && s.sub_intent!=='SERVICE_DURATION' && !c.cognitive_read_question){s.goal='BOOK_SERVICE';s.intent='BOOKING';}
