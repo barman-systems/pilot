@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: ${{ github.event.head_commit.message != 'fix(qa): stabilize cognitive journey gate' }}
+    if: "${{ github.event.head_commit.message != 'fix(qa): stabilize cognitive journey gate' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
