@@ -6,14 +6,18 @@ import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const PROVIDER_COOLDOWN_DEFAULT_MS=60_000;
 const PROVIDER_COOLDOWN_MAX_MS=5*60_000;
+const PROVIDER_429_STRIKE_WINDOW_MS=30_000;
 const providerCooldowns=new Map();
+const provider429Strikes=new Map();
+const transportIds=new WeakMap();let nextTransportId=1;
 const clean=(value,max=400)=>String(value??'').trim().slice(0,max);
 const finite=value=>Number.isFinite(Number(value))?Number(value):0;
 const int=value=>Math.max(0,Math.trunc(finite(value)));
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 const providerForEndpoint=endpoint=>endpoint===GATEWAY_ENDPOINT?'vercel-ai-gateway':endpoint.includes('groq.com')?'groq':endpoint.includes('generativelanguage.googleapis.com')?'google-gemini':endpoint.includes('cloudflare.com')?'cloudflare-workers-ai':'unknown';
 const authorizationValue=headers=>String(headers?.authorization||headers?.Authorization||'');
-const cooldownKey=(provider,headers)=>`${provider}:${hash(authorizationValue(headers)).slice(0,16)}`;
+function transportScope(fetchImpl){if(fetchImpl===fetch)return'native';if(!transportIds.has(fetchImpl))transportIds.set(fetchImpl,nextTransportId++);return`custom-${transportIds.get(fetchImpl)}`}
+const cooldownKey=(provider,headers,fetchImpl)=>`${provider}:${hash(authorizationValue(headers)).slice(0,16)}:${transportScope(fetchImpl)}`;
 
 function retryAfterMs(response,now=Date.now()){
   const value=clean(response?.headers?.get?.('retry-after'),80);
@@ -29,12 +33,22 @@ function cooldownRemainingMs(key,now=Date.now()){
   if(until<=now){if(until)providerCooldowns.delete(key);return 0}
   return until-now;
 }
-function armProviderCooldown(key,response,now=Date.now()){
-  const duration=retryAfterMs(response,now)||PROVIDER_COOLDOWN_DEFAULT_MS;
+function armProviderCooldown(key,duration,now=Date.now()){
   const until=now+duration;
   providerCooldowns.set(key,Math.max(Number(providerCooldowns.get(key)||0),until));
-  return {cooldownMs:duration,retryAfterMs:retryAfterMs(response,now)};
+  provider429Strikes.delete(key);
+  return duration;
 }
+function observeProvider429(key,response,now=Date.now()){
+  const explicitRetry=retryAfterMs(response,now);
+  if(explicitRetry!=null)return {retryAfterMs:explicitRetry,cooldownMs:armProviderCooldown(key,explicitRetry,now),strikeCount:1};
+  const previous=provider429Strikes.get(key);
+  const consecutive=previous&&now-previous.at<=PROVIDER_429_STRIKE_WINDOW_MS?previous.count+1:1;
+  provider429Strikes.set(key,{count:consecutive,at:now});
+  if(consecutive<2)return {retryAfterMs:null,cooldownMs:null,strikeCount:consecutive};
+  return {retryAfterMs:null,cooldownMs:armProviderCooldown(key,PROVIDER_COOLDOWN_DEFAULT_MS,now),strikeCount:consecutive};
+}
+function clearProvider429Strikes(key){provider429Strikes.delete(key)}
 
 function contextIdentity(raw){
   try{
@@ -127,7 +141,7 @@ export async function generateDABBIRAiReply(args={}){
     let nextOptions=options;
     const endpoint=String(url||'');
     const provider=providerForEndpoint(endpoint);
-    const circuitKey=cooldownKey(provider,options?.headers);
+    const circuitKey=cooldownKey(provider,options?.headers,upstreamFetch);
     let requestedModel=null;
     if(options?.body){
       try{
@@ -157,10 +171,13 @@ export async function generateDABBIRAiReply(args={}){
       throw error;
     }
     const attempt={endpoint:provider,model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started};
-    if(response?.status===429&&provider!=='vercel-ai-gateway'){
-      const cooldown=armProviderCooldown(circuitKey,response);
-      attempt.retry_after_ms=cooldown.retryAfterMs;
-      attempt.cooldown_ms=cooldown.cooldownMs;
+    if(provider!=='vercel-ai-gateway'){
+      if(response?.status===429){
+        const observed=observeProvider429(circuitKey,response);
+        attempt.retry_after_ms=observed.retryAfterMs;
+        attempt.cooldown_ms=observed.cooldownMs;
+        attempt.rate_limit_strike=observed.strikeCount;
+      }else clearProvider429Strikes(circuitKey);
     }
     attempts.push(attempt);
     if(response?.ok){
@@ -179,7 +196,7 @@ export async function generateDABBIRAiReply(args={}){
   const hasUsage=reportedUsage&&[reportedUsage.prompt_tokens??reportedUsage.input_tokens,reportedUsage.completion_tokens??reportedUsage.output_tokens].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0);
   const actualCostUsd=coreResult?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
   const result={...coreResult,telemetry:{final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
-    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms,retry_after_ms:a.retry_after_ms??null,cooldown_ms:a.cooldown_ms??null})),skipped_attempts:skippedAttempts}};
+    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms,retry_after_ms:a.retry_after_ms??null,cooldown_ms:a.cooldown_ms??null,rate_limit_strike:a.rate_limit_strike??null})),skipped_attempts:skippedAttempts}};
   if(!result?.ok){
     // Fixed categories and numeric statuses only: no upstream body, URL, IDs or credentials.
     console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),skipped_attempts:skippedAttempts.slice(0,8).map(a=>({provider:a.provider,reason:a.reason,retry_after_ms:a.retry_after_ms||null})),configured_attempts:attempts.length});
