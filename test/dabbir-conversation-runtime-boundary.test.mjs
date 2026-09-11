@@ -15,7 +15,7 @@ test('WhatsApp channel owns transport but not conversation composition',()=>{
 
 test('canonical conversation runtime owns engine selection without Meta transport authority',()=>{
   const runtime=read('_dabbir-conversation-runtime.js');
-  for(const required of ['_dabbir-semantic-interpreter.js','_dabbir-knowledge-rag.js','_dabbir-understanding-orchestrator.js','_dabbir-v3-shadow-observer.js','_dabbir-conversation-v3-runtime.js','runUnderstandingTurn({','runConversationV3Runtime({','createV3ShadowObserver({context,rpc})',"cognitiveMode:'policy'"])assert.ok(runtime.includes(required),`conversation runtime must retain ${required}`);
+  for(const required of ['_dabbir-semantic-interpreter.js','_dabbir-knowledge-rag.js','_dabbir-understanding-orchestrator.js','_dabbir-v3-shadow-observer.js','_dabbir-conversation-v3-runtime.js','runUnderstandingTurn({','runConversationV3Runtime({','createV3ShadowObserver({context,rpc:turnRpc})',"cognitiveMode:'policy'",'preloadedSemanticRpc({rpc,claim,load:routingLoad})'])assert.ok(runtime.includes(required),`conversation runtime must retain ${required}`);
   for(const forbidden of ['_whatsapp-live-core.js','_whatsapp-service-connection.js','_dabbir-whatsapp-catalog.js','_dabbir-whatsapp-flows.js','sendMetaText(','sendMetaCatalogProducts(','sendMetaBookingFlow('])assert.equal(runtime.includes(forbidden),false,`conversation runtime must not own transport ${forbidden}`);
 });
 
@@ -29,4 +29,12 @@ test('canonical boundary cannot bypass authority or reserve outbound itself',()=
   assert.equal(runtime.includes('dabbir_semantic_execute_v2'),false);
   assert.equal(runtime.includes('dabbir_whatsapp_ai_reserve_outbound'),false);
   assert.equal(runtime.includes('serviceRpc('),false);
+});
+
+test('canonical runtime fences the preloaded semantic snapshot before legacy composition',()=>{
+  const runtime=read('_dabbir-conversation-runtime.js');
+  assert.match(runtime,/SEMANTIC_PRELOAD_SCOPE_MISMATCH/);
+  assert.match(runtime,/args\?\.p_batch_id!==claim\.batch_id\|\|args\?\.p_lock_token!==claim\.lock_token/);
+  assert.match(runtime,/const routingLoad=await rpc\('dabbir_semantic_load_v2'/);
+  assert.match(runtime,/const turnRpc=preloadedSemanticRpc\(\{rpc,claim,load:routingLoad\}\)/);
 });
