@@ -11,6 +11,11 @@ test('429 and transient provider exhaustion classify as PROVIDER_NOISE',()=>{
   assert.equal(classifyProviderNoise(noise()),true);
 });
 
+test('generic application 503/504 without provider evidence is not hidden as provider noise',()=>{
+  assert.equal(classifyProviderNoise({ok:false,status:503,json:{error:'INTERNAL_UNAVAILABLE'}}),false);
+  assert.equal(classifyProviderNoise({ok:false,status:504,json:{error:'UPSTREAM_UNKNOWN'}}),false);
+});
+
 test('a valid model response with a failed cognitive check is not provider noise',()=>{
   assert.equal(classifyProviderNoise(cognitiveFail()),false);
   assert.deepEqual(cognitiveCheckResult(cognitiveFail(),{checkCount:2,requireCognitiveProbe:true}).failedChecks,['a']);
