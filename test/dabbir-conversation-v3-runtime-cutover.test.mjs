@@ -47,7 +47,7 @@ test('real V3 runtime writes and sends the Brain response without legacy dialogu
   const c=context('مرحبا');const calls=[],sent=[],logs=[];
   const load={version:0,message_revision:1,semantic_state:{},cognitive_policy:{mode:'canary'},activity_profile:c.activity_profile};
   const rpc=async(name,args)=>{calls.push(name);if(name==='dabbir_semantic_commit_v2')return {version:1,replay:false,state:args.p_state};if(name==='dabbir_semantic_assert_current_v2')return true;if(name==='dabbir_record_ai_operator_decision_v1')return true;throw new Error(`unexpected rpc ${name}`)};
-  const interpreter=async()=>({proposal:{intent:'SUPPORT',action:'REPLY',confidence:1,serviceName:null,entities:[],serviceQuestion:null,dialogue:{message_role:'GREETING',evidence:'مرحبا',invalidated_fields:[]}},fastFacts:[],provider:'stub-v3',model:'stub'});
+  const interpreter=async()=>({proposal:{intent:'SUPPORT',action:'REPLY',confidence:1,serviceName:null,serviceSurface:null,entities:[],serviceQuestion:null,dialogue:{message_role:'GREETING',evidence:'مرحبا',invalidated_fields:[]}},fastFacts:[],provider:'stub-v3',model:'stub'});
   const deliver=async(_claim,_ctx,body,purpose)=>{sent.push({body,purpose});return {providerMessageId:'meta-v3'}};
   const result=await runConversationV3Runtime({claim:{batch_id:c.batch.id,lock_token:'80000000-0000-4000-8000-000000000001'},context:c,rpc,deliver,finish:async()=>true,handoff:async()=>{throw new Error('no handoff')},bookingText:()=>'',slotsText:()=>'',interpreter,preloadedLoad:load,logger:{info:x=>logs.push(x)}});
   assert.equal(result.engine,'V3');assert.equal(result.legacy_dialogue_called,false);assert.match(sent[0].body,/حياك/);assert.ok(logs.some(x=>x.includes('CONVERSATION_BRAIN_V3')));assert.equal(calls.includes('dabbir_semantic_commit_v2'),true);
@@ -57,4 +57,11 @@ test('authority projection never promotes tentative vehicle into executable cano
   const c=context('جيب شيروكي'),state={version:2,goal:'BOOK_SERVICE',intent_confirmed:true,episode_id:'e',episode_started_at:c.batch.last_message_at,last_turn_at:c.batch.last_message_at,episode_boundary:{kind:'CONTINUE'},facts:[{field:'service',status:'VERIFIED',value:ids.vip,source:'CUSTOMER_STATED',confidence:1},{field:'delivery_mode',status:'VERIFIED',value:'MOBILE',source:'DATABASE_FACT',confidence:1}],tentatives:[{field:'vehicle',status:'TENTATIVE',candidate_value:'station',surface:'جيب شيروكي'}],invalidations:[],pending_question:null};
   const projection=_v3RuntimeTest.authorityProjection({load:{semantic_state:{},cognitive_policy:{mode:'canary'}},state,plan:{missing_fields:['vehicle','location'],required_fields:['vehicle','location']},context:c,action:'CLARIFY',at:new Date(c.batch.last_message_at),interpretation:{proposal:{confidence:.9},provider:'stub'}});
   assert.equal(projection.entities.vehicle,undefined);assert.equal(projection.operational_confidence,.6);assert.equal(projection.v3_engine.legacy_dialogue_called,false);
+});
+
+test('unmapped service language is preserved as tentative instead of disappearing',()=>{
+  const base={facts:[],tentatives:[],turn_tentative:[]};
+  const out=_v3RuntimeTest.preserveUnmappedService(base,{serviceName:null,serviceSurface:'غسيل الشخصيات',confidence:.72});
+  const service=out.tentatives.find(x=>x.field==='service');
+  assert.equal(service?.surface,'غسيل الشخصيات');assert.equal(service?.status,'TENTATIVE');assert.equal(service?.resolution,'SCOPED_CATALOG_UNRESOLVED');assert.equal(service?.candidate_value,null);
 });
