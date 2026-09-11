@@ -31,6 +31,12 @@ function authorityProjection({load,state,plan,context,action,at,interpretation})
 }
 function authorityAction({state,plan}){if(state.goal==='BOOK_SERVICE'&&plan.proposed_action==='READY_FOR_AUTHORITY')return factValue(state,'slot')!=null?'CREATE_BOOKING':'CHECK_AVAILABILITY';if(['RESCHEDULE_BOOKING','CANCEL_BOOKING'].includes(state.goal))return 'HANDOFF';if(plan.proposed_action==='CLARIFY')return 'CLARIFY';return 'REPLY';}
 function metricsFor({state,plan,action,interpretation,episode}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null};}
+function preserveUnmappedService(understanding,proposal){
+  const surface=clean(proposal?.serviceSurface,180),hasVerified=arr(understanding?.facts).some(f=>f?.field==='service'&&f?.status==='VERIFIED'),hasTentative=arr(understanding?.tentatives).some(t=>t?.field==='service');
+  if(!surface||proposal?.serviceName||hasVerified||hasTentative)return understanding;
+  const candidate={field:'service',status:'TENTATIVE',value:null,candidate_value:null,source:'V3_SEMANTIC_PROPOSAL',confidence:Math.max(0,Math.min(1,Number(proposal?.confidence)||0)),resolution:'SCOPED_CATALOG_UNRESOLVED',surface};
+  return {...understanding,tentatives:[...arr(understanding.tentatives),candidate],turn_tentative:[...arr(understanding.turn_tentative),candidate]};
+}
 function log(logger,record){try{logger.info?.(JSON.stringify(record));}catch{}}
 
 export async function runConversationV3Runtime({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,interpreter=interpretConversationTurnV3,now=()=>new Date(),logger=console,preloadedLoad=null}){
@@ -41,7 +47,8 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   const firstV3=!previousRuntime,seeded=seedConversationStateV3({previousShadow:previousRuntime,canonicalState:firstV3?{}:load.semantic_state||{}});
   const episode=firstV3?{kind:'NEW_EPISODE',reason:'V3_ENGINE_CUTOVER',idle_ms:null,at:at.toISOString()}:classifyEpisodeBoundaryV3({previousState:previousRuntime,canonicalState:load.semantic_state||{},proposal:interpretation.proposal,context:enriched,now:at});
   const base=episode.kind==='NEW_EPISODE'?freshConversationStateV3({context:enriched,at}):seeded;
-  const understanding=understandTurnV3({context:enriched,proposal:interpretation.proposal,previousState:base,now:at});
+  const understood=understandTurnV3({context:enriched,proposal:interpretation.proposal,previousState:base,now:at});
+  const understanding=preserveUnmappedService(understood,interpretation.proposal);
   let {state,plan,response}=planConversationTurnV3({previousState:base,understanding,episode,context:enriched});const action=authorityAction({state,plan});
   const projection=authorityProjection({load,state,plan,context:enriched,action,at,interpretation});
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:projection,p_metrics:metricsFor({state,plan,action,interpretation,episode})});
@@ -65,4 +72,4 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   await sendV3(response,action==='CLARIFY'?'v3-clarify':'v3-reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};
 }
 
-export const _v3RuntimeTest={authorityProjection,authorityAction,metricsFor};
+export const _v3RuntimeTest={authorityProjection,authorityAction,metricsFor,preserveUnmappedService};
