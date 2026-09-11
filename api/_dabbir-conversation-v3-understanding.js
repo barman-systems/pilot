@@ -2,16 +2,18 @@ const arr=v=>Array.isArray(v)?v:[];
 const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,n);
 const norm=v=>clean(v,300).normalize('NFKD').replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
 const STRONG=new Set(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED']);
+const TRUSTED_FAST_FIELDS=new Set(['location','slot']);
+const TRUSTED_FAST_SOURCES=new Set(['PROVIDER_VERIFIED','CUSTOMER_CONFIRMED','DATABASE_FACT']);
 
 const currentMessage=context=>arr(context?.batch_messages).at(-1)||null;
 const currentText=context=>arr(context?.batch_messages).map(m=>String(m?.language_body??m?.body??'')).filter(Boolean).join(' ').trim();
 const scopedServices=context=>arr(context?.services).filter(s=>(!s?.business_id||s.business_id===context?.business?.id)&&(!s?.branch_id||s.branch_id===context?.conversation?.branch_id));
 const profileServices=context=>arr(context?.activity_profile?.services).filter(s=>(!s?.business_id||s.business_id===context?.business?.id)&&(!s?.branch_id||s.branch_id===context?.conversation?.branch_id));
-const fact=(field,value,source,resolution,extra={})=>({field,status:'VERIFIED',value,source,confidence:extra.confidence??1,resolution,surface:extra.surface??null});
+const fact=(field,value,source,resolution,extra={})=>{const {confidence=1,surface=null,...rest}=extra||{};return {field,status:'VERIFIED',value,source,confidence,resolution,surface,...rest};};
 const tentative=(field,candidate_value,surface,resolution,extra={})=>({field,status:'TENTATIVE',value:candidate_value??null,candidate_value:candidate_value??null,source:extra.source||'SEMANTIC_PROPOSAL',confidence:extra.confidence??0,resolution,surface:clean(surface,300)||null});
 
 function legacySeedFacts(canonical){
-  return Object.entries(canonical?.entities||{}).flatMap(([field,f])=>f?.status==='active'&&f.value!=null&&STRONG.has(f.source)&&Number(f.confidence)>=.9?[fact(field,f.value,f.source,'CANONICAL_SEED',{confidence:Number(f.confidence)})]:[]);
+  return Object.entries(canonical?.entities||{}).flatMap(([field,f])=>f?.status==='active'&&f.value!=null&&STRONG.has(f.source)&&Number(f.confidence)>=.9?[fact(field,f.value,f.source,'CANONICAL_SEED',{confidence:Number(f.confidence),...(f.starts_at?{starts_at:f.starts_at}:{}),...(f.receipt_id?{receipt_id:f.receipt_id}:{})})]:[]);
 }
 function stateFacts(state,canonical){
   if(Array.isArray(state?.facts))return state.facts.filter(f=>f?.status==='VERIFIED').map(f=>({...f}));
@@ -44,6 +46,18 @@ function activityWideSingleMode(context){
 function validDate(value){return typeof value==='string'&&/^20\d{2}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T12:00:00Z`));}
 function validTime(value){if(typeof value!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(value))return false;return true;}
 function evidenceOk(raw,evidence){const e=clean(evidence,300);return !!e&&raw.includes(e);}
+function applyTrustedFastFacts(context,factMap,turnVerified){
+  for(const item of arr(context?.v3_fast_facts).slice(0,8)){
+    const field=clean(item?.field,80),source=clean(item?.source,80);
+    if(!TRUSTED_FAST_FIELDS.has(field)||!TRUSTED_FAST_SOURCES.has(source)||item?.value==null)continue;
+    if(field==='location'&&source!=='PROVIDER_VERIFIED')continue;
+    if(field==='slot'&&source!=='CUSTOMER_CONFIRMED')continue;
+    const f=fact(field,item.value,source,clean(item?.resolution,120)||'TRUSTED_RUNTIME_FACT',{confidence:1,
+      ...(item?.starts_at?{starts_at:clean(item.starts_at,80)}:{}),...(item?.receipt_id?{receipt_id:clean(item.receipt_id,100)}:{}),
+      ...(item?.service_id?{service_id:clean(item.service_id,100)}:{}),...(item?.worker_id?{worker_id:clean(item.worker_id,100)}:{})});
+    putFact(factMap,f);turnVerified.push(f);
+  }
+}
 
 export function seedConversationStateV3({previousShadow=null,canonicalState=null}){
   return {version:2,goal:previousShadow?.goal||canonicalState?.goal||'UNKNOWN',intent_confirmed:previousShadow?.intent_confirmed===true||canonicalState?.intent_confirmed===true,
@@ -63,6 +77,7 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
   const previousTentatives=arr(previousState?.tentatives).map(x=>({...x}));
   const turnVerified=[],turnTentative=[],sideQuestions=[],invalidations=[];
   if(context?.conversation?.branch_id){const f=fact('branch',context.conversation.branch_id,'DATABASE_FACT','SERVER_SCOPE');putFact(factMap,f);}
+  applyTrustedFastFacts(context,factMap,turnVerified);
 
   const role=String(proposal?.dialogue?.message_role||'').toUpperCase();
   for(const field of arr(proposal?.dialogue?.invalidated_fields).map(x=>clean(x,80)).filter(Boolean)){if(factMap.has(field)){factMap.delete(field);invalidations.push({field,reason:'CUSTOMER_CORRECTION'});}}
@@ -76,7 +91,7 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
   if(proposal?.serviceName){
     selectedService=serviceByName(context,proposal.serviceName);
     if(selectedService){
-      const f=fact('service',selectedService.id,'CUSTOMER_STATED','SCOPED_CATALOG_MATCH',{surface:proposal.serviceName,confidence:Math.max(.9,Number(proposal?.confidence)||0)});putFact(factMap,f);turnVerified.push(f);
+      const f=fact('service',selectedService.id,'CUSTOMER_STATED','V3_SCOPED_CATALOG_GROUNDING',{surface:proposal.serviceName,confidence:Math.max(.9,Number(proposal?.confidence)||0)});putFact(factMap,f);turnVerified.push(f);
       if(Number.isFinite(Number(selectedService.price))){const p=fact('price',Number(selectedService.price),'DATABASE_FACT','SCOPED_CATALOG_PRICE');putFact(factMap,p);turnVerified.push(p);}
     }
   }
@@ -89,10 +104,10 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
     if(!field||!evidenceOk(raw,surface))continue;
     const def=contract?.entity_definitions?.[field]||unionDefinition(context,field);
     if(field==='date'&&validDate(value)){
-      const f=fact(field,value,'CUSTOMER_STATED','SEMANTIC_STRUCTURAL_DATE',{surface,confidence});putFact(factMap,f);turnVerified.push(f);continue;
+      const f=fact(field,value,'CUSTOMER_STATED','V3_SEMANTIC_DATE',{surface,confidence});putFact(factMap,f);turnVerified.push(f);continue;
     }
     if(field==='time'&&validTime(value)){
-      const f=fact(field,value,'CUSTOMER_STATED','SEMANTIC_STRUCTURAL_TIME',{surface,confidence});putFact(factMap,f);turnVerified.push(f);continue;
+      const f=fact(field,value,'CUSTOMER_STATED','V3_SEMANTIC_TIME',{surface,confidence});putFact(factMap,f);turnVerified.push(f);continue;
     }
     if(field==='vehicle'){
       const allowed=def?.type==='ENUM'&&arr(def.values).includes(value);
@@ -115,9 +130,12 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
     const priorVehicle=previousTentatives.find(x=>x.field==='vehicle'&&x.candidate_value);
     if(priorVehicle){const f=fact('vehicle',priorVehicle.candidate_value,'CUSTOMER_CONFIRMED','TENTATIVE_CONFIRMED_BY_CUSTOMER',{surface:raw,confidence:1});putFact(factMap,f);turnVerified.push(f);invalidations.push({field:'vehicle',reason:'TENTATIVE_CONFIRMED'});}
   }
+  if(role==='DENIAL'&&previousState?.pending_question?.purpose==='CONFIRM_TENTATIVE_VEHICLE'){
+    const i=previousTentatives.findIndex(x=>x.field==='vehicle');if(i>=0)invalidations.push({field:'vehicle',reason:'CUSTOMER_DENIED_TENTATIVE'});
+  }
   const pendingField=previousState?.pending_question?.fields?.[0]||previousState?.pending_question?.field||null;
   if(pendingField&&role==='ANSWER_TO_PENDING_QUESTION'&&!turnVerified.some(f=>f.field===pendingField)&&!turnTentative.some(f=>f.field===pendingField)&&raw){
-    if(!['SIDE_QUESTION','SOCIAL','TOPIC_SWITCH','CANCELLATION'].includes(role))turnTentative.push(tentative(pendingField,null,raw,'SEMANTIC_SURFACE_UNMAPPED',{source:'CURRENT_TURN_SURFACE',confidence:Number(proposal?.confidence)||0}));
+    if(!['SIDE_QUESTION','SOCIAL','TOPIC_SWITCH','CANCELLATION'].includes(role)&&!['service','slot','location'].includes(pendingField))turnTentative.push(tentative(pendingField,null,raw,'SEMANTIC_SURFACE_UNMAPPED',{source:'CURRENT_TURN_SURFACE',confidence:Number(proposal?.confidence)||0}));
   }
 
   const parts=localParts(safeAt,context?.business?.timezone||'Asia/Dubai'),date=factMap.get('date'),time=factMap.get('time');
@@ -128,9 +146,15 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
   if(serviceQuestion)sideQuestions.push({type:serviceQuestion,evidence:proposal.serviceQuestion?.evidence||null});
   else if(String(proposal?.action||'').toUpperCase()==='PRICING')sideQuestions.push({type:'price',evidence:null});
 
-  const bookingIntentStrong=semanticIntent==='BOOKING'&&Number(proposal?.confidence||0)>=.5&&['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CONTINUATION','CORRECTION'].includes(role||'NEW_REQUEST');
+  const bookingIntentStrong=semanticIntent==='BOOKING'&&Number(proposal?.confidence||0)>=.5&&['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CONTINUATION','CORRECTION','CONFIRMATION','REFERENCE'].includes(role||'NEW_REQUEST');
   const serviceSelectedThisTurn=turnVerified.some(f=>f.field==='service');
-  const goal=semanticIntent==='BOOKING'?'BOOK_SERVICE':semanticIntent==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':semanticIntent==='CANCEL_BOOKING'?'CANCEL_BOOKING':previousState?.goal||'UNKNOWN';
+  let goal=previousState?.goal||'UNKNOWN';
+  if(semanticIntent==='BOOKING')goal='BOOK_SERVICE';
+  else if(semanticIntent==='RESCHEDULE_BOOKING')goal='RESCHEDULE_BOOKING';
+  else if(semanticIntent==='CANCEL_BOOKING')goal='CANCEL_BOOKING';
+  else if(semanticIntent==='SERVICE_DISCOVERY'&&!['BOOK_SERVICE','RESCHEDULE_BOOKING'].includes(goal))goal='DISCOVER_SERVICE';
+  else if(semanticIntent==='PRICING'&&!['BOOK_SERVICE','RESCHEDULE_BOOKING'].includes(goal))goal='PRICE_SERVICE';
+  else if(semanticIntent==='SUPPORT'&&goal==='UNKNOWN')goal='SUPPORT';
   const currentTentativeFields=new Set(turnTentative.map(x=>x.field));
   const confirmedTurnFields=new Set(turnVerified.map(x=>x.field));
   const tentatives=[...previousTentatives.filter(x=>!currentTentativeFields.has(x.field)&&!confirmedTurnFields.has(x.field)&&!invalidations.some(i=>i.field===x.field)),...turnTentative];
