@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { json } from './_auth-core.js';
 import { adminRpc, notifyTelegram, observeDabbirLive, runtimeEvidence, serviceRoleKey, telegramRoute } from './_barman-executive-core.js';
-import { planExecutiveCommand, readOnlyAnswer } from './_barman-executive-automation.js';
+import { planExecutiveCommand, readOnlyAnswer, understandExecutiveSituation } from './_barman-executive-automation.js';
 
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 function sameSecret(left,right){const a=Buffer.from(String(left||'')),b=Buffer.from(String(right||''));return a.length===b.length&&a.length>0&&timingSafeEqual(a,b)}
@@ -16,9 +16,64 @@ function report(snapshot){
   return `نفّذ BARMAN فحصاً حياً لـ DABBIR. الحالة: ${state}. الموقع HTTP ${snapshot.site.status}، قاعدة البيانات ${snapshot.database.project_ref}، commit ${snapshot.commit_sha.slice(0,12)}، المنطقة ${snapshot.region}.`;
 }
 
+function executiveReality(snapshot){
+  const observedAt=clean(snapshot?.observed_at,80);
+  const ageMs=Date.now()-Date.parse(observedAt||'');
+  const fresh=Number.isFinite(ageMs)&&ageMs>=-30000&&ageMs<=120000;
+  let confidence=0.3;
+  if(snapshot?.site?.status>=200&&snapshot.site.status<400)confidence+=0.25;
+  if(snapshot?.database?.project_ref==='fphpoysqdsceniwduxjq')confidence+=0.25;
+  if(/^[0-9a-f]{40}$/i.test(String(snapshot?.commit_sha||'')))confidence+=0.2;
+  confidence=Math.min(1,Number(confidence.toFixed(2)));
+  return {
+    source:'VERCEL_EXECUTIVE_CRON_LIVE_OBSERVATION',
+    observed_at:observedAt,
+    freshness:fresh?'FRESH':'STALE',
+    confidence,
+    subject:'DABBIR_PRODUCTION',
+    evidence_refs:[
+      'https://dabbir.bmalman.com',
+      'dabbir-qa-capability',
+      clean(snapshot?.commit_sha||'UNAVAILABLE',80),
+    ],
+    healthy:snapshot?.healthy===true,
+    commit_sha:clean(snapshot?.commit_sha||'UNAVAILABLE',80),
+    deployment_id:clean(snapshot?.deployment_id||'UNAVAILABLE',160),
+    region:clean(snapshot?.region||'UNAVAILABLE',160),
+    site:snapshot?.site||{},
+    database:snapshot?.database||{},
+    probes:snapshot?.probes||{},
+  };
+}
+
 async function notify(key,commandId,text){
   const route=await telegramRoute(key,commandId).catch(()=>null);
   return notifyTelegram(route,text).catch(()=>null);
+}
+
+async function prepareQueuedCommands(key,reality,snapshot){
+  const prepared=[];
+  for(let index=0;index<8;index+=1){
+    const pending=await adminRpc(key,'barman_executive_next_unprepared_v1',{});
+    if(pending?.selected!==true)break;
+    const command=pending.command||{};
+    const commandId=String(command.id||'');
+    if(!commandId)throw new Error('EXECUTIVE_PREP_COMMAND_ID_MISSING');
+    const understanding=await understandExecutiveSituation(command.command_text,{
+      reality,
+      goals:Array.isArray(snapshot?.goals)?snapshot.goals:[],
+      memory:Array.isArray(snapshot?.memory)?snapshot.memory:[],
+    });
+    const persisted=await adminRpc(key,'barman_executive_decide_v1',{
+      p_command_id:commandId,
+      p_reality:reality,
+      p_situation:understanding.situation,
+      p_decision:{...understanding.decision,route:understanding.route,understanding_source:understanding.source,model:understanding.model||null},
+      p_memory_refs:understanding.decision?.memory_refs||[],
+    });
+    prepared.push({command_id:commandId,route:understanding.route,decision_id:persisted?.decision_id||null,state:persisted?.state||null});
+  }
+  return prepared;
 }
 
 async function finalizeRetry(key,claim,error,prefix){
@@ -90,12 +145,17 @@ async function executeReadOnly(key){
 }
 
 export async function executeExecutiveCycle(key){
+  const observed=await observeDabbirLive();
+  const reality=executiveReality(observed);
+  await adminRpc(key,'barman_executive_record_reality_v1',{p_reality:reality});
+  const snapshot=await adminRpc(key,'barman_executive_read_snapshot_v1',{});
+  const preparation=await prepareQueuedCommands(key,reality,snapshot||{});
   const results=[];
   for(const worker of [executePlanner,executeReadOnly,executeRuntime]){
     const result=await worker(key);
     if(result.claimed)results.push(result);
   }
-  return results;
+  return {preparation,reality,results};
 }
 
 export default async function handler(req,res){
@@ -103,14 +163,15 @@ export default async function handler(req,res){
   const authMode=cronAuthMode(req);if(!authMode)return json(res,401,{ok:false,error:'CRON_AUTH_REQUIRED'});
   let key;try{key=serviceRoleKey()}catch(error){return json(res,error.status||503,{ok:false,error:error.message})}
   try{
-    const results=await executeExecutiveCycle(key);
+    const cycle=await executeExecutiveCycle(key);
+    const results=cycle.results;
     const summary={
-      ok:true,claimed:results.length,
+      ok:true,claimed:results.length,prepared:cycle.preparation.length,reality_freshness:cycle.reality.freshness,reality_confidence:cycle.reality.confidence,
       planned:results.filter(x=>x.outcome==='PLANNED').length,
       done:results.filter(x=>x.outcome==='DONE').length,
       blocked:results.filter(x=>x.outcome==='BLOCKED').length,
       retry:results.filter(x=>x.outcome==='RETRY').length,
-      results,
+      preparation:cycle.preparation,results,
     };
     console.info('barman_executive_cron',{auth_mode:authMode,...summary});
     return json(res,200,summary);
