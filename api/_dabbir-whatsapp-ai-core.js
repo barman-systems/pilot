@@ -1,6 +1,7 @@
 import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';
 import { retrieveDabbirKnowledge } from './_dabbir-knowledge-rag.js';
 import { runUnderstandingTurn } from './_dabbir-understanding-orchestrator.js';
+import { createV3ShadowObserver } from './_dabbir-v3-shadow-observer.js';
 import { catalogMenuForContext, resolveCatalogService, sendMetaCatalogProducts } from './_dabbir-whatsapp-catalog.js';
 import { getPublishedBookingFlow, sendMetaBookingFlow } from './_dabbir-whatsapp-flows.js';
 import { createHash } from 'node:crypto';
@@ -87,11 +88,11 @@ async function deliver(claim,context,body,purpose='reply',transport=null){
 }
 async function finish(claim,outcome,error=null){return serviceRpc('dabbir_whatsapp_ai_finish_batch',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_outcome:outcome,p_error:error})}
 
-
 async function processClaim(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)throw Object.assign(new Error('AI_CONTEXT_UNVERIFIED'),{code:'AI_CONTEXT_UNVERIFIED'});
-  return runUnderstandingTurn({claim,context,rpc:serviceRpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,cognitiveMode:'policy',
+  const shadow=createV3ShadowObserver({context,rpc:serviceRpc});
+  return runUnderstandingTurn({claim,context,rpc:shadow.rpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,cognitiveMode:'policy',
     deliverMenu:async(guarded,c,lang)=>{
       const connection=await loadConversationConnectionWithServiceKey(serviceKey(),c.business.id,c.conversation.id);
       const flow=await getPublishedBookingFlow({businessId:c.business.id,connectionId:connection.id});
@@ -115,7 +116,7 @@ async function processClaim(claim){
       const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},
         referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,
         meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});
-      return {...result.proposal,executionMetadata:{provider:result.provider,model:result.model,...result.telemetry}};
+      return shadow.captureProposal({...result.proposal,executionMetadata:{provider:result.provider,model:result.model,...result.telemetry}});
     }});
 }
 
