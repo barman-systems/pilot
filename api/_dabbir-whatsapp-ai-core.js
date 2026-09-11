@@ -1,7 +1,4 @@
-import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';
-import { retrieveDabbirKnowledge } from './_dabbir-knowledge-rag.js';
-import { runUnderstandingTurn } from './_dabbir-understanding-orchestrator.js';
-import { createV3ShadowObserver } from './_dabbir-v3-shadow-observer.js';
+import { runConversationRuntimeTurn } from './_dabbir-conversation-runtime.js';
 import { catalogMenuForContext, resolveCatalogService, sendMetaCatalogProducts } from './_dabbir-whatsapp-catalog.js';
 import { getPublishedBookingFlow, sendMetaBookingFlow } from './_dabbir-whatsapp-flows.js';
 import { createHash } from 'node:crypto';
@@ -40,7 +37,6 @@ const one=v=>Array.isArray(v)?v[0]??null:v??null;
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 
 function serviceKey(){return clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192)}
-function latestText(context){return arr(context?.batch_messages).map(x=>clean(x?.body,1500)).filter(Boolean).join('\n').slice(0,2500)}
 function fmtWhen(value,timezone,lang){
   try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return clean(value,80)}
 }
@@ -91,8 +87,16 @@ async function finish(claim,outcome,error=null){return serviceRpc('dabbir_whatsa
 async function processClaim(claim){
   const context=await serviceRpc('dabbir_whatsapp_ai_context',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   if(!context?.business?.id||!context?.conversation?.id)throw Object.assign(new Error('AI_CONTEXT_UNVERIFIED'),{code:'AI_CONTEXT_UNVERIFIED'});
-  const shadow=createV3ShadowObserver({context,rpc:serviceRpc});
-  return runUnderstandingTurn({claim,context,rpc:shadow.rpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct:resolveCatalogService,cognitiveMode:'policy',
+  return runConversationRuntimeTurn({
+    claim,
+    context,
+    rpc:serviceRpc,
+    deliver,
+    finish,
+    handoff,
+    bookingText,
+    slotsText,
+    resolveProduct:resolveCatalogService,
     deliverMenu:async(guarded,c,lang)=>{
       const connection=await loadConversationConnectionWithServiceKey(serviceKey(),c.business.id,c.conversation.id);
       const flow=await getPublishedBookingFlow({businessId:c.business.id,connectionId:connection.id});
@@ -110,14 +114,7 @@ async function processClaim(claim){
       try{return await deliver(guarded,c,lang==='ar'?'اختر الخدمة التي تريدها من الكتالوج.':'Choose the service you want from the catalog.','catalog-products',(conn,recipient)=>sendMetaCatalogProducts({connection:conn,businessId:c.business.id,recipient,catalogId:menu.catalogId,items:menu.items,lang}));}
       catch(error){if(error?.ambiguous!==true&&error?.definitive===true&&Number(error?.providerStatus)!==429)return null;throw error;}
     },
-    planner:async(c,safeContext)=>{
-      const message=latestText(c);
-      const retrieved=await retrieveDabbirKnowledge({businessId:c.business.id,query:message,rpc:serviceRpc,env:process.env,fetchImpl:fetch,limit:5});
-      const result=await interpretSemanticMessage({message,context:{...safeContext,retrieved_business_knowledge:retrieved},
-        referenceTime:c.batch?.last_message_at||c.batch_messages?.at(-1)?.created_at,
-        meteringContext:{business:{id:c.business.id},conversation:{id:c.conversation.id},batch_message_created_at:c.batch?.last_message_at}});
-      return shadow.captureProposal({...result.proposal,executionMetadata:{provider:result.provider,model:result.model,...result.telemetry}});
-    }});
+  });
 }
 
 async function requireHumanForFailure(claim,code,reason){
