@@ -48,10 +48,6 @@ test('AI booking inserts whatsapp source and never overrides confirmation or dep
   must(core,/Your booking is confirmed/);
 });
 
-// Arbitrary provider identifiers and missing/ungrounded mutation state are
-// behavior-tested in dabbir-brain-contract, semantic-provider-contract and
-// dabbir-whatsapp-worker-authority suites against the actual executor.
-
 test('availability and booking confirmation use verified business timezone without Dubai fallback',()=>{
   must(actions,/select b\.timezone into v_timezone/);
   assert.doesNotMatch(actions,/Asia\/Dubai/);
@@ -86,7 +82,7 @@ test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{
   must(ambiguous,/requireHumanForFailure/);
   must(ambiguous,/Ambiguous WhatsApp delivery requires human review/);
   assert.doesNotMatch(ambiguous,/finish\(claim,'RETRY'/);
-  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?return \{state:'HUMAN_REQUIRED',error:code\};\}/)?.[0]||'';
+  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?return \{state:'HUMAN_REQUIRED',error:code\};\s*\}/)?.[0]||'';
   must(escalation,/finish\(claim,'HUMAN_REQUIRED'/);
   must(escalation,/dabbir_whatsapp_ai_handoff|handoff\(context/);
 });
