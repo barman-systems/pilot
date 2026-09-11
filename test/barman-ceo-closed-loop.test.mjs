@@ -9,15 +9,23 @@ const realitySql=fs.readFileSync(new URL('../supabase/migrations/20260911170343_
 const decisionSql=fs.readFileSync(new URL('../supabase/migrations/20260911170415_barman_ceo_situation_decision_prepare_v1.sql',import.meta.url),'utf8');
 
 test('executive cron observes fresh reality and persists Situation -> Decision before existing workers claim',()=>{
-  const observe=cron.indexOf('barman_executive_record_reality_v1');
-  const select=cron.indexOf('barman_executive_next_unprepared_v1');
-  const decide=cron.indexOf('barman_executive_decide_v1');
-  const runtimeClaim=cron.indexOf("p_lane:'runtime'");
+  const cycleStart=cron.indexOf('export async function executeExecutiveCycle');
+  assert.ok(cycleStart>=0);
+  const cycle=cron.slice(cycleStart);
+  const observe=cycle.indexOf('observeDabbirLive()');
+  const record=cycle.indexOf('barman_executive_record_reality_v1');
+  const prepare=cycle.indexOf('prepareQueuedCommands');
+  const planner=cycle.indexOf('executePlanner');
+  const readOnly=cycle.indexOf('executeReadOnly');
+  const runtime=cycle.indexOf('executeRuntime');
   assert.ok(observe>=0);
-  assert.ok(select>observe);
-  assert.ok(decide>select);
-  assert.ok(runtimeClaim>decide);
-  assert.match(cron,/observeDabbirLive\(\)/);
+  assert.ok(record>observe);
+  assert.ok(prepare>record);
+  assert.ok(planner>prepare);
+  assert.ok(readOnly>prepare);
+  assert.ok(runtime>prepare);
+  assert.match(cron,/barman_executive_next_unprepared_v1/);
+  assert.match(cron,/barman_executive_decide_v1/);
   assert.match(cron,/reality_freshness/);
   assert.match(cron,/reality_confidence/);
 });
