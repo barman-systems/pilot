@@ -16,9 +16,7 @@ test('synthetic provider telemetry preserves unknown cost and reports only actua
 test('missing or malformed gateway cost remains unknown instead of verified zero',()=>{
   const absent=new Response('{}');
   assert.equal(actualGatewayCost({},absent),null);
-  for(const cost of [null,undefined,'','  ',false,true,[],{},'invalid',-1,Infinity]){
-    assert.equal(actualGatewayCost({usage:{cost}},absent),null);
-  }
+  for(const cost of [null,undefined,'','  ',false,true,[],{},'invalid',-1,Infinity])assert.equal(actualGatewayCost({usage:{cost}},absent),null);
   assert.equal(actualGatewayCost({usage:{cost:null}},new Response('{}',{headers:{'x-vercel-ai-gateway-cost':'0.0012'}})),.0012);
 });
 test('explicit numeric zero is valid provider cost evidence',()=>{
@@ -28,15 +26,21 @@ test('explicit numeric zero is valid provider cost evidence',()=>{
 
 const meter=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-meter.js',import.meta.url),'utf8');
 const whatsapp=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
+const runtime=fs.readFileSync(new URL('../api/_dabbir-conversation-runtime.js',import.meta.url),'utf8');
+const interpreter=fs.readFileSync(new URL('../api/_dabbir-semantic-interpreter.js',import.meta.url),'utf8');
+const v3Interpreter=fs.readFileSync(new URL('../api/_dabbir-conversation-v3-interpreter.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907133700_dabbir_ai_customer_cost_metering_v1.sql',import.meta.url),'utf8');
 
-test('WhatsApp AI routes through the per-business meter',()=>{
-  const interpreter=fs.readFileSync(new URL('../api/_dabbir-semantic-interpreter.js',import.meta.url),'utf8');
-  assert.match(whatsapp,/\.\/_dabbir-semantic-interpreter\.js/);
+test('WhatsApp AI routes both legacy and V3 interpretation through the per-business meter',()=>{
+  assert.match(whatsapp,/\.\/_dabbir-conversation-runtime\.js/);
+  assert.match(runtime,/\.\/_dabbir-semantic-interpreter\.js/);
   assert.match(interpreter,/\.\/_dabbir-whatsapp-ai-meter\.js/);
-  assert.match(whatsapp,/meteringContext:\{business:\{id:c\.business\.id/);
-  assert.match(whatsapp,/conversation:\{id:c\.conversation\.id/);
-  assert.match(whatsapp,/batch_message_created_at/);
+  assert.match(v3Interpreter,/\.\/_dabbir-whatsapp-ai-meter\.js/);
+  for(const source of [runtime,v3Interpreter]){
+    assert.match(source,/meteringContext:\{business:\{id:c?\.?business\.id|meteringContext:\{business:\{id:context\?\.business\?\.id/);
+    assert.match(source,/conversation:\{id:c?\.?conversation\.id|conversation:\{id:context\?\.conversation\?\.id/);
+    assert.match(source,/batch_message_created_at/);
+  }
 });
 
 test('meter preserves paid fallback and attributes Vercel spend to the business',()=>{
