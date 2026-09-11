@@ -1,12 +1,9 @@
-import {applyActivityRequirements,verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
-import {normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
+import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 
 // Conversation policy only. This layer may choose what to ask next and how to
 // phrase that question, but it never grants tool, tenant, service, slot or
 // mutation authority. Missing fields remain execution prerequisites, not a
-// scripted questionnaire. It may also restore facts that are already explicit
-// in the customer turn or authoritative single-mode business contract so stale
-// AI inference cannot force a fake clarification.
+// scripted questionnaire.
 const ASKABLE=new Set(['service','delivery_mode','vehicle','location','property_details','worker','date','time','appointment','slot','request','intent_confirmation']);
 const ELIGIBLE_REASONS=new Set(['MISSING_OR_AMBIGUOUS_FACT','COGNITIVE_REPLAN']);
 const arr=v=>Array.isArray(v)?v:[];
@@ -28,77 +25,6 @@ function currentPending(previous){return previous?.cognition?.pending_field||pre
 function incompleteCandidate(state,key){
   const f=state?.entities?.[key];
   return !!(f&&f.status==='active'&&!verifiedOperationalFact(f)&&(f.hour!=null||f.part||f.value!=null));
-}
-function latestMessage(context){return arr(context?.batch_messages).at(-1)||null;}
-function messageInstant(args,context){
-  const raw=latestMessage(context)?.created_at||latestMessage(context)?.occurred_at||args?.now||Date.now();
-  const d=raw instanceof Date?raw:new Date(raw);
-  return Number.isNaN(d.getTime())?new Date():d;
-}
-function wallClock(instant,timeZone){
-  try{
-    const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:timeZone||'UTC',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(instant).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
-    if(!parts.year||!parts.month||!parts.day||parts.hour==null||parts.minute==null)return null;
-    return {date:`${parts.year}-${parts.month}-${parts.day}`,time:`${parts.hour}:${parts.minute}`};
-  }catch{return null;}
-}
-function immediateRequest(context){
-  const t=normalizeSemanticText(latestMessage(context)?.language_body??latestMessage(context)?.body??'');
-  if(!t||/(?:^|\s)(?:مب|مو|مش|ليس|not)\s+(?:الحين|الان|now)(?:\s|$)/.test(t))return false;
-  return /(?:^|\s)(?:الحين|الان|الحينه|now|right now)(?:\s|$)/.test(t);
-}
-function setGroundedFact(state,key,value,source,stamp,extra={}){
-  const old=state.entities?.[key];
-  if(old&&old.status==='active'&&JSON.stringify(old.value)!==JSON.stringify(value)){
-    state.user_corrections=arr(state.user_corrections);
-    state.user_corrections.push({entity:key,previous:{...old,status:'superseded'},superseded_at:stamp});
-    state.user_corrections=state.user_corrections.slice(-16);
-  }
-  state.entities=state.entities||{};
-  state.entities[key]={value,source,confidence:1,status:'active',updated_at:stamp,...extra};
-}
-function reconcileTrustedFacts({args,state,context}){
-  const stamp=state.updated_at||new Date().toISOString(),oneMode=singleDeliveryMode(state);
-  const mode=state.entities?.delivery_mode,explicitConflict=arr(state.unresolved_references).includes('delivery_mode');
-  let changed=false,temporal=false;
-
-  // A single database-authorized mode outranks any AI inference, including a
-  // conflicting inference. Only an actual customer-stated/confirmed conflict is
-  // allowed to remain unresolved for clarification.
-  if(oneMode&&(!mode||(mode.source==='AI_INFERENCE'&&!explicitConflict))){
-    setGroundedFact(state,'delivery_mode',oneMode,'DATABASE_FACT',stamp,{service_id:state.entities?.service?.value||contract(state)?.service_id});
-    state.delivery_mode=oneMode;
-    changed=true;
-  }
-
-  // "الحين / الآن / now" is a direct temporal instruction, not an AI guess.
-  // Anchor it to the message receipt time in the business timezone, then let the
-  // normal activity/tool guards decide whether the requested instant is usable.
-  if(immediateRequest(context)){
-    const instant=messageInstant(args,context),wall=wallClock(instant,context?.business?.timezone);
-    if(wall){
-      setGroundedFact(state,'date',wall.date,'CUSTOMER_STATED',stamp,{grounded_by:'MESSAGE_RECEIPT_TIME'});
-      setGroundedFact(state,'time',wall.time,'CUSTOMER_STATED',stamp,{grounded_by:'MESSAGE_RECEIPT_TIME'});
-      changed=true;temporal=true;
-      if(state.cognition){
-        state.cognition.inferred_facts=arr(state.cognition.inferred_facts).filter(k=>!['date','time'].includes(k));
-        state.cognition.unverified_facts=arr(state.cognition.unverified_facts).filter(k=>!['date','time'].includes(k));
-        state.cognition.immediate_time_grounded=true;
-      }
-    }
-  }
-
-  if(!changed)return;
-  const instant=messageInstant(args,context);
-  if(context?.business&&context?.activity_profile&&Array.isArray(context?.services)){
-    const resolution=applyActivityRequirements(state,context,instant);
-    state.missing_fields=[...arr(resolution.missing)];
-    state.invalid_fields=[...arr(resolution.invalid)];
-    state.confirmed_fields=[...arr(resolution.already_satisfied)];
-  }else{
-    if(oneMode){state.missing_fields=arr(state.missing_fields).filter(k=>k!=='delivery_mode');state.invalid_fields=arr(state.invalid_fields).filter(k=>k!=='delivery_mode');}
-    if(temporal){state.missing_fields=arr(state.missing_fields).filter(k=>!['date','time'].includes(k));state.invalid_fields=arr(state.invalid_fields).filter(k=>!['date','time'].includes(k));}
-  }
 }
 function fieldScore(field,{state,previous,proposal}){
   // Finish the thought the customer is already answering before switching to a
@@ -181,7 +107,6 @@ function updateCognition(state,fields,source,reply){
 export function applyGoalDrivenConversationPlan({args,result}){
   if(!result?.state||!result?.decision)return result;
   const state=result.state,decision=result.decision,proposal=args?.proposal||null,previous=args?.previous||null,context=args?.context||{};
-  reconcileTrustedFacts({args,state,context});
   // Special clarification flows (verified memory confirmation, service/slot
   // presentation, recovery, ambiguity and security) keep their dedicated
   // semantics. This planner only replaces the generic first-missing-field rule.
