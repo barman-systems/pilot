@@ -1,4 +1,5 @@
 import { SEMANTIC_SYSTEM_PROMPT, SEMANTIC_JSON_SCHEMA, semanticContractViolation } from './_dabbir-semantic-contract.js';
+import {V3_SEMANTIC_SYSTEM_PROMPT,V3_SEMANTIC_JSON_SCHEMA,v3SemanticContractViolation} from './_dabbir-conversation-v3-semantic-contract.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -12,6 +13,12 @@ const DIRECT_PROVIDER_TIMEOUT_MS = 5000;
 const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
 const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
+
+function semanticSpec(semantic){
+  if(semantic==='v3')return {prompt:V3_SEMANTIC_SYSTEM_PROMPT,schema:V3_SEMANTIC_JSON_SCHEMA,violation:v3SemanticContractViolation,profile:'v3'};
+  if(semantic)return {prompt:SEMANTIC_SYSTEM_PROMPT,schema:SEMANTIC_JSON_SCHEMA,violation:semanticContractViolation,profile:'legacy'};
+  return null;
+}
 
 export function getDABBIRAiConfig(env = process.env) {
   if (env.GEMINI_API_KEY) {
@@ -205,9 +212,8 @@ function finalizeReply({ reply, input, language, config, authMode, model, semant
 }
 
 async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false, schemaFallback = false }) {
-  // Capability is verified for this configured endpoint/model, not inferred from
-  // OpenAI-compatible transport. Keep other providers' existing request contract.
-  const strictSemantic=semantic && !schemaFallback && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
+  const spec=semanticSpec(semantic),semanticEnabled=!!spec;
+  const strictSemantic=semanticEnabled && !schemaFallback && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -219,32 +225,26 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
         model,
         messages,
         temperature: 0.15,
-        max_tokens: semantic ? 1600 : 320,
-        ...(semantic ? { response_format: strictSemantic
-          ? {type:'json_schema',json_schema:{name:'dabbir_semantic_interpretation',strict:true,schema:SEMANTIC_JSON_SCHEMA}}
+        max_tokens: semanticEnabled ? 1600 : 320,
+        ...(semanticEnabled ? { response_format: strictSemantic
+          ? {type:'json_schema',json_schema:{name:spec.profile==='v3'?'dabbir_v3_interpretation':'dabbir_semantic_interpretation',strict:true,schema:spec.schema}}
           : {type:'json_object'}, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
         stream: false,
       }),
     });
     const payload = await response.json().catch(() => ({}));
-    const violation=semantic&&response.ok?(payload?.choices?.[0]?.finish_reason==='length'?'TRUNCATED':semanticContractViolation(payload?.choices?.[0]?.message?.content)):null;
-    if(violation)console.warn('dabbir_semantic_contract_rejected',{reason:violation,format:strictSemantic?'json_schema':'json_object'});
+    const violation=semanticEnabled&&response.ok?(payload?.choices?.[0]?.finish_reason==='length'?'TRUNCATED':spec.violation(payload?.choices?.[0]?.message?.content)):null;
+    if(violation)console.warn('dabbir_semantic_contract_rejected',{reason:violation,format:strictSemantic?'json_schema':'json_object',profile:spec.profile});
     const formatCode=['json_validate_failed','schema_validation_failed','invalid_json_schema'].includes(payload?.error?.code);
     const formatParam=['response_format','response_format.json_schema'].includes(payload?.error?.param);
     const formatRejected=response.status===400&&(formatCode||formatParam);
-    if(semantic&&response.status===400)console.warn('dabbir_semantic_provider_rejected',{status:400,reason:formatCode?payload.error.code:formatParam?'RESPONSE_FORMAT_PARAM':'UNCLASSIFIED_REQUEST_ERROR',format:strictSemantic?'json_schema':'json_object'});
+    if(semanticEnabled&&response.status===400)console.warn('dabbir_semantic_provider_rejected',{status:400,reason:formatCode?payload.error.code:formatParam?'RESPONSE_FORMAT_PARAM':'UNCLASSIFIED_REQUEST_ERROR',format:strictSemantic?'json_schema':'json_object',profile:spec.profile});
     if(strictSemantic&&(formatRejected||(violation&&violation!=='TRUNCATED'))){
-      console.warn('dabbir_semantic_format_fallback',{reason:formatRejected?'PROVIDER_SCHEMA_REJECTED':violation});
-      // One compatibility attempt, through the SAME metered/bounded fetch and
-      // application validator. Never on quota/auth/network failure or truncation.
+      console.warn('dabbir_semantic_format_fallback',{reason:formatRejected?'PROVIDER_SCHEMA_REJECTED':violation,profile:spec.profile});
       clearTimeout(timer);
       return callOpenAiCompatible({endpoint,credential,model,messages,fetchImpl,timeoutMs,semantic,schemaFallback:true});
     }
-    if (violation) {
-      // A transport success is not an interpretation success. Try the next
-      // configured provider within the existing shared attempt/deadline budget.
-      return { response: { ok: false, status: 502 }, payload: {} };
-    }
+    if (violation) return { response: { ok: false, status: 502 }, payload: {} };
     return { response, payload };
   } finally {
     clearTimeout(timer);
@@ -261,9 +261,6 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
     if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
 
     const model = models[index];
-    // Structured interpretation may be the last available HTTP attempt. Give
-    // it the remaining existing gateway window; the interpreter's shared
-    // 18-second deadline still applies. Ordinary short replies keep the split.
     const timeoutMs = semantic ? remaining : index === 0 ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining) : remaining;
     try {
       const { response, payload } = await callOpenAiCompatible({
@@ -303,9 +300,10 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   const cloudflareToken = String(env.CLOUDFLARE_API_TOKEN || '');
   const cloudflareAccountId = String(env.CLOUDFLARE_ACCOUNT_ID || '');
   const cloudflareReady = Boolean(cloudflareToken && cloudflareAccountId);
+  const spec=semanticSpec(semantic);
   const messages = [
-    { role: 'system', content: semantic ? SEMANTIC_SYSTEM_PROMPT : systemPrompt(normalizedProject, language, businessContext) },
-    ...(semantic ? [{role:'user',content:'CONTEXT DATA: '+String(businessContext).slice(0,16000)}] : []),
+    { role: 'system', content: spec ? spec.prompt : systemPrompt(normalizedProject, language, businessContext) },
+    ...(spec ? [{role:'user',content:'CONTEXT DATA: '+String(businessContext).slice(0,16000)}] : []),
     ...normalizeHistory(history),
     { role: 'user', content: input },
   ];
