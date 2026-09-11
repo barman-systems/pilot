@@ -197,15 +197,22 @@ async function exchangeEmbeddedCodeWithRedirect(platform, code, redirectUri) {
   if (!platform?.ready) throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
   if (!redirectUri) throw Object.assign(new Error('META_OAUTH_REDIRECT_URI_REQUIRED'), { status: 400 });
   const url = new URL(`https://graph.facebook.com/${encodeURIComponent(platform.graphVersion)}/oauth/access_token`);
-  url.searchParams.set('client_id', platform.appId);
-  url.searchParams.set('client_secret', platform.appSecret);
-  url.searchParams.set('code', String(code));
-  url.searchParams.set('grant_type', 'authorization_code');
-  url.searchParams.set('redirect_uri', redirectUri);
+  const form = new URLSearchParams();
+  form.set('client_id', platform.appId);
+  form.set('client_secret', platform.appSecret);
+  form.set('code', String(code));
+  form.set('grant_type', 'authorization_code');
+  form.set('redirect_uri', redirectUri);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload?.access_token) throw metaProviderError(payload, response, 'META_CODE_EXCHANGE_FAILED');
     return { accessToken: String(payload.access_token), expiresIn: Number(payload.expires_in || 0) || null };
