@@ -94,7 +94,7 @@ test('Meta OAuth exchange posts app secret and code in form body, never URL', as
   assert.equal(seen.init.cache, 'no-store');
 });
 
-test('all WhatsApp Embedded Meta credential exchange paths keep secrets out of URL construction', async () => {
+test('all WhatsApp Embedded Meta credential paths keep secrets and tokens out of URL construction', async () => {
   const core = await read('api/_whatsapp-embedded-core.js');
   const complete = await read('api/dabbir-whatsapp-embedded-complete.js');
 
@@ -102,12 +102,17 @@ test('all WhatsApp Embedded Meta credential exchange paths keep secrets out of U
   assert.doesNotMatch(core, /searchParams\.set\(['"]client_secret['"]/);
   assert.doesNotMatch(complete, /searchParams\.set\(['"]access_token['"]/);
   assert.doesNotMatch(complete, /searchParams\.set\(['"]client_secret['"]/);
+  assert.doesNotMatch(complete, /debug_token/);
+  assert.doesNotMatch(complete, /input_token/);
+  assert.doesNotMatch(complete, /params:\s*\{\s*input_token\s*:/);
 
   assert.match(core, /authorization:\s*`Bearer \$\{token\}`/);
   assert.match(core, /form\.set\('client_secret', config\.appSecret\)/);
   assert.match(core, /'content-type': 'application\/x-www-form-urlencoded'/);
   assert.match(complete, /form\.set\('client_secret', platform\.appSecret\)/);
   assert.match(complete, /form\.set\('redirect_uri', redirectUri\)/);
+  assert.match(complete, /owned_whatsapp_business_accounts/);
+  assert.match(complete, /client_whatsapp_business_accounts/);
   assert.match(complete, /method: 'POST'/);
   assert.match(complete, /'content-type': 'application\/x-www-form-urlencoded'/);
 });
