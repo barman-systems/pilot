@@ -1,0 +1,123 @@
+{
+  "schema_version": 2,
+  "status": "SOURCE_REFRESH_PARTIALLY_VERIFIED",
+  "purpose": "Evidence-only refresh of the BOOK writer surface at the current repository SHA. This artifact is not authorization to delete, weaken, or reroute any writer, trigger, RLS policy, CAS fence, idempotency contract, or tenant boundary.",
+  "repository": "barman-systems/pilot",
+  "source_main_sha": "556a656dae925399a63c68de81f82790ac7f5d92",
+  "production_validation": {
+    "status": "NOT_REFRESHED_IN_THIS_SLICE",
+    "validated_production_sha": null,
+    "release_evidence_verified": false,
+    "note": "This source-only refresh deliberately makes no live Production claim. A live preflight and exact deployment evidence are required before any convergence or deletion decision."
+  },
+  "database_lineage": {
+    "repository_migration": "20260911184500_barman_ceo_strict_closed_loop_v1",
+    "source": "docs/architecture/execution-lineage-repair-v1.json",
+    "interpretation": "The repository records a repaired lineage evidence artifact, but this refresh does not replace a live lineage preflight."
+  },
+  "operation_summary": {
+    "BOOK": "MULTIPLE_ACTIVE_WRITERS",
+    "RESCHEDULE": "MULTIPLE_ACTIVE_WRITERS",
+    "CANCEL": "MULTIPLE_ACTIVE_WRITERS"
+  },
+  "writers": [
+    {
+      "id": "api.branch_operations.create_appointment",
+      "operation": "BOOK",
+      "entrypoint": "api/branch-operations.js#createAppointment",
+      "source_lines": "112-146",
+      "actor": "authenticated_member",
+      "write_mode": "direct_postgrest_insert",
+      "target": "public.dabbir_appointments",
+      "authorization": ["verified_user", "active_business_membership", "resolved_branch_scope"],
+      "idempotency": "NONE_IN_HANDLER",
+      "verification": "RETURN_REPRESENTATION_AND_BRANCH_READBACK",
+      "classification": "AUTHORITY",
+      "convergence_status": "CANDIDATE_FIRST_SURGICAL_MIGRATION",
+      "deletion_allowed": false,
+      "evidence": ["api/branch-operations.js:112-145"]
+    },
+    {
+      "id": "api.dabbir_runtime.create_appointment",
+      "operation": "BOOK",
+      "entrypoint": "api/dabbir-runtime.js#handler POST action=create_appointment",
+      "source_lines": "478-523, dispatched by handler at 565-587",
+      "actor": "authenticated_runtime_consumer",
+      "write_mode": "direct_postgrest_insert",
+      "target": "public.dabbir_appointments",
+      "authorization": ["runtime_identity_and_membership_contract", "RLS"],
+      "idempotency": "NONE_IN_HANDLER",
+      "classification": "AUTHORITY",
+      "convergence_status": "IN_SCOPE; CALLER_GRAPH_REQUIRED",
+      "deletion_allowed": false,
+      "evidence": ["api/dabbir-runtime.js:478-523", "api/dabbir-runtime.js:565-587", "api/dabbir-runtime-fast.js:10", "api/mobile/runtime.js:2", "api/app.js:363-364"]
+    },
+    {
+      "id": "api.adaptive_appointment.create",
+      "operation": "BOOK",
+      "entrypoint": "api/adaptive-appointment.js#handler",
+      "source_lines": "74-139",
+      "actor": "authenticated_member",
+      "write_mode": "direct_postgrest_insert",
+      "target": "public.dabbir_appointments",
+      "authorization": ["verified_user", "active_business_membership", "resolved_branch_scope"],
+      "idempotency": "UUID_REQUEST_KEY_PLUS_FINGERPRINT_PLUS_REPLAY_READBACK",
+      "verification": "RETURN_REPRESENTATION_PLUS_REPLAY_READBACK",
+      "classification": "AUTHORITY",
+      "convergence_status": "REFERENCE_ADAPTER; NOT YET DOMAIN OWNER",
+      "deletion_allowed": false,
+      "evidence": ["api/adaptive-appointment.js:74-139"]
+    }
+  ],
+  "caller_graph": {
+    "scope": "Static repository evidence only; tests and fixtures are listed separately and do not prove Production reachability.",
+    "nodes": [
+      {
+        "writer_id": "api.dabbir_runtime.create_appointment",
+        "callers_or_delegators": [
+          {"path": "api/dabbir-runtime-fast.js:10", "kind": "imports_and_delegates_to_runtime_handler", "confidence": "HIGH"},
+          {"path": "api/mobile/runtime.js:2", "kind": "imports_fast_runtime_handler", "confidence": "HIGH"},
+          {"path": "api/app.js:363-364", "kind": "rewrites_runtime_route_to_fast_route", "confidence": "HIGH"},
+          {"path": "api/owner-action-center-core-ui.js:185", "kind": "fetches_fast_runtime", "confidence": "HIGH"},
+          {"path": "api/dabbir-whatsapp-webhook.js:3", "kind": "imports_runtime_classifiers_only", "confidence": "HIGH", "is_booking_writer_caller": false}
+        ],
+        "unknowns": ["Exact current POST action=create_appointment branch and all external/browser callers require runtime tracing or route evidence."]
+      },
+      {
+        "writer_id": "api.branch_operations.create_appointment",
+        "callers_or_delegators": [
+          {"path": "api/branch-operations.js:148-165", "kind": "route_handler_dispatches_action=create_appointment", "confidence": "HIGH"}
+        ],
+        "unknowns": ["Production/browser callers are not proven by this source-only scan; route evidence is required before retirement."]
+      },
+      {
+        "writer_id": "api.adaptive_appointment.create",
+        "callers_or_delegators": [
+          {"path": "api/adaptive-appointment.js:74-139", "kind": "route_handler_is_writer", "confidence": "HIGH"},
+          {"path": "test/dabbir-adaptive-appointment-submit.test.mjs:81", "kind": "test_fixture_request", "confidence": "HIGH", "is_production_caller": false},
+          {"path": "test/dabbir-booking-owner-journey.test.mjs:39,109,164", "kind": "test_fixture_request", "confidence": "HIGH", "is_production_caller": false}
+        ],
+        "unknowns": ["Production/browser caller inventory requires route and live journey evidence."]
+      }
+    ]
+  },
+  "safety_invariants": {
+    "evidence_only": true,
+    "unproven_writer_deletion_allowed": false,
+    "new_execution_ddl_before_live_lineage_preflight_allowed": false,
+    "rls_weakening_allowed": false,
+    "cas_or_idempotency_weakening_allowed": false,
+    "trigger_removal_allowed": false
+  },
+  "next_step": {
+    "operation": "BOOK",
+    "phase": "CALLER_GRAPH_AND_CREATE_BOOKING_CONTRACT_DISCOVERY",
+    "first_candidate": "api.branch_operations.create_appointment",
+    "required_before_code_change": [
+      "Live lineage preflight green",
+      "Exact Production caller evidence for all three writers",
+      "Semantic equivalence specification",
+      "Isolation and idempotency regression tests"
+    ]
+  }
+}
