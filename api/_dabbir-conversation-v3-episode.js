@@ -33,18 +33,22 @@ export function classifyEpisodeBoundaryV3({previousState=null,canonicalState=nul
   const longIdle=idleMs==null||idleMs>V3_EPISODE_IDLE_MS;
   const operational=OPERATIONAL_INTENTS.has(intent);
   const independentEvidence=carriesIndependentRequestEvidence({proposal,previousState,canonicalState});
+  // A clean provider-labelled NEW_REQUEST keeps the existing reason code so
+  // observability remains stable.
+  if(longIdle&&operational&&role==='NEW_REQUEST'){
+    return {kind:'NEW_EPISODE',reason:'LONG_IDLE_COMPLETE_NEW_REQUEST',idle_ms:idleMs,at:at.toISOString()};
+  }
   // Episode ownership must not be dictated by a stale pending question. After
   // a long idle gap, an operational turn that carries fresh request evidence
   // starts a new episode even if the semantic provider labels it as an answer
   // to the old pending field. This is exactly the production failure class
   // observed when a new "wash now" request inherited intent_confirmation.
-  if(longIdle&&operational&&(role==='NEW_REQUEST'||role==='TOPIC_SWITCH'||independentEvidence)){
+  if(longIdle&&operational&&(role==='TOPIC_SWITCH'||independentEvidence)){
     return {kind:'NEW_EPISODE',reason:'LONG_IDLE_INDEPENDENT_REQUEST',idle_ms:idleMs,at:at.toISOString()};
   }
   if(CONTINUATION_ROLES.has(role))return {kind:'CONTINUE',reason:`SEMANTIC_${role}`,idle_ms:idleMs,at:at.toISOString()};
   if(role==='NEW_REQUEST'&&previousState?.goal&&intent&&intent!==String(previousState.goal).replace(/^BOOK_SERVICE$/,'BOOKING')){
     return {kind:'NEW_EPISODE',reason:'EXPLICIT_NEW_GOAL',idle_ms:idleMs,at:at.toISOString()};
   }
-  if(longIdle&&role==='NEW_REQUEST'&&operational)return {kind:'NEW_EPISODE',reason:'LONG_IDLE_COMPLETE_NEW_REQUEST',idle_ms:idleMs,at:at.toISOString()};
   return {kind:'CONTINUE',reason:longIdle?'LONG_IDLE_BUT_NOT_NEW_REQUEST':'ACTIVE_EPISODE',idle_ms:idleMs,at:at.toISOString()};
 }
