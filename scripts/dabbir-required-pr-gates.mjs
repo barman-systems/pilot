@@ -10,6 +10,7 @@ export const ALWAYS_REQUIRED_PR_WORKFLOWS=Object.freeze(['DABBIR Security Gate']
 export function classifyChangedPaths(paths=[]){
   let mobileCi=false;
   let maestro=false;
+  let lineagePreflight=false;
   for(const raw of paths){
     const path=clean(raw);
     if(!path)continue;
@@ -25,8 +26,17 @@ export function classifyChangedPaths(paths=[]){
       ['privacy.html','terms.html','support.html','vercel.json','.github/workflows/dabbir-mobile-ci.yml'].includes(path)
     ) mobileCi=true;
     if(path.startsWith('mobile/')||path==='.github/workflows/dabbir-ios-maestro.yml')maestro=true;
+    if(
+      path.startsWith('supabase/migrations/')||
+      [
+        '.github/workflows/dabbir-live-ddl-lineage-preflight.yml',
+        'scripts/dabbir-live-ddl-lineage-preflight.mjs',
+        'scripts/sql/dabbir-live-ddl-lineage-preflight.sql',
+        'test/dabbir-live-ddl-lineage-preflight.test.mjs',
+      ].includes(path)
+    ) lineagePreflight=true;
   }
-  return {mobileCi,maestro};
+  return {mobileCi,maestro,lineagePreflight};
 }
 
 async function githubJson(url,token){
@@ -103,6 +113,7 @@ export async function run({env=process.env}={}){
   const required=[...ALWAYS_REQUIRED_PR_WORKFLOWS];
   if(classification.mobileCi)required.push('DABBIR Mobile CI');
   if(classification.maestro)required.push('DABBIR iOS Maestro Smoke');
+  if(classification.lineagePreflight)required.push('DABBIR Live DDL Lineage Preflight');
 
   const pollMs=Math.max(1_000,Number(env.DABBIR_GATE_POLL_MS||DEFAULT_POLL_MS));
   const timeoutMs=Math.max(60_000,Number(env.DABBIR_GATE_TIMEOUT_MS||DEFAULT_TIMEOUT_MS));

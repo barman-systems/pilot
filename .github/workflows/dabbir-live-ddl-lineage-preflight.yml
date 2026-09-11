@@ -1,0 +1,48 @@
+name: DABBIR Live DDL Lineage Preflight
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/dabbir-live-ddl-lineage-preflight.yml'
+      - 'scripts/dabbir-live-ddl-lineage-preflight.mjs'
+      - 'scripts/sql/dabbir-live-ddl-lineage-preflight.sql'
+      - 'test/dabbir-live-ddl-lineage-preflight.test.mjs'
+      - 'scripts/dabbir-required-pr-gates.mjs'
+      - 'test/dabbir-required-pr-gates.test.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-ddl-lineage-preflight:
+    name: live-ddl-lineage-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Run atomic live lineage preflight
+        env:
+          SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+          DABBIR_LINEAGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          DABBIR_LINEAGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          DABBIR_PRODUCTION_RELEASE_EVIDENCE_URL: https://dabbir.bmalman.com/api/release-evidence
+          DABBIR_LINEAGE_PREFLIGHT_REPORT: dabbir-live-ddl-lineage-preflight-report.json
+        run: node scripts/dabbir-live-ddl-lineage-preflight.mjs
+      - name: Upload preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-live-ddl-lineage-preflight-${{ github.sha }}
+          path: dabbir-live-ddl-lineage-preflight-report.json
+          if-no-files-found: error
+          retention-days: 30
