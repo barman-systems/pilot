@@ -164,24 +164,31 @@ export async function understandExecutiveSituation(command,context={},env=proces
     'Return RUNTIME_CHECK for a live DABBIR health/status check that requires the existing public runtime probes; DATA_QUERY for read-only database facts; REPO_CHANGE for one repository change; MULTI_STEP for objectives requiring multiple dependent actions; EXTERNAL_ACTION only for non-financial external actions; and REVIEW_REQUIRED when safe execution is not established.',
     'Owner-only OTP, KYC, legal signatures and payments are already hard-gated before you are called and must never be authorized here.',
     'Use only supplied facts. Unknown business/product/customer/economic state must remain UNKNOWN, never infer HEALTHY from green infrastructure.',
+    'For incidents with multiple degraded business, customer, or economic signals, compare at least three distinct safe options before choosing one.',
     'affected_goal must be one supplied goal id or empty. memory_refs must contain only supplied memory ids.',
     'If a supplied memory is materially relevant, cite it in memory_refs and explain its effect in the decision reason. Never cite irrelevant memory.',
     'Choose the lowest-risk option that advances the affected goal and has an explicit rollback/containment path. Do not claim completion.',
   ].join('\n');
-  try{
+  const userContent=JSON.stringify({command:commandText,reality,goals,memory:memories});
+  const requestUnderstanding=async retry=>{
+    const correction=retry?'\nThe previous response was not valid JSON. Return exactly one JSON object matching the supplied schema. No markdown and no prose outside JSON. Preserve evidence discipline, owner boundaries, health-domain truth, and fail-closed safety.':'';
     const response=await fetch(GATEWAY_ENDPOINT,{
       method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
       body:JSON.stringify({
         model,
-        messages:[{role:'system',content:system},{role:'user',content:JSON.stringify({command:commandText,reality,goals,memory:memories})}],
-        temperature:0.05,max_tokens:1800,stream:false,
+        messages:[{role:'system',content:system+correction},{role:'user',content:userContent}],
+        temperature:retry?0:0.05,max_tokens:1800,stream:false,
         response_format:{type:'json_schema',json_schema:{name:'barman_executive_situation_decision',description:'Durable executive situation and decision',schema}},
       }),
       signal:AbortSignal.timeout(20000),
     });
     const payload=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(`EXECUTIVE_UNDERSTANDING_GATEWAY_HTTP_${response.status}`);
-    const parsed=parseJson(payload);
+    return parseJson(payload);
+  };
+  try{
+    let parsed=await requestUnderstanding(false);
+    if(!parsed)parsed=await requestUnderstanding(true);
     if(!parsed)throw new Error('EXECUTIVE_UNDERSTANDING_INVALID_JSON');
     const route=String(parsed.route||'REVIEW_REQUIRED').toUpperCase();
     if(!EXECUTIVE_ROUTES.has(route)||route==='OWNER_GATE')throw new Error('EXECUTIVE_ROUTE_INVALID');
