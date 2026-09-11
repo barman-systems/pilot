@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { json } from './_auth-core.js';
 import { adminRpc, notifyTelegram, observeDabbirLive, runtimeEvidence, serviceRoleKey, telegramRoute } from './_barman-executive-core.js';
-import { planExecutiveCommand, readOnlyAnswer } from './_barman-executive-automation.js';
+import { planExecutiveCommand, readOnlyAnswer, understandExecutiveCommand } from './_barman-executive-automation.js';
 
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 function sameSecret(left,right){const a=Buffer.from(String(left||'')),b=Buffer.from(String(right||''));return a.length===b.length&&a.length>0&&timingSafeEqual(a,b)}
@@ -16,22 +16,47 @@ function report(snapshot){
   return `نفّذ BARMAN فحصاً حياً لـ DABBIR. الحالة: ${state}. الموقع HTTP ${snapshot.site.status}، قاعدة البيانات ${snapshot.database.project_ref}، commit ${snapshot.commit_sha.slice(0,12)}، المنطقة ${snapshot.region}.`;
 }
 
+async function measurementSnapshot(key){
+  const end=new Date(),start=new Date(end.getTime()-7*24*60*60*1000);
+  try{
+    return await adminRpc(key,'dabbir_owner_measurement_snapshot_v1',{
+      p_scope:{authority_role:'ROOT_OWNER'},p_start:start.toISOString(),p_end:end.toISOString(),
+      p_business_id:null,p_branch_id:null,p_activity_type:null,p_channel:null,p_provider:null,p_model:null,
+    });
+  }catch(error){
+    return {
+      generated_at:end.toISOString(),
+      measurement_health:{overall:'NOT_MEASURED',funnel:'NOT_MEASURED',quality:'NOT_MEASURED',usage_cost:'NOT_MEASURED',attribution:'NOT_MEASURED'},
+      regression_warnings:[],
+      measurement_error:clean(error?.message||error,300),
+    };
+  }
+}
+
 async function observeExecutiveReality(key){
-  const snapshot=await observeDabbirLive();
+  const [snapshot,measurement]=await Promise.all([observeDabbirLive(),measurementSnapshot(key)]);
   const evidence=runtimeEvidence(snapshot);
   const confidence=snapshot.healthy?1:0.7;
   const persisted=await adminRpc(key,'barman_executive_observe_v1',{
     p_observation:{
-      source:'vercel-executive-cron',
-      subject:'DABBIR production reality',
-      observed_at:snapshot.observed_at,
-      freshness:'FRESH',
-      confidence,
-      evidence_refs:evidence,
-      snapshot,
+      source:'vercel-executive-cron',subject:'DABBIR production reality',observed_at:snapshot.observed_at,
+      freshness:'FRESH',confidence,evidence_refs:evidence,snapshot,measurement,
     },
   });
-  return {snapshot,persisted};
+  return {snapshot,measurement,persisted};
+}
+
+async function routePendingExecutiveWork(key,limit=8){
+  const routed=[];
+  for(let i=0;i<limit;i+=1){
+    const pending=await adminRpc(key,'barman_executive_pending_for_routing_v1',{});
+    if(pending?.found!==true)break;
+    const command=pending.command||{};
+    const understood=await understandExecutiveCommand(command.command_text,pending);
+    const persisted=await adminRpc(key,'barman_executive_route_pending_v1',{p_command_id:command.id,p_route:understood});
+    routed.push({command_id:command.id,route:understood.route,risk_level:understood.risk_level,understanding_source:understood.understanding_source,decision_id:persisted?.decision_id,execution_lane:persisted?.execution_lane||null,executable:persisted?.executable===true,memory_refs_used:persisted?.memory_refs_used||[]});
+  }
+  return routed;
 }
 
 async function notify(key,commandId,text){
@@ -44,13 +69,8 @@ async function finalizeRetry(key,claim,error,prefix){
   const attempts=Number(command.attempt_count||0);
   const permanent=/PLAN_OWNER_GATE_REQUIRED|PLAN_TASKS_INVALID|PLAN_TASK_TEXT_INVALID/.test(message);
   const outcome=permanent||attempts>=3?'BLOCKED':'RETRY';
-  const summary=permanent
-    ?'توقف BARMAN عند حد صلاحية أو خطة غير آمنة، ولم يتجاوز الحاجز.'
-    :`${prefix} وسيعاد تلقائيًا ضمن حد المحاولات.`;
-  await adminRpc(key,'barman_executive_finalize_v1',{
-    p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:outcome,
-    p_summary:summary,p_evidence:[],p_error:message,
-  }).catch(()=>null);
+  const summary=permanent?'توقف BARMAN عند حد صلاحية أو خطة غير آمنة، ولم يتجاوز الحاجز.':`${prefix} وسيعاد تلقائيًا ضمن حد المحاولات.`;
+  await adminRpc(key,'barman_executive_finalize_v1',{p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:outcome,p_summary:summary,p_evidence:[],p_error:message}).catch(()=>null);
   if(outcome==='BLOCKED')await notify(key,commandId,`${summary}\n\nالسبب: ${message}`).catch(()=>null);
   return {claimed:true,lane:String(command.execution_lane||''),command_id:commandId,outcome,error:message};
 }
@@ -62,10 +82,7 @@ async function executeRuntime(key){
   try{
     const snapshot=await observeDabbirLive();
     const evidence=runtimeEvidence(snapshot),summary=report(snapshot),outcome=snapshot.healthy?'DONE':'BLOCKED';
-    await adminRpc(key,'barman_executive_finalize_v1',{
-      p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:outcome,
-      p_summary:summary,p_evidence:evidence,p_error:snapshot.healthy?null:'DABBIR_LIVE_HEALTH_CHECK_FAILED',
-    });
+    await adminRpc(key,'barman_executive_finalize_v1',{p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:outcome,p_summary:summary,p_evidence:evidence,p_error:snapshot.healthy?null:'DABBIR_LIVE_HEALTH_CHECK_FAILED'});
     await notify(key,commandId,`${summary}\n\nالحالة: ${outcome} — تم تسجيل ACTION → ARTIFACT → TEST → EVIDENCE.`);
     return {claimed:true,lane:'runtime',command_id:commandId,outcome,evidence_count:evidence.length,decision_id:claim.decision_id,goal_id:claim.goal_id};
   }catch(error){return finalizeRetry(key,claim,error,'فشل تنفيذ الفحص الحي')}
@@ -77,9 +94,7 @@ async function executePlanner(key){
   const command=claim.command||{},commandId=String(command.id||'');
   try{
     const plan=await planExecutiveCommand(command.command_text);
-    const decomposed=await adminRpc(key,'barman_executive_decompose_v1',{
-      p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_tasks:plan.tasks,
-    });
+    const decomposed=await adminRpc(key,'barman_executive_decompose_v1',{p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_tasks:plan.tasks});
     const count=Number(decomposed?.child_count||plan.tasks.length);
     const summary=`حوّل BARMAN الهدف إلى ${count} مهام تنفيذية مستقلة. التنفيذ سيستمر حسب نوع كل مهمة، ولن تعتبر المهمة مكتملة قبل التحقق.`;
     await notify(key,commandId,summary);
@@ -94,14 +109,8 @@ async function executeReadOnly(key){
   try{
     const snapshot=await adminRpc(key,'barman_executive_read_snapshot_v1',{});
     const answer=readOnlyAnswer(command.command_text,snapshot||{});
-    const evidence=[{
-      type:'query',reference:'barman-executive-snapshot-v1',verified:true,
-      details:{metric:answer.metric,expected:answer.expected,generated_at:snapshot?.generated_at||new Date().toISOString(),produced_by:'vercel-read-only-worker'},
-    }];
-    await adminRpc(key,'barman_executive_finalize_v1',{
-      p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:'DONE',
-      p_summary:answer.summary,p_evidence:evidence,p_error:null,
-    });
+    const evidence=[{type:'query',reference:'barman-executive-snapshot-v1',verified:true,details:{metric:answer.metric,expected:answer.expected,generated_at:snapshot?.generated_at||new Date().toISOString(),produced_by:'vercel-read-only-worker'}}];
+    await adminRpc(key,'barman_executive_finalize_v1',{p_command_id:commandId,p_run_id:claim.run_id,p_action_id:claim.action_id,p_outcome:'DONE',p_summary:answer.summary,p_evidence:evidence,p_error:null});
     await notify(key,commandId,`${answer.summary}\n\nتمت القراءة من المصدر التشغيلي، والتحقق المستقل سيعيد فحص الدليل.`);
     return {claimed:true,lane:'read_only',command_id:commandId,outcome:'DONE',metric:answer.metric,evidence_count:1,decision_id:claim.decision_id,goal_id:claim.goal_id};
   }catch(error){return finalizeRetry(key,claim,error,'فشل منفذ القراءة')}
@@ -122,22 +131,13 @@ export default async function handler(req,res){
   let key;try{key=serviceRoleKey()}catch(error){return json(res,error.status||503,{ok:false,error:error.message})}
   try{
     const reality=await observeExecutiveReality(key);
+    const routing=await routePendingExecutiveWork(key);
     const results=await executeExecutiveCycle(key);
     const summary={
       ok:true,
-      reality:{
-        health_check_id:reality.persisted?.health_check_id,
-        observed_at:reality.persisted?.observed_at,
-        freshness:reality.persisted?.freshness,
-        confidence:reality.persisted?.confidence,
-        production_commit:reality.snapshot?.commit_sha,
-      },
-      claimed:results.length,
-      planned:results.filter(x=>x.outcome==='PLANNED').length,
-      done:results.filter(x=>x.outcome==='DONE').length,
-      blocked:results.filter(x=>x.outcome==='BLOCKED').length,
-      retry:results.filter(x=>x.outcome==='RETRY').length,
-      results,
+      reality:{health_check_id:reality.persisted?.health_check_id,observed_at:reality.persisted?.observed_at,freshness:reality.persisted?.freshness,confidence:reality.persisted?.confidence,executive_status:reality.persisted?.executive_status,health_dimensions:reality.persisted?.health_dimensions,measurement_health:reality.measurement?.measurement_health,production_commit:reality.snapshot?.commit_sha},
+      routed:routing.length,routing,
+      claimed:results.length,planned:results.filter(x=>x.outcome==='PLANNED').length,done:results.filter(x=>x.outcome==='DONE').length,blocked:results.filter(x=>x.outcome==='BLOCKED').length,retry:results.filter(x=>x.outcome==='RETRY').length,results,
     };
     console.info('barman_executive_cron',{auth_mode:authMode,...summary});
     return json(res,200,summary);
