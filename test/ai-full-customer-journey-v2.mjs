@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate, captureSidebarFailure } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
 import {runOwnerAiBookingJourney} from '../.github/scripts/dabbir-owner-ai-booking-journey.mjs';
 import { runBookingOwnerJourney } from '../.github/scripts/dabbir-booking-owner-journey.mjs';
+import {classifyProviderNoise,runCognitiveGate} from './support/dabbir-cognitive-gate.mjs';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
@@ -129,11 +130,12 @@ async function step(name, fn, { required = true } = {}) {
   report.steps.push(row);
   try {
     const result = await fn();
-    row.status = 'PASS';
+    row.status = result?.classification === 'PROVIDER_NOISE' ? 'PROVIDER_NOISE' : 'PASS';
     row.duration_ms = Date.now() - started;
     if (result?.status != null) row.http_status = result.status;
     if (result?.detail != null) row.detail = small(result.detail);
-    console.log(`PASS ${name} (${row.duration_ms}ms)${row.detail ? ` — ${row.detail}` : ''}`);
+    const prefix = row.status === 'PROVIDER_NOISE' ? 'PROVIDER_NOISE' : 'PASS';
+    console.log(`${prefix} ${name} (${row.duration_ms}ms)${row.detail ? ` — ${row.detail}` : ''}`);
     return result;
   } catch (error) {
     row.status = 'FAIL';
@@ -143,6 +145,33 @@ async function step(name, fn, { required = true } = {}) {
     console.error(`FAIL ${name} (${row.duration_ms}ms) — ${row.detail}`);
     return null;
   }
+}
+
+async function runRequiredCognitiveStep(name,{scenario='critical',checkCount=null,expectedKeys=null,evidenceKey,requireCognitiveProbe=false,logKey=null}={}) {
+  return step(name,async()=>{
+    const gate=await runCognitiveGate({
+      scenario,
+      checkCount,
+      expectedKeys,
+      requireCognitiveProbe,
+      request:async currentScenario=>{
+        const body={synthetic:true,probe:'cognitive_dialogue'};
+        if(currentScenario&&currentScenario!=='critical')body.scenario=currentScenario;
+        return ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body});
+      },
+    });
+    const probe=gate.response||{status:0,json:{}};
+    const evidence={status:probe.status,checks:probe.json?.checks||null,providers:probe.json?.providers||null,evidence_scope:probe.json?.evidence_scope||null,error:probe.json?.error||null,gate:{classification:gate.classification,valid_failures:gate.valid_failures,attempts:gate.attempts}};
+    if(evidenceKey)report[evidenceKey]={...(probe.json||{}),gate:evidence.gate};
+    if(logKey)console.log(logKey+'='+JSON.stringify(evidence));
+    if(gate.classification==='PROVIDER_NOISE'){
+      report.provider_noise_events??=[];
+      report.provider_noise_events.push({step:name,scenario,attempts:gate.attempts});
+      return {status:probe.status,classification:'PROVIDER_NOISE',detail:JSON.stringify({scenario,attempts:gate.attempts})};
+    }
+    assert(gate.classification!=='COGNITIVE_FAILURE',`COGNITIVE_REPEATED_FAILURE:${name}:${JSON.stringify(evidence)}`);
+    return {status:probe.status,detail:JSON.stringify({classification:gate.classification,attempts:gate.attempts.length,checks:evidence.checks,evidence_scope:evidence.evidence_scope})};
+  });
 }
 
 class Session {
@@ -827,48 +856,23 @@ async function runJourney() {
     return { status: result.status, detail: `Real provider verified: ${JSON.stringify(providerEvidence)}; AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
   });
 
-  await step('15b_cognitive_goal_continuity', async () => {
-    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue'}});
-    const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
-    report.cognitive_goal_continuity_evidence={...evidence,turns:probe.json?.turns};
-    assert(probe.ok&&probe.json?.ok===true&&probe.json?.cognitive_probe===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),`COGNITIVE_CONTINUITY_PROBE_FAILED:${JSON.stringify(evidence)}`);
-    return {status:probe.status,detail:JSON.stringify(evidence)};
-  });
+  await runRequiredCognitiveStep('15b_cognitive_goal_continuity',{checkCount:9,evidenceKey:'cognitive_goal_continuity_evidence',requireCognitiveProbe:true});
 
-  await step('15f_cognitive_context_references',async()=>{
-    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'context_references'}});
-    const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
-    report.cognitive_context_reference_evidence={...evidence,turns:probe.json?.turns};
-    assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_CONTEXT_REFERENCES_FAILED:'+JSON.stringify(evidence));
-    return {status:probe.status,detail:JSON.stringify(evidence)};
-  });
+  await runRequiredCognitiveStep('15f_cognitive_context_references',{scenario:'context_references',checkCount:9,evidenceKey:'cognitive_context_reference_evidence'});
 
-  await step('15g_unseen_multi_activity',async()=>{
-    const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'unseen_multi_activity'}});
-    report.unseen_multi_activity_evidence=probe.json;
-    const expected=['services_duration_side_question','clinic_administrative_boundary','laundry_pickup_requirements','salon_typed_worker_reference','salon_conditional_date_preference'];
-    assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===expected.length&&expected.every(key=>probe.json.checks[key]===true),'UNSEEN_MULTI_ACTIVITY_FAILED:'+JSON.stringify(probe.json));
-    return {status:probe.status,detail:JSON.stringify({checks:probe.json.checks,evidence_scope:probe.json.evidence_scope})};
+  await runRequiredCognitiveStep('15g_unseen_multi_activity',{
+    scenario:'unseen_multi_activity',
+    checkCount:5,
+    expectedKeys:['services_duration_side_question','clinic_administrative_boundary','laundry_pickup_requirements','salon_typed_worker_reference','salon_conditional_date_preference'],
+    evidenceKey:'unseen_multi_activity_evidence',
   });
 
   // Bounded comparative measurement once per release, not once per viewport.
   // A failed candidate is recorded as FAIL; the existing required primary
   // continuity gate above is unchanged. No model priority is changed here.
   if(REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
-    await step('15d_cognitive_independent_goals',async()=>{
-      const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'multiple_requests'}});
-      const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
-      console.log('COGNITIVE_GOAL_SEPARATION='+JSON.stringify(evidence));
-      assert(probe.ok&&probe.json?.ok===true&&probe.json?.cognitive_probe===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===12&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_GOAL_SEPARATION_FAILED:'+JSON.stringify(evidence));
-      return {status:probe.status,detail:JSON.stringify(evidence)};
-    });
-    await step('15e_cognitive_service_duration',async()=>{
-      const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',scenario:'service_details'}});
-      const evidence={status:probe.status,checks:probe.json?.checks,providers:probe.json?.providers,evidence_scope:probe.json?.evidence_scope,error:probe.json?.error};
-      console.log('COGNITIVE_SERVICE_DETAILS='+JSON.stringify(evidence));
-      assert(probe.ok&&probe.json?.ok===true&&probe.json?.external_side_effects===false&&Object.keys(probe.json?.checks||{}).length===9&&Object.values(probe.json.checks).every(x=>x===true),'COGNITIVE_SERVICE_DETAILS_FAILED:'+JSON.stringify(evidence));
-      return {status:probe.status,detail:JSON.stringify(evidence)};
-    });
+    await runRequiredCognitiveStep('15d_cognitive_independent_goals',{scenario:'multiple_requests',checkCount:12,evidenceKey:'cognitive_independent_goals_evidence',requireCognitiveProbe:true,logKey:'COGNITIVE_GOAL_SEPARATION'});
+    await runRequiredCognitiveStep('15e_cognitive_service_duration',{scenario:'service_details',checkCount:9,evidenceKey:'cognitive_service_details_evidence',logKey:'COGNITIVE_SERVICE_DETAILS'});
     report.cognitive_model_comparison=[];
     for(const provider of ['google-gemini','groq','cloudflare-workers-ai']){
       await step('15c_compare_'+provider,async()=>{
@@ -876,6 +880,11 @@ async function runJourney() {
         const evidence={provider,status:probe.status,ok:probe.json?.ok===true,checks:probe.json?.checks||null,providers:probe.json?.providers||[],error:probe.json?.error||null,evidence_scope:probe.json?.evidence_scope||null};
         report.cognitive_model_comparison.push(evidence);
         console.log('COGNITIVE_MODEL_MEASUREMENT='+JSON.stringify(evidence));
+        if(classifyProviderNoise(probe)){
+          report.provider_noise_events??=[];
+          report.provider_noise_events.push({step:'15c_compare_'+provider,provider,http_status:probe.status,providers:evidence.providers});
+          return {status:probe.status,classification:'PROVIDER_NOISE',detail:provider+' unavailable from transient provider capacity/network failure; cognitive score not counted.'};
+        }
         assert(probe.ok&&evidence.ok&&evidence.providers.length>0&&evidence.providers.every(x=>x.provider===provider)&&Object.keys(evidence.checks||{}).length===11&&Object.values(evidence.checks).every(x=>x===true),'COGNITIVE_CANDIDATE_FAILED:'+provider+':'+(evidence.error||'CHECK_FAILURE'));
         return {status:probe.status,detail:provider+' passed the fixed five-turn real-model comparison; DB and WhatsApp delivery excluded.'};
       },{required:false});
