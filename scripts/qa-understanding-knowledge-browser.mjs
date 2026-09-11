@@ -30,9 +30,10 @@ try{
    const entry={engine:name,language,width,status:'RUNNING'};results.push(entry);
    try{
     await page.goto(origin+'/?lang='+language);await page.locator('#dabbirActionCenter #dabbirMemoryButton').click();
-    // The first bootstrap read deliberately has no services. Explicit owner open must
-    // refresh the authoritative knowledge snapshot instead of pinning stale empty state.
-    await page.locator('select[name="service"] option[value="qa-service"]').waitFor();
+    // Native <option> nodes are not rendered as independently visible elements in
+    // WebKit/Chromium. Freshness is proven by the authoritative option being attached
+    // to the live select, then by selecting its value below.
+    await page.locator('select[name="service"] option[value="qa-service"]').waitFor({state:'attached'});
     await page.locator('input[name="alias"]').fill('VIP');await page.locator('select[name="service"]').selectOption('qa-service');
     // The live English journey exposed a refresh between filling and submitting.
     // Exercise that transition in both engines and languages with native inputs.
