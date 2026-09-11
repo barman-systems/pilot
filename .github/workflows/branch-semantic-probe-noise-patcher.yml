@@ -1,0 +1,36 @@
+name: Branch Semantic Probe Noise Patcher
+
+on:
+  push:
+    branches:
+      - fix/customer-journey-determinism-guardian
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/customer-journey-determinism-guardian
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Apply and verify semantic provider-noise patch
+        run: |
+          python3 scripts/branch-semantic-probe-noise-patch.py
+          node --check test/ai-full-customer-journey-v2.mjs
+          node --test test/dabbir-cognitive-gate.test.mjs test/dabbir-release-guardian-baseline.test.mjs
+      - name: Commit patched journey and remove one-shot helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'dabbir-qa-patcher'
+          git config user.email 'dabbir-qa-patcher@users.noreply.github.com'
+          git add test/ai-full-customer-journey-v2.mjs
+          git rm .github/workflows/branch-semantic-probe-noise-patcher.yml scripts/branch-semantic-probe-noise-patch.py
+          git commit -m 'fix(qa): separate provider capacity noise from semantic quality'
+          git push origin HEAD:fix/customer-journey-determinism-guardian
