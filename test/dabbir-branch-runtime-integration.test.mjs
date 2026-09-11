@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const read=path=>fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const workspace=read('api/branch-workspace.js');
 const operations=read('api/branch-operations.js');
+const bookingDomain=read('api/_dabbir-booking-domain.js');
 const context=read('api/branch-context.js');
 const ui=read('api/branch-context-ui.js');
 const actionCenter=read('api/owner-action-center-core-ui.js');
@@ -25,11 +26,12 @@ test('branch workspace derives dependent rows from scoped conversation ids',()=>
   assert.match(workspace,/dabbir_messages\?[\s\S]*conversation_id=eq\.\$\{enc\(selectedConversationId\)\}/);
 });
 
-test('branch writes require an explicit selected scope and verify persisted branch id',()=>{
+test('branch writes require an explicit selected scope and preserve it through canonical booking mutation',()=>{
   assert.match(operations,/branchWrite\(scope\)/);
-  assert.match(operations,/branch_id:branchId/);
   assert.match(operations,/conversation\.branch_id!==branchId/);
-  assert.match(operations,/appointment\.branch_id!==branchId/);
+  assert.match(operations,/createRequestedBooking\(\{[\s\S]*branchId,/);
+  assert.match(bookingDomain,/if\(explicitBranch\)row\.branch_id=explicitBranch/);
+  assert.match(bookingDomain,/explicitBranch&&appointment\.branch_id!==explicitBranch/);
 });
 
 test('authorized branch options are server-derived, not guessed from the business branch registry',()=>{
