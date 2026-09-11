@@ -4,6 +4,7 @@ const arr=v=>Array.isArray(v)?v:[];
 const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,n);
 const allowedStatus=new Set(V3_FACT_STATUSES);
 const STRONG_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED']);
+const SUMMARY_FIELDS=new Set(['service','delivery_mode','immediacy','vehicle','date','time']);
 
 const currentText=context=>arr(context?.batch_messages).map(m=>String(m?.language_body??m?.body??'')).filter(Boolean).join(' ').trim();
 const currentMessage=context=>arr(context?.batch_messages).at(-1)||null;
@@ -33,16 +34,11 @@ function proposalCandidates({proposal,context,state}){
     let mappingAllowed=false;
     if(def?.type==='ENUM'&&Array.isArray(def.values))mappingAllowed=def.values.includes(value);
     else if(['DATE','TIME','TEXT'].includes(def?.type))mappingAllowed=true;
-    // A model proposal can establish semantic meaning, but an open-language
-    // surface is not execution authority. If the candidate value belongs to the
-    // live entity definition, retain it as TENTATIVE until an authoritative
-    // resolver/confirmation upgrades it. Never drop the surface merely because
-    // there is no handwritten synonym in source code.
     return [{field,status:mappingAllowed?'TENTATIVE':'CONFLICT',value:mappingAllowed?value:null,candidate_value:value,surface,source:'SEMANTIC_PROPOSAL',confidence:Number(item?.confidence)||0,resolution:mappingAllowed?'ALLOWED_VALUE_NEEDS_GROUNDING':'OUTSIDE_ENTITY_DEFINITION',invalidation_reason:null}];
   });
 }
 
-function pendingSurfaceCandidate({context,previous,state,proposalFacts}){
+function pendingSurfaceCandidate({context,previous,state,proposal,proposalFacts}){
   const field=previous?.cognition?.pending_field||previous?.clarification_entity||null;
   const surface=clean(currentText(context),300);
   if(!field||!surface||proposalFacts.some(f=>f.field===field))return null;
@@ -50,9 +46,6 @@ function pendingSurfaceCandidate({context,previous,state,proposalFacts}){
   if(!def)return null;
   const sideRole=proposal?.dialogue?.message_role;
   if(['SIDE_QUESTION','SOCIAL','TOPIC_SWITCH','CANCELLATION'].includes(sideRole))return null;
-  // This is the structural replacement for “unknown means absent”. The exact
-  // customer surface survives even when no unique operational value can be
-  // proven. The Conversation Brain will later present it for correction.
   return {field,status:'TENTATIVE',value:null,candidate_value:null,surface,source:'CURRENT_TURN_SURFACE',confidence:Number(proposal?.confidence)||0,resolution:'SEMANTIC_SURFACE_UNMAPPED',invalidation_reason:null};
 }
 
@@ -84,16 +77,15 @@ function explicitInvalidations({beforeState,afterState}){
   return reasons;
 }
 
-function mergeFacts(base,candidates){
-  const map=new Map(base.map(f=>[f.field,{...f}]));
+function mergeFacts(base,candidates,invalidations){
+  const invalidated=new Set(arr(invalidations).map(x=>x?.field).filter(Boolean));
+  const map=new Map(base.filter(f=>!invalidated.has(f.field)).map(f=>[f.field,{...f}]));
   const tentative=[];
   for(const f of candidates){
     if(!f||!f.field||!allowedStatus.has(f.status))continue;
     const existing=map.get(f.field);
     if(f.status==='VERIFIED')map.set(f.field,{...f});
     else if(!existing||existing.status!=='VERIFIED'){
-      // Retain multiple open-language candidates rather than overwriting one
-      // uncertain surface with another opaque guess.
       tentative.push({...f,id:factId(f.field,f.surface,f.value)});
       if(!existing)map.set(f.field,{...f});
     }
@@ -103,12 +95,11 @@ function mergeFacts(base,candidates){
 
 export function buildTurnUnderstandingV3({context,previousState,legacyState,proposal,now=new Date()}){
   const before=snapshotFromCanonicalV3(previousState||{});
-  const base=before.facts;
   const semantic=proposalCandidates({proposal,context,state:legacyState||previousState||{}});
   const pending=pendingSurfaceCandidate({context,previous:previousState,state:legacyState||previousState||{},proposal,proposalFacts:semantic});
   const authoritative=authoritativeDelta({beforeState:previousState||{},afterState:legacyState||{},context});
   const invalidations=explicitInvalidations({beforeState:previousState||{},afterState:legacyState||{}});
-  const {facts,tentative}=mergeFacts(base,[...semantic,...(pending?[pending]:[]),...authoritative]);
+  const {facts,tentative}=mergeFacts(before.facts,[...semantic,...(pending?[pending]:[]),...authoritative],invalidations);
   const msg=currentMessage(context);
   const snapshot={version:1,turn:{text:clean(currentText(context),1000),message_id:msg?.id||null,created_at:msg?.created_at||now.toISOString()},facts,tentative,invalidations,
     signals:{goal:legacyState?.goal||previousState?.goal||'UNKNOWN',message_role:proposal?.dialogue?.message_role||null,service_id:legacyState?.entities?.service?.value||null,delivery_mode:legacyState?.entities?.delivery_mode?.value||null},errors:[]};
@@ -121,11 +112,12 @@ export function runTurnUnderstandingShadowV3(args){
   catch(error){return {ok:false,snapshot:null,error:safeV3ShadowError(error)};}
 }
 
+const safeSummaryValue=value=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?value:null;
 export function v3ShadowSummary(result){
-  if(!result?.ok)return {ok:false,error:result?.error||{code:'V3_SHADOW_ERROR'}};
+  if(!result?.ok)return {ok:false,retention_ok:false,error:result?.error||{code:'V3_SHADOW_ERROR'}};
   const snapshot=result.snapshot;
-  return {ok:true,version:snapshot.version,turn_message_id:snapshot.turn.message_id,
-    verified:snapshot.facts.filter(f=>f.status==='VERIFIED').map(f=>f.field),
-    tentative:snapshot.tentative.map(f=>({field:f.field,candidate_value:f.candidate_value??null,resolution:f.resolution})),
+  return {ok:true,retention_ok:true,version:snapshot.version,turn_message_id:snapshot.turn.message_id,
+    facts:snapshot.facts.filter(f=>SUMMARY_FIELDS.has(f.field)).map(f=>({field:f.field,status:f.status,value:safeSummaryValue(f.value),source:f.source,resolution:f.resolution})),
+    tentative:snapshot.tentative.map(f=>({field:f.field,candidate_value:safeSummaryValue(f.candidate_value),resolution:f.resolution})),
     invalidations:snapshot.invalidations.map(x=>({field:x.field,reason:x.reason}))};
 }
