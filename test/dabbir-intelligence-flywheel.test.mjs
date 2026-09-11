@@ -15,4 +15,13 @@ test('capability registry starts shadow-only and cannot become execution authori
 test('planner context truncates retrieved knowledge',()=>{const rows=safeKnowledgeContext([{knowledge_key:'x'.repeat(300),knowledge_type:'policy',content:'a'.repeat(3000),score:.9}]);assert.equal(rows[0].knowledge_key.length,180);assert.equal(rows[0].content.length,1200)});
 test('production failure mining delegates to database without applying changes',async()=>{let args;const result=await mineProductionFailures({rpc:async(name,p)=>{args=[name,p];return {ok:true,auto_apply:false}},since:'48 hours'});assert.equal(args[0],'dabbir_ai_failure_mine_v1');assert.equal(result.auto_apply,false)});
 
-test('WhatsApp semantic planner consumes only guarded business-scoped RAG context',()=>{const source=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');assert.match(source,/import \{ retrieveDabbirKnowledge \} from '\.\/_dabbir-knowledge-rag\.js'/);assert.match(source,/retrieveDabbirKnowledge\(\{businessId:c\.business\.id,query:message,rpc:serviceRpc,env:process\.env,fetchImpl:fetch,limit:5\}\)/);assert.match(source,/context:\{\.\.\.safeContext,retrieved_business_knowledge:retrieved\}/);assert.doesNotMatch(source,/retrieved_business_knowledge[^\n]{0,200}(?:CREATE_BOOKING|CANCEL_BOOKING|RESCHEDULE_BOOKING)\s*\(/)});
+test('canonical conversation runtime consumes only guarded business-scoped RAG context',()=>{
+  const core=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
+  const runtime=fs.readFileSync(new URL('../api/_dabbir-conversation-runtime.js',import.meta.url),'utf8');
+  assert.match(core,/import \{ runConversationRuntimeTurn \} from '\.\/_dabbir-conversation-runtime\.js'/);
+  assert.doesNotMatch(core,/\.\/_dabbir-knowledge-rag\.js/);
+  assert.match(runtime,/import \{ retrieveDabbirKnowledge \} from '\.\/_dabbir-knowledge-rag\.js'/);
+  assert.match(runtime,/retrieveDabbirKnowledge\(\{[\s\S]*?businessId:c\.business\.id,[\s\S]*?query:message,[\s\S]*?rpc,[\s\S]*?env:process\.env,[\s\S]*?fetchImpl:fetch,[\s\S]*?limit:5,[\s\S]*?\}\)/);
+  assert.match(runtime,/context:\{\.\.\.safeContext,retrieved_business_knowledge:retrieved\}/);
+  assert.doesNotMatch(runtime,/retrieved_business_knowledge[^\n]{0,200}(?:CREATE_BOOKING|CANCEL_BOOKING|RESCHEDULE_BOOKING)\s*\(/);
+});
