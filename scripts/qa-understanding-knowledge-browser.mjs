@@ -11,10 +11,11 @@ const server=http.createServer((req,res)=>{
   const language=req.url.includes('lang=en')?'en':'ar';
   res.setHeader('content-type','text/html;charset=utf-8');
   res.end(`<!doctype html><html lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px system-ui;background:#111;color:white}#screen-automations{display:none}#tour{display:none;position:fixed;inset:0;z-index:120;background:#234a;pointer-events:auto}</style><div id="screen-automations"><div class="hero"></div></div><div id="dabbirActionCenter"></div><div id="tour">Synthetic onboarding overlay</div><script>
-let workspace={business:{id:'qa-business'},membership:{role:'owner'}},status=null,version=0,writes=[];
+let workspace={business:{id:'qa-business'},membership:{role:'owner'}},status=null,version=0,writes=[],knowledgeReads=0;
 window.fetch=async(url,options={})=>{
  if(options.method==='POST'){const body=JSON.parse(options.body);writes.push(body.action);status={propose:'PROPOSED',propose_correction:'PROPOSED',approve:'OWNER_APPROVED',revoke:'REVOKED',rollback:'OWNER_APPROVED'}[body.action];version++;document.querySelector('#tour').style.display='block'}
- return {ok:true,json:async()=>({ok:true,services:[{id:'qa-service',name:'Gold wash',active:true}],proposals:status?[{id:'qa-proposal',entity_type:'service',alias:'VIP',target_id:'qa-service',status,version}]:[],audit:[]})};
+ const isKnowledge=String(url).includes('/api/understanding-knowledge');const staleBootstrap=isKnowledge&&++knowledgeReads===1;
+ return {ok:true,json:async()=>({ok:true,services:staleBootstrap?[]:[{id:'qa-service',name:'Gold wash',active:true}],proposals:status?[{id:'qa-proposal',entity_type:'service',alias:'VIP',target_id:'qa-service',status,version}]:[],audit:[]})};
 };
 setTimeout(()=>{const host=document.createElement('div');host.className='dac-head';document.querySelector('#dabbirActionCenter').append(host)},900);
 </script><script src="/knowledge.js"></script></html>`);
@@ -29,6 +30,9 @@ try{
    const entry={engine:name,language,width,status:'RUNNING'};results.push(entry);
    try{
     await page.goto(origin+'/?lang='+language);await page.locator('#dabbirActionCenter #dabbirMemoryButton').click();
+    // The first bootstrap read deliberately has no services. Explicit owner open must
+    // refresh the authoritative knowledge snapshot instead of pinning stale empty state.
+    await page.locator('select[name="service"] option[value="qa-service"]').waitFor();
     await page.locator('input[name="alias"]').fill('VIP');await page.locator('select[name="service"]').selectOption('qa-service');
     // The live English journey exposed a refresh between filling and submitting.
     // Exercise that transition in both engines and languages with native inputs.
@@ -49,8 +53,8 @@ try{
     await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).click();
     await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).click();
     await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
-    const evidence=await page.evaluate(()=>({actions:writes,status,version,modal:document.querySelector('#dabbirMemoryOverlay').matches(':modal'),tourVisible:getComputedStyle(document.querySelector('#tour')).display==='block'}));
-    if(evidence.actions.join(',')!==action+',approve,revoke,rollback'||!evidence.modal||!evidence.tourVisible||evidence.version!==4)throw Error('KNOWLEDGE_BROWSER_EVIDENCE_INVALID');
+    const evidence=await page.evaluate(()=>({actions:writes,status,version,knowledgeReads,modal:document.querySelector('#dabbirMemoryOverlay').matches(':modal'),tourVisible:getComputedStyle(document.querySelector('#tour')).display==='block'}));
+    if(evidence.actions.join(',')!==action+',approve,revoke,rollback'||!evidence.modal||!evidence.tourVisible||evidence.version!==4||evidence.knowledgeReads<2)throw Error('KNOWLEDGE_BROWSER_EVIDENCE_INVALID');
     entry.status='PASS';entry.evidence=evidence;
    }catch(error){entry.status='FAIL';entry.error=String(error.message);await page.screenshot({path:path.join(output,`knowledge-${name}-${language}-${width}.png`)}).catch(()=>{});throw error}
    finally{await context.close()}
