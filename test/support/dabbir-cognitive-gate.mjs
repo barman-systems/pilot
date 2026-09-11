@@ -13,10 +13,12 @@ function transientTelemetry(telemetry){
 
 export function classifyProviderNoise(response){
   const status=Number(response?.status||0),body=response?.json||{};
-  if([0,429,503,504].includes(status))return true;
-  if(status===502&&body?.error==='AI_PLANNER_UNAVAILABLE')return true;
+  if(status===0||status===429)return true;
   const rows=providerRows(body),errored=rows.filter(row=>row?.error);
-  return errored.length>0&&errored.every(row=>transientTelemetry(row?.telemetry));
+  const transientProviderFailure=errored.length>0&&errored.every(row=>transientTelemetry(row?.telemetry));
+  if(status===502&&body?.error==='AI_PLANNER_UNAVAILABLE')return true;
+  if([502,503,504].includes(status)&&transientProviderFailure)return true;
+  return false;
 }
 
 export function cognitiveCheckResult(response,{checkCount=null,expectedKeys=null,requireCognitiveProbe=false}={}){
