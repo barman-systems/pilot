@@ -22,15 +22,6 @@ function firstEnv(...names) {
   return '';
 }
 
-function existingMetaDebugToken() {
-  return firstEnv(
-    'DABBIR_WHATSAPP_ACCESS_TOKEN',
-    'PILOT_WHATSAPP_ACCESS_TOKEN',
-    'WHATSAPP_ACCESS_TOKEN',
-    'META_WHATSAPP_ACCESS_TOKEN',
-  );
-}
-
 function metaProviderError(payload, response, fallback) {
   const error = new Error(String(payload?.error?.message || fallback).slice(0, 300));
   error.status = 502;
@@ -295,14 +286,6 @@ function idsFromRows(rows) {
   return (Array.isArray(rows) ? rows : []).map(row => cleanId(row?.id)).filter(Boolean);
 }
 
-function granularTargetIds(granularScopes, scopeName) {
-  return [...new Set((Array.isArray(granularScopes) ? granularScopes : [])
-    .filter(item => String(item?.scope || '') === scopeName)
-    .flatMap(item => Array.isArray(item?.target_ids) ? item.target_ids : [])
-    .map(cleanId)
-    .filter(Boolean))];
-}
-
 function businessIdFromActor(payload) {
   const direct = cleanId(payload?.business?.id || payload?.business);
   return direct || '';
@@ -386,43 +369,10 @@ async function narrowWabasByCoexistencePhone(platform, token, wabaIds) {
 }
 
 export async function discoverWabaIdFromAccessToken(platform, token, options = {}) {
-  const appAccessToken = `${String(platform?.appId || '')}|${String(platform?.appSecret || '')}`;
-  if (!platform?.appId || !platform?.appSecret || !token) {
+  if (!platform?.graphVersion || !token) {
     throw Object.assign(new Error('META_WABA_DISCOVERY_CONFIGURATION_MISSING'), { status: 503 });
   }
-  const authorizationToken = String(options.authorizationToken || existingMetaDebugToken() || appAccessToken).trim();
-  if (!authorizationToken) {
-    throw Object.assign(new Error('META_WABA_DISCOVERY_CONFIGURATION_MISSING'), { status: 503 });
-  }
-  const payload = await graphJson(platform, 'debug_token', authorizationToken, {
-    params: { input_token: String(token) },
-  });
-  if (payload?.data?.is_valid === false) {
-    throw Object.assign(new Error('META_WABA_DISCOVERY_FAILED'), { status: 502 });
-  }
-  const granularScopes = Array.isArray(payload?.data?.granular_scopes) ? payload.data.granular_scopes : [];
-  const uniqueWabas = granularTargetIds(granularScopes, 'whatsapp_business_management');
-  if (uniqueWabas.length === 1) return uniqueWabas[0];
-  if (uniqueWabas.length > 1) {
-    throw Object.assign(new Error('META_WABA_RESOLUTION_REQUIRED'), { status: 409 });
-  }
-
-  const businessTargetIds = granularTargetIds(granularScopes, 'business_management');
-  const scopes = new Set((Array.isArray(payload?.data?.scopes) ? payload.data.scopes : []).map(value => String(value || '')));
-  const granularNames = new Set(granularScopes.map(item => String(item?.scope || '')));
-  const regressionShape = scopes.has('whatsapp_business_management')
-    || scopes.has('business_management')
-    || granularNames.has('business_management');
-  if (!regressionShape) throw Object.assign(new Error('META_WABA_DISCOVERY_EMPTY'), { status: 409 });
-
-  console.info('dabbir_whatsapp_debug_scope_shape', {
-    whatsapp_target_count: uniqueWabas.length,
-    business_target_count: businessTargetIds.length,
-    scope_count: scopes.size,
-    granular_scope_names: [...granularNames].slice(0, 12),
-  });
-
-  const graphWabas = await listBusinessWabas(platform, token, businessTargetIds);
+  const graphWabas = await listBusinessWabas(platform, token);
   if (graphWabas.length === 1) return graphWabas[0];
   if (graphWabas.length > 1 && options.onboardingMode === 'whatsapp_business_app_onboarding') {
     const coexistenceWabas = await narrowWabasByCoexistencePhone(platform, token, graphWabas);
@@ -513,7 +463,7 @@ export default async function handler(req, res) {
       waba_id: stored?.waba_id || wabaId,
       phone_number_id: stored?.phone_number_id || phoneNumberId,
       connected_at: stored?.connected_at || now.toISOString(),
-      waba_source: cleanId(body?.waba_id) ? 'embedded_session' : 'debug_token',
+      waba_source: cleanId(body?.waba_id) ? 'embedded_session' : 'graph_edges',
       meta_app_domain_repair_attempted: Boolean(exchangeResult.domainRepairAttempted),
       meta_app_domain_repaired: Boolean(exchangeResult.domainRepairChanged),
       meta_sdk_redirect_fallback_used: Boolean(exchangeResult.redirectFallbackUsed),
