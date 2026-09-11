@@ -35,6 +35,30 @@ export function brainResponseV3({text,plan_id=null,metadata=null}){
   return assertFinalResponseSourceV3({source:V3_RESPONSE_SOURCE,text:clean(text,1600),plan_id,metadata});
 }
 
+export function assertDialoguePlanV3({plan,state,response}){
+  const facts=verifiedFacts(state),question=plan?.next_question||null;
+  const asked=arr(question?.fields).map(x=>clean(x,80)).filter(Boolean);
+  const confirmedAsked=asked.filter(field=>facts.has(field));
+  if(confirmedAsked.length){
+    throw Object.assign(new Error('V3_ASKED_CONFIRMED_FACT'),{code:'V3_ASKED_CONFIRMED_FACT',fields:confirmedAsked});
+  }
+  if(state?.intent_confirmed===true&&asked.includes('intent_confirmation')){
+    throw Object.assign(new Error('V3_REDUNDANT_INTENT_CONFIRMATION'),{code:'V3_REDUNDANT_INTENT_CONFIRMATION'});
+  }
+  const tentativeFields=new Set(arr(state?.tentatives).map(x=>clean(x?.field,80)).filter(Boolean));
+  const surfaced=new Set(arr(plan?.surfaced_tentative_fields).map(x=>clean(x,80)).filter(Boolean));
+  const dropped=[...tentativeFields].filter(field=>!surfaced.has(field)&&!asked.includes(field));
+  if(dropped.length){
+    throw Object.assign(new Error('V3_TENTATIVE_FACT_DROPPED'),{code:'V3_TENTATIVE_FACT_DROPPED',fields:dropped});
+  }
+  if(response){
+    assertFinalResponseSourceV3(response);
+    const marks=(String(response.text).match(/[?؟]/g)||[]).length;
+    if(marks>1)throw Object.assign(new Error('V3_MULTIPLE_USER_QUESTIONS'),{code:'V3_MULTIPLE_USER_QUESTIONS',count:marks});
+  }
+  return plan;
+}
+
 export function safeV3ShadowError(error){
-  return {code:clean(error?.code||error?.message||'V3_SHADOW_ERROR',120),lost:arr(error?.lost).slice(0,12).map(x=>({field:clean(x?.field,80)}))};
+  return {code:clean(error?.code||error?.message||'V3_SHADOW_ERROR',120),lost:arr(error?.lost).slice(0,12).map(x=>({field:clean(x?.field,80)})),fields:arr(error?.fields).slice(0,12).map(x=>clean(x,80))};
 }
