@@ -48,10 +48,6 @@ test('AI booking inserts whatsapp source and never overrides confirmation or dep
   must(core,/Your booking is confirmed/);
 });
 
-// Arbitrary provider identifiers and missing/ungrounded mutation state are
-// behavior-tested in dabbir-brain-contract, semantic-provider-contract and
-// dabbir-whatsapp-worker-authority suites against the actual executor.
-
 test('availability and booking confirmation use verified business timezone without Dubai fallback',()=>{
   must(actions,/select b\.timezone into v_timezone/);
   assert.doesNotMatch(actions,/Asia\/Dubai/);
@@ -66,9 +62,7 @@ test('availability migration never mixes a rowtype target with scalar INTO targe
 });
 
 test('cancel and reschedule are scoped to the conversation customer and stop after handoff',()=>{
-  for(const src of [actions,patch]){
-    must(src,/a\.customer_id=v_conversation\.customer_id/);
-  }
+  for(const src of [actions,patch])must(src,/a\.customer_id=v_conversation\.customer_id/);
   must(patch,/state in \('human_active','action_required'\)/);
   must(patch,/AI_BLOCKED_BY_HUMAN_TAKEOVER/);
   must(actions,/PAST_APPOINTMENT_NOT_CANCELLABLE_BY_AI/);
@@ -80,17 +74,15 @@ test('same-as-last-time is grounded from customer booking history',()=>{
   must(actions,/a\.customer_id=v_customer_id/);
   const resolver=fs.readFileSync(path.join(root,'api/_dabbir-context-resolver.js'),'utf8');
   must(resolver,/operational_history/);
-  // dabbir-understanding-v2-db executes live SQL history filtering and rejects
-  // stale historical selection before any appointment write.
 });
 
 test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{
-  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([^\n]+)\}/)?.[1]||'';
+  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([\s\S]*?)\}(?=if\(Number\(error\?\.providerStatus\)|\s*if\(Number\(error\?\.providerStatus\))/)?.[1]||'';
   assert.ok(ambiguous,'ambiguous-outbound branch must exist before retry classification');
   must(ambiguous,/requireHumanForFailure/);
   must(ambiguous,/Ambiguous WhatsApp delivery requires human review/);
   assert.doesNotMatch(ambiguous,/finish\(claim,'RETRY'/);
-  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?\n\}/)?.[0]||'';
+  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?return \{state:'HUMAN_REQUIRED',error:code\};\s*\}/)?.[0]||'';
   must(escalation,/finish\(claim,'HUMAN_REQUIRED'/);
   must(escalation,/dabbir_whatsapp_ai_handoff|handoff\(context/);
 });

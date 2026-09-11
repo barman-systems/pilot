@@ -28,7 +28,7 @@ test('clean first request understands MOBILE and NOW without inheriting old serv
  assert.equal(r.state.facts.find(x=>x.field==='immediacy')?.value,'NOW');
  assert.equal(r.state.facts.some(x=>x.field==='service'),false);
  assert.deepEqual(r.plan.next_question.fields,['service']);
- assert.match(r.response.text,/الحين/);assert.match(r.response.text,/أي خدمة/);
+ assert.match(r.response.text,/الحين/);assert.match(r.response.text,/خارجي/);assert.match(r.response.text,/40 درهم/);assert.equal((r.response.text.match(/[؟?]/g)||[]).length,1);
 });
 
 test('service selection is decisive booking behavior and never asks intent_confirmation',()=>{
@@ -40,7 +40,7 @@ test('service selection is decisive booking behavior and never asks intent_confi
  const r=planConversationTurnV3({previousState:previous,understanding:u,episode:e,context:c});
  assert.equal(r.state.intent_confirmed,true);assert.equal(r.plan.next_question.fields.includes('intent_confirmation'),false);
  assert.deepEqual(r.plan.next_question.fields,['vehicle','location']);
- assert.doesNotMatch(r.response.text,/تقصد تبا تحجز/);assert.match(r.response.text,/خارجي/);assert.match(r.response.text,/سيارتك/);
+ assert.doesNotMatch(r.response.text,/تقصد تبا تحجز/);assert.match(r.response.text,/خارجي/);assert.match(r.response.text,/صالون/);assert.match(r.response.text,/ستيشن\/SUV/);assert.match(r.response.text,/موقع/);
 });
 
 test('unseen الاستيشن survives as station tentative and is surfaced, not repeated generic vehicle question',()=>{
