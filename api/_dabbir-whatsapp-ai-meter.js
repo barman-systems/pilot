@@ -164,7 +164,7 @@ export async function generateDABBIRAiReply(args={}){
     let response;
     try{response=await upstreamFetch(url,nextOptions);}catch(error){
       if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED','PROVIDER_429_COOLDOWN'].includes(error?.code)){
-        if(error?.code!=='PROVIDER_429_COOLDOWN')skippedAttempts.push({provider,model:requestedModel,reason:error.code});
+        if(error?.code!=='PROVIDER_429_COOLDOWN')skippedAttempts.push({provider,reason:error.code});
         throw error;
       }
       attempts.push({endpoint:provider,status:0,duration_ms:Date.now()-started,outcome:'NETWORK_ERROR'});
