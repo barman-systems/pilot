@@ -18,8 +18,8 @@ const client=String.raw`
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
   const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent=${JSON.stringify(css)};document.head.appendChild(style);
   const nativeFetch=window.fetch.bind(window);
-  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false});
-  let state=emptyState(null),generation=0,returnFocus=null;
+  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false,openFresh:false});
+  let state=emptyState(null),generation=0,returnFocus=null,loadPromise=null;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
     button:'سياسات دبّر',candidate:'اقتراح جديد',title:'سياسات المالك',
@@ -46,21 +46,26 @@ const client=String.raw`
     return id;
   }
   async function load(force=false){
-    const id=syncScope();if(!id||state.loading)return;
+    const id=syncScope();if(!id)return;
+    if(state.loading){const pending=loadPromise;if(!force)return pending;await pending;return load(true)}
     if(!force&&state.loaded)return renderButton();
     state.loading=true;const epoch=generation;
     document.querySelectorAll('#dabbirMemoryOverlay button,#dabbirMemoryOverlay input,#dabbirMemoryOverlay select').forEach(el=>el.disabled=true);
-    const get=async path=>{
-      const response=await nativeFetch(path+'?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
-      const payload=await response.json().catch(()=>null);
-      if(!response.ok||!payload?.ok)throw new Error('OWNER_KNOWLEDGE_LOOKUP_FAILED');
-      return payload;
-    };
-    const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
-    if(!current(id,epoch))return;
-    const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
-    state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',policyError:policies.status!=='fulfilled',loaded:true};
-    renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
+    const task=(async()=>{
+      const get=async path=>{
+        const response=await nativeFetch(path+'?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+        const payload=await response.json().catch(()=>null);
+        if(!response.ok||!payload?.ok)throw new Error('OWNER_KNOWLEDGE_LOOKUP_FAILED');
+        return payload;
+      };
+      const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
+      if(!current(id,epoch))return;
+      const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
+      state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',policyError:policies.status!=='fulfilled',loaded:true,openFresh:Boolean(force)};
+      renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
+    })();
+    loadPromise=task;
+    try{return await task}finally{if(loadPromise===task)loadPromise=null}
   }
   function renderButton(){
     if(!syncScope())return;
@@ -68,7 +73,7 @@ const client=String.raw`
     const autoHero=document.querySelector('#screen-automations .hero');
     const host=actionHead||autoHero;if(!host)return;
     let button=document.querySelector('#dabbirMemoryButton');
-    if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',()=>{openDialog();return load(true)});const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
+    if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',()=>{if(state.openFresh){state.openFresh=false;return openDialog()}return load(true).then(()=>{if(!syncScope())return;state.openFresh=false;openDialog()})});const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
     // The automation screen exists before the asynchronous dashboard mounts.
     // Move the existing control when its authoritative visible host arrives.
     if(button.parentNode!==host)host.append(button);
