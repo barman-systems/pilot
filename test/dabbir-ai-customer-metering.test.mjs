@@ -28,15 +28,19 @@ test('explicit numeric zero is valid provider cost evidence',()=>{
 
 const meter=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-meter.js',import.meta.url),'utf8');
 const whatsapp=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
+const conversationRuntime=fs.readFileSync(new URL('../api/_dabbir-conversation-runtime.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907133700_dabbir_ai_customer_cost_metering_v1.sql',import.meta.url),'utf8');
 
-test('WhatsApp AI routes through the per-business meter',()=>{
+test('WhatsApp AI routes through the per-business meter via canonical conversation runtime',()=>{
   const interpreter=fs.readFileSync(new URL('../api/_dabbir-semantic-interpreter.js',import.meta.url),'utf8');
-  assert.match(whatsapp,/\.\/_dabbir-semantic-interpreter\.js/);
+  assert.match(whatsapp,/\.\/_dabbir-conversation-runtime\.js/);
+  assert.doesNotMatch(whatsapp,/\.\/_dabbir-semantic-interpreter\.js/);
+  assert.match(conversationRuntime,/\.\/_dabbir-semantic-interpreter\.js/);
   assert.match(interpreter,/\.\/_dabbir-whatsapp-ai-meter\.js/);
-  assert.match(whatsapp,/meteringContext:\{business:\{id:c\.business\.id/);
-  assert.match(whatsapp,/conversation:\{id:c\.conversation\.id/);
-  assert.match(whatsapp,/batch_message_created_at/);
+  assert.match(conversationRuntime,/meteringContext:\{/);
+  assert.match(conversationRuntime,/business:\{id:c\.business\.id\}/);
+  assert.match(conversationRuntime,/conversation:\{id:c\.conversation\.id\}/);
+  assert.match(conversationRuntime,/batch_message_created_at/);
 });
 
 test('meter preserves paid fallback and attributes Vercel spend to the business',()=>{
