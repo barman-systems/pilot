@@ -21,6 +21,10 @@ function serviceExactFromMessage(context,raw){const wanted=norm(raw);if(!wanted)
 function exactSurface(raw,surface){const s=clean(surface,240);return !!s&&raw.includes(s);}
 function finite01(v){return typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1;}
 function parseJsonOnly(raw){const text=String(raw??'').trim();if(!text.startsWith('{')||!text.endsWith('}')||text.length>12000)return null;try{return JSON.parse(text)}catch{return null}}
+function normalizeModelContract(x){
+  if(!x||Array.isArray(x)||typeof x!=='object')return x;
+  return {...x,service_candidate:x.service_candidate??null,entities:Array.isArray(x.entities)?x.entities:[],side_questions:Array.isArray(x.side_questions)?x.side_questions:[],invalidated_fields:Array.isArray(x.invalidated_fields)?x.invalidated_fields:[],requested_action:x.requested_action??'NONE',confirmation:x.confirmation??null};
+}
 function validModelContract(x,raw){
   if(!x||Array.isArray(x)||!INTENTS.has(x.intent)||!ROLES.has(x.role)||!ACTIONS.has(x.requested_action)||!finite01(x.confidence))return false;
   if(!Array.isArray(x.entities)||x.entities.length>12||!Array.isArray(x.side_questions)||x.side_questions.length>4||!Array.isArray(x.invalidated_fields)||x.invalidated_fields.length>8)return false;
@@ -50,7 +54,7 @@ function fastPath({context,previousState,raw}){
   const exact=serviceExactFromMessage(context,trimmed);if(exact&&pending?.fields?.includes('service'))return {proposal:proposalBase({serviceName:serviceLabel(exact),serviceSurface:trimmed,serviceVerified:true}),fastFacts};
   const p=context?.pending_state,payload=p?.payload||{};
   if(ordinal&&p?.pending_action==='choose_slot'&&payload.presented===true&&arr(payload.slots).length>=Number(ordinal[1])){const index=Number(ordinal[1])-1,slot=payload.slots[index];fastFacts.push({field:'slot',value:index,source:'CUSTOMER_CONFIRMED',resolution:'PRESENTED_SLOT_SELECTION',confidence:1,starts_at:slot?.starts_at||null,service_id:slot?.service_id||null,worker_id:slot?.worker_id||null});return {proposal:proposalBase({intent:previousState?.goal==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':'BOOKING',action:previousState?.goal==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':'CREATE_BOOKING',serviceSurface:trimmed}),fastFacts};}
-  if(fastFacts.some(f=>f.field==='location')&&previousState?.goal==='BOOK_SERVICE')return {proposal:proposalBase({serviceSurface:trimmed||'location'}),fastFacts};
+  if(fastFacts.some(f=>f.field==='location')&&previousState?.goal==='BOOK_SERVICE')return {proposal:proposalBase({role:'CONTINUATION',serviceSurface:null}),fastFacts};
   return {proposal:null,fastFacts};
 }
 
@@ -59,13 +63,14 @@ export async function interpretConversationTurnV3({context,previousState=null,ge
   const fast=fastPath({context,previousState,raw});if(fast.proposal)return {...fast,provider:'deterministic-v3-fast-path',model:null,telemetry:null};
   const result=await generate({project:'dabbir_businesses',semantic:'v3',language:'auto',message:clean(raw,2000),businessContext:JSON.stringify(providerContext(context,previousState,referenceTime)),history:roleHistory(context),meteringContext:{business:{id:context?.business?.id},conversation:{id:context?.conversation?.id},batch_message_created_at:referenceTime}});
   if(!result?.ok)throw Object.assign(new Error('V3_INTERPRETER_UNAVAILABLE'),{code:'V3_INTERPRETER_UNAVAILABLE',telemetry:result?.telemetry||null});
-  const x=parseJsonOnly(result.reply);if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result?.telemetry||null});
+  const x=normalizeModelContract(parseJsonOnly(result.reply));if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result?.telemetry||null});
   let serviceName=null;if(x.service_candidate?.label&&x.service_candidate?.surface&&x.service_candidate.confidence>=.65){const s=serviceByLabel(context,x.service_candidate.label);if(s)serviceName=serviceLabel(s);}
   const entities=x.entities.map(e=>({entity:e.entity,value:e.value,evidence:e.surface,confidence:e.confidence,correction:e.correction}));
   const serviceQuestion=x.side_questions.find(q=>q.type==='price'||q.type==='duration_minutes')||null;
-  const proposal={intent:x.intent==='UNKNOWN'?'SUPPORT':x.intent,action:x.requested_action==='NONE'?'REPLY':x.requested_action,confidence:x.confidence,serviceName,serviceSurface:x.service_candidate?.surface||null,serviceCandidateLabel:x.service_candidate?.label||null,serviceVerified:false,entities,
+  const semanticServiceSurface=x.service_candidate?.label?x.service_candidate?.surface:null;
+  const proposal={intent:x.intent==='UNKNOWN'?'SUPPORT':x.intent,action:x.requested_action==='NONE'?'REPLY':x.requested_action,confidence:x.confidence,serviceName,serviceSurface:semanticServiceSurface,serviceCandidateLabel:x.service_candidate?.label||null,serviceVerified:false,entities,
     serviceQuestion:serviceQuestion?{field:serviceQuestion.type,evidence:serviceQuestion.surface}:null,dialogue:{message_role:x.role,evidence:clean(raw,300),invalidated_fields:x.invalidated_fields},requestSpans:[],contextReference:null};
   return {proposal,fastFacts:fast.fastFacts,provider:result.provider,model:result.model,telemetry:result.telemetry||null,raw_interpretation:{intent:x.intent,role:x.role,service_candidate_label:x.service_candidate?.label||null,requested_action:x.requested_action}};
 }
 
-export const _v3InterpreterTest={norm,serviceByLabel,serviceExactFromMessage,validModelContract,fastPath,providerContext};
+export const _v3InterpreterTest={norm,serviceByLabel,serviceExactFromMessage,normalizeModelContract,validModelContract,fastPath,providerContext};
