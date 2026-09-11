@@ -5,6 +5,9 @@ const DEFAULT_MODEL='minimax/minimax-m3-free';
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const ALLOWED_KINDS=new Set(['REPO_CHANGE','DATA_QUERY','EXTERNAL_ACTION','REVIEW_REQUIRED']);
 const ALLOWED_RISKS=new Set(['LOW','MEDIUM','HIGH','CRITICAL']);
+const EXECUTIVE_ROUTES=new Set(['REPO_CHANGE','DATA_QUERY','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED','OWNER_GATE']);
+const EXECUTIVE_SEVERITIES=new Set(['LOW','MEDIUM','HIGH','CRITICAL']);
+const HEALTH_STATES=new Set(['HEALTHY','DEGRADED','UNKNOWN']);
 
 function ownerGate(text){
   return /(?:otp|one[- ]time password|kyc|اعرف عميلك|رمز تحقق|رمز التحقق|توقيع قانوني|legal signature|دفع مالي|تحويل مالي|بيانات بطاقة|card details)/i.test(String(text||''));
@@ -57,25 +60,161 @@ function parseJson(payload){
   try{return JSON.parse(value)}catch{return null}
 }
 
-function validatedTasks(raw){
-  if(!Array.isArray(raw)||raw.length<2||raw.length>12)throw new Error('PLAN_TASKS_INVALID');
-  return raw.map((item,index)=>{
-    const commandText=clean(item?.command_text,1600);
-    if(commandText.length<4)throw new Error('PLAN_TASK_TEXT_INVALID');
-    if(ownerGate(commandText)||String(item?.kind||'').toUpperCase()==='OWNER_GATE')throw new Error('PLAN_OWNER_GATE_REQUIRED');
-    const inferred=classifyAutomationTask(commandText);
-    const requestedKind=String(item?.kind||'').toUpperCase();
-    const kind=ALLOWED_KINDS.has(requestedKind)?requestedKind:inferred.kind;
-    const requestedRisk=String(item?.risk_level||'').toUpperCase();
-    const riskLevel=ALLOWED_RISKS.has(requestedRisk)?requestedRisk:inferred.risk_level;
-    return {
-      title:clean(item?.title||commandText,180),
-      command_text:commandText,
-      kind,
-      risk_level:riskLevel,
-      sequence:index+1,
+function list(value,max=12,itemMax=500){
+  return Array.isArray(value)?value.map(item=>clean(item,itemMax)).filter(Boolean).slice(0,max):[];
+}
+function healthDomains(value={}){
+  const result={};
+  for(const key of ['infrastructure','runtime','product','customer','economic','strategic']){
+    const state=String(value?.[key]||'UNKNOWN').toUpperCase();
+    result[key]=HEALTH_STATES.has(state)?state:'UNKNOWN';
+  }
+  return result;
+}
+function safeReality(value={}){
+  const confidence=Math.max(0,Math.min(1,Number(value?.confidence)||0));
+  return {
+    source:clean(value?.source||'UNAVAILABLE',160),
+    observed_at:clean(value?.observed_at||'',80),
+    freshness:clean(value?.freshness||'UNKNOWN',40).toUpperCase(),
+    confidence,
+    subject:clean(value?.subject||'DABBIR',160),
+    evidence_refs:list(value?.evidence_refs,12,500),
+    healthy:value?.healthy===true,
+    commit_sha:clean(value?.commit_sha||'UNAVAILABLE',80),
+  };
+}
+function failClosedUnderstanding(command,reality,reason,route='REVIEW_REQUIRED'){
+  return {
+    source:'FAIL_CLOSED',
+    route,
+    situation:{
+      what_changed:clean(command,800),
+      why_it_matters:'لا توجد دلالة كافية تسمح باختيار مسار تنفيذي مستقل بأمان.',
+      affected_goal:'',
+      severity:route==='OWNER_GATE'?'CRITICAL':'MEDIUM',
+      known_facts:[],
+      unknowns:[reason],
+      freshness:reality.freshness,
+      confidence:reality.confidence,
+      evidence_refs:reality.evidence_refs,
+      health_domains:healthDomains({}),
+    },
+    decision:{
+      options:route==='OWNER_GATE'?['OWNER_REQUIRED','NO_EXECUTION']:['REVIEW_REQUIRED','NO_EXECUTION'],
+      chosen_option:route==='OWNER_GATE'?'OWNER_REQUIRED':'REVIEW_REQUIRED',
+      reason,
+      risk:route==='OWNER_GATE'?'CRITICAL':'MEDIUM',
+      expected_outcome:'لا تنفيذ مستقل قبل اكتمال الفهم أو صلاحية المالك.',
+      rollback:'NO_MUTATION',
+      owner_required:route==='OWNER_GATE',
+      memory_refs:[],
+    },
+  };
+}
+
+export async function understandExecutiveSituation(command,context={},env=process.env){
+  const commandText=clean(command,4000);
+  const reality=safeReality(context?.reality||{});
+  const goals=Array.isArray(context?.goals)?context.goals.slice(0,12).map(goal=>({id:clean(goal?.id,80),title:clean(goal?.title,240),objective:clean(goal?.objective,800),status:clean(goal?.status,40),priority:Number(goal?.priority)||4})).filter(goal=>goal.id):[];
+  const memories=Array.isArray(context?.memory)?context.memory.slice(0,20).map(item=>({id:String(item?.id||''),memory_key:clean(item?.memory_key,180),confidence:Number(item?.confidence)||0,value:item?.value&&typeof item.value==='object'?item.value:{}})).filter(item=>item.id):[];
+  if(!commandText)return failClosedUnderstanding('',reality,'EMPTY_COMMAND');
+  if(ownerGate(commandText))return failClosedUnderstanding(commandText,reality,'OWNER_ONLY_AUTHORITY','OWNER_GATE');
+  const credential=await gatewayCredential(env);
+  if(!credential)return failClosedUnderstanding(commandText,reality,'SEMANTIC_GATEWAY_CREDENTIAL_MISSING');
+  const model=clean(env.BARMAN_AI_GATEWAY_MODEL||env.DABBIR_AI_GATEWAY_MODEL||DEFAULT_MODEL,120);
+  const schema={
+    type:'object',
+    properties:{
+      route:{type:'string',enum:['REPO_CHANGE','DATA_QUERY','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED']},
+      situation:{
+        type:'object',
+        properties:{
+          what_changed:{type:'string'},why_it_matters:{type:'string'},affected_goal:{type:'string'},
+          severity:{type:'string',enum:['LOW','MEDIUM','HIGH','CRITICAL']},
+          known_facts:{type:'array',items:{type:'string'},maxItems:10},
+          unknowns:{type:'array',items:{type:'string'},maxItems:10},
+          evidence_refs:{type:'array',items:{type:'string'},maxItems:12},
+          health_domains:{type:'object',properties:{
+            infrastructure:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+            runtime:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+            product:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+            customer:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+            economic:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+            strategic:{type:'string',enum:['HEALTHY','DEGRADED','UNKNOWN']},
+          },required:['infrastructure','runtime','product','customer','economic','strategic'],additionalProperties:false},
+        },
+        required:['what_changed','why_it_matters','affected_goal','severity','known_facts','unknowns','evidence_refs','health_domains'],additionalProperties:false,
+      },
+      decision:{
+        type:'object',
+        properties:{
+          options:{type:'array',items:{type:'string'},minItems:2,maxItems:5},chosen_option:{type:'string'},reason:{type:'string'},
+          risk:{type:'string',enum:['LOW','MEDIUM','HIGH','CRITICAL']},expected_outcome:{type:'string'},rollback:{type:'string'},owner_required:{type:'boolean'},
+          memory_refs:{type:'array',items:{type:'string'},maxItems:8},
+        },
+        required:['options','chosen_option','reason','risk','expected_outcome','rollback','owner_required','memory_refs'],additionalProperties:false,
+      },
+    },
+    required:['route','situation','decision'],additionalProperties:false,
+  };
+  const system=[
+    'You are the existing BARMAN Executive OS reasoning stage for DABBIR. Do not invent a new architecture.',
+    'Understand the current situation BEFORE execution routing. Keyword matching is not semantic understanding.',
+    'Return DATA_QUERY for read-only operational questions, REPO_CHANGE for one repository change, MULTI_STEP for objectives requiring multiple dependent actions, EXTERNAL_ACTION only for non-financial external actions, and REVIEW_REQUIRED when safe execution is not established.',
+    'Owner-only OTP, KYC, legal signatures and payments are already hard-gated before you are called and must never be authorized here.',
+    'Use only supplied facts. Unknown business/product/customer/economic state must remain UNKNOWN, never infer HEALTHY from green infrastructure.',
+    'affected_goal must be one supplied goal id or empty. memory_refs must contain only supplied memory ids.',
+    'If a supplied memory is materially relevant, cite it in memory_refs and explain its effect in the decision reason. Never cite irrelevant memory.',
+    'Choose the lowest-risk option that advances the affected goal and has an explicit rollback/containment path. Do not claim completion.',
+  ].join('\n');
+  try{
+    const response=await fetch(GATEWAY_ENDPOINT,{
+      method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
+      body:JSON.stringify({
+        model,
+        messages:[{role:'system',content:system},{role:'user',content:JSON.stringify({command:commandText,reality,goals,memory:memories})}],
+        temperature:0.05,max_tokens:1800,stream:false,
+        response_format:{type:'json_schema',json_schema:{name:'barman_executive_situation_decision',description:'Durable executive situation and decision',schema}},
+      }),
+      signal:AbortSignal.timeout(20000),
+    });
+    const payload=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(`EXECUTIVE_UNDERSTANDING_GATEWAY_HTTP_${response.status}`);
+    const parsed=parseJson(payload);
+    if(!parsed)throw new Error('EXECUTIVE_UNDERSTANDING_INVALID_JSON');
+    const route=String(parsed.route||'REVIEW_REQUIRED').toUpperCase();
+    if(!EXECUTIVE_ROUTES.has(route)||route==='OWNER_GATE')throw new Error('EXECUTIVE_ROUTE_INVALID');
+    const goalIds=new Set(goals.map(goal=>goal.id));
+    const memoryIds=new Set(memories.map(item=>item.id));
+    const situation={
+      what_changed:clean(parsed.situation?.what_changed||commandText,1200),
+      why_it_matters:clean(parsed.situation?.why_it_matters,1200),
+      affected_goal:goalIds.has(clean(parsed.situation?.affected_goal,80))?clean(parsed.situation?.affected_goal,80):'',
+      severity:EXECUTIVE_SEVERITIES.has(String(parsed.situation?.severity||'').toUpperCase())?String(parsed.situation.severity).toUpperCase():'MEDIUM',
+      known_facts:list(parsed.situation?.known_facts,10,600),
+      unknowns:list(parsed.situation?.unknowns,10,600),
+      freshness:reality.freshness,
+      confidence:reality.confidence,
+      evidence_refs:[...new Set([...reality.evidence_refs,...list(parsed.situation?.evidence_refs,12,500)])].slice(0,12),
+      health_domains:healthDomains(parsed.situation?.health_domains),
     };
-  });
+    const memoryRefs=list(parsed.decision?.memory_refs,8,80).filter(id=>memoryIds.has(id));
+    const decision={
+      options:list(parsed.decision?.options,5,800),
+      chosen_option:clean(parsed.decision?.chosen_option,1000),
+      reason:clean(parsed.decision?.reason,1600),
+      risk:ALLOWED_RISKS.has(String(parsed.decision?.risk||'').toUpperCase())?String(parsed.decision.risk).toUpperCase():situation.severity,
+      expected_outcome:clean(parsed.decision?.expected_outcome,1200),
+      rollback:clean(parsed.decision?.rollback,1200)||'NO_MUTATION',
+      owner_required:parsed.decision?.owner_required===true,
+      memory_refs:memoryRefs,
+    };
+    if(decision.options.length<2||!decision.chosen_option||!decision.reason)return failClosedUnderstanding(commandText,reality,'EXECUTIVE_DECISION_INCOMPLETE');
+    return {source:'AI_GATEWAY',model,route,situation,decision};
+  }catch(error){
+    return {...failClosedUnderstanding(commandText,reality,clean(error?.message||error,240)),model};
+  }
 }
 
 export async function planExecutiveCommand(command,env=process.env){
@@ -117,6 +256,27 @@ export async function planExecutiveCommand(command,env=process.env){
   const parsed=parseJson(payload);
   if(!parsed)throw new Error('PLANNER_GATEWAY_INVALID_JSON');
   return {source:'AI_GATEWAY',model,tasks:validatedTasks(parsed.tasks)};
+}
+
+function validatedTasks(raw){
+  if(!Array.isArray(raw)||raw.length<2||raw.length>12)throw new Error('PLAN_TASKS_INVALID');
+  return raw.map((item,index)=>{
+    const commandText=clean(item?.command_text,1600);
+    if(commandText.length<4)throw new Error('PLAN_TASK_TEXT_INVALID');
+    if(ownerGate(commandText)||String(item?.kind||'').toUpperCase()==='OWNER_GATE')throw new Error('PLAN_OWNER_GATE_REQUIRED');
+    const inferred=classifyAutomationTask(commandText);
+    const requestedKind=String(item?.kind||'').toUpperCase();
+    const kind=ALLOWED_KINDS.has(requestedKind)?requestedKind:inferred.kind;
+    const requestedRisk=String(item?.risk_level||'').toUpperCase();
+    const riskLevel=ALLOWED_RISKS.has(requestedRisk)?requestedRisk:inferred.risk_level;
+    return {
+      title:clean(item?.title||commandText,180),
+      command_text:commandText,
+      kind,
+      risk_level:riskLevel,
+      sequence:index+1,
+    };
+  });
 }
 
 function number(value){return Number.isFinite(Number(value))?Number(value):0}
