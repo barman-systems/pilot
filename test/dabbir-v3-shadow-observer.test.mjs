@@ -5,7 +5,7 @@ import {createV3ShadowObserver} from '../api/_dabbir-v3-shadow-observer.js';
 const ids={business:'10000000-0000-4000-8000-000000000001',branch:'20000000-0000-4000-8000-000000000001',conversation:'30000000-0000-4000-8000-000000000001',customer:'40000000-0000-4000-8000-000000000001',service:'50000000-0000-4000-8000-000000000001',batch:'60000000-0000-4000-8000-000000000001'};
 const context={batch:{id:ids.batch,last_message_at:'2026-09-11T04:10:11Z'},business:{id:ids.business,timezone:'Asia/Dubai'},conversation:{id:ids.conversation,branch_id:ids.branch},customer:{id:ids.customer},batch_messages:[{id:'70000000-0000-4000-8000-000000000001',body:'الاستيشن',created_at:'2026-09-11T04:10:11Z'}],services:[{id:ids.service,name:'خارجي'}]};
 const before={version:2,goal:'BOOK_SERVICE',clarification_entity:'vehicle',cognition:{pending_field:'vehicle'},entities:{service:{value:ids.service,source:'CUSTOMER_STATED',status:'active',confidence:1}}};
-const load={semantic_state:before,activity_profile:{source:'DATABASE_FACT',version:1,business_id:ids.business,branch_id:ids.branch,services:[{business_id:ids.business,branch_id:ids.branch,service_id:ids.service,delivery_modes:['MOBILE'],entity_definitions:{vehicle:{type:'ENUM',values:['saloon','station']}},contract_version:'v1'}]}};
+const load={cognitive_policy:{mode:'canary'},semantic_state:before,activity_profile:{source:'DATABASE_FACT',version:1,business_id:ids.business,branch_id:ids.branch,services:[{business_id:ids.business,branch_id:ids.branch,service_id:ids.service,delivery_modes:['MOBILE'],entity_definitions:{vehicle:{type:'ENUM',values:['saloon','station']}},contract_version:'v1'}]}};
 
 test('shadow observer logs V3 result but returns the exact legacy RPC result',async()=>{
   const calls=[],logs=[];
@@ -20,6 +20,27 @@ test('shadow observer logs V3 result but returns the exact legacy RPC result',as
   assert.equal(logs.length,1);
   const event=JSON.parse(logs[0][1]);
   assert.equal(event.event,'DABBIR_V3_TURN_SHADOW');
+  assert.equal(event.rollout_mode,'canary');
   assert.equal(event.ok,true);
+  assert.equal(event.retention_ok,true);
+  assert.ok(event.facts.some(x=>x.field==='delivery_mode'&&x.value==='MOBILE'));
   assert.ok(event.tentative.some(x=>x.field==='vehicle'&&x.candidate_value==='station'));
+});
+
+test('shadow observer never blocks legacy commit even if production logger throws',async()=>{
+  const rpc=async(name,args)=>name==='dabbir_semantic_load_v2'?load:name==='dabbir_semantic_commit_v2'?{version:10,replay:false,state:args.p_state}:{ok:true};
+  const observer=createV3ShadowObserver({context,rpc,logger:{info(){throw new Error('LOGGER_FAIL')},error(){throw new Error('LOGGER_FAIL')}}});
+  await observer.rpc('dabbir_semantic_load_v2',{});
+  const committed=await observer.rpc('dabbir_semantic_commit_v2',{p_batch_id:ids.batch,p_state:before});
+  assert.equal(committed.version,10);
+});
+
+test('cognitive_mode off disables V3 shadow observation entirely',async()=>{
+  const logs=[];const offLoad={...load,cognitive_policy:{mode:'off'}};
+  const rpc=async(name,args)=>name==='dabbir_semantic_load_v2'?offLoad:name==='dabbir_semantic_commit_v2'?{version:11,replay:false,state:args.p_state}:{ok:true};
+  const observer=createV3ShadowObserver({context,rpc,logger:{info:x=>logs.push(x),error:x=>logs.push(x)}});
+  await observer.rpc('dabbir_semantic_load_v2',{});
+  const committed=await observer.rpc('dabbir_semantic_commit_v2',{p_batch_id:ids.batch,p_state:before});
+  assert.equal(committed.version,11);
+  assert.deepEqual(logs,[]);
 });
