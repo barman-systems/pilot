@@ -468,7 +468,7 @@ export function clarification(s,c,{acknowledge=true}={}) {
     // stays bound to the resolver's next entity, never a provider's invented one.
     const service=scoped(c.services,c).find(x=>x.id===valueOf(s,'service'));
     const known=[service?nameOf(service):null,supported(s.entities.date)?valueOf(s,'date'):null,supported(s.entities.time)?(en?'at ':'الساعة ')+valueOf(s,'time'):null].filter(Boolean);
-    return acknowledge&&known.length?(en?'Got it: ':'تمام، ')+known.join('، ')+'. '+question:question;
+    return acknowledge&&known.length?(en?'Got it: ':'تمام، ')+known.join(en?', ':'، ')+'. '+question:question;
   }
   return en?'Which detail should I use?':'أي تفصيل تقصد؟';
 }

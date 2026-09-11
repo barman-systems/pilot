@@ -26,6 +26,13 @@ test('single database-authorized delivery mode is never exposed as a customer qu
   assert.equal(r.decision.action,'CLARIFY');
 });
 
+test('English grounded acknowledgement uses English punctuation at composition source',()=>{
+  const state=baseState({language:'en',missing_fields:['vehicle'],clarification_entity:'vehicle',
+    entities:{service:fact('svc'),branch:fact('branch','DATABASE_FACT',1),date:fact('2026-09-12'),time:fact('09:00')},cognition:{pending_field:'vehicle'}});
+  const r=plan(state,null,null,'I want to book tomorrow at 9am');
+  assert.doesNotMatch(r.decision.reply,/،/);
+});
+
 test('an actually pending unanswered field stays coherent instead of jumping around the form',()=>{
   const previous=baseState({clarification_entity:'location',cognition:{pending_field:'location',pending_question:{field:'location',text:'وين موقع الخدمة؟',presentation:'PROVIDER_ACCEPTED'}}});
   const state=baseState({clarification_entity:'vehicle',cognition:{pending_field:'vehicle'}});
