@@ -5,7 +5,7 @@ const DEFAULT_MODEL='minimax/minimax-m3-free';
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const ALLOWED_KINDS=new Set(['REPO_CHANGE','DATA_QUERY','EXTERNAL_ACTION','REVIEW_REQUIRED']);
 const ALLOWED_RISKS=new Set(['LOW','MEDIUM','HIGH','CRITICAL']);
-const EXECUTIVE_ROUTES=new Set(['REPO_CHANGE','DATA_QUERY','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED','OWNER_GATE']);
+const EXECUTIVE_ROUTES=new Set(['REPO_CHANGE','DATA_QUERY','RUNTIME_CHECK','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED','OWNER_GATE']);
 const EXECUTIVE_SEVERITIES=new Set(['LOW','MEDIUM','HIGH','CRITICAL']);
 const HEALTH_STATES=new Set(['HEALTHY','DEGRADED','UNKNOWN']);
 
@@ -126,7 +126,7 @@ export async function understandExecutiveSituation(command,context={},env=proces
   const schema={
     type:'object',
     properties:{
-      route:{type:'string',enum:['REPO_CHANGE','DATA_QUERY','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED']},
+      route:{type:'string',enum:['REPO_CHANGE','DATA_QUERY','RUNTIME_CHECK','MULTI_STEP','EXTERNAL_ACTION','REVIEW_REQUIRED']},
       situation:{
         type:'object',
         properties:{
@@ -161,7 +161,7 @@ export async function understandExecutiveSituation(command,context={},env=proces
   const system=[
     'You are the existing BARMAN Executive OS reasoning stage for DABBIR. Do not invent a new architecture.',
     'Understand the current situation BEFORE execution routing. Keyword matching is not semantic understanding.',
-    'Return DATA_QUERY for read-only operational questions, REPO_CHANGE for one repository change, MULTI_STEP for objectives requiring multiple dependent actions, EXTERNAL_ACTION only for non-financial external actions, and REVIEW_REQUIRED when safe execution is not established.',
+    'Return RUNTIME_CHECK for a live DABBIR health/status check that requires the existing public runtime probes; DATA_QUERY for read-only database facts; REPO_CHANGE for one repository change; MULTI_STEP for objectives requiring multiple dependent actions; EXTERNAL_ACTION only for non-financial external actions; and REVIEW_REQUIRED when safe execution is not established.',
     'Owner-only OTP, KYC, legal signatures and payments are already hard-gated before you are called and must never be authorized here.',
     'Use only supplied facts. Unknown business/product/customer/economic state must remain UNKNOWN, never infer HEALTHY from green infrastructure.',
     'affected_goal must be one supplied goal id or empty. memory_refs must contain only supplied memory ids.',
@@ -286,9 +286,6 @@ const BUSINESS_CUSTOMER_QUESTION=/(?:زبائن|عملاء)\s+(?:الأنشطة|
 
 export function readMetricForQuestion(command){
   const q=clean(command,4000).toLowerCase();
-  // In owner language, "registered customers/users" means DABBIR accounts.
-  // Keep tenant CRM records behind an explicit business-customer phrase so the
-  // two populations cannot be silently conflated.
   if(REGISTERED_ACCOUNT_QUESTION.test(q))return 'REGISTERED_ACCOUNTS_TOTAL';
   if(BUSINESS_CUSTOMER_QUESTION.test(q))return 'CUSTOMERS_TOTAL';
   if(/مسجل|حساب|account|user/.test(q))return 'REGISTERED_ACCOUNTS_TOTAL';
