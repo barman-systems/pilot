@@ -92,8 +92,12 @@ async function discoverAppIdFromExistingToken(config) {
   try {
     const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/app`);
     url.searchParams.set('fields', 'id');
-    url.searchParams.set('access_token', token);
-    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { accept: 'application/json', authorization: `Bearer ${token}` },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     const payload = await response.json().catch(() => ({}));
     const id = String(payload?.id || '').trim();
     if (!response.ok || !/^[0-9]{5,40}$/.test(id)) return '';
@@ -314,13 +318,20 @@ async function graphFetch(config, path, { method = 'GET', token, query, body } =
 export async function exchangeEmbeddedCode(config, code) {
   if (!config.ready) throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
   const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/oauth/access_token`);
-  url.searchParams.set('client_id', config.appId);
-  url.searchParams.set('client_secret', config.appSecret);
-  url.searchParams.set('code', String(code));
+  const form = new URLSearchParams();
+  form.set('client_id', config.appId);
+  form.set('client_secret', config.appSecret);
+  form.set('code', String(code));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload?.access_token) {
       const error = new Error(String(payload?.error?.message || 'META_CODE_EXCHANGE_FAILED').slice(0, 300));
