@@ -10,7 +10,11 @@ const contractFor=(context,id)=>profileServices(context).find(s=>s.service_id===
 const serviceLabel=(context,id)=>{const s=serviceRow(context,id);return clean(s?.name_ar||s?.name||s?.name_en,120)||null;};
 const currency=context=>clean(context?.business?.currency_code||'AED',8);
 const arabic=context=>!String(context?.conversation?.language||context?.customer?.language||'ar').toLowerCase().startsWith('en');
+const isConversationGoal=g=>['BOOK_SERVICE','DISCOVER_SERVICE','PRICE_SERVICE','SUPPORT','UNKNOWN'].includes(g);
 
+function serviceOptions(context){
+  return scopedServices(context).slice(0,6).map(s=>({type:'service',id:s.id,label:clean(s?.name_ar||s?.name||s?.name_en,120),price:Number.isFinite(Number(s?.price))?Number(s.price):null,currency:currency(context)})).filter(x=>x.label);
+}
 function requirementsFor(state,context){
   if(state.goal!=='BOOK_SERVICE')return [];
   const values=mapFacts(state.facts),serviceId=values.get('service')?.value;
@@ -34,19 +38,22 @@ function summaryParts(state,context){
   const vehicle=values.get('vehicle')?.value;if(vehicle)out.push(vehicle==='station'?'سيارة ستيشن/SUV':vehicle==='saloon'?'سيارة صالون':`السيارة ${clean(vehicle,80)}`);
   return out;
 }
-function tentativeVehicle(state){return arr(state.tentatives).find(x=>x.field==='vehicle')||null;}
+function tentativeByField(state,field){return arr(state.tentatives).find(x=>x.field===field)||null;}
+function tentativeVehicle(state){return tentativeByField(state,'vehicle');}
+function tentativeService(state){return tentativeByField(state,'service');}
 function answerSideQuestions(understanding,state,context){
   const answers=[];const serviceId=factValue(state,'service'),row=serviceRow(context,serviceId);
   for(const q of arr(understanding.side_questions)){
     if(q.type==='price'&&row&&Number.isFinite(Number(row.price)))answers.push({type:'price',value:Number(row.price),currency:currency(context),service_label:serviceLabel(context,serviceId)});
-    if(q.type==='duration'&&row&&Number.isFinite(Number(row.duration_minutes??row.duration)))answers.push({type:'duration',value:Number(row.duration_minutes??row.duration)});
+    if(q.type==='duration_minutes'&&row&&Number.isFinite(Number(row.duration_minutes??row.duration)))answers.push({type:'duration',value:Number(row.duration_minutes??row.duration)});
   }
   return answers;
 }
-function chooseQuestion(state,missing){
-  const vehicle=tentativeVehicle(state);
+function chooseQuestion(state,missing,context){
+  const vehicle=tentativeVehicle(state),service=tentativeService(state);
   if(vehicle)return {fields:['vehicle'],purpose:vehicle.candidate_value?'CONFIRM_TENTATIVE_VEHICLE':'MAP_TENTATIVE_VEHICLE',candidate_value:vehicle.candidate_value,surface:vehicle.surface};
-  if(missing.includes('service'))return {fields:['service'],purpose:'COLLECT_SERVICE'};
+  if(service)return {fields:['service'],purpose:'MAP_TENTATIVE_SERVICE',surface:service.surface,options:serviceOptions(context)};
+  if(missing.includes('service'))return {fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
   if(missing.includes('vehicle')&&missing.includes('location'))return {fields:['vehicle','location'],purpose:'COLLECT_VEHICLE_AND_LOCATION'};
   if(missing.includes('vehicle'))return {fields:['vehicle'],purpose:'COLLECT_VEHICLE'};
   if(missing.includes('location'))return {fields:['location'],purpose:'COLLECT_LOCATION'};
@@ -54,42 +61,63 @@ function chooseQuestion(state,missing){
   if(missing.length)return {fields:[missing[0]],purpose:'COLLECT_REQUIRED'};
   return null;
 }
-function renderArabic({state,plan,context}){
-  const parts=summaryParts(state,context),answer=plan.answers?.[0]||null,vehicle=tentativeVehicle(state),q=plan.next_question;
+function menuArabic(options){return options.map((x,i)=>`${i+1}) ${x.label}${x.price!=null?` — ${x.price} ${x.currency==='AED'?'درهم':x.currency}`:''}`).join('، ');}
+function menuEnglish(options){return options.map((x,i)=>`${i+1}) ${x.label}${x.price!=null?` — ${x.price} ${x.currency}`:''}`).join(', ');}
+function renderArabic({state,plan,context,understanding}){
+  const parts=summaryParts(state,context),answer=plan.answers?.[0]||null,vehicle=tentativeVehicle(state),serviceTentative=tentativeService(state),q=plan.next_question;
+  if(understanding?.role==='GREETING'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'هلا، حياك. كيف أقدر أساعدك؟';
+  if(understanding?.role==='SOCIAL'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'حياك. قل لي وش تحتاج وبساعدك.';
   const segments=[];
   if(answer?.type==='price')segments.push(`${answer.service_label||'الخدمة'} ${answer.value} ${answer.currency==='AED'?'درهم':answer.currency}.`);
-  if(parts.length)segments.push(`تمام، فهمت: ${parts.join('، ')}.`);
-  else segments.push('تمام.');
+  if(parts.length)segments.push(`فهمت عليك: ${parts.join('، ')}.`);
+  if(serviceTentative&&q?.purpose==='MAP_TENTATIVE_SERVICE'){
+    const surface=clean(serviceTentative.surface,100)||'الخدمة اللي ذكرتها',options=arr(q.options);
+    segments.push(`فهمت إنك تقصد «${surface}»، لكن ما ربطتها بخدمة واحدة بثقة.`);
+    if(options.length)segments.push(`عندنا ${menuArabic(options)}. أي واحد تقصد؟`);else segments.push('وضح لي اسم الخدمة شوي؟');
+    return segments.join(' ');
+  }
   if(vehicle){
     if(vehicle.candidate_value){
       const label=vehicle.candidate_value==='station'?'ستيشن/SUV':vehicle.candidate_value==='saloon'?'صالون':clean(vehicle.surface,100)||'هذا النوع';
       segments.push(`فهمت إن السيارة ${label} — صح؟`);
-      if(plan.missing_fields.includes('location'))segments.push('إذا نعم، أرسل موقعك من خيار الموقع في واتساب.');
+      if(plan.missing_fields.includes('location'))segments.push('إذا صحيح، أرسل موقعك من خيار الموقع في واتساب وبكمل لك.');
     }else{
       const surface=clean(vehicle.surface,100)||'هذا النوع';
-      segments.push(`فهمت إن السيارة ${surface}، لكن تصنيفنا صالون أو ستيشن/SUV. أي فئة نعتمد؟`);
+      segments.push(`فهمت السيارة «${surface}»، لكن أحتاج أحدد فئتها عندنا: صالون أو ستيشن/SUV؟`);
     }
     return segments.join(' ');
   }
-  if(q?.purpose==='COLLECT_SERVICE')segments.push('أي خدمة تبي بالضبط؟');
-  else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('سيارتك صالون ولا ستيشن/SUV؟ وأرسل موقعك من خيار الموقع في واتساب.');
-  else if(q?.purpose==='COLLECT_VEHICLE')segments.push('سيارتك صالون ولا ستيشن/SUV؟');
-  else if(q?.purpose==='COLLECT_LOCATION')segments.push('باقي موقعك بس — أرسله من خيار الموقع في واتساب.');
-  else if(q?.purpose==='COLLECT_WHEN')segments.push('متى يناسبك؟');
-  else if(q)segments.push('أعطني المعلومة الباقية عشان أكمل لك.');
-  else segments.push('المعلومات الأساسية واضحة عندي.');
+  if(q?.purpose==='COLLECT_SERVICE'){
+    const options=arr(q.options);if(options.length)segments.push(`عندنا ${menuArabic(options)}. أي واحد تبي؟`);else segments.push('أي خدمة تبي بالضبط؟');
+  }else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('قل لي نوع السيارة: صالون أو ستيشن/SUV، وأرسل موقعك من خيار الموقع في واتساب.');
+  else if(q?.purpose==='COLLECT_VEHICLE')segments.push('السيارة صالون أو ستيشن/SUV؟');
+  else if(q?.purpose==='COLLECT_LOCATION')segments.push('باقي موقعك بس — أرسله من خيار الموقع في واتساب وبكمل لك.');
+  else if(q?.purpose==='COLLECT_WHEN')segments.push('متى تبيه؟');
+  else if(q)segments.push('أعطني المعلومة الباقية وبكمل لك.');
+  else if(state.goal==='DISCOVER_SERVICE'){
+    const options=serviceOptions(context);segments.push(options.length?`الخدمات المتاحة: ${menuArabic(options)}. إذا تبا تحجز، قل لي أي واحد.`:'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.');
+  }else if(state.goal==='PRICE_SERVICE'&&!answer){
+    const options=serviceOptions(context);segments.push(options.length?`حدد الخدمة عشان أعطيك السعر الصحيح: ${menuArabic(options)}. أي واحد تقصد؟`:'حدد لي الخدمة اللي تسأل عن سعرها.');
+  }else if(state.goal==='SUPPORT')segments.push('قل لي وش تحتاج وبساعدك.');
+  else if(state.goal==='BOOK_SERVICE')segments.push('المعلومات المطلوبة للحجز مكتملة عندي.');
+  else segments.push('قل لي وش تحتاج وبساعدك.');
   return segments.join(' ');
 }
-function renderEnglish({state,plan,context}){
+function renderEnglish({state,plan,context,understanding}){
+  if(understanding?.role==='GREETING'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'Hi. How can I help?';
   const service=serviceLabel(context,factValue(state,'service')),q=plan.next_question,segments=[];
   if(plan.answers?.[0]?.type==='price')segments.push(`${service||'The service'} is ${plan.answers[0].value} ${plan.answers[0].currency}.`);
-  if(service)segments.push(`Got it: ${service}.`);else segments.push('Got it.');
-  if(q?.purpose==='COLLECT_SERVICE')segments.push('Which service would you like?');
+  if(service)segments.push(`Got it: ${service}.`);
+  if(q?.purpose==='COLLECT_SERVICE'){const options=arr(q.options);segments.push(options.length?`Available services: ${menuEnglish(options)}. Which one would you like?`:'Which service would you like?');}
+  else if(q?.purpose==='MAP_TENTATIVE_SERVICE'){const options=arr(q.options);segments.push(`I could not safely map “${clean(tentativeService(state)?.surface,100)}” to one service.${options.length?` Available: ${menuEnglish(options)}. Which one do you mean?`:' Please clarify the service.'}`);}
   else if(q?.purpose==='CONFIRM_TENTATIVE_VEHICLE')segments.push('I understood the vehicle as station/SUV — is that right?');
-  else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('Is the vehicle a saloon/sedan or station/SUV? Then send your WhatsApp location.');
-  else if(q?.purpose==='COLLECT_VEHICLE')segments.push('Is the vehicle a saloon/sedan or station/SUV?');
+  else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('Is the vehicle saloon/sedan or station/SUV? Then send your WhatsApp location.');
+  else if(q?.purpose==='COLLECT_VEHICLE')segments.push('Is the vehicle saloon/sedan or station/SUV?');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('I only need your service location — send it using WhatsApp Location.');
   else if(q?.purpose==='COLLECT_WHEN')segments.push('When would you like it?');
+  else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`Available services: ${menuEnglish(options)}.`:'No active services are available to show right now.');}
+  else if(state.goal==='SUPPORT')segments.push('Tell me what you need and I will help.');
+  else if(state.goal==='BOOK_SERVICE')segments.push('I have the required booking details.');
   return segments.join(' ');
 }
 
@@ -103,12 +131,19 @@ export function planConversationTurnV3({previousState,understanding,episode,cont
     facts:understanding.facts.map(f=>({...f})),tentatives:understanding.tentatives.map(f=>({...f})),invalidations,pending_question:null};
   if(episode?.kind!=='NEW_EPISODE')assertFactRetentionV3({before:previous,after:state});
   const required=requirementsFor(state,context),verified=mapFacts(state.facts),missing=required.filter(field=>!verified.has(field));
-  const answers=answerSideQuestions(understanding,state,context),nextQuestion=chooseQuestion(state,missing);
-  const plan={version:2,goal:state.goal,intent_confirmed:state.intent_confirmed,answers,missing_fields:missing,required_fields:required,next_question:nextQuestion,
-    surfaced_facts:summaryParts(state,context),surfaced_tentative_fields:arr(state.tentatives).map(x=>x.field),proposed_action:missing.length?'CLARIFY':'READY_FOR_AUTHORITY',response_parts:{acknowledgement:'ACK',understanding_summary:true,answer:answers.length>0,assumption:!!tentativeVehicle(state),question:nextQuestion?.purpose||null}};
-  state.pending_question=nextQuestion?{fields:nextQuestion.fields,purpose:nextQuestion.purpose}:null;
-  const text=arabic(context)?renderArabic({state,plan,context}):renderEnglish({state,plan,context});
-  const response=brainResponseV3({text,plan_id:`${state.episode_id}:${understanding.turn.message_id||'turn'}`,metadata:{goal:state.goal}});
+  const answers=answerSideQuestions(understanding,state,context);
+  let nextQuestion=chooseQuestion(state,missing,context);
+  if(state.goal==='DISCOVER_SERVICE'&&!verified.has('service'))nextQuestion={fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
+  if(state.goal==='PRICE_SERVICE'&&!verified.has('service'))nextQuestion={fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
+  if(['SUPPORT','UNKNOWN'].includes(state.goal)&&['GREETING','SOCIAL'].includes(understanding.role))nextQuestion=null;
+  let proposedAction=missing.length?'CLARIFY':'READY_FOR_AUTHORITY';
+  if(!isConversationGoal(state.goal))proposedAction=missing.length?'CLARIFY':'READY_FOR_AUTHORITY';
+  else if(['SUPPORT','UNKNOWN','DISCOVER_SERVICE','PRICE_SERVICE'].includes(state.goal))proposedAction='REPLY';
+  const plan={version:3,goal:state.goal,intent_confirmed:state.intent_confirmed,answers,missing_fields:missing,required_fields:required,next_question:nextQuestion,
+    surfaced_facts:summaryParts(state,context),surfaced_tentative_fields:arr(state.tentatives).map(x=>x.field),proposed_action:proposedAction,response_parts:{acknowledgement:'ACK',understanding_summary:true,answer:answers.length>0,assumption:!!tentativeVehicle(state)||!!tentativeService(state),question:nextQuestion?.purpose||null}};
+  state.pending_question=nextQuestion?{fields:nextQuestion.fields,purpose:nextQuestion.purpose,...(arr(nextQuestion.options).length?{options:nextQuestion.options.map(x=>({...x}))}:{})}:null;
+  const text=arabic(context)?renderArabic({state,plan,context,understanding}):renderEnglish({state,plan,context,understanding});
+  const response=brainResponseV3({text,plan_id:`${state.episode_id}:${understanding.turn.message_id||'turn'}`,metadata:{goal:state.goal,engine:'V3'}});
   assertDialoguePlanV3({plan,state,response});
   return {state,plan,response};
 }
