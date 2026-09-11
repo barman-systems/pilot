@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const mapPath=fileURLToPath(new URL('../docs/architecture/execution-writer-map-v1.json',import.meta.url));
-const map=JSON.parse(readFileSync(mapPath,'utf8'));
+const readJson=relative=>JSON.parse(readFileSync(fileURLToPath(new URL('../'+relative,import.meta.url)),'utf8'));
+const map=readJson('docs/architecture/execution-writer-map-v1.json');
+const repair=readJson('docs/architecture/execution-lineage-repair-v1.json');
 const writers=new Map(map.writers.map(row=>[row.id,row]));
-
-const byOperation=operation=>map.writers.filter(row=>String(row.operation).split('_').includes(operation)||row.operation===operation);
 
 test('execution writer map is evidence only and preserves hard safety invariants',()=>{
   assert.equal(map.status,'PARTIALLY_VERIFIED');
@@ -21,13 +20,19 @@ test('execution writer map is evidence only and preserves hard safety invariants
   assert.equal(map.hard_invariants.cas_or_idempotency_weakening_allowed,false);
 });
 
-test('new execution DDL remains fail-closed while live migration history is incomplete',()=>{
+test('verified lineage repair supersedes only the stale DDL blocker without weakening execution invariants',()=>{
   assert.equal(map.database_lineage.state,'DEFINITION_PRESENT_HISTORY_MISSING');
-  assert.equal(map.database_lineage.missing_history_version,'20260911184500');
-  assert.equal(map.database_lineage.new_execution_ddl_authorized,false);
-  assert.equal(map.hard_invariants.new_execution_ddl_before_lineage_reconciliation_allowed,false);
-  assert.equal(map.database_lineage.live_definition_markers['public.barman_executive_claim_v1'].has_decision_gate,true);
-  assert.equal(map.database_lineage.live_definition_markers['public.barman_executive_verify_command_v1'].has_independent_verifier_gate,true);
+  assert.ok(repair.supersedes_lineage_state_in.includes('docs/architecture/execution-writer-map-v1.json'));
+  assert.equal(repair.status,'VERIFIED');
+  assert.equal(repair.post_repair_history.version,'20260911184500');
+  assert.equal(repair.post_repair_history.generated_remote_version_still_present,false);
+  assert.equal(repair.execution_ddl_gate.current_state,'LINEAGE_BLOCKER_CLOSED');
+  assert.equal(repair.execution_ddl_gate.new_execution_ddl_allowed_by_lineage_only,true);
+  assert.equal(repair.repair.function_bodies_changed,false);
+  assert.equal(repair.repair.authorization_changed,false);
+  assert.equal(repair.repair.rls_changed,false);
+  assert.equal(map.hard_invariants.llm_is_authority,false);
+  assert.equal(map.hard_invariants.rls_weakening_allowed,false);
 });
 
 test('BOOK remains explicitly multi-writer instead of pretending consolidation already happened',()=>{
@@ -95,10 +100,10 @@ test('all live appointment triggers remain classified and no trigger-removal aut
   assert.ok(map.appointment_triggers.some(row=>row.classification==='SIDE_EFFECT'&&row.writes_other_state===true));
 });
 
-test('first surgical BOOK candidate is bounded to one direct adapter',()=>{
+test('first surgical BOOK candidate remains bounded to one direct adapter after lineage repair',()=>{
   assert.equal(map.next_single_slice.operation,'BOOK');
-  assert.equal(map.next_single_slice.phase,'CONTRACT_DESIGN_AND_CALLER_MIGRATION_PLAN');
-  assert.equal(map.next_single_slice.ddl,'BLOCKED_UNTIL_MIGRATION_HISTORY_RECONCILED');
   assert.equal(map.next_single_slice.first_candidate,'api.branch_operations.create_appointment');
   assert.match(map.next_single_slice.reason,/one caller/i);
+  assert.equal(repair.execution_ddl_gate.current_state,'LINEAGE_BLOCKER_CLOSED');
+  assert.match(repair.execution_ddl_gate.note,/own security, isolation, rollback and Production acceptance gates/);
 });
