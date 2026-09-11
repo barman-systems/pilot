@@ -33,6 +33,32 @@ const PATCH_SCHEMA={
   required:['summary','patch'],
   additionalProperties:false,
 };
+const ROUTE_SCHEMA={
+  type:'object',
+  properties:{
+    route:{type:'string',enum:['REPO_CHANGE','DATA_QUERY','EXTERNAL_ACTION','REVIEW_REQUIRED','OWNER_GATE','MULTI_STEP']},
+    reason:{type:'string'},
+    risk_level:{type:'string',enum:['LOW','MEDIUM','HIGH','CRITICAL']},
+    options:{type:'array',minItems:2,maxItems:5,items:{type:'string'}},
+    situation:{
+      type:'object',
+      properties:{
+        what_changed:{type:'string'},
+        why_it_matters:{type:'string'},
+        affected_goal:{type:'string'},
+        severity:{type:'string'},
+        known_facts:{type:'array',items:{type:'string'},maxItems:8},
+        unknowns:{type:'array',items:{type:'string'},maxItems:8},
+      },
+      required:['what_changed','why_it_matters','affected_goal','severity','known_facts','unknowns'],
+      additionalProperties:false,
+    },
+    required_phases:{type:'array',maxItems:8,items:{type:'string',enum:['investigation','root_cause','proof','repair','verification','acceptance_gate','read_only','external_action']}},
+    memory_refs_used:{type:'array',maxItems:5,items:{type:'integer'}},
+  },
+  required:['route','reason','risk_level','options','situation','required_phases','memory_refs_used'],
+  additionalProperties:false,
+};
 
 function decodePart(value){
   const normalized=value.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(value.length/4)*4,'=');
@@ -102,24 +128,18 @@ function parseJsonContent(payload){
 function structuredOutput(name,schema){
   return {type:'json_schema',json_schema:{name,description:'BARMAN machine-readable tool-agent response',schema}};
 }
-function gatewayError(status){
-  return Object.assign(new Error(`AI_GATEWAY_HTTP_${status}`),{status:502});
-}
+function gatewayError(status){return Object.assign(new Error(`AI_GATEWAY_HTTP_${status}`),{status:502})}
 async function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 async function gatewayCompletion(credential,requestBody){
   let lastStatus=0;
   for(let attempt=1;attempt<=GATEWAY_MAX_ATTEMPTS;attempt+=1){
     const response=await fetch(GATEWAY_ENDPOINT,{
       method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
-      body:JSON.stringify(requestBody),
-      signal:AbortSignal.timeout(45000),
+      body:JSON.stringify(requestBody),signal:AbortSignal.timeout(45000),
     });
     lastStatus=response.status;
-    const text=await response.text();
-    let payload=null;
-    try{payload=text?JSON.parse(text):{}}catch{
-      if(response.ok)throw Object.assign(new Error('AI_GATEWAY_RESPONSE_INVALID_JSON'),{status:502});
-    }
+    const text=await response.text();let payload=null;
+    try{payload=text?JSON.parse(text):{}}catch{if(response.ok)throw Object.assign(new Error('AI_GATEWAY_RESPONSE_INVALID_JSON'),{status:502})}
     if(response.ok)return payload||{};
     if(!GATEWAY_RETRYABLE.has(response.status)||attempt===GATEWAY_MAX_ATTEMPTS)throw gatewayError(response.status);
     const retryAfter=Math.max(0,Math.min(2000,Number(response.headers.get('retry-after')||0)*1000));
@@ -132,16 +152,63 @@ async function brain(system,user,maxTokens,{name,schema}){
   if(!credential)throw Object.assign(new Error('AI_GATEWAY_CREDENTIAL_MISSING'),{status:503});
   const model=clean(process.env.BARMAN_TOOL_AGENT_MODEL||process.env.BARMAN_AI_GATEWAY_MODEL||DEFAULT_MODEL,120);
   const payload=await gatewayCompletion(credential,{
-    model,
-    messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],
-    temperature:0.05,
-    max_tokens:maxTokens,
-    stream:false,
+    model,messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],temperature:0.05,max_tokens:maxTokens,stream:false,
     response_format:structuredOutput(name,schema),
   });
   const parsed=parseJsonContent(payload);
   if(!parsed)throw Object.assign(new Error('AI_GATEWAY_STRUCTURED_OUTPUT_INVALID'),{status:502});
   return {model,payload:parsed};
+}
+
+function fallbackRisk(route){return route==='DATA_QUERY'?'LOW':route==='EXTERNAL_ACTION'?'HIGH':route==='OWNER_GATE'?'CRITICAL':'MEDIUM'}
+function fallbackPhases(command,route){
+  const text=String(command||'');
+  const phases=[];
+  if(/راجع|افحص|حلل|دقق|investigat|review|inspect|analy/i.test(text))phases.push('investigation');
+  if(/سبب|جذر|root.?cause/i.test(text))phases.push('root_cause');
+  if(/اثبت|أثبت|دليل|proof|evidence|تأكد|تاكد|verify/i.test(text))phases.push('proof');
+  if(/أصلح|اصلح|fix|repair|طوّر|طور|develop|implement/i.test(text))phases.push('repair');
+  if(route==='DATA_QUERY')phases.push('read_only');
+  if(route==='EXTERNAL_ACTION')phases.push('external_action');
+  if(!phases.includes('verification')&&route==='REPO_CHANGE')phases.push('verification');
+  if(/قبل التأكد|قبل التاكد|acceptance|قبول/i.test(text))phases.push('acceptance_gate');
+  return [...new Set(phases)].slice(0,8);
+}
+async function semanticRoute(command,executiveContext={}){
+  const fallback=routeToolAgentCommand(command);
+  if(['OWNER_GATE','MULTI_STEP'].includes(fallback.route)){
+    return {
+      ...fallback,risk_level:fallbackRisk(fallback.route),options:[fallback.route,'REVIEW_REQUIRED'],
+      situation:{what_changed:clean(command,1200),why_it_matters:'Owner authority or compound-work boundary must be resolved before code execution.',affected_goal:'DABBIR governed execution',severity:fallbackRisk(fallback.route),known_facts:[fallback.reason],unknowns:['safe execution plan']},
+      required_phases:fallbackPhases(command,fallback.route),memory_refs_used:[],understanding_source:'HARD_SAFETY_OR_STRUCTURE_GATE',
+    };
+  }
+  const system=[
+    'You are the semantic execution-routing step inside the existing BARMAN Executive OS tool agent.',
+    'Understand the situation before selecting the execution surface. Do not execute or propose code here.',
+    'Owner-only legal, payment, KYC, OTP, card data, or binding commitments must be OWNER_GATE.',
+    'Use REPO_CHANGE only when repository mutation is actually required; DATA_QUERY for read-only facts; EXTERNAL_ACTION for non-financial outside actions; MULTI_STEP when one command contains multiple dependent jobs; REVIEW_REQUIRED when safe routing is not established.',
+    'Represent investigation, root-cause, proof, repair, verification, and acceptance gates in required_phases when the owner asked for them. Never collapse those requirements into the label REPO_CHANGE.',
+    'Verified executive memories may influence the reason only when materially similar. Put only actually used memory IDs in memory_refs_used.',
+    'Return structured JSON only.',
+  ].join('\n');
+  try{
+    const result=await brain(system,{command:clean(command,4000),executive_context:executiveContext},1400,{name:'barman_semantic_execution_route',schema:ROUTE_SCHEMA});
+    const p=result.payload;
+    return {
+      route:p.route,reason:clean(p.reason,1600),risk_level:p.risk_level,
+      options:Array.isArray(p.options)?p.options.slice(0,5):[],situation:p.situation||{},
+      required_phases:Array.isArray(p.required_phases)?p.required_phases.slice(0,8):[],
+      memory_refs_used:Array.isArray(p.memory_refs_used)?p.memory_refs_used.slice(0,5):[],
+      understanding_source:'AI_GATEWAY',model:result.model,
+    };
+  }catch(error){
+    return {
+      ...fallback,risk_level:fallbackRisk(fallback.route),options:[fallback.route,'REVIEW_REQUIRED'],
+      situation:{what_changed:clean(command,1200),why_it_matters:'Semantic routing provider was unavailable; preserve the deterministic fail-closed fallback.',affected_goal:'DABBIR governed execution',severity:fallbackRisk(fallback.route),known_facts:[fallback.reason],unknowns:['semantic interpretation unavailable']},
+      required_phases:fallbackPhases(command,fallback.route),memory_refs_used:[],understanding_source:'DETERMINISTIC_FALLBACK',brain_error:clean(error?.message||error,200),
+    };
+  }
 }
 
 async function discover(command,paths){
@@ -187,11 +254,17 @@ export default async function handler(req,res){
     let key;try{key=serviceRoleKey()}catch(error){return json(res,error.status||503,{ok:false,error:error.message})}
     const body=req.body&&typeof req.body==='object'?req.body:{};
     const phase=clean(body.phase,40);
+    const workerId=`github-tool-agent:${clean(claims.run_id,80)||'run'}`;
     if(phase==='claim'){
-      const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:`github-tool-agent:${clean(claims.run_id,80)||'run'}`,p_lane:'tool_agent',p_lease_seconds:3600});
+      const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:workerId,p_lane:'tool_agent',p_lease_seconds:3600});
       return json(res,200,{ok:true,...claim});
     }
-    if(phase==='route')return json(res,200,{ok:true,...routeToolAgentCommand(body.command)});
+    if(phase==='route'){
+      const context=await adminRpc(key,'barman_executive_context_for_worker_v1',{p_worker_id:workerId}).catch(()=>({ok:false,found:false,memories:[]}));
+      const routed=await semanticRoute(body.command,context);
+      const persisted=await adminRpc(key,'barman_executive_record_route_for_worker_v1',{p_worker_id:workerId,p_route:routed});
+      return json(res,200,{ok:true,...routed,decision_id:persisted?.decision_id,semantic_memory_refs:persisted?.memory_refs||[]});
+    }
     if(phase==='discover')return json(res,200,{ok:true,...await discover(body.command,body.paths)});
     if(phase==='patch')return json(res,200,{ok:true,...await proposePatch(body.command,body.files,body.previous_patch,body.apply_error)});
     if(phase==='finalize'){
