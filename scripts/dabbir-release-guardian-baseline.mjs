@@ -4,6 +4,7 @@ export function decideRollbackBaseline({failedRun,history}){
   const failedSha=String(failedRun?.head_sha||'');
   const failedWorkflow=String(failedRun?.name||'');
   const failedId=Number(failedRun?.id||0);
+  const failedAttempt=Math.max(1,Number(failedRun?.run_attempt||1));
   const previous=(Array.isArray(history)?history:[]).find(run=>
     Number(run?.id||0)!==failedId &&
     String(run?.name||'')===failedWorkflow &&
@@ -12,10 +13,12 @@ export function decideRollbackBaseline({failedRun,history}){
     String(run?.status||'')==='completed' &&
     String(run?.head_sha||'')!==failedSha
   );
-  if(!previous)return {eligible:false,reason:'NO_DISTINCT_BASELINE'};
+  if(!previous)return {eligible:false,confirmation_required:false,reason:'NO_DISTINCT_BASELINE',failed_run_attempt:failedAttempt};
   const conclusion=String(previous?.conclusion||'');
-  if(conclusion!=='success')return {eligible:false,reason:'BASELINE_NOT_GREEN',baseline_run_id:Number(previous.id),baseline_sha:String(previous.head_sha||''),baseline_conclusion:conclusion};
-  return {eligible:true,reason:'NEW_REGRESSION_AFTER_GREEN_BASELINE',baseline_run_id:Number(previous.id),baseline_sha:String(previous.head_sha||''),baseline_conclusion:conclusion};
+  const baseline={baseline_run_id:Number(previous.id),baseline_sha:String(previous.head_sha||''),baseline_conclusion:conclusion,failed_run_attempt:failedAttempt};
+  if(conclusion!=='success')return {eligible:false,confirmation_required:false,reason:'BASELINE_NOT_GREEN',...baseline};
+  if(failedAttempt<2)return {eligible:false,confirmation_required:true,reason:'REPEAT_FAILURE_REQUIRED',...baseline};
+  return {eligible:true,confirmation_required:false,reason:'REPEATED_REGRESSION_AFTER_GREEN_BASELINE',...baseline};
 }
 
 async function githubJson(path,token){
@@ -41,7 +44,9 @@ async function main(){
   const output=String(process.env.GITHUB_OUTPUT||'');
   const lines=[
     `eligible=${decision.eligible?'true':'false'}`,
+    `confirmation_required=${decision.confirmation_required?'true':'false'}`,
     `reason=${decision.reason}`,
+    `failed_run_attempt=${decision.failed_run_attempt||1}`,
     `baseline_run_id=${decision.baseline_run_id||''}`,
     `baseline_sha=${decision.baseline_sha||''}`,
     `baseline_conclusion=${decision.baseline_conclusion||''}`,
