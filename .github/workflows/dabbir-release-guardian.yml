@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: read
+  actions: write
 
 concurrency:
   group: dabbir-release-guardian-main
@@ -44,17 +44,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Prove this is a new regression against a green baseline
+      - name: Prove repeated regression against a green baseline
         id: baseline
         run: node scripts/dabbir-release-guardian-baseline.mjs
 
-      - name: Stop destructive rollback for a pre-existing or unproven failure
+      - name: Confirm first failure by rerunning failed jobs once
+        if: steps.baseline.outputs.confirmation_required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GUARDIAN_CONFIRMATION_RERUN run=${FAILED_RUN_ID} sha=${FAILED_SHA} workflow=${FAILED_WORKFLOW}"
+          gh run rerun "$FAILED_RUN_ID" --failed
+
+      - name: Stop destructive rollback for unconfirmed, pre-existing or unproven failure
         if: steps.baseline.outputs.eligible != 'true'
         run: |
           echo "BASELINE_FAILURE_SKIP_ROLLBACK: ${{ steps.baseline.outputs.reason }}"
+          echo "Failed run attempt: ${{ steps.baseline.outputs.failed_run_attempt }}"
           echo "Previous distinct run: ${{ steps.baseline.outputs.baseline_run_id }} / ${{ steps.baseline.outputs.baseline_conclusion }}"
 
-      - name: Fail closed with a governed revert PR if the failing head is still current
+      - name: Fail closed with a governed revert PR if the repeated failing head is still current
         if: steps.baseline.outputs.eligible == 'true'
         shell: bash
         run: |
@@ -94,17 +103,20 @@ jobs:
           git push origin HEAD:"$branch"
 
           body=$(cat <<EOF
-          DABBIR Release Guardian detected a NEW regression after a green baseline and prepared a governed rollback candidate.
+          DABBIR Release Guardian detected a REPEATED regression after a green baseline and prepared a governed rollback candidate.
 
           Failed workflow: ${FAILED_WORKFLOW}
           Failed conclusion: ${FAILED_CONCLUSION}
           Failed SHA: ${FAILED_SHA}
+          Confirmed failed run attempt: ${{ steps.baseline.outputs.failed_run_attempt }}
           Green baseline run: ${{ steps.baseline.outputs.baseline_run_id }}
           Green baseline SHA: ${{ steps.baseline.outputs.baseline_sha }}
           Rollback branch: ${branch}
 
           Safety contract:
-          - rollback requires a previously green distinct baseline
+          - one red-after-green result is not enough for rollback
+          - rollback requires a repeated failed attempt on the same workflow run
+          - provider-noise-only AI journey outcomes must not fail the journey gate
           - direct main push: forbidden
           - branch protection: preserved
           - required checks: must pass
@@ -116,7 +128,7 @@ jobs:
           pr_url=$(gh pr create \
             --base main \
             --head "$branch" \
-            --title "revert(guardian): ${FAILED_WORKFLOW} regression on ${short_sha}" \
+            --title "revert(guardian): repeated ${FAILED_WORKFLOW} regression on ${short_sha}" \
             --body "$body")
           echo "Governed rollback PR created: $pr_url"
 
