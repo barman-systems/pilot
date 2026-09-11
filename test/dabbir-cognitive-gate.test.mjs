@@ -35,6 +35,13 @@ test('two valid cognitive misses fail even with provider noise between them',asy
   assert.equal(result.valid_failures,2);
 });
 
+test('one cognitive miss cannot become a release failure when provider noise prevents confirmation',async()=>{
+  const rows=[cognitiveFail(),noise(),noise()];
+  const result=await runCognitiveGate({request:async()=>rows.shift(),scenario:'x',checkCount:2,requireCognitiveProbe:true,sleepFn:async()=>{}});
+  assert.equal(result.classification,'PROVIDER_NOISE');
+  assert.equal(result.valid_failures,1);
+});
+
 test('provider noise alone never becomes a cognitive failure',async()=>{
   const result=await runCognitiveGate({request:async()=>noise(),scenario:'x',checkCount:2,requireCognitiveProbe:true,sleepFn:async()=>{}});
   assert.equal(result.classification,'PROVIDER_NOISE');
