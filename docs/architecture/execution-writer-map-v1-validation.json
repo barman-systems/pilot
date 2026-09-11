@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "map": "docs/architecture/execution-writer-map-v1.json",
+  "map_source_main_sha": "ec11ff0b2d9ba5bf0d485028aabee19cc814b8cc",
+  "validated_main_sha": "12319b8dead2067833de81d868bebfe1de5ece73",
+  "validated_production_sha": "12319b8dead2067833de81d868bebfe1de5ece73",
+  "validated_production_deployment": "dpl_DQ54YHYBJ13YEdsFyr36ZuFzASQq",
+  "production_release_evidence_verified": true,
+  "compare": {
+    "ahead_by": 1,
+    "changed_files": [
+      "api/_barman-executive-automation.js",
+      "test/barman-ceo-semantic-json-retry.test.mjs"
+    ],
+    "execution_writer_surface_changed": false
+  },
+  "database_lineage": {
+    "migration_history_version_present": false,
+    "missing_version": "20260911184500",
+    "strict_function_definitions_present_live": true,
+    "state": "DEFINITION_PRESENT_HISTORY_MISSING"
+  },
+  "verdict": "WRITER_MAP_REVALIDATED_NO_EXECUTION_SURFACE_DRIFT",
+  "new_execution_ddl_authorized": false
+}
