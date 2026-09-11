@@ -10,24 +10,8 @@ const latestText=context=>arr(context?.batch_messages).map(x=>clean(x?.body,1500
 
 export const conversationEngineForMode=mode=>mode==='canary'||mode==='active'?'V3':'LEGACY';
 
-function preloadedSemanticRpc({rpc,claim,load}){
-  let available=true;
-  return async(name,args)=>{
-    if(name==='dabbir_semantic_load_v2'&&available){
-      if(args?.p_batch_id!==claim.batch_id||args?.p_lock_token!==claim.lock_token){
-        throw Object.assign(new Error('SEMANTIC_PRELOAD_SCOPE_MISMATCH'),{code:'SEMANTIC_PRELOAD_SCOPE_MISMATCH'});
-      }
-      available=false;
-      return load;
-    }
-    return rpc(name,args);
-  };
-}
-
 // Canonical conversation composition boundary.
 // Channels own transport only. This module owns engine selection and composition.
-// A turn is routed and executed from one semantic snapshot: engine selection must
-// not race a second semantic_load_v2 read before the selected engine starts.
 // shadow/off are legacy-visible with V3 observation; canary/active are real V3.
 export async function runConversationRuntimeTurn({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct,deliverMenu,logger=console}){
   const routingLoad=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
@@ -36,8 +20,7 @@ export async function runConversationRuntimeTurn({claim,context,rpc,deliver,fini
     return runConversationV3Runtime({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,preloadedLoad:routingLoad,logger});
   }
 
-  const turnRpc=preloadedSemanticRpc({rpc,claim,load:routingLoad});
-  const shadow=createV3ShadowObserver({context,rpc:turnRpc});
+  const shadow=createV3ShadowObserver({context,rpc});
   return runUnderstandingTurn({
     claim,context,rpc:shadow.rpc,deliver,finish,handoff,bookingText,slotsText,resolveProduct,cognitiveMode:'policy',deliverMenu,
     planner:async(c,safeContext)=>{
