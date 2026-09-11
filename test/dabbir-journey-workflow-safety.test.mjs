@@ -27,6 +27,13 @@ test('every root and nested API runtime change triggers the production customer 
   must(/- 'team\.html'/,'team UI changes must trigger the full production journey');
 });
 
+test('full production journey uses the hardened pinned WebKit installer',()=>{
+  must(/grep -q 'dl\.google\.com\/linux\/chrome-stable\/deb'/,'full journey must remove the unrelated Chrome apt source before browser dependency installation');
+  must(/npm install --no-save --no-audit --no-fund --ignore-scripts playwright@1\.62\.1/,'full journey must pin Playwright without audit, lifecycle scripts, or package-lock mutation');
+  must(/node node_modules\/playwright\/cli\.js install --with-deps webkit/,'full journey must invoke the pinned local Playwright CLI directly');
+  mustNot(/npx playwright install --with-deps webkit/,'full journey must not rediscover Playwright through npx');
+});
+
 test('capacity never runs automatically on push or schedule',()=>{
   const manualGate=/github\.event_name == 'workflow_dispatch'/g;
   assert.ok((workflow.match(manualGate)||[]).length>=2,'both capacity jobs must be workflow_dispatch-only');
