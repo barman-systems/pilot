@@ -16,6 +16,24 @@ function report(snapshot){
   return `نفّذ BARMAN فحصاً حياً لـ DABBIR. الحالة: ${state}. الموقع HTTP ${snapshot.site.status}، قاعدة البيانات ${snapshot.database.project_ref}، commit ${snapshot.commit_sha.slice(0,12)}، المنطقة ${snapshot.region}.`;
 }
 
+async function observeExecutiveReality(key){
+  const snapshot=await observeDabbirLive();
+  const evidence=runtimeEvidence(snapshot);
+  const confidence=snapshot.healthy?1:0.7;
+  const persisted=await adminRpc(key,'barman_executive_observe_v1',{
+    p_observation:{
+      source:'vercel-executive-cron',
+      subject:'DABBIR production reality',
+      observed_at:snapshot.observed_at,
+      freshness:'FRESH',
+      confidence,
+      evidence_refs:evidence,
+      snapshot,
+    },
+  });
+  return {snapshot,persisted};
+}
+
 async function notify(key,commandId,text){
   const route=await telegramRoute(key,commandId).catch(()=>null);
   return notifyTelegram(route,text).catch(()=>null);
@@ -39,7 +57,7 @@ async function finalizeRetry(key,claim,error,prefix){
 
 async function executeRuntime(key){
   const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:'vercel-runtime-worker',p_lane:'runtime',p_lease_seconds:300});
-  if(claim?.claimed!==true)return {claimed:false,lane:'runtime'};
+  if(claim?.claimed!==true)return {claimed:false,lane:'runtime',reason:claim?.reason||'NO_WORK'};
   const command=claim.command||{},commandId=String(command.id||'');
   try{
     const snapshot=await observeDabbirLive();
@@ -49,13 +67,13 @@ async function executeRuntime(key){
       p_summary:summary,p_evidence:evidence,p_error:snapshot.healthy?null:'DABBIR_LIVE_HEALTH_CHECK_FAILED',
     });
     await notify(key,commandId,`${summary}\n\nالحالة: ${outcome} — تم تسجيل ACTION → ARTIFACT → TEST → EVIDENCE.`);
-    return {claimed:true,lane:'runtime',command_id:commandId,outcome,evidence_count:evidence.length};
+    return {claimed:true,lane:'runtime',command_id:commandId,outcome,evidence_count:evidence.length,decision_id:claim.decision_id,goal_id:claim.goal_id};
   }catch(error){return finalizeRetry(key,claim,error,'فشل تنفيذ الفحص الحي')}
 }
 
 async function executePlanner(key){
   const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:'vercel-ceo-planner',p_lane:'planner',p_lease_seconds:300});
-  if(claim?.claimed!==true)return {claimed:false,lane:'planner'};
+  if(claim?.claimed!==true)return {claimed:false,lane:'planner',reason:claim?.reason||'NO_WORK'};
   const command=claim.command||{},commandId=String(command.id||'');
   try{
     const plan=await planExecutiveCommand(command.command_text);
@@ -65,13 +83,13 @@ async function executePlanner(key){
     const count=Number(decomposed?.child_count||plan.tasks.length);
     const summary=`حوّل BARMAN الهدف إلى ${count} مهام تنفيذية مستقلة. التنفيذ سيستمر حسب نوع كل مهمة، ولن تعتبر المهمة مكتملة قبل التحقق.`;
     await notify(key,commandId,summary);
-    return {claimed:true,lane:'planner',command_id:commandId,outcome:'PLANNED',child_count:count,planner:plan.source};
+    return {claimed:true,lane:'planner',command_id:commandId,outcome:'PLANNED',child_count:count,planner:plan.source,decision_id:claim.decision_id,goal_id:claim.goal_id};
   }catch(error){return finalizeRetry(key,claim,error,'تعذر إنشاء خطة تنفيذ صالحة')}
 }
 
 async function executeReadOnly(key){
   const claim=await adminRpc(key,'barman_executive_claim_v1',{p_worker_id:'vercel-read-only-worker',p_lane:'read_only',p_lease_seconds:180});
-  if(claim?.claimed!==true)return {claimed:false,lane:'read_only'};
+  if(claim?.claimed!==true)return {claimed:false,lane:'read_only',reason:claim?.reason||'NO_WORK'};
   const command=claim.command||{},commandId=String(command.id||'');
   try{
     const snapshot=await adminRpc(key,'barman_executive_read_snapshot_v1',{});
@@ -85,7 +103,7 @@ async function executeReadOnly(key){
       p_summary:answer.summary,p_evidence:evidence,p_error:null,
     });
     await notify(key,commandId,`${answer.summary}\n\nتمت القراءة من المصدر التشغيلي، والتحقق المستقل سيعيد فحص الدليل.`);
-    return {claimed:true,lane:'read_only',command_id:commandId,outcome:'DONE',metric:answer.metric,evidence_count:1};
+    return {claimed:true,lane:'read_only',command_id:commandId,outcome:'DONE',metric:answer.metric,evidence_count:1,decision_id:claim.decision_id,goal_id:claim.goal_id};
   }catch(error){return finalizeRetry(key,claim,error,'فشل منفذ القراءة')}
 }
 
@@ -103,9 +121,18 @@ export default async function handler(req,res){
   const authMode=cronAuthMode(req);if(!authMode)return json(res,401,{ok:false,error:'CRON_AUTH_REQUIRED'});
   let key;try{key=serviceRoleKey()}catch(error){return json(res,error.status||503,{ok:false,error:error.message})}
   try{
+    const reality=await observeExecutiveReality(key);
     const results=await executeExecutiveCycle(key);
     const summary={
-      ok:true,claimed:results.length,
+      ok:true,
+      reality:{
+        health_check_id:reality.persisted?.health_check_id,
+        observed_at:reality.persisted?.observed_at,
+        freshness:reality.persisted?.freshness,
+        confidence:reality.persisted?.confidence,
+        production_commit:reality.snapshot?.commit_sha,
+      },
+      claimed:results.length,
       planned:results.filter(x=>x.outcome==='PLANNED').length,
       done:results.filter(x=>x.outcome==='DONE').length,
       blocked:results.filter(x=>x.outcome==='BLOCKED').length,
