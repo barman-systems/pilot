@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { validatePreflightEvidence } from './dabbir-lineage-evidence-validation.mjs';
 
 export const PREFLIGHT_STATES=Object.freeze([
   'BASELINE_MATCH',
@@ -77,12 +78,22 @@ function releaseIdentityEquivalent(a,b){
 export function evaluatePreflight({expectedMigrations,liveSnapshot,releaseBefore,releaseAfter}){
   if(!releaseBefore||!releaseAfter)return {state:'UNKNOWN',reason:'PRODUCTION_IDENTITY_UNAVAILABLE'};
   if(!releaseIdentityEquivalent(releaseBefore,releaseAfter))return {state:'PRODUCTION_DRIFT_DURING_PREFLIGHT',reason:'PRODUCTION_IDENTITY_CHANGED'};
-  if(!liveSnapshot||typeof liveSnapshot!=='object')return {state:'UNKNOWN',reason:'LIVE_SNAPSHOT_UNAVAILABLE'};
-  if(!Array.isArray(liveSnapshot.migration_history)||!Array.isArray(liveSnapshot.functions))return {state:'UNKNOWN',reason:'LIVE_SNAPSHOT_INCOMPLETE'};
-  if(liveSnapshot.functions.length===0)return {state:'UNKNOWN',reason:'FUNCTION_EVIDENCE_EMPTY'};
+
+  const evidence=validatePreflightEvidence({expectedMigrations,liveSnapshot});
+  if(!evidence.ok)return {state:'UNKNOWN',reason:evidence.reason,evidence_validation:evidence};
+
   const lineage=compareMigrationLineage(expectedMigrations,liveSnapshot.migration_history);
-  if(!lineage.match)return {state:'BASELINE_CHANGED',reason:'MIGRATION_HISTORY_DIFFERS_FROM_REPOSITORY_BASE',lineage};
-  return {state:'BASELINE_MATCH',reason:'LIVE_LINEAGE_MATCHES_REPOSITORY_BASE',lineage};
+  if(!lineage.match)return {state:'BASELINE_CHANGED',reason:'MIGRATION_HISTORY_DIFFERS_FROM_REPOSITORY_BASE',lineage,evidence_validation:evidence};
+
+  // Phase A establishes structural validity only. Without an independently derived
+  // Expected Manifest, complete-but-semantically-wrong function evidence cannot be
+  // compared safely. Do not promote migration-name equality to BASELINE_MATCH.
+  return {
+    state:'UNKNOWN',
+    reason:'PHASE_B_EXPECTED_MANIFEST_NOT_AVAILABLE',
+    lineage,
+    evidence_validation:evidence,
+  };
 }
 
 async function fetchJson(url,options={},timeoutMs=15_000){
