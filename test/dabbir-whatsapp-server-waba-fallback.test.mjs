@@ -9,61 +9,57 @@ const read = path => readFile(new URL(path, root), 'utf8');
 const platform = {
   appId: '123456789012345',
   appSecret: 'unit-test-app-secret',
-  graphVersion: 'v23.0',
+  graphVersion: 'v26.0',
 };
-const debugAuthorizationToken = 'unit-test-system-user-token';
 
-test('server discovers exactly one shared WABA from Meta debug_token granular scopes', async () => {
+const json = payload => new Response(JSON.stringify(payload), {
+  status: 200,
+  headers: { 'content-type': 'application/json' },
+});
+
+test('server discovers exactly one shared WABA through authorized Graph business edges without putting token in URL', async () => {
   const originalFetch = globalThis.fetch;
-  let seenUrl = null;
-  let seenAuthorization = null;
+  const seen = [];
   try {
     globalThis.fetch = async (url, options = {}) => {
-      seenUrl = new URL(String(url));
-      seenAuthorization = options?.headers?.authorization || null;
-      return new Response(JSON.stringify({
-        data: {
-          is_valid: true,
-          granular_scopes: [
-            { scope: 'public_profile', target_ids: [] },
-            { scope: 'whatsapp_business_management', target_ids: ['998877665544332'] },
-          ],
-        },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      const parsed = new URL(String(url));
+      seen.push({ url: parsed, authorization: options?.headers?.authorization || null });
+      if (parsed.pathname === '/v26.0/me') return json({ id: '42', business: { id: '77777777777' } });
+      if (parsed.pathname === '/v26.0/77777777777/owned_whatsapp_business_accounts') {
+        return json({ data: [{ id: '998877665544332', name: 'Owned WABA' }] });
+      }
+      if (parsed.pathname === '/v26.0/77777777777/client_whatsapp_business_accounts') return json({ data: [] });
+      throw new Error(`UNEXPECTED_GRAPH_PATH:${parsed.pathname}`);
     };
 
-    const wabaId = await discoverWabaIdFromAccessToken(
-      platform,
-      'oauth-user-token',
-      { authorizationToken: debugAuthorizationToken },
-    );
+    const wabaId = await discoverWabaIdFromAccessToken(platform, 'oauth-user-token');
     assert.equal(wabaId, '998877665544332');
-    assert.equal(seenUrl.pathname, '/v23.0/debug_token');
-    assert.equal(seenUrl.searchParams.get('input_token'), 'oauth-user-token');
-    assert.equal(seenAuthorization, 'Bearer unit-test-system-user-token');
+    assert.ok(seen.length >= 3);
+    for (const request of seen) {
+      assert.equal(request.authorization, 'Bearer oauth-user-token');
+      assert.doesNotMatch(request.url.toString(), /oauth-user-token|input_token=|access_token=/);
+    }
+    assert.equal(seen.some(request => request.url.pathname.endsWith('/debug_token')), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('server refuses to guess when Meta shares multiple WABAs', async () => {
+test('server refuses to guess when authorized Graph edges expose multiple WABAs', async () => {
   const originalFetch = globalThis.fetch;
   try {
-    globalThis.fetch = async () => new Response(JSON.stringify({
-      data: {
-        is_valid: true,
-        granular_scopes: [
-          { scope: 'whatsapp_business_management', target_ids: ['11111111111', '22222222222'] },
-        ],
-      },
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    globalThis.fetch = async url => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === '/v26.0/me') return json({ id: '42', business: { id: '77777777777' } });
+      if (parsed.pathname === '/v26.0/77777777777/owned_whatsapp_business_accounts') {
+        return json({ data: [{ id: '11111111111' }, { id: '22222222222' }] });
+      }
+      if (parsed.pathname === '/v26.0/77777777777/client_whatsapp_business_accounts') return json({ data: [] });
+      throw new Error(`UNEXPECTED_GRAPH_PATH:${parsed.pathname}`);
+    };
 
     await assert.rejects(
-      () => discoverWabaIdFromAccessToken(
-        platform,
-        'oauth-user-token',
-        { authorizationToken: debugAuthorizationToken },
-      ),
+      () => discoverWabaIdFromAccessToken(platform, 'oauth-user-token'),
       error => error?.message === 'META_WABA_RESOLUTION_REQUIRED' && error?.status === 409,
     );
   } finally {
@@ -71,7 +67,7 @@ test('server refuses to guess when Meta shares multiple WABAs', async () => {
   }
 });
 
-test('iPhone Embedded Signup refuses incomplete authorization when Meta returns no session event', async () => {
+test('iPhone Embedded Signup refuses incomplete authorization and server fallback avoids debug_token query transport', async () => {
   const ui = await read('api/dabbir-whatsapp-embedded-ui.js');
   const endpoint = await read('api/dabbir-whatsapp-embedded-complete.js');
 
@@ -82,10 +78,10 @@ test('iPhone Embedded Signup refuses incomplete authorization when Meta returns 
   assert.match(ui, /if\(!session\?\.waba_id\)\{[\s\S]*META_EMBEDDED_SIGNUP_SESSION_MISSING/);
 
   assert.match(endpoint, /discoverWabaIdFromAccessToken/);
-  assert.match(endpoint, /debug_token/);
-  assert.match(endpoint, /granular_scopes/);
-  assert.match(endpoint, /whatsapp_business_management/);
-  assert.match(endpoint, /DABBIR_WHATSAPP_ACCESS_TOKEN/);
-  assert.match(endpoint, /authorizationToken \|\| existingMetaDebugToken\(\) \|\| appAccessToken/);
-  assert.match(endpoint, /waba_source: cleanId\(body\?\.waba_id\) \? 'embedded_session' : 'debug_token'/);
+  assert.match(endpoint, /owned_whatsapp_business_accounts/);
+  assert.match(endpoint, /client_whatsapp_business_accounts/);
+  assert.doesNotMatch(endpoint, /debug_token/);
+  assert.doesNotMatch(endpoint, /input_token/);
+  assert.doesNotMatch(endpoint, /existingMetaDebugToken/);
+  assert.match(endpoint, /waba_source: cleanId\(body\?\.waba_id\) \? 'embedded_session' : 'graph_edges'/);
 });

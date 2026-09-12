@@ -23,7 +23,7 @@ function finite01(v){return typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1;
 function parseJsonOnly(raw){const text=String(raw??'').trim();if(!text.startsWith('{')||!text.endsWith('}')||text.length>12000)return null;try{return JSON.parse(text)}catch{return null}}
 function normalizeModelContract(x){
   if(!x||Array.isArray(x)||typeof x!=='object')return x;
-  return {...x,service_candidate:x.service_candidate??null,entities:Array.isArray(x.entities)?x.entities:[],side_questions:Array.isArray(x.side_questions)?x.side_questions:[],invalidated_fields:Array.isArray(x.invalidated_fields)?x.invalidated_fields:[],requested_action:x.requested_action??'NONE',confirmation:x.confirmation??null};
+  return {...x,service_candidate:x.service_candidate??null,entities:x.entities??[],side_questions:x.side_questions??[],invalidated_fields:x.invalidated_fields??[],requested_action:x.requested_action??'NONE',confirmation:x.confirmation??null};
 }
 function validModelContract(x,raw){
   if(!x||Array.isArray(x)||!INTENTS.has(x.intent)||!ROLES.has(x.role)||!ACTIONS.has(x.requested_action)||!finite01(x.confidence))return false;
@@ -69,7 +69,7 @@ export async function interpretConversationTurnV3({context,previousState=null,ge
   const serviceQuestion=x.side_questions.find(q=>q.type==='price'||q.type==='duration_minutes')||null;
   const semanticServiceSurface=x.service_candidate?.label?x.service_candidate?.surface:null;
   const proposal={intent:x.intent==='UNKNOWN'?'SUPPORT':x.intent,action:x.requested_action==='NONE'?'REPLY':x.requested_action,confidence:x.confidence,serviceName,serviceSurface:semanticServiceSurface,serviceCandidateLabel:x.service_candidate?.label||null,serviceVerified:false,entities,
-    serviceQuestion:serviceQuestion?{field:serviceQuestion.type,evidence:serviceQuestion.surface}:null,dialogue:{message_role:x.role,evidence:clean(raw,300),invalidated_fields:x.invalidated_fields},requestSpans:[],contextReference:null};
+    serviceQuestion:serviceQuestion?{field:serviceQuestion.type,evidence:serviceQuestion.surface}:null,serviceQuestions:x.side_questions.map(q=>({field:q.type,evidence:q.surface})),dialogue:{message_role:x.role,evidence:clean(raw,300),invalidated_fields:x.invalidated_fields},requestSpans:[],contextReference:null};
   return {proposal,fastFacts:fast.fastFacts,provider:result.provider,model:result.model,telemetry:result.telemetry||null,raw_interpretation:{intent:x.intent,role:x.role,service_candidate_label:x.service_candidate?.label||null,requested_action:x.requested_action}};
 }
 
