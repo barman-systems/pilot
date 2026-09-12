@@ -9,6 +9,7 @@ import {
 } from '../scripts/dabbir-live-ddl-lineage-preflight.mjs';
 
 const read=relative=>fs.readFileSync(fileURLToPath(new URL(`../${relative}`,import.meta.url)),'utf8');
+const VALID_MD5='0123456789abcdef0123456789abcdef'; // synthetic test constant — not derived from any real definition
 const release={
   commit_sha:'a'.repeat(40),
   deployment_id:'dpl_test',
@@ -24,17 +25,17 @@ const expected=[
 ];
 const snapshot={
   migration_history:[
-    {version:'20260911170343',name:'one',statements_md5:'a'},
-    {version:'20260911184500',name:'two',statements_md5:'b'},
+    {version:'20260911170343',name:'one',statements_md5:VALID_MD5},
+    {version:'20260911184500',name:'two',statements_md5:VALID_MD5},
   ],
   functions:[
     {
       schema_name:'public',
       function_name:'example',
       identity_arguments:'',
-      definition_md5:'c',
-      acl_md5:'d',
-      search_path_md5:'e',
+      definition_md5:VALID_MD5,
+      acl_md5:VALID_MD5,
+      search_path_md5:VALID_MD5,
       security_definer:true,
     },
   ],
@@ -74,17 +75,21 @@ test('workflow is a dedicated migration-path required candidate and uses only th
   assert.doesNotMatch(runner,/database\/migrations|apply_migration|db push/i);
 });
 
-test('matching migration lineage returns BASELINE_MATCH with stable production identity',()=>{
+test('matching migration lineage with valid evidence returns UNKNOWN pending independent Phase B manifest',()=>{
   const result=evaluatePreflight({expectedMigrations:expected,liveSnapshot:snapshot,releaseBefore:release,releaseAfter:{...release}});
-  assert.equal(result.state,'BASELINE_MATCH');
+  assert.equal(result.evidence_validation.ok,true);
   assert.equal(result.lineage.match,true);
+  assert.equal(result.state,'UNKNOWN');
+  assert.equal(result.reason,'PHASE_B_EXPECTED_MANIFEST_NOT_AVAILABLE');
 });
 
 test('migration history change returns BASELINE_CHANGED',()=>{
   const changed={...snapshot,migration_history:[snapshot.migration_history[0]]};
   const result=evaluatePreflight({expectedMigrations:expected,liveSnapshot:changed,releaseBefore:release,releaseAfter:{...release}});
-  assert.equal(result.state,'BASELINE_CHANGED');
+  assert.equal(result.evidence_validation.ok,true);
   assert.equal(result.lineage.match,false);
+  assert.equal(result.state,'BASELINE_CHANGED');
+  assert.equal(result.reason,'MIGRATION_HISTORY_DIFFERS_FROM_REPOSITORY_BASE');
   assert.ok(result.lineage.missing.includes('20260911184500:two'));
 });
 

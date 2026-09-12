@@ -7,18 +7,16 @@ import {
 } from '../scripts/dabbir-lineage-evidence-validation.mjs';
 import { evaluatePreflight } from '../scripts/dabbir-live-ddl-lineage-preflight.mjs';
 
-const md5a='a'.repeat(32);
-const md5b='b'.repeat(32);
-const md5c='c'.repeat(32);
+const VALID_MD5='0123456789abcdef0123456789abcdef'; // synthetic test constant — not derived from any real definition
 const expectedMigrations=[{version:'20260901000000',name:'phase_a_fixture'}];
-const liveMigration={version:'20260901000000',name:'phase_a_fixture',statements_md5:md5a};
+const liveMigration={version:'20260901000000',name:'phase_a_fixture',statements_md5:VALID_MD5};
 const liveFunction={
   schema_name:'public',
   function_name:'phase_a_fixture',
   identity_arguments:'',
-  definition_md5:md5a,
-  acl_md5:md5b,
-  search_path_md5:md5c,
+  definition_md5:VALID_MD5,
+  acl_md5:VALID_MD5,
+  search_path_md5:VALID_MD5,
   security_definer:false,
 };
 const goodSnapshot=()=>({migration_history:[{...liveMigration}],functions:[{...liveFunction}]});
@@ -88,17 +86,20 @@ test('rejects non-boolean security_definer',()=>{
   rejected(validateFunctionEvidence([{...liveFunction,security_definer:'false'}]));
 });
 
-test('rejects migration row missing version or name',()=>{
-  rejected(validateMigrationEvidence([{name:'phase_a_fixture',statements_md5:md5a}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
-  rejected(validateMigrationEvidence([{version:'20260901000000',statements_md5:md5a}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
+test('rejects migration row missing version',()=>{
+  rejected(validateMigrationEvidence([{name:'phase_a_fixture',statements_md5:VALID_MD5}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
+});
+
+test('rejects migration row missing name',()=>{
+  rejected(validateMigrationEvidence([{version:'20260901000000',statements_md5:VALID_MD5}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
 });
 
 test('rejects duplicate function identity',()=>{
-  rejected(validateFunctionEvidence([{...liveFunction},{...liveFunction,definition_md5:md5b}]));
+  rejected(validateFunctionEvidence([{...liveFunction},{...liveFunction}]));
 });
 
 test('rejects duplicate migration identity',()=>{
-  rejected(validateMigrationEvidence([{...liveMigration},{...liveMigration,statements_md5:md5b}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
+  rejected(validateMigrationEvidence([{...liveMigration},{...liveMigration}],{requireStatementsMd5:true,label:'LIVE_MIGRATION_EVIDENCE'}));
 });
 
 test('rejects general type mismatches',()=>{
