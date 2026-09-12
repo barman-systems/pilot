@@ -17,7 +17,7 @@ function putFact(map,f){if(f?.field&&f.status==='VERIFIED')map.set(f.field,f);}
 function localParts(at,tz){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(at).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return {date:`${p.year}-${p.month}-${p.day}`,time:`${p.hour}:${p.minute}`};}catch{return null}}
 function serviceByName(context,name){const wanted=norm(name);if(!wanted)return null;const hits=scopedServices(context).filter(s=>[s?.name,s?.name_ar,s?.name_en].some(x=>norm(x)===wanted));return hits.length===1?hits[0]:null;}
 function serviceById(context,id){return scopedServices(context).find(s=>s.id===id)||null;}
-function contractFor(context,serviceId){return profileServices(context).find(s=>s.service_id===id)||null;}
+function contractFor(context,serviceId){return profileServices(context).find(s=>s.service_id===serviceId)||null;}
 function unionDefinition(context,field){const defs=profileServices(context).map(s=>s?.entity_definitions?.[field]).filter(Boolean);if(!defs.length)return null;if(defs.every(d=>d.type===defs[0].type)){const values=[...new Set(defs.flatMap(d=>arr(d.values)))];return {...defs[0],...(values.length?{values}: {})};}return null;}
 function activityWideSingleMode(context){const rows=profileServices(context);if(!rows.length)return null;const modes=[...new Set(rows.flatMap(r=>arr(r.delivery_modes)).filter(Boolean))];return modes.length===1?modes[0]:null;}
 function validDate(value){return typeof value==='string'&&/^20\d{2}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T12:00:00Z`));}
