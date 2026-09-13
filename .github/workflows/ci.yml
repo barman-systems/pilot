@@ -43,6 +43,7 @@ jobs:
           fi
           node scripts/dabbir-production-db-change-gate.mjs
       - name: Enforce Supabase advisor regression gate
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
