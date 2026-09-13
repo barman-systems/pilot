@@ -62,7 +62,7 @@ test('protected prelaunch remains a supported fail-closed mode while live produc
 
   // Other production-only journeys remain public-launch gated.
   assert.match(away,/steps\.launch-gate\.outputs\.ready == 'true'/);
-  assert.match(auth,/steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
+  assert.match(auth,/github\.event_name != 'pull_request' && steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
 });
 
 test('deployment contract records the authoritative live public production state', () => {

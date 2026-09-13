@@ -31,8 +31,6 @@ jobs:
     env:
       PROJECT_REF: fphpoysqdsceniwduxjq
       PRODUCTION_ORIGIN: https://dabbir.bmalman.com
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -41,6 +39,10 @@ jobs:
 
       - name: Resolve management credential
         id: credential
+        if: github.event_name != 'pull_request'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -56,7 +58,10 @@ jobs:
           fi
 
       - name: Enforce native Supabase leaked password protection
-        if: steps.credential.outputs.available == 'true'
+        if: github.event_name != 'pull_request' && steps.credential.outputs.available == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -97,7 +102,10 @@ jobs:
         run: node scripts/dabbir-production-origin-gate.mjs
 
       - name: Enforce hosted Supabase Auth URLs
-        if: steps.credential.outputs.available == 'true' && steps.launch-gate.outputs.ready == 'true'
+        if: github.event_name != 'pull_request' && steps.credential.outputs.available == 'true' && steps.launch-gate.outputs.ready == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
