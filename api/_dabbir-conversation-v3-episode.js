@@ -33,6 +33,13 @@ export function classifyEpisodeBoundaryV3({previousState=null,canonicalState=nul
   const longIdle=idleMs==null||idleMs>V3_EPISODE_IDLE_MS;
   const operational=OPERATIONAL_INTENTS.has(intent);
   const independentEvidence=carriesIndependentRequestEvidence({proposal,previousState,canonicalState});
+  const socialRole=role==='GREETING'||role==='SOCIAL';
+  // A standalone social turn after a long idle period must never resurrect an
+  // old operational episode. Keep short social interruptions inside the live
+  // episode so a customer does not lose booking progress mid-conversation.
+  if(longIdle&&socialRole&&!operational&&!independentEvidence){
+    return {kind:'NEW_EPISODE',reason:'LONG_IDLE_SOCIAL_RESTART',idle_ms:idleMs,at:at.toISOString()};
+  }
   // A clean provider-labelled NEW_REQUEST keeps the existing reason code so
   // observability remains stable.
   if(longIdle&&operational&&role==='NEW_REQUEST'){
