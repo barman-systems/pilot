@@ -77,7 +77,7 @@
       "verdict"
     ],
     "limitations": [
-      "snapshot collector and actual scope not yet built",
+      "declared synthetic relational scope and native collector implemented; final experimental authorization and attestation binding remain unproven",
       "signing and verification not connected",
       "EQUAL_IN_DECLARED_SCOPE is not historical attribution or whole-database equality"
     ],
@@ -89,6 +89,16 @@
         "ACTUAL_LOAD_RESULT exact object handed to B"
       ],
       "rule": "full-row equality checks pre-load persistence only; load-result differences are separate evidence and must not be treated as failed restore automatically"
+    },
+    "preparationEvidence": {
+      "scopeFile": "test/fixtures/s07-preparation/relational-scope.json",
+      "collectorFile": "scripts/dabbir-s07-relational-capture.mjs",
+      "evidenceFile": "docs/evidence/s07-native-34761401485.json",
+      "nativeAssertions": "PRE_EXPORT equals POST_RESTORE_PRE_LOAD; schema drift rejected",
+      "scopeHash": "a99e1e09ffcdfae8f54de1ab7a9765040d36eb6aaeb69c871c05f44a4fd30b8c",
+      "tables": 33,
+      "columns": 254,
+      "limitation": "Two native preparation snapshots do not fulfill the three-snapshot signed experimental attestation above. Original predicate unchanged; no independent certificate issued."
     }
   }
 }
