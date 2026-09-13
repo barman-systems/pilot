@@ -171,7 +171,7 @@ async function verifyEvidence(item,releaseCache){
         assert(Number.isFinite(now)&&now===reported,`SNAPSHOT_METRIC_MISMATCH_${clean(key,80)}`);
         checked[key]={reported,current:now};
       }
-      return {type,reference,checked,generated_at:generatedAt,source:'AUTHORITATIVE_DB_RECHECK'};
+      return {type,reference,checked,generated_at:generatedAt,source:'AUTHORITATIVE_DB_FRESH_RECHECK'};
     }
     throw new VerificationMismatch('QUERY_REFERENCE_DENIED');
   }
