@@ -1,4 +1,77 @@
 import fs from 'node:fs';
+
+import vm from 'node:vm';
+
+// Execute the actual worker with an isolated HTTP boundary; no live OIDC or DB calls.
+async function runSnapshotWorker({ageMs=0, generatedAt, reported=13, current=13, snapshotStatus=200, rejectStatus=200}={}){
+  const calls=[];
+  const messages=[];
+  const fakeProcess={env:{ACTIONS_ID_TOKEN_REQUEST_URL:'https://oidc.invalid/token',ACTIONS_ID_TOKEN_REQUEST_TOKEN:'synthetic-test-token'},exitCode:0,exit(){throw new Error('UNEXPECTED_EXIT')}};
+  const response=(status,payload)=>({ok:status>=200&&status<300,status,json:async()=>payload});
+  const fetch=async(url,options={})=>{
+    if(String(url).startsWith('https://oidc.invalid/'))return response(200,{value:'synthetic-oidc'});
+    assert.equal(url,'https://dabbir.bmalman.com/api/barman-independent-verifier');
+    const body=JSON.parse(options.body);
+    calls.push(body);
+    if(body.phase==='claim')return response(200,{ok:true,claimed:true,command:{
+      id:'11111111-1111-4111-8111-111111111111',worker_id:'executor-test',
+      evidence:[{type:'query',reference:'barman-executive-snapshot-v1',details:{
+        generated_at:generatedAt??new Date(Date.now()-ageMs).toISOString(),expected:{customers_total:reported}
+      }}]
+    }});
+    if(body.phase==='snapshot')return response(snapshotStatus,{ok:snapshotStatus===200,snapshot:{customers:{total:current}}});
+    if(body.phase==='reject')return response(rejectStatus,{ok:rejectStatus===200,rejected:{verification_status:'FAILED'}});
+    if(body.phase==='verify')return response(200,{ok:true,verified:true});
+    throw new Error('UNEXPECTED_PHASE');
+  };
+  const context=vm.createContext({process:fakeProcess,fetch,AbortSignal,Date,console:{log:(...v)=>messages.push(v.join(' ')),error:(...v)=>messages.push(v.join(' '))}});
+  await new vm.Script('(async()=>{'+worker+'\n})()').runInContext(context);
+  return {calls,messages,exitCode:fakeProcess.exitCode};
+}
+
+test('worker accepts a fresh equal snapshot and emits freshness provenance',async()=>{
+  const r=await runSnapshotWorker();
+  assert.deepEqual(r.calls.map(c=>c.phase),['claim','snapshot','verify']);
+  assert.equal(r.calls[2].details.checks[0].source,'AUTHORITATIVE_DB_FRESH_RECHECK');
+  assert.equal(r.exitCode,0);
+});
+
+for(const [name,options,reason] of [
+  ['stale',{ageMs:31*60*1000},'SNAPSHOT_EVIDENCE_STALE'],
+  ['future',{ageMs:-120000},'SNAPSHOT_GENERATED_AT_FUTURE'],
+  ['invalid timestamp',{generatedAt:'invalid'},'SNAPSHOT_GENERATED_AT_INVALID'],
+]){
+  test('worker rejects '+name+' evidence before reading mutable state',async()=>{
+    const r=await runSnapshotWorker(options);
+    assert.deepEqual(r.calls.map(c=>c.phase),['claim','reject']);
+    assert.equal(r.calls[1].reason,reason);
+    assert.equal(r.exitCode,0);
+  });
+}
+
+for(const current of [12,14]){
+  test('worker rejects changed customer total '+current+' without promotion',async()=>{
+    const r=await runSnapshotWorker({current});
+    assert.deepEqual(r.calls.map(c=>c.phase),['claim','snapshot','reject']);
+    assert.equal(r.calls[2].reason,'SNAPSHOT_METRIC_MISMATCH_CUSTOMERS_TOTAL');
+    assert.equal(r.exitCode,0);
+  });
+}
+
+test('transient snapshot failure never terminally rejects the command',async()=>{
+  const r=await runSnapshotWorker({snapshotStatus:503});
+  assert.deepEqual(r.calls.map(c=>c.phase),['claim','snapshot']);
+  assert.equal(r.exitCode,1);
+});
+
+test('failed rejection RPC cannot be reported as successful verification',async()=>{
+  const r=await runSnapshotWorker({ageMs:31*60*1000,rejectStatus:503});
+  assert.deepEqual(r.calls.map(c=>c.phase),['claim','reject']);
+  assert.equal(r.exitCode,1);
+  assert.ok(r.messages.some(m=>m.includes('INDEPENDENT_VERIFICATION_REJECTION_FAILED')));
+  assert.ok(r.messages.every(m=>!m.includes('INDEPENDENT_VERIFICATION_PASSED')));
+});
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
