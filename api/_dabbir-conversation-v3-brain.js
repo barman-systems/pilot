@@ -93,6 +93,19 @@ export function planConversationTurnV3({previousState,understanding,episode,cont
   const invalidations=[...(episode?.kind==='NEW_EPISODE'?arr(previous.facts).filter(f=>f?.status==='VERIFIED').map(f=>({field:f.field,reason:'NEW_EPISODE'})):[]),...arr(understanding.invalidations)];
   const state={version:2,episode_id:episode?.kind==='NEW_EPISODE'?`${clean(context?.conversation?.id,80)}:${understanding.turn.created_at}`:previous.episode_id||`${clean(context?.conversation?.id,80)}:${understanding.turn.created_at}`,episode_started_at:episode?.kind==='NEW_EPISODE'?understanding.turn.created_at:previous.episode_started_at||understanding.turn.created_at,last_turn_at:understanding.turn.created_at,episode_boundary:{kind:episode?.kind||'CONTINUE',reason:episode?.reason||'UNKNOWN',idle_ms:episode?.idle_ms??null},goal:understanding.goal||previous.goal||'UNKNOWN',intent_confirmed:episode?.kind==='NEW_EPISODE'?understanding.signals.booking_intent_strong===true:(previous.intent_confirmed===true||understanding.signals.booking_intent_strong===true),facts:understanding.facts.map(f=>({...f})),tentatives:understanding.tentatives.map(f=>({...f})),invalidations,pending_question:null};
   if(episode?.kind!=='NEW_EPISODE')assertFactRetentionV3({before:previous,after:state});
+  const socialOnly=understanding.signals.social_only===true;
+  state.last_operational_turn_at=socialOnly?(previous.last_operational_turn_at||previous.last_turn_at||null):understanding.turn.created_at;
+  if(socialOnly){
+    // A social interruption keeps the episode and pending proposition available
+    // for an actual answer. It is neither an answer nor renewed booking consent.
+    state.goal=previous.goal||'UNKNOWN';state.intent_confirmed=previous.intent_confirmed===true;
+    state.pending_question=previous.pending_question?structuredClone(previous.pending_question):null;
+    const required=requirementsFor(state,context),verified=mapFacts(state.facts);
+    const plan={version:3,goal:state.goal,intent_confirmed:state.intent_confirmed,turn_disposition:'SOCIAL_ONLY',answers:[],missing_fields:required.filter(f=>!verified.has(f)),required_fields:required,next_question:null,surfaced_facts:[],surfaced_tentative_fields:[],deferred_tentative_fields:arr(state.tentatives).map(t=>t.field),proposed_action:'REPLY',response_parts:{acknowledgement:'SOCIAL',understanding_summary:false,answer:false,assumption:false,question:null}};
+    const text=arabic(context)?(understanding.role==='GREETING'?'هلا، حياك. كيف أقدر أساعدك؟':'حياك. أنا حاضر إذا احتجت مساعدة.'):(understanding.role==='GREETING'?'Hi. How can I help?':'You are welcome. I am here if you need help.');
+    const response=brainResponseV3({text,plan_id:`${state.episode_id}:${understanding.turn.message_id||'turn'}`,metadata:{goal:state.goal,engine:'V3'}});
+    assertDialoguePlanV3({plan,state,response});return {state,plan,response};
+  }
   const required=requirementsFor(state,context),verified=mapFacts(state.facts),missing=required.filter(field=>!verified.has(field)),answers=answerSideQuestions(understanding,state,context);let nextQuestion=chooseQuestion(state,missing,context);
   if(state.goal==='DISCOVER_SERVICE'&&!verified.has('service'))nextQuestion=tentativeService(state)?nextQuestion:{fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
   if(state.goal==='PRICE_SERVICE'&&!verified.has('service'))nextQuestion=tentativeService(state)?nextQuestion:{fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
