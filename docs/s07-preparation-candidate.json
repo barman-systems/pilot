@@ -1,0 +1,110 @@
+{
+  "status": "PREPARATION_CANDIDATE_NOT_SEALED_NOT_AUTHORIZED",
+  "repository": "barman-systems/pilot",
+  "sourceHead": "e816903b052fb113529c43fe17355624920e13c4",
+  "nativeTestHead": "e9000f5bc3c8d7bb154b93ad83f208f6573e40ef",
+  "nativeRun": 34758714922,
+  "files": [
+    {
+      "path": ".github/workflows/s07-native-preparation.yml",
+      "gitBlob": "18df49dbb128bb4e0233170be400bbdf0e7aef8c",
+      "sha256": "8697aec6a9856e71374cc7c131de4bdc27bedeead994e091ffb91f401784b757",
+      "bytes": 3098
+    },
+    {
+      "path": "docs/evidence/s07-native-20260913/boundary.json",
+      "gitBlob": "a3b6c2128c983d56fd28d9200f1983ac867f0791",
+      "sha256": "790c6200badfb1225e05f03b342ba0d4fba5c4d40aef7f641062741b5a97fdde",
+      "bytes": 1110
+    },
+    {
+      "path": "docs/evidence/s07-native-20260913/evidence.json",
+      "gitBlob": "4d93aeaaf6687f7369578e843f524dc7329115b9",
+      "sha256": "8e87d6a26afc170043134c0063914ee4cf275980f242a9efea2d3ab5f93601b9",
+      "bytes": 939
+    },
+    {
+      "path": "docs/evidence/s07-native-20260913/sql-bootstrap.json",
+      "gitBlob": "be16db8baa080a69b38bf473568856909ecc24d7",
+      "sha256": "90f29170083ec585c6c309d11b8798771eaea924c57df57c40474d09d8ecebad",
+      "bytes": 53674
+    },
+    {
+      "path": "docs/s07-native-execution-handoff.md",
+      "gitBlob": "cc44c0ad7b6defc258f3c144ceeb6f9a59e6866b",
+      "sha256": "39ed6ccd324dc3a822e2aff24b812d2cb6fda2c5d93ed8883085728921857357",
+      "bytes": 5965
+    },
+    {
+      "path": "scripts/dabbir-s07-fixture-adapter.mjs",
+      "gitBlob": "7d5b71c247b143666ccec5db94829b3a43efdb25",
+      "sha256": "f3a6298b3e7d44f0971051393587da7956d272df4a0e492b18f900ad4e00a925",
+      "bytes": 1141
+    },
+    {
+      "path": "scripts/dabbir-s07-recovery-executor.mjs",
+      "gitBlob": "80737ebd57f58677b01453136bd095a6deeba633",
+      "sha256": "66c110f87bf8dc00b422fb0a10664a303fca05438edbbacdc92263f0935b6b5d",
+      "bytes": 2795
+    },
+    {
+      "path": "test/fixtures/s07-native-boundary.mjs",
+      "gitBlob": "6916c2a9d0c77561f6612d32b1e602ddf06d18ba",
+      "sha256": "0382bc320e0b9da1548b552ca5655075d160b8409698f14f99847b3ffb8826de",
+      "bytes": 3658
+    },
+    {
+      "path": "test/fixtures/s07-native-recovery.mjs",
+      "gitBlob": "b8dc916fca4d14f062cbbc5d5324d0381f94de85",
+      "sha256": "f35b8d5a26069349412689e7d2ebc77a3dfc974984d61bf32944f550e0b6ce38",
+      "bytes": 3416
+    },
+    {
+      "path": "test/fixtures/s07-native-sql-steps.json",
+      "gitBlob": "4de62a86cc3bcb193bdacdfa17df2deca8a82d3a",
+      "sha256": "e9795082710751d66f9c5291494d4826af6aa91250ebb2021854be137599bc85",
+      "bytes": 3530
+    },
+    {
+      "path": "test/fixtures/s07-native-sql.mjs",
+      "gitBlob": "9f365d2d66f96947b6686007f8147ad5c8f25c80",
+      "sha256": "d1ab5e621e6ede14502432a749cce5e812b732317c5beb6f99dfe1149b03bcb7",
+      "bytes": 6207
+    },
+    {
+      "path": "test/fixtures/s07-preparation/designed-state.json",
+      "gitBlob": "1d8f26aaa9be7686a2fb3513aef4715e357aa5b0",
+      "sha256": "e6eee61c3354e866fa32d3e81bdf19c1b284d04785482c945361a0684e752837",
+      "bytes": 1769
+    },
+    {
+      "path": "test/fixtures/s07-preparation/expectations-draft.json",
+      "gitBlob": "6908c765b180a90b09693549ee3c13797992752a",
+      "sha256": "0870b347f7bc21ca4e859caeb6674a238fd87d362f48aca6327e4377d2f56ee5",
+      "bytes": 3541
+    },
+    {
+      "path": "test/fixtures/s07-preparation/instrumented-B/runtime.mjs",
+      "gitBlob": "3758213f1c3e3c298811e1a0b75dd86171768c8b",
+      "sha256": "66b777af405bcacc3de292f777b95d3d0e7d46132cb87b59931975ea46323c18",
+      "bytes": 14027
+    },
+    {
+      "path": "test/fixtures/s07-preparation/instrumented-B/s07-evidence-gate.mjs",
+      "gitBlob": "74933158568ec848f23d9b28dfd68e93f9a61834",
+      "sha256": "3514bb7a7cb1e738e0cc8b1c9fac8144e45ad0150f5e1d2a505fa3184dd18b8a",
+      "bytes": 937
+    }
+  ],
+  "executionAuthorized": false,
+  "openRequirements": [
+    "independent operator identity and exclusive signing authority",
+    "real external preregistration receipt and trust reference",
+    "final S07 interpreter configuration and runtime image binding",
+    "predeclared S07 row scope bound to final environment"
+  ],
+  "ciFinding": {
+    "verify-pr": "PREMERGE_DRAFT_BLOCKED",
+    "protectedWorkflow": "Owner gate also applies to .github/workflows/s07-native-preparation.yml; gate unchanged"
+  }
+}
