@@ -36,16 +36,39 @@ function validModelContract(x,raw){
 }
 function previousSummary(previousState){
   const facts=arr(previousState?.facts).filter(f=>f?.status==='VERIFIED').slice(0,12).map(f=>({field:f.field,value:typeof f.value==='string'||typeof f.value==='number'?f.value:null}));
-  return {goal:previousState?.goal||'UNKNOWN',intent_confirmed:previousState?.intent_confirmed===true,pending:previousState?.pending_question?{fields:arr(previousState.pending_question.fields),purpose:previousState.pending_question.purpose||null,options:arr(previousState.pending_question.options).map(o=>({type:o.type,label:o.label||null}))}:null,facts,tentatives:arr(previousState?.tentatives).slice(0,6).map(t=>({field:t.field,candidate_value:t.candidate_value??null,surface:t.surface||null}))};
+  return {goal:previousState?.goal||'UNKNOWN',intent_confirmed:previousState?.intent_confirmed===true,last_operational_turn_at:previousState?.last_operational_turn_at||previousState?.last_turn_at||null,evidence_invalidations:arr(previousState?.evidence_invalidations).map(x=>({field:x.field,reason:x.reason})),pending:previousState?.pending_question?{fields:arr(previousState.pending_question.fields),purpose:previousState.pending_question.purpose||null,options:arr(previousState.pending_question.options).map(o=>({type:o.type,label:o.label||null}))}:null,facts,tentatives:arr(previousState?.tentatives).slice(0,6).map(t=>({field:t.field,candidate_value:t.candidate_value??null,surface:t.surface||null}))};
 }
 function activitySummary(context){return arr(context?.activity_profile?.services).slice(0,10).map(c=>({service_label:serviceLabel(scopedServices(context).find(s=>s.id===c.service_id)),delivery_modes:arr(c.delivery_modes),booking_model:c.booking_model||c.operating_model||null,entity_definitions:c.entity_definitions||{}}));}
 function providerContext(context,previousState,referenceTime){return {reference_time:referenceTime,business_timezone:context?.business?.timezone||'Asia/Dubai',activity_type:context?.business?.business_type||null,catalog:scopedServices(context).slice(0,10).map(s=>({label:serviceLabel(s),price:Number.isFinite(Number(s.price))?Number(s.price):null,duration_minutes:Number.isFinite(Number(s.duration_minutes??s.duration))?Number(s.duration_minutes??s.duration):null})),activity_contracts:activitySummary(context),previous:previousSummary(previousState)};}
 function roleHistory(context){return arr(context?.history||context?.recent_conversation).slice(-4).flatMap(item=>{const sender=String(item?.sender_type??item?.role??'').toLowerCase(),content=clean(item?.body??item?.content,500);if(!content)return[];return [{role:sender==='ai'||sender==='assistant'||sender==='human'?'assistant':'user',content}]});}
 function proposalBase({intent='BOOKING',role='ANSWER_TO_PENDING_QUESTION',confidence=1,serviceName=null,serviceSurface=null,serviceVerified=false,action='REPLY',invalidated_fields=[]}={}){return {intent,action,confidence,serviceName,serviceSurface,serviceVerified,entities:[],serviceQuestion:null,dialogue:{message_role:role,evidence:serviceSurface,invalidated_fields}};}
-function fastPath({context,previousState,raw}){
-  const msg=currentMessage(context),trimmed=clean(raw,200),fastFacts=[];
-  const receipt=arr(context?.location_receipts).find(r=>r?.message_id===msg?.id&&(!r?.business_id||r.business_id===context?.business?.id)&&(!r?.conversation_id||r.conversation_id===context?.conversation?.id));
-  if(receipt&&Number.isFinite(Number(receipt?.value?.lat??receipt?.latitude))&&Number.isFinite(Number(receipt?.value?.lng??receipt?.longitude))){const value=receipt.value&&typeof receipt.value==='object'?receipt.value:{lat:Number(receipt.latitude),lng:Number(receipt.longitude),label:receipt.label||null};fastFacts.push({field:'location',value,source:'PROVIDER_VERIFIED',resolution:'SIGNED_WHATSAPP_LOCATION',confidence:1,receipt_id:receipt.message_id});}
+// Receipts belong to messages, not to the last message or the pending field.
+// Collect the trusted evidence before choosing any whole-batch shortcut. The
+// current contract can represent one location; conflicting points fail closed
+// instead of silently turning array order into customer selection.
+function batchLocationEvidence(context){
+  const messageIds=new Set();let locationFact=null;
+  for(const msg of arr(context?.batch_messages)){
+    if(!msg?.id)continue;
+    const receipts=arr(context?.location_receipts).filter(r=>r?.message_id===msg.id&&(!r?.business_id||r.business_id===context?.business?.id)&&(!r?.conversation_id||r.conversation_id===context?.conversation?.id));
+    for(const receipt of receipts){
+      const lat=Number(receipt?.value?.lat??receipt?.latitude),lng=Number(receipt?.value?.lng??receipt?.longitude);
+      if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)continue;
+      const value=receipt.value&&typeof receipt.value==='object'?receipt.value:{lat,lng,label:receipt.label||null};
+      if(locationFact&&(Number(locationFact.value.lat)!==lat||Number(locationFact.value.lng)!==lng)){
+        throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',reason:'MULTIPLE_LOCATION_RECEIPTS_UNRESOLVED'});
+      }
+      messageIds.add(msg.id);
+      locationFact={field:'location',value,source:'PROVIDER_VERIFIED',resolution:'SIGNED_WHATSAPP_LOCATION',confidence:1,receipt_id:receipt.message_id};
+    }
+  }
+  return {messageIds,fastFacts:locationFact?[locationFact]:[]};
+}
+function fastPath({context,previousState,raw,locations=batchLocationEvidence(context)}){
+  const trimmed=clean(raw,200),fastFacts=locations.fastFacts;
+  // A receipt may satisfy location, never the unprocessed text around it.
+  // Do not confirm a vehicle/slot or finish the batch before that text is read.
+  if(locations.messageIds.size&&arr(context?.batch_messages).some(m=>!locations.messageIds.has(m?.id)))return {proposal:null,fastFacts};
   const pending=previousState?.pending_question||null;
   if(['CONFIRM_TENTATIVE_VEHICLE','CONFIRM_TENTATIVE_SERVICE'].includes(pending?.purpose)&&CONFIRM_RE.test(trimmed))return {proposal:proposalBase({role:'CONFIRMATION',serviceSurface:trimmed}),fastFacts};
   if(pending&&DENY_RE.test(trimmed))return {proposal:proposalBase({intent:previousState?.goal==='BOOK_SERVICE'?'BOOKING':'SUPPORT',role:'DENIAL',serviceSurface:trimmed}),fastFacts};
@@ -59,8 +82,16 @@ function fastPath({context,previousState,raw}){
 }
 
 export async function interpretConversationTurnV3({context,previousState=null,generate=generateDABBIRAiReply,now=new Date()}){
-  const raw=currentText(context),msg=currentMessage(context),referenceTime=msg?.created_at||context?.batch?.last_message_at||(now instanceof Date?now.toISOString():String(now));
-  const fast=fastPath({context,previousState,raw});if(fast.proposal)return {...fast,provider:'deterministic-v3-fast-path',model:null,telemetry:null};
+  const msg=currentMessage(context),referenceTime=msg?.created_at||context?.batch?.last_message_at||(now instanceof Date?now.toISOString():String(now));
+  const locations=batchLocationEvidence(context);
+  const fast=fastPath({context,previousState,raw:currentText(context),locations});if(fast.proposal)return {...fast,provider:'deterministic-v3-fast-path',model:null,telemetry:null};
+  // Strip only displays backed by scoped receipt IDs. Ordinary customer text,
+  // including text that merely looks like a location, still needs interpretation.
+  const semanticContext=locations.messageIds.size?{...context,batch_messages:arr(context?.batch_messages).filter(m=>!locations.messageIds.has(m?.id))}:context;
+  const raw=currentText(semanticContext);
+  if(locations.messageIds.size&&(!raw||clean(raw,raw.length).length>2000)){
+    throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',reason:'MIXED_BATCH_TEXT_OUTSIDE_BUDGET'});
+  }
   const result=await generate({project:'dabbir_businesses',semantic:'v3',language:'auto',message:clean(raw,2000),businessContext:JSON.stringify(providerContext(context,previousState,referenceTime)),history:roleHistory(context),meteringContext:{business:{id:context?.business?.id},conversation:{id:context?.conversation?.id},batch_message_created_at:referenceTime}});
   if(!result?.ok)throw Object.assign(new Error('V3_INTERPRETER_UNAVAILABLE'),{code:'V3_INTERPRETER_UNAVAILABLE',telemetry:result?.telemetry||null});
   const x=normalizeModelContract(parseJsonOnly(result.reply));if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result?.telemetry||null});
