@@ -1,0 +1,2044 @@
+{
+  "run": 34761586351,
+  "job": 103735258418,
+  "testedCommit": "c8de4a212d8ff771db3097ee608fd9a29edd46ee",
+  "conclusion": "success",
+  "syntheticOnly": true,
+  "independentWitness": false,
+  "evidence": [
+    {
+      "file": "boundary.json",
+      "data": {
+        "scope": "SYNTHETIC_NATIVE_BOUNDARY_NOT_S07",
+        "status": "PASS",
+        "results": [
+          {
+            "via": "rpc",
+            "mode": "missing",
+            "delivered": false
+          },
+          {
+            "via": "rpc",
+            "mode": "write_failure",
+            "delivered": false
+          },
+          {
+            "via": "rpc",
+            "mode": "forged",
+            "delivered": false
+          },
+          {
+            "via": "rpc",
+            "mode": "valid",
+            "delivered": true
+          },
+          {
+            "via": "preloaded",
+            "mode": "missing",
+            "delivered": false
+          },
+          {
+            "via": "preloaded",
+            "mode": "write_failure",
+            "delivered": false
+          },
+          {
+            "via": "preloaded",
+            "mode": "forged",
+            "delivered": false
+          },
+          {
+            "via": "preloaded",
+            "mode": "valid",
+            "delivered": true
+          }
+        ],
+        "BCommit": "7645f9df82fc8c365f42451b949f387ec24db3d5",
+        "originalHash": "7208f5d598f1d34a232504e17674dca98e8b3f8feb8b1037fa4c0f968d8d09b0",
+        "instrumentedHash": "66b777af405bcacc3de292f777b95d3d0e7d46132cb87b59931975ea46323c18",
+        "historicalRPC": false,
+        "independentWitness": false,
+        "interpreter": "stopping sentinel"
+      }
+    },
+    {
+      "file": "evidence.json",
+      "data": {
+        "scope": "SYNTHETIC_NATIVE_RECOVERY_ONLY_NOT_S07",
+        "status": "PASS",
+        "server": "16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+        "binaries": {
+          "pg_dump": "84b6c45e52a8e01a4e50784a09694633a84a530e6b8e19b4139698c4d1e3ac45",
+          "pg_restore": "37059a2e745d53e5d112223a31f76f9b53e0bda1fae3dfbc17fe11b83fdac791",
+          "psql": "937e4ea7a9c625c98b1c56e0127e80b1ccac0a57079f67e33fe711e52c41af4c"
+        },
+        "beforeHash": "b251629466af0747a41af51aff8d29326feb19e32c8a165c1484227e9db95678",
+        "afterHash": "b251629466af0747a41af51aff8d29326feb19e32c8a165c1484227e9db95678",
+        "archiveHash": "1fd3b5526a2759435c566929c6bf763cc03251716f254f76ac8574b0684e777d",
+        "executorHash": "66c110f87bf8dc00b422fb0a10664a303fca05438edbbacdc92263f0935b6b5d",
+        "assertions": [
+          "default deny",
+          "full row equality",
+          "bigint preserved",
+          "occupied target rejected",
+          "time loss detected"
+        ],
+        "historicalDDL": false,
+        "independentWitness": false
+      }
+    },
+    {
+      "file": "sql-bootstrap.json",
+      "data": {
+        "scope": "EXISTING_SYNTHETIC_TEST_BOOTSTRAP_NOT_PRODUCTION_DDL",
+        "status": "PASS",
+        "commit": "7645f9df82fc8c365f42451b949f387ec24db3d5",
+        "steps": [
+          {
+            "index": 0,
+            "file": "./fixtures/understanding/database.sql",
+            "sha256": "70da40563fa70ba594b0583eb185231871d5198ff7169c1bdc9ea30d5d74f52f"
+          },
+          {
+            "index": 1,
+            "file": "../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql",
+            "sha256": "64a6f58b2f44a92d8bc9bd7af58c4353b50f650ffb27d27621f02ad553ee0e43"
+          },
+          {
+            "index": 2,
+            "file": "./fixtures/understanding/activity-database.sql",
+            "sha256": "1ca974047ded854c390d2c32b74dbce25e9043c45521a8286e7673a43bd71e59"
+          },
+          {
+            "index": 3,
+            "file": "../supabase/migrations/20260908155841_dabbir_activity_intelligence_v1.sql",
+            "sha256": "783bac7751e2d973f49f413184cbdf959366426407fb5cea5a3a1e815309affa"
+          },
+          {
+            "index": 4,
+            "file": "../supabase/migrations/20260909085635_dabbir_activity_action_authority_v1.sql",
+            "sha256": "88f389dd38ac7615f90c4ff2c45995a2acf21ad87d96a7449e988c82b0b291fc"
+          },
+          {
+            "index": 5,
+            "file": "../supabase/migrations/20260909091257_dabbir_activity_configuration_visibility_v1.sql",
+            "sha256": "523128b42fa9f07827c245821e8994ee0aa48845238f7c0131f6c6c01460df79"
+          },
+          {
+            "index": 6,
+            "file": null,
+            "sha256": "14087f59960d0f7c1594440537d238e22e186c0746039283bb1b591675fc326d"
+          },
+          {
+            "index": 7,
+            "file": "../supabase/migrations/20260908173803_dabbir_provider_retry_checkpoint_v1.sql",
+            "sha256": "faae4881f7e9d48cadd40f03eda2b0048576368b76a87b8f50cd368ca5c941c2"
+          },
+          {
+            "index": 8,
+            "file": "../supabase/migrations/20260909121326_dabbir_cognitive_dialogue_state_v1.sql",
+            "sha256": "342352e3e53362a902e679a9bcf920f7035b92c2aeeb2476acbf0b8eb100c7ba"
+          },
+          {
+            "index": 9,
+            "file": "../supabase/migrations/20260909121923_dabbir_cognitive_rollout_deny_clients_v1.sql",
+            "sha256": "a48dd3ee8d134676651f8f614fe1cffbdd9b9ef201cc233ea545b7afc2f08a14"
+          },
+          {
+            "index": 10,
+            "file": null,
+            "sha256": "c283e04b5d30b04c257353e1440093a2f88db97fa90515dd8e2f582f308ac04a"
+          },
+          {
+            "index": 11,
+            "file": "../supabase/migrations/20260909134020_dabbir_cognitive_delivery_progress_v1.sql",
+            "sha256": "24af79c81971f27beb5bd0f233e380e66dce069d8a1b22749246424eba1738ef"
+          },
+          {
+            "index": 12,
+            "file": "../supabase/migrations/20260909142432_dabbir_service_presentation_receipts_v1.sql",
+            "sha256": "00961fdb9b1a9a2477cefc2320dd7dc97ac9f732afe45cd975d77575ce2c197a"
+          },
+          {
+            "index": 13,
+            "file": null,
+            "sha256": "d9d95d466d07462d2f7091e60c36e20157aba1bf6b195813ab387a0aad776106"
+          },
+          {
+            "index": 14,
+            "file": "../supabase/migrations/20260903105200_dabbir_whatsapp_ai_outbound_handoff_guard_v1.sql",
+            "sha256": "b118931a1c55e2c8c842729acb1f76a65d99c7e67d8e01dc31502bc27876fe10"
+          },
+          {
+            "index": 15,
+            "file": "../supabase/migrations/20260909143719_dabbir_cognitive_finalized_acceptance_v1.sql",
+            "sha256": "534329fd0997bd4352bc591c3af6b074fb2238c20cf7a98c697956b30a50a095"
+          },
+          {
+            "index": 16,
+            "file": "../supabase/migrations/20260909144318_dabbir_atomic_cognitive_presentation_v1.sql",
+            "sha256": "e3ea5c2bebbadfd9136d1a10979b22fa6019551ee787414f1d6ba09209129101"
+          },
+          {
+            "index": 17,
+            "file": "../supabase/migrations/20260909144913_dabbir_cognitive_receipt_reconciliation_v1.sql",
+            "sha256": "21a46548d3fcc01488855ad0d77ea04441dbfb1f7a3287a328038504b49e1c07"
+          },
+          {
+            "index": 18,
+            "file": "../supabase/migrations/20260909180619_dabbir_conversational_brain_context_v1.sql",
+            "sha256": "547a581595d66442fdc3f7fb81d1497ed2a6d93a814b7e54c2173eefccc9adea"
+          }
+        ],
+        "columns": [
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "activity_registry_v1",
+            "column_name": "version",
+            "data_type": "integer",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "activity_registry_v1",
+            "column_name": "schema",
+            "data_type": "jsonb",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "activity_registry_v1",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "cognitive_rollouts",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "cognitive_rollouts",
+            "column_name": "mode",
+            "data_type": "text",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "cognitive_rollouts",
+            "column_name": "canary_percent",
+            "data_type": "integer",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "dabbir_private",
+            "table_name": "cognitive_rollouts",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "service_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "version",
+            "data_type": "bigint",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "config",
+            "data_type": "jsonb",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "action",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "restored_version",
+            "data_type": "bigint",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "created_by",
+            "data_type": "uuid",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_activity_service_versions",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "operation_key",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "operation_type",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "entity_id",
+            "data_type": "uuid",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_action_ledger",
+            "column_name": "result",
+            "data_type": "jsonb",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "pending_action",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "payload",
+            "data_type": "jsonb",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "expires_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "semantic_state",
+            "data_type": "jsonb",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "semantic_version",
+            "data_type": "bigint",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "semantic_batch_id",
+            "data_type": "uuid",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_conversation_state",
+            "column_name": "semantic_message_revision",
+            "data_type": "bigint",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "source_conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "source_correction_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "entity_type",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "alias",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "target_id",
+            "data_type": "uuid",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "confidence",
+            "data_type": "numeric",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "impact",
+            "data_type": "text",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "version",
+            "data_type": "bigint",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "created_by",
+            "data_type": "uuid",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "reviewed_by",
+            "data_type": "uuid",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_knowledge_proposals",
+            "column_name": "reviewed_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 15
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "batch_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "proposal_id",
+            "data_type": "uuid",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "event_type",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "version",
+            "data_type": "bigint",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "actor_id",
+            "data_type": "uuid",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "metrics",
+            "data_type": "jsonb",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_ai_understanding_events",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "service_id",
+            "data_type": "uuid",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "worker_id",
+            "data_type": "uuid",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "simulated",
+            "data_type": "boolean",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "starts_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "booking_source",
+            "data_type": "text",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "location_type",
+            "data_type": "text",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "service_latitude",
+            "data_type": "double precision",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "service_longitude",
+            "data_type": "double precision",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "service_address",
+            "data_type": "text",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_appointments",
+            "column_name": "activity_intelligence",
+            "data_type": "jsonb",
+            "ordinal_position": 15
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_branch_services",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_branch_services",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_branch_services",
+            "column_name": "service_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_branch_services",
+            "column_name": "active",
+            "data_type": "boolean",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_branches",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_branches",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_branches",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_branches",
+            "column_name": "name",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "knowledge_key",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "knowledge_type",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "value",
+            "data_type": "jsonb",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "source",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "confidence",
+            "data_type": "numeric",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_business_knowledge",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_businesses",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_businesses",
+            "column_name": "timezone",
+            "data_type": "text",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_businesses",
+            "column_name": "business_type",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "vehicle_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "starts_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "location_lat",
+            "data_type": "numeric",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_booking_requests",
+            "column_name": "location_lng",
+            "data_type": "numeric",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_vehicles",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_vehicles",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_car_wash_vehicles",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "state",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "channel_type",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "demo_mode",
+            "data_type": "boolean",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "understanding_revision",
+            "data_type": "bigint",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_conversations",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "memory_key",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "value",
+            "data_type": "jsonb",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "source",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "confidence",
+            "data_type": "numeric",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "last_seen_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "expires_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "version",
+            "data_type": "bigint",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "last_confirmed_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customer_memory",
+            "column_name": "verified_action_id",
+            "data_type": "uuid",
+            "ordinal_position": 15
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customers",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customers",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_customers",
+            "column_name": "channel_handle",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "state",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "route_class",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "reason",
+            "data_type": "text",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "metadata",
+            "data_type": "jsonb",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "priority",
+            "data_type": "integer",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "routing_strategy",
+            "data_type": "text",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "summary",
+            "data_type": "text",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "attempted_actions",
+            "data_type": "jsonb",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_handoffs",
+            "column_name": "unresolved_items",
+            "data_type": "jsonb",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_home_service_settings",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_home_service_settings",
+            "column_name": "enabled",
+            "data_type": "boolean",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_memberships",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_memberships",
+            "column_name": "user_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_memberships",
+            "column_name": "role",
+            "data_type": "text",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_memberships",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batch_items",
+            "column_name": "batch_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batch_items",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batch_items",
+            "column_name": "message_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batch_items",
+            "column_name": "ordinal",
+            "data_type": "integer",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "customer_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "state",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "lock_token",
+            "data_type": "uuid",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "locked_until",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "first_message_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "last_message_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "dispatch_token",
+            "data_type": "uuid",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "channel_type",
+            "data_type": "text",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "attempt_count",
+            "data_type": "integer",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "last_error",
+            "data_type": "text",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "next_attempt_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "processed_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 15
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_message_batches",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 16
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "sender_type",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "sender_user_id",
+            "data_type": "uuid",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "simulated",
+            "data_type": "boolean",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "body",
+            "data_type": "text",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "understanding_revision",
+            "data_type": "bigint",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_messages",
+            "column_name": "intent",
+            "data_type": "text",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "active",
+            "data_type": "boolean",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "name",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "name_ar",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "name_en",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "duration_minutes",
+            "data_type": "integer",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_services",
+            "column_name": "price_aed",
+            "data_type": "numeric",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "phone_number_id",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_connections",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "connection_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "event_key",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "direction",
+            "data_type": "text",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "event_type",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "provider_message_id",
+            "data_type": "text",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "message_id",
+            "data_type": "uuid",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "provider_status",
+            "data_type": "text",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "provider_verified",
+            "data_type": "boolean",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "occurred_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_event_ledger",
+            "column_name": "evidence",
+            "data_type": "jsonb",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_flow_sessions",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "message_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "latitude",
+            "data_type": "double precision",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "longitude",
+            "data_type": "double precision",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "label",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_location_receipts",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "connection_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "sender_user_id",
+            "data_type": "uuid",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "sender_type",
+            "data_type": "text",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "idempotency_key",
+            "data_type": "text",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "payload_hash",
+            "data_type": "text",
+            "ordinal_position": 8
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "recipient_handle",
+            "data_type": "text",
+            "ordinal_position": 9
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "body",
+            "data_type": "text",
+            "ordinal_position": 10
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "state",
+            "data_type": "text",
+            "ordinal_position": 11
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "external_attempt_started_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 12
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "provider_message_id",
+            "data_type": "text",
+            "ordinal_position": 13
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "message_id",
+            "data_type": "uuid",
+            "ordinal_position": 14
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "error_code",
+            "data_type": "text",
+            "ordinal_position": 15
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 16
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "provider_verified",
+            "data_type": "boolean",
+            "ordinal_position": 17
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "finalized_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 18
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_outbound_reservations",
+            "column_name": "provider_status",
+            "data_type": "text",
+            "ordinal_position": 19
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "conversation_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "message_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "state",
+            "data_type": "text",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "ordinal_position": 5
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "transcription_confidence",
+            "data_type": "numeric",
+            "ordinal_position": 6
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_whatsapp_voice_ingest",
+            "column_name": "clarification_required",
+            "data_type": "boolean",
+            "ordinal_position": 7
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_branches",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_branches",
+            "column_name": "branch_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_branches",
+            "column_name": "worker_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_branches",
+            "column_name": "active",
+            "data_type": "boolean",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_services",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_services",
+            "column_name": "service_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_services",
+            "column_name": "worker_id",
+            "data_type": "uuid",
+            "ordinal_position": 3
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_worker_services",
+            "column_name": "active",
+            "data_type": "boolean",
+            "ordinal_position": 4
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_workers",
+            "column_name": "id",
+            "data_type": "uuid",
+            "ordinal_position": 1
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_workers",
+            "column_name": "business_id",
+            "data_type": "uuid",
+            "ordinal_position": 2
+          },
+          {
+            "table_schema": "public",
+            "table_name": "dabbir_workers",
+            "column_name": "status",
+            "data_type": "text",
+            "ordinal_position": 3
+          }
+        ],
+        "historicalRowScopeBound": false,
+        "rpcExecuted": true,
+        "rpc": "public.dabbir_semantic_load_v2(uuid,uuid)",
+        "loadHash": "0e1ad1af9fd39a5d12de896bf1612e3b4e159a53ce90f2dc0db4fd69a35f2173",
+        "independentWitness": false,
+        "interpreter": "stopping sentinel",
+        "declaredCapture": {
+          "tables": 33,
+          "columns": 254,
+          "scopeHash": "a99e1e09ffcdfae8f54de1ab7a9765040d36eb6aaeb69c871c05f44a4fd30b8c",
+          "beforeHash": "2601fe1975e96f068a982385357e1fbdf94e470d127c24296f25c5feefd02ffe",
+          "afterHash": "2601fe1975e96f068a982385357e1fbdf94e470d127c24296f25c5feefd02ffe",
+          "schemaMutationRejected": true,
+          "transaction": "REPEATABLE READ READ ONLY"
+        },
+        "restore": {
+          "status": "ALL_DECLARED_FIXTURE_ROWS_EQUAL",
+          "tables": 35,
+          "beforeHash": "8f8ad6d408b3a57831494ac81f0cf3b6eb373730c451775265b7f3516175aaef",
+          "afterHash": "8f8ad6d408b3a57831494ac81f0cf3b6eb373730c451775265b7f3516175aaef",
+          "archiveHash": "7066599deca87f35328e64ed793c433126cbf6850bbd68ceb6d847d4e560bc2f"
+        },
+        "syntheticRowScope": {
+          "schemas": [
+            "public",
+            "dabbir_private",
+            "auth"
+          ],
+          "tables": [
+            "auth.users",
+            "dabbir_private.activity_registry_v1",
+            "dabbir_private.cognitive_rollouts",
+            "public.dabbir_activity_service_versions",
+            "public.dabbir_ai_action_ledger",
+            "public.dabbir_ai_conversation_state",
+            "public.dabbir_ai_knowledge_proposals",
+            "public.dabbir_ai_understanding_events",
+            "public.dabbir_appointments",
+            "public.dabbir_branch_services",
+            "public.dabbir_business_branches",
+            "public.dabbir_business_knowledge",
+            "public.dabbir_businesses",
+            "public.dabbir_car_wash_booking_requests",
+            "public.dabbir_car_wash_vehicles",
+            "public.dabbir_conversations",
+            "public.dabbir_customer_memory",
+            "public.dabbir_customers",
+            "public.dabbir_handoffs",
+            "public.dabbir_home_service_settings",
+            "public.dabbir_memberships",
+            "public.dabbir_message_batch_items",
+            "public.dabbir_message_batches",
+            "public.dabbir_messages",
+            "public.dabbir_services",
+            "public.dabbir_whatsapp_connections",
+            "public.dabbir_whatsapp_event_ledger",
+            "public.dabbir_whatsapp_flow_sessions",
+            "public.dabbir_whatsapp_location_receipts",
+            "public.dabbir_whatsapp_outbound_reservations",
+            "public.dabbir_whatsapp_voice_ingest",
+            "public.dabbir_worker_branches",
+            "public.dabbir_worker_services",
+            "public.dabbir_workers",
+            "public.synthetic_capture"
+          ],
+          "columns": "all",
+          "rows": "all rows in disposable fixture only"
+        }
+      }
+    }
+  ]
+}
