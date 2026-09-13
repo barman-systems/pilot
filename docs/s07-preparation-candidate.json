@@ -1,5 +1,5 @@
 {
-  "status": "PREPARATION_CANDIDATE_NOT_SEALED_NOT_AUTHORIZED",
+  "status": "INTERNAL_PREPARATION_INCOMPLETE",
   "repository": "barman-systems/pilot",
   "sourceHead": "e816903b052fb113529c43fe17355624920e13c4",
   "nativeTestHead": "e9000f5bc3c8d7bb154b93ad83f208f6573e40ef",
@@ -98,13 +98,21 @@
   ],
   "executionAuthorized": false,
   "openRequirements": [
-    "independent operator identity and exclusive signing authority",
-    "real external preregistration receipt and trust reference",
     "final S07 interpreter configuration and runtime image binding",
     "predeclared S07 row scope bound to final environment"
   ],
   "ciFinding": {
     "verify-pr": "PREMERGE_DRAFT_BLOCKED",
     "protectedWorkflow": "Owner gate also applies to .github/workflows/s07-native-preparation.yml; gate unchanged"
-  }
+  },
+  "governance": {
+    "version": "S07_OWNER_AMENDMENT_V0_3",
+    "decision": "docs/s07-owner-amendment-v0.3.md",
+    "mode": "INTERNAL_VERIFICATION",
+    "independentOperatorRequired": false,
+    "externalAnchorRequired": false,
+    "independentCertification": false
+  },
+  "inventoryScope": "Historical file inventory at sourceHead; not a current seal",
+  "ownerAuthorization": "Internal continuation authorized; executionAuthorized remains false until technical preparation is complete"
 }
