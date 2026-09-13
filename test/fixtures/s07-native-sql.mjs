@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
+import {readFileSync,mkdirSync,writeFileSync,mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {runConversationV3Runtime as runtime} from './s07-preparation/instrumented-B/runtime.mjs';
+import {restoreDesignedS07} from '../../scripts/dabbir-s07-recovery-executor.mjs';
 test('original B synthetic SQL bootstrap and real load RPC reach only a persisted boundary',async()=>{
   const bin=process.env.S07_PG_BIN;assert.ok(bin?.startsWith('/'));
   const env={PGHOST:'127.0.0.1',PGPORT:'55437',PGUSER:'s07_runner',PGPASSFILE:'/dev/null',LANG:'C'};
@@ -45,6 +47,17 @@ test('original B synthetic SQL bootstrap and real load RPC reach only a persiste
     evidence.status='PASS'; evidence.historicalRowScopeBound=false; evidence.rpcExecuted=true;
     evidence.rpc='public.dabbir_semantic_load_v2(uuid,uuid)';evidence.loadHash=hash(JSON.stringify(loaded));
     evidence.independentWitness=false;evidence.interpreter='stopping sentinel';
+    const tables=sql('s07_sql',"SELECT format('%I.%I',schemaname,tablename) FROM pg_tables WHERE schemaname IN ('public','dabbir_private','auth') ORDER BY schemaname,tablename;").split('\n');
+    const capture=db=>tables.map(table=>({table,rows:sql(db,`SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text FROM ${table} t;`)}));
+    const before=capture('s07_sql');sql('postgres','CREATE DATABASE s07_sql_restore');
+    try {
+      const restored=await restoreDesignedS07({source:'s07_sql',target:'s07_sql_restore',port:55437,
+        outputDir:mkdtempSync(join(tmpdir(),'s07-sql-restore-')),binaries:Object.fromEntries(['psql','pg_dump','pg_restore'].map(n=>[n,join(bin,n)])),
+        authorize:async request=>request.source==='s07_sql'&&request.target==='s07_sql_restore'});
+      const after=capture('s07_sql_restore');assert.deepEqual(after,before);
+      evidence.restore={status:'ALL_DECLARED_FIXTURE_ROWS_EQUAL',tables:tables.length,beforeHash:hash(JSON.stringify(before)),afterHash:hash(JSON.stringify(after)),archiveHash:restored.receipt.archiveSha256};
+      evidence.syntheticRowScope={schemas:['public','dabbir_private','auth'],tables,columns:'all',rows:'all rows in disposable fixture only'};
+    } finally {sql('postgres','DROP DATABASE s07_sql_restore');}
   } catch(error) {evidence.status='FAIL';evidence.error=String(error.message);throw error;}
   finally {mkdirSync('test-results/s07-native',{recursive:true});writeFileSync('test-results/s07-native/sql-bootstrap.json',JSON.stringify(evidence,null,2));sql('postgres','DROP DATABASE s07_sql');}
 });
