@@ -1,0 +1,52 @@
+{
+  "BCommit": "7645f9df82fc8c365f42451b949f387ec24db3d5",
+  "historicalRPC": false,
+  "independentWitness": false,
+  "instrumentedHash": "66b777af405bcacc3de292f777b95d3d0e7d46132cb87b59931975ea46323c18",
+  "interpreter": "stopping sentinel",
+  "originalHash": "7208f5d598f1d34a232504e17674dca98e8b3f8feb8b1037fa4c0f968d8d09b0",
+  "results": [
+    {
+      "delivered": false,
+      "mode": "missing",
+      "via": "rpc"
+    },
+    {
+      "delivered": false,
+      "mode": "write_failure",
+      "via": "rpc"
+    },
+    {
+      "delivered": false,
+      "mode": "forged",
+      "via": "rpc"
+    },
+    {
+      "delivered": true,
+      "mode": "valid",
+      "via": "rpc"
+    },
+    {
+      "delivered": false,
+      "mode": "missing",
+      "via": "preloaded"
+    },
+    {
+      "delivered": false,
+      "mode": "write_failure",
+      "via": "preloaded"
+    },
+    {
+      "delivered": false,
+      "mode": "forged",
+      "via": "preloaded"
+    },
+    {
+      "delivered": true,
+      "mode": "valid",
+      "via": "preloaded"
+    }
+  ],
+  "scope": "SYNTHETIC_NATIVE_BOUNDARY_NOT_S07",
+  "status": "PASS"
+}
