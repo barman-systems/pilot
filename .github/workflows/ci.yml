@@ -28,6 +28,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check JavaScript syntax
         run: npm run check:syntax
+      - name: Verify frozen conversational benchmark
+        run: node scripts/dabbir-conversation-benchmark-manifest.mjs
       - name: Audit production dependencies
         run: npm run audit:prod
       - name: Enforce Production database change discipline

@@ -1,0 +1,14 @@
+{
+  "benchmark": "conversation_failure",
+  "version": "v1",
+  "frozen_at": "2026-09-13",
+  "hash_contract": "oracle-v1",
+  "cases": [
+    {
+      "case_id": "cfv1-001",
+      "eval_case_id": "00000000-0000-4000-8000-000000000001",
+      "failure_class": "CONTEXT_TRACKING",
+      "oracle_hash": "sha256:66314d89a1bd6db9670b25a52c30d89d04d37369046a17f7baea55a432100ad8"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "case_id": "cfv1-001",
+  "expected": {
+    "intent": "BOOK_SERVICE",
+    "should_use_knowledge": false,
+    "should_execute": true,
+    "should_handoff": false,
+    "max_clarification_count": 0,
+    "behavior_summary": "Use the current turn and do not revive stale requirements."
+  },
+  "rubric": {
+    "intent_correct": {
+      "weight": 25,
+      "check": "intent_equals_expected"
+    },
+    "latest_turn_grounded": {
+      "weight": 20,
+      "check": "latest_turn_evidence_matches"
+    },
+    "context_correct": {
+      "weight": 20,
+      "check": "state_matches_expected"
+    },
+    "evidence_grounding": {
+      "weight": 10,
+      "check": "knowledge_evidence_matches"
+    },
+    "clarification_minimal": {
+      "weight": 10,
+      "check": "clarification_within_bounds"
+    },
+    "execution_decision_correct": {
+      "weight": 10,
+      "check": "execution_decision_matches"
+    },
+    "handoff_correct": {
+      "weight": 5,
+      "check": "handoff_decision_matches"
+    }
+  },
+  "hard_fail_rules": [
+    "wrong_booking",
+    "unrequested_execution",
+    "knowledge_key_not_retrieved"
+  ]
+}
