@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const apiRoot = path.join(root, 'api');
 const retiredRef = 'spohjzrsymsmzsseygtw';
 const mumbaiRef = 'fphpoysqdsceniwduxjq';
-const retiredPublishableKey = 'sb_publishable_WPxhwNf08BW1FgBptkinWg_3j75O4O3';
+const hardcodedPublishableKey = /sb_publishable_[A-Za-z0-9_-]+/;
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
@@ -17,11 +17,11 @@ function jsFiles(dir) {
   });
 }
 
-test('runtime API cannot silently fall back to the retired Sydney Supabase project', () => {
+test('runtime API cannot use the retired Sydney project or hardcode a publishable key', () => {
   const offenders = [];
   for (const file of jsFiles(apiRoot)) {
     const source = fs.readFileSync(file, 'utf8');
-    if (source.includes(retiredRef) || source.includes(retiredPublishableKey)) {
+    if (source.includes(retiredRef) || hardcodedPublishableKey.test(source)) {
       offenders.push(path.relative(root, file));
     }
   }
