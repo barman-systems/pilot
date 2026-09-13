@@ -24,7 +24,7 @@ jobs:
           PG_BIN=$(pg_config --bindir)
           echo "S07_PG_BIN=$PG_BIN" >> "$GITHUB_ENV"
           "$PG_BIN/initdb" -D "$RUNNER_TEMP/s07-pg" -U s07_runner --auth=trust
-          "$PG_BIN/pg_ctl" -D "$RUNNER_TEMP/s07-pg" -l "$RUNNER_TEMP/s07-pg.log" -o '-h 127.0.0.1 -p 55437' -w start
+          "$PG_BIN/pg_ctl" -D "$RUNNER_TEMP/s07-pg" -l "$RUNNER_TEMP/s07-pg.log" -o "-h 127.0.0.1 -p 55437 -k $RUNNER_TEMP" -w start || { cat "$RUNNER_TEMP/s07-pg.log"; exit 1; }
       - name: Exercise exact executor with synthetic rows
         run: node --test test/fixtures/s07-native-recovery.mjs
       - uses: actions/upload-artifact@v7
