@@ -7,6 +7,7 @@ import {join,resolve} from 'node:path';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {runConversationV3Runtime as runtime} from './s07-preparation/instrumented-B/runtime.mjs';
 import {restoreDesignedS07} from '../../scripts/dabbir-s07-recovery-executor.mjs';
+import {relationalCaptureSQL,validateRelationalCapture} from '../../scripts/dabbir-s07-relational-capture.mjs';
 test('original B synthetic SQL bootstrap and real load RPC reach only a persisted boundary',async()=>{
   const bin=process.env.S07_PG_BIN;assert.ok(bin?.startsWith('/'));
   const env={PGHOST:'127.0.0.1',PGPORT:'55437',PGUSER:'s07_runner',PGPASSFILE:'/dev/null',LANG:'C'};
@@ -50,11 +51,18 @@ test('original B synthetic SQL bootstrap and real load RPC reach only a persiste
     const tables=sql('s07_sql',"SELECT format('%I.%I',schemaname,tablename) FROM pg_tables WHERE schemaname IN ('public','dabbir_private','auth') ORDER BY schemaname,tablename;").split('\n');
     const capture=db=>tables.map(table=>({table,rows:sql(db,`SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text FROM ${table} t;`)}));
     const before=capture('s07_sql');sql('postgres','CREATE DATABASE s07_sql_restore');
+    const scope=JSON.parse(readFileSync(new URL('./s07-preparation/relational-scope.json',import.meta.url)));
+    const captureScoped=db=>validateRelationalCapture(scope,sql(db,relationalCaptureSQL(scope)));
+    const scopedBefore=captureScoped('s07_sql');
     try {
       const restored=await restoreDesignedS07({source:'s07_sql',target:'s07_sql_restore',port:55437,
         outputDir:mkdtempSync(join(tmpdir(),'s07-sql-restore-')),binaries:Object.fromEntries(['psql','pg_dump','pg_restore'].map(n=>[n,join(bin,n)])),
         authorize:async request=>request.source==='s07_sql'&&request.target==='s07_sql_restore'});
       const after=capture('s07_sql_restore');assert.deepEqual(after,before);
+      const scopedAfter=captureScoped('s07_sql_restore');assert.equal(scopedAfter.snapshotHash,scopedBefore.snapshotHash);
+      sql('s07_sql_restore','ALTER TABLE public.dabbir_ai_conversation_state ADD COLUMN unexpected_probe text');
+      assert.throws(()=>captureScoped('s07_sql_restore'),/SCHEMA_SCOPE_MISMATCH/);
+      evidence.declaredCapture={tables:Object.keys(scope.tables).length,columns:Object.values(scope.tables).reduce((n,c)=>n+c.length,0),scopeHash:scopedBefore.scopeHash,beforeHash:scopedBefore.snapshotHash,afterHash:scopedAfter.snapshotHash,schemaMutationRejected:true,transaction:'REPEATABLE READ READ ONLY'};
       evidence.restore={status:'ALL_DECLARED_FIXTURE_ROWS_EQUAL',tables:tables.length,beforeHash:hash(JSON.stringify(before)),afterHash:hash(JSON.stringify(after)),archiveHash:restored.receipt.archiveSha256};
       evidence.syntheticRowScope={schemas:['public','dabbir_private','auth'],tables,columns:'all',rows:'all rows in disposable fixture only'};
     } finally {sql('postgres','DROP DATABASE s07_sql_restore');}
