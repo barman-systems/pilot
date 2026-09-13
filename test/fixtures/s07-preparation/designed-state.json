@@ -1,0 +1,63 @@
+{
+  "provenance": "DESIGNED_NOT_HISTORICAL",
+  "conceptualSlots": 4,
+  "runtimeFacts": 5,
+  "state": {
+    "version": 2,
+    "goal": "BOOK_SERVICE",
+    "intent_confirmed": true,
+    "episode_id": "s07-designed-episode",
+    "episode_started_at": "2030-01-01T10:00:00+04:00",
+    "last_turn_at": "2030-01-01T10:00:00+04:00",
+    "facts": [
+      {
+        "field": "service",
+        "value": "10000000-0000-4000-8000-000000000007",
+        "status": "VERIFIED",
+        "source": "CUSTOMER_CONFIRMED",
+        "confidence": 1,
+        "resolution": "S07_DESIGNED_FIXTURE_NOT_HISTORICAL",
+        "surface": null
+      },
+      {
+        "field": "branch",
+        "value": "10000000-0000-4000-8000-000000000003",
+        "status": "VERIFIED",
+        "source": "DATABASE_FACT",
+        "confidence": 1,
+        "resolution": "S07_DESIGNED_FIXTURE_NOT_HISTORICAL",
+        "surface": null
+      },
+      {
+        "field": "vehicle",
+        "value": "10000000-0000-4000-8000-000000000008",
+        "status": "VERIFIED",
+        "source": "CUSTOMER_CONFIRMED",
+        "confidence": 1,
+        "resolution": "S07_DESIGNED_FIXTURE_NOT_HISTORICAL",
+        "surface": null
+      },
+      {
+        "field": "date",
+        "value": "2030-01-02",
+        "status": "VERIFIED",
+        "source": "CUSTOMER_CONFIRMED",
+        "confidence": 1,
+        "resolution": "S07_DESIGNED_FIXTURE_NOT_HISTORICAL",
+        "surface": null
+      },
+      {
+        "field": "time",
+        "value": "10:00",
+        "status": "VERIFIED",
+        "source": "CUSTOMER_CONFIRMED",
+        "confidence": 1,
+        "resolution": "S07_DESIGNED_FIXTURE_NOT_HISTORICAL",
+        "surface": null
+      }
+    ],
+    "tentatives": [],
+    "invalidations": [],
+    "pending_question": null
+  }
+}
