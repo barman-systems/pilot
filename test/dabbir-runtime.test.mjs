@@ -5,6 +5,7 @@ import { classifyClinicMessage, classifyCelebrityMessage, requirePersistedRow } 
 
 const root = new URL('../', import.meta.url);
 const runtimeSource = await readFile(new URL('api/dabbir-runtime.js', root), 'utf8');
+const branchOperationsSource = await readFile(new URL('api/branch-operations.js', root), 'utf8');
 const aiSource = await readFile(new URL('api/_ai-core.js', root), 'utf8');
 
 test('clinic appointment intent', () => {
@@ -59,10 +60,26 @@ test('AI runtime is grounded in business data and supports general businesses', 
 
 test('appointments and followups are persisted through tenant RLS instead of preview-only state', () => {
   assert.match(runtimeSource, /action === 'create_appointment'/);
+  assert.match(runtimeSource, /export async function createAppointment/);
+  assert.match(runtimeSource, /resolveBranchScope/);
+  assert.match(runtimeSource, /branchWrite\(writeScope\)/);
+  assert.match(runtimeSource, /branch_id:\s*branchId/);
   assert.match(runtimeSource, /dabbir_appointments\?select=/);
   assert.match(runtimeSource, /action === 'create_followup'/);
   assert.match(runtimeSource, /dabbir_followups\?select=/);
   assert.match(runtimeSource, /verified_persisted/);
+});
+
+test('branch appointment route delegates to the existing runtime writer instead of owning duplicate persistence', () => {
+  assert.match(branchOperationsSource, /createAppointment as createRuntimeAppointment/);
+  assert.match(branchOperationsSource, /createRuntimeAppointment\(/);
+  assert.match(branchOperationsSource, /dabbir_branch_appointment_runtime/);
+  assert.doesNotMatch(branchOperationsSource, /dabbir_appointments\?select=/);
+  assert.doesNotMatch(branchOperationsSource, /async function createAppointment/);
+  assert.match(runtimeSource, /scope\.mode === 'all' && scope\.branch_ids\.length === 1/);
+  assert.match(runtimeSource, /appointment\.business_id !== businessId/);
+  assert.match(runtimeSource, /appointment\.branch_id !== branchId/);
+  assert.match(runtimeSource, /appointment\.customer_id !== customerId/);
 });
 
 test('runtime truth contract fails closed when persistence evidence is missing', () => {

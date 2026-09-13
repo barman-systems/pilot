@@ -10,6 +10,7 @@ import {
   supabaseRpc,
 } from './_auth-core.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
+import { branchWrite, resolveBranchScope } from './_branch-scope.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUSINESS_TYPES = new Set(['store', 'laundry', 'car_wash', 'clinic', 'creator', 'salon', 'real_estate', 'services', 'other']);
@@ -475,9 +476,21 @@ async function sendMessage(identity, body) {
   };
 }
 
-async function createAppointment(identity, body) {
+export async function createAppointment(identity, body, { customerSource = 'dabbir_appointment_runtime' } = {}) {
   const businessId = safeId(body.business_id);
-  if (!businessId || !requireMembership(identity, businessId)) throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'), { status: 403 });
+  const membership = businessId ? requireMembership(identity, businessId) : null;
+  if (!businessId || !membership || membership.status !== 'active') throw Object.assign(new Error('BUSINESS_ACCESS_DENIED'), { status: 403 });
+  const scope = await resolveBranchScope({
+    businessId,
+    membership,
+    userId: identity.user.id,
+    requestedBranch: body.branch_id,
+    fetchRows: (path, code) => rest(identity.accessToken, path, {}, code),
+  });
+  const writeScope = scope.mode === 'all' && scope.branch_ids.length === 1
+    ? { ...scope, mode: 'selected', branch_id: scope.branch_ids[0] }
+    : scope;
+  const branchId = branchWrite(writeScope);
   let customerId = safeId(body.customer_id);
   const startsAt = new Date(String(body.starts_at || ''));
   if (Number.isNaN(startsAt.getTime())) throw Object.assign(new Error('VALID_START_TIME_REQUIRED'), { status: 400 });
@@ -491,7 +504,7 @@ async function createAppointment(identity, body) {
         business_id: businessId,
         display_name: customerName,
         lead_status: 'new',
-        metadata: { source: 'dabbir_appointment_runtime' },
+        metadata: { source: customerSource },
       }),
     }, 'CUSTOMER_CREATE_FAILED');
     customerId = requirePersistedRow(customers, 'CUSTOMER_CREATE_UNVERIFIED').id;
@@ -502,6 +515,7 @@ async function createAppointment(identity, body) {
     headers: { prefer: 'return=representation' },
     body: JSON.stringify({
       business_id: businessId,
+      branch_id: branchId,
       customer_id: customerId,
       service_id: safeId(body.service_id),
       starts_at: startsAt.toISOString(),
@@ -510,14 +524,18 @@ async function createAppointment(identity, body) {
     }),
   }, 'APPOINTMENT_CREATE_FAILED');
   const appointment = requirePersistedRow(rows, 'APPOINTMENT_PERSISTENCE_UNVERIFIED');
+  if (appointment.business_id !== businessId || appointment.branch_id !== branchId || appointment.customer_id !== customerId) {
+    throw Object.assign(new Error('APPOINTMENT_PERSISTENCE_UNVERIFIED'), { status: 502 });
+  }
 
   return {
     ok: true,
     action: 'create_appointment',
     state: 'VERIFIED_PERSISTED',
     appointment,
+    branch_id: branchId,
     verified_persisted: true,
-    truth: truthEvidence('appointment', appointment),
+    truth: truthEvidence('appointment', appointment, { business_id: businessId, branch_id: branchId, customer_id: customerId }),
     external_side_effects: false,
   };
 }
