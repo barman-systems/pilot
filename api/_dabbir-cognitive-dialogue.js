@@ -1,7 +1,7 @@
 import {normalizeSemanticText,clarification,greetingOnly} from './_dabbir-semantic-engine-core.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {partitionGoalRequests} from './_dabbir-goal-queue.js';
-import {answerServiceQuestion} from './_dabbir-service-question.js';
+import {answerServiceQuestion,groundedServiceQuestion} from './_dabbir-service-question.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const goals=new Set(['BOOK_SERVICE','CANCEL_BOOKING','RESCHEDULE_BOOKING']);
@@ -28,7 +28,7 @@ export function mayReplaceGoal(previous,proposal,currentMessages){
  if(!activeJourney(previous))return true;
  const d=proposal?.dialogue,raw=arr(currentMessages).map(m=>m.language_body??m.body??'').join(' ');
  // A model role alone never authorizes a reset. The user must explicitly end
-// or replace the goal, and the model must cite the current message.
+ // or replace the goal, and the model must cite the current message.
  return d?.message_role==='TOPIC_SWITCH'&&typeof d.evidence==='string'&&d.evidence.length>=2&&raw.includes(d.evidence)&&
   /(?:خل(?:نا|يني).*نترك|انس(?:ى)? (?:الحجز|الطلب)|ما ابي احجز|forget (?:the )?(?:booking|request)|start (?:over|a new)|different topic)/i.test(normalizeSemanticText(d.evidence));
 }
@@ -82,17 +82,18 @@ export function cognitiveReduce(args,reduce){
    dialogue:{message_role:activeJourney(previous)?'SIDE_QUESTION':'ANSWER_TO_PENDING_QUESTION',evidence:continuation.evidence,invalidated_fields:[]}}};
  }
  const d=groundedDialogue(args.proposal,c);
+ const serviceQuestion=groundedServiceQuestion({context:c,proposal:args.proposal});
  const social=greetingOnly(c.batch_messages);
  let prepared=previous?structuredClone(previous):previous;
  // Invalidating a fact can only remove authority. The model cannot replace it
-// with business truth or invalidate an unrelated tenant's saved state.
+ // with business truth or invalidate an unrelated tenant's saved state.
  if(prepared&&d&&['CORRECTION','DENIAL'].includes(d.message_role))for(const key of arr(d.invalidated_fields).slice(0,4)){
   if(['service','worker','vehicle','location','date','time','delivery_mode','property_details'].includes(key)){
    if(prepared.entities[key])prepared.entities[key]={...prepared.entities[key],value:null,status:'unresolved',source:'CUSTOMER_CORRECTION',confidence:0};
    delete prepared.entities.slot;
   }
  }
- let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:social?'SOCIAL':d?.message_role||(args.proposal?.serviceQuestion?'SIDE_QUESTION':null)}});
+ let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!serviceQuestion,cognitive_message_role:social?'SOCIAL':d?.message_role||(serviceQuestion?'SIDE_QUESTION':null)}});
  let {state,decision}=result;
  if(continuation&&previous?.language)state.language=previous.language;
  if(['HANDOFF','SUPERSEDED'].includes(decision.action)||['UNTRUSTED_INSTRUCTION','BOOKING_NEGATED','CUSTOMER_WITHDREW_REQUEST'].includes(decision.reasonCode))return decisionView(state,decision,previous,c,d?.message_role||'NEW_REQUEST');
@@ -114,14 +115,20 @@ export function cognitiveReduce(args,reduce){
  }
  if(partition)return decisionView(partition.state,partition.decision,previous,c,'NEW_REQUEST');
  const wasActive=activeJourney(previous);
+ const pendingResolved=resolvesPending(previous,state);
  const knowledge=d?.message_role==='SIDE_QUESTION'?arr(c.knowledge).find(k=>k.key===args.proposal?.knowledgeKey&&k.source==='owner_approved'&&Number(k.confidence)>=.95):null;
- const proposedRead=d?.message_role==='SIDE_QUESTION'?({PRICING:'PRICING',SERVICE_DISCOVERY:'SERVICE_MENU'}[args.proposal?.intent]||null):null;
+ const roleRead=d?.message_role==='SIDE_QUESTION'?({PRICING:'PRICING',SERVICE_DISCOVERY:'SERVICE_MENU'}[args.proposal?.intent]||null):null;
+ // A separately grounded read-only service question is stronger evidence than a
+ // model role label. It may interrupt an unresolved requirement, but it never
+ // grants mutation authority and never discards an actually resolved field.
+ const serviceRead=serviceQuestion&&!pendingResolved?(serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU'):null;
+ const proposedRead=roleRead||serviceRead;
  const side=wasActive&&(['PRICING','SERVICE_MENU'].includes(decision.action)||proposedRead||knowledge);
- let role=d?.message_role||(side?'SIDE_QUESTION':resolvesPending(previous,state)?'ANSWER_TO_PENDING_QUESTION':arr(state.user_corrections).length>arr(previous?.user_corrections).length?'CORRECTION':wasActive?'CONTINUATION':'NEW_REQUEST');
+ let role=d?.message_role||(side?'SIDE_QUESTION':pendingResolved?'ANSWER_TO_PENDING_QUESTION':arr(state.user_corrections).length>arr(previous?.user_corrections).length?'CORRECTION':wasActive?'CONTINUATION':'NEW_REQUEST');
  if(side){
   const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service'),service_verified:verifiedOperationalFact(state.entities?.service)};
   // Recompute the next business requirement from the retained goal. A pricing
-// target never overwrites the service being booked or reuses a slot approval.
+  // target never overwrites the service being booked or reuses a slot approval.
   result=reduce({...args,proposal:null,previous:prepared,context:{...c,batch_messages:[],cognitive_message_role:'SIDE_QUESTION'}});
   state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,queryServiceVerified:inquiry.service_verified,resumeReply:previous?.intent_confirmed!==false&&result.decision.action==='CLARIFY'?result.decision.reply:null};
   if(knowledge){const answer=state.language==='en'?knowledge.value?.answer_en||knowledge.value?.answer_ar:knowledge.value?.answer_ar||knowledge.value?.answer_en;if(typeof answer==='string')decision.reply=answer.slice(0,1400)+(decision.resumeReply?'\n'+decision.resumeReply:'');else decision=result.decision;}

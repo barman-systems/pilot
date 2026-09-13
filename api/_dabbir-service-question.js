@@ -3,9 +3,14 @@ import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 
 // Read-only response facet over the current branch catalog. The interpreter
 // names the requested attribute; it never supplies its value or a booking fact.
-export function answerServiceQuestion({context:c,state,decision,proposal}){
+export function groundedServiceQuestion({context:c,proposal}){
  const q=proposal?.serviceQuestion,raw=(c.batch_messages||[]).map(m=>m.language_body??m.body??'').join(' ');
- if(!q||!['price','duration_minutes'].includes(q.field)||typeof q.evidence!=='string'||!q.evidence.trim()||!raw.includes(q.evidence)||Number(proposal.confidence)<.8||!['REPLY','PRICING','SERVICE_MENU'].includes(decision.action))return decision;
+ return q&&['price','duration_minutes'].includes(q.field)&&typeof q.evidence==='string'&&q.evidence.trim()&&raw.includes(q.evidence)&&Number(proposal.confidence)>=.8?q:null;
+}
+
+export function answerServiceQuestion({context:c,state,decision,proposal}){
+ const q=groundedServiceQuestion({context:c,proposal});
+ if(!q||!['REPLY','PRICING','SERVICE_MENU'].includes(decision.action))return decision;
  const ar=state.language==='ar',catalog=(c.services||[]).filter(s=>(!s.business_id||s.business_id===c.business.id)&&(!s.branch_id||s.branch_id===c.conversation.branch_id));
  const named=proposal.serviceName?catalog.filter(s=>[s.name_ar,s.name,s.name_en].some(n=>n&&normalizeSemanticText(n)===normalizeSemanticText(proposal.serviceName))):[];
  const selected=verifiedOperationalFact(state.entities?.service)?state.entities.service.value:null;

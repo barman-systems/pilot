@@ -47,7 +47,11 @@ export function assertDialoguePlanV3({plan,state,response}){
   }
   const tentativeFields=new Set(arr(state?.tentatives).map(x=>clean(x?.field,80)).filter(Boolean));
   const surfaced=new Set(arr(plan?.surfaced_tentative_fields).map(x=>clean(x,80)).filter(Boolean));
-  const dropped=[...tentativeFields].filter(field=>!surfaced.has(field)&&!asked.includes(field));
+  const deferred=new Set(arr(plan?.deferred_tentative_fields).map(x=>clean(x,80)).filter(Boolean));
+  if(deferred.size&&(plan?.turn_disposition!=='SOCIAL_ONLY'||plan?.proposed_action!=='REPLY'||question||arr(plan?.answers).length||arr(plan?.surfaced_facts).length||[...deferred].some(field=>!tentativeFields.has(field)))){
+    throw Object.assign(new Error('V3_INVALID_TENTATIVE_DEFERRAL'),{code:'V3_INVALID_TENTATIVE_DEFERRAL'});
+  }
+  const dropped=[...tentativeFields].filter(field=>!surfaced.has(field)&&!asked.includes(field)&&!deferred.has(field));
   if(dropped.length){
     throw Object.assign(new Error('V3_TENTATIVE_FACT_DROPPED'),{code:'V3_TENTATIVE_FACT_DROPPED',fields:dropped});
   }
