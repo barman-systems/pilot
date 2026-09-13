@@ -1,0 +1,94 @@
+{
+  "status": "DRAFT_UNSEALED_NOT_EXECUTED",
+  "facts": [
+    {
+      "field": "service",
+      "expectedValue": "10000000-0000-4000-8000-000000000007",
+      "expectedStatus": "VERIFIED",
+      "expectedSource": "CUSTOMER_CONFIRMED"
+    },
+    {
+      "field": "branch",
+      "expectedValue": "10000000-0000-4000-8000-000000000003",
+      "expectedStatus": "VERIFIED",
+      "expectedSource": "DATABASE_FACT"
+    },
+    {
+      "field": "vehicle",
+      "expectedValue": "10000000-0000-4000-8000-000000000008",
+      "expectedStatus": "VERIFIED",
+      "expectedSource": "CUSTOMER_CONFIRMED"
+    },
+    {
+      "field": "date",
+      "expectedValue": "2030-01-02",
+      "expectedStatus": "VERIFIED",
+      "expectedSource": "CUSTOMER_CONFIRMED"
+    },
+    {
+      "field": "time",
+      "expectedValue": "10:00",
+      "expectedStatus": "VERIFIED",
+      "expectedSource": "CUSTOMER_CONFIRMED"
+    }
+  ],
+  "requiredFactCount": 5,
+  "arms": [
+    "U0",
+    "U1",
+    "U2"
+  ],
+  "checkpoints": [
+    "pre_compaction",
+    "p_state.v3_runtime",
+    "database_after_commit",
+    "loaded_runtime",
+    "seeded_facts"
+  ],
+  "rules": {
+    "eachFact": "compare presence, value, status and source independently; duplicate field is invalid evidence",
+    "missingTime": "failure of time even if date is present",
+    "countOnly": "five entries never substitutes for matching identities and values",
+    "mismatch": "retain actual payload and classify first differing checkpoint; no automatic historical attribution",
+    "comparisonInvalid": "retain outcomes; withhold cross-arm causal attribution if setup equivalence is unproven"
+  },
+  "restoreEquality": {
+    "version": "S07_FULL_ROW_EQUALITY_DRAFT_1",
+    "scope": "complete rows and exact column sets for declared conversation state, conversation revision, batch and all loaded context dependencies; schema-derived rowKeys/columnsByKey must be pinned before sealing",
+    "representation": "canonical JSON object keys; array order preserved; no omitted internal fields; bigint/numeric lossless strings; no exclusions within row data",
+    "captureTimes": [
+      "source: committed state before export, writers stopped",
+      "target: after restore before invoking load RPC",
+      "optional persisted input reread before load: same scope; not the load RPC output"
+    ],
+    "predicate": "all three canonical full-row snapshots equal within identical pinned scope; five facts checked independently as additional assertions",
+    "witness": "independent execution authority owns collector code/config/signing key; restore process exit status is not witness",
+    "attestation": [
+      "runId",
+      "authorizationId",
+      "scopeHash",
+      "collectorHash",
+      "predicateHash",
+      "executorHash",
+      "archiveHash",
+      "threeSnapshotHashes",
+      "captureOrder",
+      "databaseIdentity",
+      "verdict"
+    ],
+    "limitations": [
+      "snapshot collector and actual scope not yet built",
+      "signing and verification not connected",
+      "EQUAL_IN_DECLARED_SCOPE is not historical attribution or whole-database equality"
+    ],
+    "loadBoundary": {
+      "status": "DRAFT_NOT_INTEGRATED",
+      "reason": "repository load RPC can upsert customer memory",
+      "stages": [
+        "POST_RESTORE_PRE_LOAD full rows",
+        "ACTUAL_LOAD_RESULT exact object handed to B"
+      ],
+      "rule": "full-row equality checks pre-load persistence only; load-result differences are separate evidence and must not be treated as failed restore automatically"
+    }
+  }
+}
