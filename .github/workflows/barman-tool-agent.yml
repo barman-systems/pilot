@@ -8,11 +8,13 @@ on:
   schedule:
     - cron: '*/5 * * * *'
 
+# P0 trust-order containment.
+# The executor remains intentionally disabled until an independent pre-merge
+# gate is implemented and enforced before any merge-capable path.
 permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
-  actions: write
+  contents: read
+  pull-requests: read
+  actions: read
   checks: read
 
 concurrency:
@@ -21,7 +23,7 @@ concurrency:
 
 jobs:
   execute:
-    if: github.ref == 'refs/heads/main'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
