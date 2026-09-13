@@ -53,6 +53,10 @@ function safeDetails(value){
   if(Buffer.byteLength(serialized,'utf8')>16000)throw Object.assign(new Error('DETAILS_TOO_LARGE'),{status:400});
   return value;
 }
+function rejectionReason(value){
+  const reason=clean(value,120).toUpperCase();
+  return /^[A-Z0-9_:-]{3,120}$/.test(reason)?reason:null;
+}
 
 export default async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
@@ -89,6 +93,21 @@ export default async function handler(req,res){
         p_details:details,
       });
       return json(res,200,{ok:true,verified});
+    }
+
+    if(phase==='reject'){
+      const commandId=uuid(body.command_id);
+      if(!commandId)return json(res,400,{ok:false,error:'COMMAND_ID_INVALID'});
+      const reason=rejectionReason(body.reason);
+      if(!reason)return json(res,400,{ok:false,error:'VERIFICATION_REJECTION_REASON_INVALID'});
+      const details=safeDetails(body.details);
+      const rejected=await adminRpc(key,'barman_executive_reject_verification_v1',{
+        p_command_id:commandId,
+        p_verifier:verifierId,
+        p_reason:reason,
+        p_details:details,
+      });
+      return json(res,200,{ok:true,rejected});
     }
 
     return json(res,400,{ok:false,error:'PHASE_INVALID'});
