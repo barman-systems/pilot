@@ -1,3 +1,4 @@
+import {isSocialOnlyTurnV3} from './_dabbir-conversation-v3-episode.js';
 const arr=v=>Array.isArray(v)?v:[];
 const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,n);
 const norm=v=>clean(v,300).normalize('NFKD').replace(/[\u064b-\u065f\u0670ـ]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
@@ -12,7 +13,21 @@ const fact=(field,value,source,resolution,extra={})=>{const {confidence=1,surfac
 const tentative=(field,candidate_value,surface,resolution,extra={})=>({field,status:'TENTATIVE',value:candidate_value??null,candidate_value:candidate_value??null,source:extra.source||'SEMANTIC_PROPOSAL',confidence:extra.confidence??0,resolution,surface:clean(surface,300)||null});
 function legacySeedFacts(canonical){return Object.entries(canonical?.entities||{}).flatMap(([field,f])=>f?.status==='active'&&f.value!=null&&STRONG.has(f.source)&&Number(f.confidence)>=.9?[fact(field,f.value,f.source,'CANONICAL_SEED',{confidence:Number(f.confidence),...(f.starts_at?{starts_at:f.starts_at}:{}),...(f.receipt_id?{receipt_id:f.receipt_id}:{})})]:[]);}
 function stateFacts(state,canonical){if(Array.isArray(state?.facts))return state.facts.filter(f=>f?.status==='VERIFIED').map(f=>({...f}));return legacySeedFacts(canonical);}
-function stateTentatives(state){return arr(state?.tentatives).map(x=>({...x}));}
+function reconcileTentatives(state,facts){
+  // Older runtimes consumed the transport's rendered location as a pending
+  // answer. Match that exact protocol representation against a verified receipt;
+  // this is not a language heuristic and never promotes or deletes a fact.
+  const location=facts.find(f=>f.field==='location'&&f.source==='PROVIDER_VERIFIED'&&f.resolution==='SIGNED_WHATSAPP_LOCATION'&&f.receipt_id);
+  const lat=location?.value?.lat,lng=location?.value?.lng;
+  const providerSurface=typeof lat==='number'&&Number.isFinite(lat)&&Math.abs(lat)<=90&&typeof lng==='number'&&Number.isFinite(lng)&&Math.abs(lng)<=180
+    ?`📍 موقع واتساب: ${lat.toFixed(6)}, ${lng.toFixed(6)}${location.value.label?` — ${location.value.label}`:''}`:null;
+  const invalidations=[],tentatives=[];
+  for(const item of arr(state?.tentatives)){
+    if(providerSurface&&item.field!=='location'&&item.source==='CURRENT_TURN_SURFACE'&&item.resolution==='SEMANTIC_SURFACE_UNMAPPED'&&item.value==null&&item.candidate_value==null&&item.surface===providerSurface){invalidations.push({field:item.field,reason:'PROVIDER_EVIDENCE_FIELD_MISMATCH',receipt_id:location.receipt_id});}
+    else tentatives.push({...item});
+  }
+  return {tentatives,invalidations};
+}
 function putFact(map,f){if(f?.field&&f.status==='VERIFIED')map.set(f.field,f);}
 function localParts(at,tz){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(at).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return {date:`${p.year}-${p.month}-${p.day}`,time:`${p.hour}:${p.minute}`};}catch{return null}}
 function serviceByName(context,name){const wanted=norm(name);if(!wanted)return null;const hits=scopedServices(context).filter(s=>[s?.name,s?.name_ar,s?.name_en].some(x=>norm(x)===wanted));return hits.length===1?hits[0]:null;}
@@ -25,13 +40,17 @@ function validTime(value){return typeof value==='string'&&/^([01]\d|2[0-3]):[0-5
 function evidenceOk(raw,evidence){const e=clean(evidence,300);return !!e&&raw.includes(e);}
 function serviceSelectionVerified(proposal){return proposal?.serviceVerified===true||(proposal?.serviceVerified==null&&proposal?.serviceCandidateLabel==null);}
 function applyTrustedFastFacts(context,factMap,turnVerified){for(const item of arr(context?.v3_fast_facts).slice(0,8)){const field=clean(item?.field,80),source=clean(item?.source,80);if(!TRUSTED_FAST_FIELDS.has(field)||!TRUSTED_FAST_SOURCES.has(source)||item?.value==null)continue;if(field==='location'&&source!=='PROVIDER_VERIFIED')continue;if(field==='slot'&&source!=='CUSTOMER_CONFIRMED')continue;const f=fact(field,item.value,source,clean(item?.resolution,120)||'TRUSTED_RUNTIME_FACT',{confidence:1,...(item?.starts_at?{starts_at:clean(item.starts_at,80)}:{}),...(item?.receipt_id?{receipt_id:clean(item.receipt_id,100)}:{}),...(item?.service_id?{service_id:clean(item.service_id,100)}:{}),...(item?.worker_id?{worker_id:clean(item.worker_id,100)}:{})});putFact(factMap,f);turnVerified.push(f);}}
-export function seedConversationStateV3({previousShadow=null,canonicalState=null}){return {version:2,goal:previousShadow?.goal||canonicalState?.goal||'UNKNOWN',intent_confirmed:previousShadow?.intent_confirmed===true||canonicalState?.intent_confirmed===true,facts:stateFacts(previousShadow,canonicalState),tentatives:stateTentatives(previousShadow),pending_question:previousShadow?.pending_question||null,last_turn_at:previousShadow?.last_turn_at||canonicalState?.updated_at||canonicalState?.created_at||null,episode_id:previousShadow?.episode_id||null,episode_started_at:previousShadow?.episode_started_at||null};}
+export function seedConversationStateV3({previousShadow=null,canonicalState=null}){
+  const facts=stateFacts(previousShadow,canonicalState),reconciled=reconcileTentatives(previousShadow,facts),pending=previousShadow?.pending_question||null;
+  return {version:2,goal:previousShadow?.goal||canonicalState?.goal||'UNKNOWN',intent_confirmed:previousShadow?.intent_confirmed===true||canonicalState?.intent_confirmed===true,facts,tentatives:reconciled.tentatives,evidence_invalidations:reconciled.invalidations,pending_question:reconciled.invalidations.some(x=>arr(pending?.fields).includes(x.field))?null:pending,last_turn_at:previousShadow?.last_turn_at||canonicalState?.updated_at||canonicalState?.created_at||null,last_operational_turn_at:previousShadow?.last_operational_turn_at||previousShadow?.last_turn_at||null,episode_id:previousShadow?.episode_id||null,episode_started_at:previousShadow?.episode_started_at||null};
+}
 export function freshConversationStateV3({context,at}){return {version:2,goal:'UNKNOWN',intent_confirmed:false,facts:[],tentatives:[],pending_question:null,last_turn_at:null,episode_id:`${clean(context?.conversation?.id,80)}:${at.toISOString()}`,episode_started_at:at.toISOString()};}
 export function understandTurnV3({context,proposal,previousState,now=new Date()}){
   const msg=currentMessage(context),raw=currentText(context),at=msg?.created_at?new Date(msg.created_at):now instanceof Date?now:new Date(now),safeAt=Number.isNaN(at.getTime())?new Date():at;
   const factMap=new Map(arr(previousState?.facts).filter(f=>f?.status==='VERIFIED').map(f=>[f.field,{...f}])),previousTentatives=arr(previousState?.tentatives).map(x=>({...x}));
-  const turnVerified=[],turnTentative=[],sideQuestions=[],invalidations=[];
-  if(context?.conversation?.branch_id){const f=fact('branch',context.conversation.branch_id,'DATABASE_FACT','SERVER_SCOPE');putFact(factMap,f);}applyTrustedFastFacts(context,factMap,turnVerified);
+  const turnVerified=[],turnTentative=[],sideQuestions=[],invalidations=arr(previousState?.evidence_invalidations).map(x=>({...x}));
+  if(context?.conversation?.branch_id){const f=fact('branch',context.conversation.branch_id,'DATABASE_FACT','SERVER_SCOPE');putFact(factMap,f);}
+  applyTrustedFastFacts(context,factMap,turnVerified);
   const role=String(proposal?.dialogue?.message_role||'').toUpperCase();for(const field of arr(proposal?.dialogue?.invalidated_fields).map(x=>clean(x,80)).filter(Boolean)){if(factMap.has(field)){factMap.delete(field);invalidations.push({field,reason:'CUSTOMER_CORRECTION'});}}
   const wideMode=activityWideSingleMode(context),semanticIntent=String(proposal?.intent||'').toUpperCase();if(wideMode&&['BOOKING','SERVICE_DISCOVERY','PRICING','RESCHEDULE_BOOKING'].includes(semanticIntent)){const f=fact('delivery_mode',wideMode,'DATABASE_FACT','ACTIVITY_SINGLE_MODE');putFact(factMap,f);turnVerified.push(f);}
   let selectedService=null;
@@ -46,6 +65,10 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
   for(const q of serviceQuestions.slice(0,4)){if(['price','duration_minutes','availability'].includes(q?.field))sideQuestions.push({type:q.field,evidence:q.evidence||null});}
   if(!sideQuestions.length&&String(proposal?.action||'').toUpperCase()==='PRICING')sideQuestions.push({type:'price',evidence:null});
   const pendingField=previousState?.pending_question?.fields?.[0]||previousState?.pending_question?.field||null;
+  // These arrays contain accepted contributions from this turn, not seeded
+  // history. Recomputed business facts and historical reconciliation must not
+  // make a greeting resume a request. Conversely, a current trusted fast fact
+  // participates even when it answers a field other than the pending one.
   const explicitTurnEvidence=[...turnVerified,...turnTentative].filter(f=>f?.source!=='DATABASE_FACT');
   const hasIndependentEvidence=sideQuestions.length>0||explicitTurnEvidence.some(f=>f.field!==pendingField)||invalidations.some(f=>f.field!==pendingField);
   const pendingCompatible=!pendingField||role!=='ANSWER_TO_PENDING_QUESTION'||turnVerified.some(f=>f.field===pendingField)||turnTentative.some(f=>f.field===pendingField)||!hasIndependentEvidence;
@@ -53,5 +76,5 @@ export function understandTurnV3({context,proposal,previousState,now=new Date()}
   const parts=localParts(safeAt,context?.business?.timezone||'Asia/Dubai'),date=factMap.get('date'),time=factMap.get('time');if(parts&&date?.value===parts.date&&time?.value===parts.time&&turnVerified.some(f=>f.field==='date'||f.field==='time')){const f=fact('immediacy','NOW','CUSTOMER_STATED','MESSAGE_RECEIPT_TIME');putFact(factMap,f);turnVerified.push(f);}
   const bookingIntentStrong=semanticIntent==='BOOKING'&&Number(proposal?.confidence||0)>=.5&&['NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CONTINUATION','CORRECTION','CONFIRMATION','REFERENCE'].includes(role||'NEW_REQUEST');const serviceSelectedThisTurn=turnVerified.some(f=>f.field==='service');let goal=previousState?.goal||'UNKNOWN';if(semanticIntent==='BOOKING')goal='BOOK_SERVICE';else if(semanticIntent==='RESCHEDULE_BOOKING')goal='RESCHEDULE_BOOKING';else if(semanticIntent==='CANCEL_BOOKING')goal='CANCEL_BOOKING';else if(semanticIntent==='SERVICE_DISCOVERY'&&!['BOOK_SERVICE','RESCHEDULE_BOOKING'].includes(goal))goal='DISCOVER_SERVICE';else if(semanticIntent==='PRICING'&&!['BOOK_SERVICE','RESCHEDULE_BOOKING'].includes(goal))goal='PRICE_SERVICE';else if(semanticIntent==='SUPPORT'&&goal==='UNKNOWN')goal='SUPPORT';
   const currentTentativeFields=new Set(turnTentative.map(x=>x.field)),confirmedTurnFields=new Set(turnVerified.map(x=>x.field));const tentatives=[...previousTentatives.filter(x=>!currentTentativeFields.has(x.field)&&!confirmedTurnFields.has(x.field)&&!invalidations.some(i=>i.field===x.field)),...turnTentative];
-  return {version:2,turn:{message_id:msg?.id||null,created_at:safeAt.toISOString()},goal,role,confidence:Number(proposal?.confidence)||0,facts:[...factMap.values()],tentatives,invalidations,turn_verified:turnVerified,turn_tentative:turnTentative,side_questions:sideQuestions,signals:{booking_intent_strong:bookingIntentStrong||serviceSelectedThisTurn&&previousState?.goal==='BOOK_SERVICE',service_selected_this_turn:serviceSelectedThisTurn,semantic_intent:semanticIntent,proposed_action:proposal?.action||null,pending_field:pendingField,pending_compatible:pendingCompatible,independent_turn_evidence:hasIndependentEvidence}};
+  return {version:2,turn:{message_id:msg?.id||null,created_at:safeAt.toISOString()},goal,role,confidence:Number(proposal?.confidence)||0,facts:[...factMap.values()],tentatives,invalidations,turn_verified:turnVerified,turn_tentative:turnTentative,side_questions:sideQuestions,signals:{social_only:isSocialOnlyTurnV3(proposal)&&explicitTurnEvidence.length===0,booking_intent_strong:bookingIntentStrong||serviceSelectedThisTurn&&previousState?.goal==='BOOK_SERVICE',service_selected_this_turn:serviceSelectedThisTurn,semantic_intent:semanticIntent,proposed_action:proposal?.action||null,pending_field:pendingField,pending_compatible:pendingCompatible,independent_turn_evidence:hasIndependentEvidence}};
 }
