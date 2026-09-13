@@ -25,6 +25,16 @@ jobs:
           persist-credentials: false
       - name: Install pinned B production dependencies without lifecycle scripts
         run: npm ci --prefix test/fixtures/s07-preparation/B --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Checkout original A in separate path
+        uses: actions/checkout@v7
+        with:
+          ref: ffde7cd866661b0091269a6b567f9a6460cf89e8
+          path: test/fixtures/s07-preparation/A
+          persist-credentials: false
+      - name: Verify A source dependency closure without executing a scenario
+        run: |
+          npm ci --prefix test/fixtures/s07-preparation/A --omit=dev --ignore-scripts --no-audit --no-fund
+          node --input-type=module -e "await import('./test/fixtures/s07-preparation/A/api/_dabbir-conversation-v3-runtime.js')"
       - name: Prepare disposable local PostgreSQL
         run: |
           sudo apt-get update -qq
@@ -35,6 +45,10 @@ jobs:
           "$PG_BIN/pg_ctl" -D "$RUNNER_TEMP/s07-pg" -l "$RUNNER_TEMP/s07-pg.log" -o "-h 127.0.0.1 -p 55437 -k $RUNNER_TEMP" -w start || { cat "$RUNNER_TEMP/s07-pg.log"; exit 1; }
       - name: Exercise exact executor with synthetic rows
         run: node --test test/fixtures/s07-native-recovery.mjs test/fixtures/s07-native-boundary.mjs test/fixtures/s07-native-sql.mjs
+      - name: Preserve synthetic evidence in job log
+        if: always()
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const p='test-results/s07-native'; if(fs.existsSync(p)) for(const f of fs.readdirSync(p).filter(f=>f.endsWith('.json'))) console.log('S07_EVIDENCE_JSON '+JSON.stringify({file:f,data:JSON.parse(fs.readFileSync(p+'/'+f))}));"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
