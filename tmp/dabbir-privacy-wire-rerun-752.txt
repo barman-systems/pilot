@@ -1,3 +1,0 @@
-Temporary #752 DR wire E2E rerun trigger. Remove after evidence collection.
-Rerun after supported cleanup-path diagnosis: account_access_state=deleted → dabbir_user_accounts → auth.users.
-Final rerun: corrected sweep selects dabbir_memberships.business_id (table has no id column).
