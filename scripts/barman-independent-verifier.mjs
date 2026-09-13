@@ -4,10 +4,24 @@ const BROKER='https://dabbir.bmalman.com/api/barman-independent-verifier';
 const AUDIENCE='barman-executive-independent-verifier';
 const TOKEN=String(process.env.GITHUB_TOKEN||'');
 const DABBIR_ORIGIN='https://dabbir.bmalman.com';
+const SNAPSHOT_MAX_AGE_MS=30*60*1000;
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 
 class VerificationMismatch extends Error{}
 class TransientVerificationError extends Error{}
+
+function rejectionReason(value){
+  return clean(value,120).toUpperCase().replace(/[^A-Z0-9_:-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,120)||'INDEPENDENT_VERIFICATION_MISMATCH';
+}
+function snapshotGeneratedAt(details,nowMs=Date.now()){
+  const raw=String(details?.generated_at||'').trim();
+  const generatedMs=Date.parse(raw);
+  if(!Number.isFinite(generatedMs))throw new VerificationMismatch('SNAPSHOT_GENERATED_AT_INVALID');
+  const ageMs=nowMs-generatedMs;
+  if(ageMs< -60_000)throw new VerificationMismatch('SNAPSHOT_GENERATED_AT_FUTURE');
+  if(ageMs>SNAPSHOT_MAX_AGE_MS)throw new VerificationMismatch('SNAPSHOT_EVIDENCE_STALE');
+  return new Date(generatedMs).toISOString();
+}
 
 async function oidc(){
   const url=String(process.env.ACTIONS_ID_TOKEN_REQUEST_URL||'');
@@ -146,6 +160,7 @@ async function verifyEvidence(item,releaseCache){
     if(reference==='barman-executive-snapshot-v1'){
       const expected=details?.expected;
       assert(expected&&typeof expected==='object'&&!Array.isArray(expected),'SNAPSHOT_EXPECTED_METRICS_REQUIRED');
+      const generatedAt=snapshotGeneratedAt(details);
       const response=await broker({phase:'snapshot'});
       const current=metricSnapshot(response?.snapshot||{});
       const checked={};
@@ -153,10 +168,10 @@ async function verifyEvidence(item,releaseCache){
         assert(Object.hasOwn(current,key),`SNAPSHOT_METRIC_DENIED_${clean(key,80)}`);
         const reported=Number(value),now=Number(current[key]);
         assert(Number.isFinite(reported)&&reported>=0,`SNAPSHOT_REPORTED_INVALID_${clean(key,80)}`);
-        assert(Number.isFinite(now)&&now>=reported,`SNAPSHOT_METRIC_REGRESSED_${clean(key,80)}`);
+        assert(Number.isFinite(now)&&now===reported,`SNAPSHOT_METRIC_MISMATCH_${clean(key,80)}`);
         checked[key]={reported,current:now};
       }
-      return {type,reference,checked,source:'AUTHORITATIVE_DB_RECHECK'};
+      return {type,reference,checked,generated_at:generatedAt,source:'AUTHORITATIVE_DB_FRESH_RECHECK'};
     }
     throw new VerificationMismatch('QUERY_REFERENCE_DENIED');
   }
@@ -195,9 +210,26 @@ try{
 }catch(error){
   const message=clean(error?.message||error,1800);
   if(error instanceof VerificationMismatch&&commandId){
-    console.error('INDEPENDENT_VERIFICATION_MISMATCH_UNPROMOTED',commandId,message);
+    const reason=rejectionReason(message);
+    try{
+      const rejected=await broker({
+        phase:'reject',
+        command_id:commandId,
+        reason,
+        details:{
+          verifier:'github-oidc-independent-verifier',
+          rejection_reason:reason,
+          verifier_error:message,
+          rejected_at:new Date().toISOString(),
+        },
+      });
+      console.log('INDEPENDENT_VERIFICATION_REJECTED',JSON.stringify({command_id:commandId,reason,rejected:rejected.rejected||null}));
+    }catch(rejectError){
+      console.error('INDEPENDENT_VERIFICATION_REJECTION_FAILED',commandId,message,clean(rejectError?.message||rejectError,800));
+      process.exitCode=1;
+    }
   }else{
     console.error('INDEPENDENT_VERIFICATION_TRANSIENT',message);
+    process.exitCode=1;
   }
-  process.exitCode=1;
 }
