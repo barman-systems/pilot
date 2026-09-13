@@ -67,7 +67,7 @@ Deno.serve(async(req:Request)=>{
  if(!SUPABASE_URL||!SERVICE_KEY)return reply(503,{ok:false,error:'OWNER_MAILER_NOT_CONFIGURED'});
  try{await verifyVercelIdentity(bearer(req))}catch(error){console.warn('DABBIR_OWNER_MAILER_OIDC_REJECTED',{error:clean(error instanceof Error?error.message:error,120)});return reply(401,{ok:false,error:'OWNER_MAILER_OIDC_REQUIRED'})}
  let body:any;try{body=await req.json()}catch{return reply(400,{ok:false,error:'INVALID_JSON'})}
- const resendKey=clean(body?.resend_key,500);if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
+ const resendKey=clean(Deno.env.get('RESEND_API_KEY')||body?.resend_key,500);if(!resendKey)return reply(503,{ok:false,error:'OWNER_OTP_NOT_CONFIGURED'});
  if(clean(body?.action,60).toLowerCase()!=='owner_otp_request')return reply(400,{ok:false,error:'UNKNOWN_ACTION'});
  try{return await requestOtp(body,resendKey)}catch(error){console.error('DABBIR_OWNER_MAILER_UNAVAILABLE',error instanceof Error?error.message:'unknown');return reply(503,{ok:false,error:'OWNER_MAILER_UNAVAILABLE'})}
 });
