@@ -62,7 +62,7 @@
       "optional persisted input reread before load: same scope; not the load RPC output"
     ],
     "predicate": "all three canonical full-row snapshots equal within identical pinned scope; five facts checked independently as additional assertions",
-    "witness": "independent execution authority owns collector code/config/signing key; restore process exit status is not witness",
+    "witness": "Identified internal executor controls collector/config/signing key under owner amendment v0.3; attestation is internal, not independent; restore exit status alone is insufficient",
     "attestation": [
       "runId",
       "authorizationId",
@@ -100,5 +100,13 @@
       "columns": 254,
       "limitation": "Two native preparation snapshots do not fulfill the three-snapshot signed experimental attestation above. Original predicate unchanged; no independent certificate issued."
     }
+  },
+  "governance": {
+    "version": "S07_OWNER_AMENDMENT_V0_3",
+    "decision": "docs/s07-owner-amendment-v0.3.md",
+    "mode": "INTERNAL_VERIFICATION",
+    "independentOperatorRequired": false,
+    "externalAnchorRequired": false,
+    "independentCertification": false
   }
 }
