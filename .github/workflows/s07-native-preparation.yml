@@ -2,7 +2,7 @@ name: S07 synthetic native recovery preparation
 on:
   push:
     branches: [test/s07-native-preparation-20260913]
-    paths: ['scripts/dabbir-s07-recovery-executor.mjs', 'test/fixtures/s07-native-recovery.mjs', '.github/workflows/s07-native-preparation.yml']
+    paths: ['scripts/dabbir-s07-recovery-executor.mjs', 'test/fixtures/s07-native-*.mjs', 'test/fixtures/s07-preparation/instrumented-B/**', '.github/workflows/s07-native-preparation.yml']
 permissions:
   contents: read
 jobs:
@@ -17,6 +17,14 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Checkout original B in separate path
+        uses: actions/checkout@v7
+        with:
+          ref: 7645f9df82fc8c365f42451b949f387ec24db3d5
+          path: test/fixtures/s07-preparation/B
+          persist-credentials: false
+      - name: Install pinned B production dependencies without lifecycle scripts
+        run: npm ci --prefix test/fixtures/s07-preparation/B --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Prepare disposable local PostgreSQL
         run: |
           sudo apt-get update -qq
@@ -26,7 +34,7 @@ jobs:
           "$PG_BIN/initdb" -D "$RUNNER_TEMP/s07-pg" -U s07_runner --auth=trust
           "$PG_BIN/pg_ctl" -D "$RUNNER_TEMP/s07-pg" -l "$RUNNER_TEMP/s07-pg.log" -o "-h 127.0.0.1 -p 55437 -k $RUNNER_TEMP" -w start || { cat "$RUNNER_TEMP/s07-pg.log"; exit 1; }
       - name: Exercise exact executor with synthetic rows
-        run: node --test test/fixtures/s07-native-recovery.mjs
+        run: node --test test/fixtures/s07-native-recovery.mjs test/fixtures/s07-native-boundary.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
