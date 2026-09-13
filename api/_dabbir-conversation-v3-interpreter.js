@@ -12,6 +12,7 @@ const SIDE_QUESTIONS=new Set(['price','duration_minutes','availability']);
 const CONFIRM_RE=/^(?:هي|هيه|ايوه|ايوا|نعم|تمام|صح|yes|yeah|yep|ok|okay|correct)$/i;
 const DENY_RE=/^(?:لا|مب|مو|لا لا|no|nope)$/i;
 const ORDINAL_RE=/^(?:الخيار\s*)?(\d{1,2})$/u;
+const GREETING_RE=/^(?:هلا|هلا والله|هلا وغلا|مرحبا|مرحبا بك|السلام عليكم|السلام عليكم ورحمه الله|السلام عليكم ورحمه الله وبركاته|سلام|hi|hello|hey|good morning|good evening)$/i;
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const V3_PROVIDER_MAX_REQUESTS=4;
 const V3_PROVIDER_TOTAL_TIMEOUT_MS=18_000;
@@ -52,6 +53,7 @@ function fastPath({context,previousState,raw}){
   const msg=currentMessage(context),trimmed=clean(raw,200),fastFacts=[];
   const receipt=arr(context?.location_receipts).find(r=>r?.message_id===msg?.id&&(!r?.business_id||r.business_id===context?.business?.id)&&(!r?.conversation_id||r.conversation_id===context?.conversation?.id));
   if(receipt&&Number.isFinite(Number(receipt?.value?.lat??receipt?.latitude))&&Number.isFinite(Number(receipt?.value?.lng??receipt?.longitude))){const value=receipt.value&&typeof receipt.value==='object'?receipt.value:{lat:Number(receipt.latitude),lng:Number(receipt.longitude),label:receipt.label||null};fastFacts.push({field:'location',value,source:'PROVIDER_VERIFIED',resolution:'SIGNED_WHATSAPP_LOCATION',confidence:1,receipt_id:receipt.message_id});}
+  if(GREETING_RE.test(norm(trimmed)))return {proposal:proposalBase({intent:'SUPPORT',role:'GREETING',confidence:1,action:'REPLY'}),fastFacts};
   const pending=previousState?.pending_question||null;
   if(['CONFIRM_TENTATIVE_VEHICLE','CONFIRM_TENTATIVE_SERVICE'].includes(pending?.purpose)&&CONFIRM_RE.test(trimmed))return {proposal:proposalBase({role:'CONFIRMATION',serviceSurface:trimmed}),fastFacts};
   if(pending&&DENY_RE.test(trimmed))return {proposal:proposalBase({intent:previousState?.goal==='BOOK_SERVICE'?'BOOKING':'SUPPORT',role:'DENIAL',serviceSurface:trimmed}),fastFacts};
