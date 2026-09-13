@@ -1,0 +1,68 @@
+name: BARMAN Independent Pre-Merge Gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to verify against current main
+        required: true
+        type: string
+
+# Trust boundary: this workflow is loaded from the protected base/default branch.
+# It never checks out or executes candidate code. It only verifies exact-SHA
+# results and publishes a status on that candidate SHA.
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: barman-independent-premerge-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  invalidate-on-main-change:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted main verifier
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Invalidate previous pre-merge receipts after main changes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BARMAN_PREMERGE_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/barman-independent-premerge-gate.mjs
+
+  verify-pr:
+    if: github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout trusted verifier only
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact candidate with trusted base logic
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BARMAN_PREMERGE_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+          BARMAN_PREMERGE_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/barman-independent-premerge-gate.mjs
