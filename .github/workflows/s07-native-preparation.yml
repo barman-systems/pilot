@@ -2,7 +2,7 @@ name: S07 synthetic native recovery preparation
 on:
   push:
     branches: [test/s07-native-preparation-20260913]
-    paths: ['scripts/dabbir-s07-recovery-executor.mjs', 'test/fixtures/s07-native-*.mjs', 'test/fixtures/s07-preparation/instrumented-B/**', '.github/workflows/s07-native-preparation.yml']
+    paths: ['scripts/dabbir-s07-recovery-executor.mjs', 'scripts/dabbir-s07-relational-capture.mjs', 'test/fixtures/s07-preparation/relational-scope.json', 'test/fixtures/s07-native-sql-steps.json', 'test/fixtures/s07-native-*.mjs', 'test/fixtures/s07-preparation/instrumented-B/**', '.github/workflows/s07-native-preparation.yml']
 permissions:
   contents: read
 jobs:
