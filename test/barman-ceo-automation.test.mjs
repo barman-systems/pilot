@@ -55,7 +55,7 @@ test('executive cron claims planner, read-only and runtime lanes separately',()=
 test('read-only executor evidence is independently re-read through OIDC verifier broker',()=>{
   assert.match(verifier,/reference==='barman-executive-snapshot-v1'/);
   assert.match(verifier,/phase:'snapshot'/);
-  assert.match(verifier,/AUTHORITATIVE_DB_RECHECK/);
+  assert.match(verifier,/AUTHORITATIVE_DB_FRESH_RECHECK/);
   assert.match(verifierBroker,/phase==='snapshot'/);
   assert.match(verifierBroker,/barman_executive_read_snapshot_v1/);
 });
