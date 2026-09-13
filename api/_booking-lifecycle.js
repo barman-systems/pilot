@@ -125,12 +125,14 @@ export const bookingLifecycleBrowser = `(()=>{if(window.__dabbirBookingLifecycle
 // historical data with a filtered view or let a late response switch context.
 export function installBookingReader(lifecycle) {
   const cache=new Map();
+  const recordRequests=new Map();
+  const validId=value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''));
   const emit=()=>window.dispatchEvent(new Event('dabbir:booking-data-changed'));
   const key=w=>lifecycle.contextKey(w)+'|'+JSON.stringify(lifecycle.getView(w));
-  function entry(w) { const k=key(w); if(!cache.has(k))cache.set(k,{rows:[],customers:[],ready:false,loading:false,error:null,has_more:false,next_offset:0,total:null,loadedAt:0,epoch:0}); return cache.get(k); }
+  function entry(w) { const k=key(w); if(!cache.has(k))cache.set(k,{rows:[],customers:[],records:new Map(),recordCustomers:new Map(),ready:false,loading:false,error:null,has_more:false,next_offset:0,total:null,loadedAt:0,epoch:0}); return cache.get(k); }
   async function ensure(w, more=false, force=false) {
     if(!w?.business?.id)return;
-    const item=entry(w);
+    const viewKey=key(w),item=entry(w);
     if(item.loading||(!force&&!more&&item.ready&&Date.now()-item.loadedAt<60000)||(!force&&!more&&item.error&&Date.now()-item.loadedAt<60000))return;
     const state=lifecycle.getView(w),range=lifecycle.period(state),epoch=item.epoch;
     const params=new URLSearchParams({business_id:w.business.id,scope:state.scope,offset:String(more?item.next_offset:0)});
@@ -147,9 +149,49 @@ export function installBookingReader(lifecycle) {
       const merge=(a,b)=>[...new Map([...a,...b].map(row=>[row.id,row])).values()];
       item.rows=merge(more?item.rows:[],body.appointments);
       item.customers=merge(more?item.customers:[],body.customers||[]);
+      // A successful refresh supersedes direct reads, including ones still in
+      // flight. Pagination supersedes only the records in its accepted page.
+      // Failed reads retain the last verified data and never advance this fence.
+      item.epoch++;
+      for(const requestKey of recordRequests.keys())if(requestKey.startsWith(viewKey+'|record:'))recordRequests.delete(requestKey);
+      if(!more){item.records.clear();item.recordCustomers.clear()}
+      else {
+        for(const row of body.appointments)item.records.delete(row.id);
+        for(const customer of body.customers||[])item.recordCustomers.delete(customer.id);
+      }
       item.ready=true;item.has_more=body.has_more;item.next_offset=body.next_offset;item.total=body.total;
     } catch(error) { if(item.epoch===epoch)item.error=String(error?.message||error); }
     finally { item.loading=false;item.loadedAt=Date.now();emit(); }
+  }
+  function ensureRecord(w,id) {
+    if(!validId(id)||!validId(w?.business?.id))return Promise.reject(new Error('INVALID_APPOINTMENT_ID'));
+    const viewKey=key(w),requestKey=viewKey+'|record:'+id,item=entry(w),epoch=item.epoch;
+    if(recordRequests.has(requestKey))return recordRequests.get(requestKey);
+    const businessId=w.business.id,branchId=w.branch_scope?.branch_id||null;
+    const state=lifecycle.getView(w),range=lifecycle.period(state);
+    const context={business:{...w.business},branch_scope:{...w.branch_scope}};
+    const current=()=>cache.get(viewKey)===item&&item.epoch===epoch&&key(w)===viewKey;
+    const params=new URLSearchParams({business_id:businessId,appointment_id:id,scope:state.scope});
+    if(branchId)params.set('branch_id',branchId);
+    else if(w.branch_scope?.mode==='all')params.set('branch_id','all');
+    if(range){params.set('from',range.from);params.set('to',range.to)}
+    const request=(async()=>{
+      const response=await fetch('/api/appointment-management?'+params,{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+      const body=await response.json();
+      if(!current())throw new Error('BOOKING_CONTEXT_CHANGED');
+      if(!response.ok||!body?.ok)throw new Error(body?.error||'BOOKING_READ_FAILED');
+      const row=body.appointment;
+      if(body.business_id!==businessId||body.branch_id!==branchId||body.scope!==state.scope||row?.id!==id||row?.business_id!==businessId||!lifecycle.inContext(row,context)||!Array.isArray(body.customers))throw new Error('BOOKING_CONTEXT_MISMATCH');
+      // A direct record must not advance or replace the paginated collection.
+      item.records.set(id,row);
+      for(const customer of body.customers)if(customer.id===row.customer_id)item.recordCustomers.set(customer.id,customer);
+      emit();return row;
+    })();
+    recordRequests.set(requestKey,request);
+    // Rejections are passed to the caller; no failed read is cached as success.
+    const cleanup=()=>{if(recordRequests.get(requestKey)===request)recordRequests.delete(requestKey)};
+    request.then(cleanup,cleanup);
+    return request;
   }
   function rows(w) {
     const item=entry(w),state=lifecycle.getView(w);
@@ -168,11 +210,14 @@ export function installBookingReader(lifecycle) {
   function invalidate(w) {
     const prefix=lifecycle.contextKey(w)+'|';
     for(const [k,item] of cache)if(k.startsWith(prefix)){item.epoch++;cache.delete(k)}
+    for(const k of recordRequests.keys())if(k.startsWith(prefix))recordRequests.delete(k);
     emit();
   }
-  const customer=(w,id)=>entry(w).customers.find(row=>row.id===id);
-  const find=(w,id)=>entry(w).rows.find(row=>row.id===id)||(w.appointments||[]).find(row=>row.id===id);
-  return {entry,ensure,rows,status,bind,invalidate,customer,find};
+  const customer=(w,id)=>entry(w).recordCustomers.get(id)||entry(w).customers.find(row=>row.id===id);
+  // Once the scoped reader is ready, a stale workspace snapshot cannot restore
+  // a booking absent from its cache. The caller can request that exact ID again.
+  const find=(w,id)=>{const item=entry(w);return item.records.get(id)||item.rows.find(row=>row.id===id)||(!item.ready?(w.appointments||[]).find(row=>row.id===id):undefined)};
+  return {entry,ensure,ensureRecord,rows,status,bind,invalidate,customer,find};
 }
 export const bookingReaderBrowser = `(()=>{if(!window.__dabbirBookingReader)window.__dabbirBookingReader=(${installBookingReader.toString()})(window.__dabbirBookingLifecycle)})();`;
 export const bookingBrowser = bookingLifecycleBrowser+'\n'+bookingReaderBrowser;

@@ -40,12 +40,14 @@ test('tool-agent routes non-code commands fail-closed before patch generation',(
   assert.match(worker,/routing\.route!==['"]REPO_CHANGE['"]/);
 });
 
-test('persistent worker has schedule plus protected-main push wake-up',()=>{
+test('persistent worker is P0-contained until an independent pre-merge gate exists',()=>{
   assert.match(workflow,/cron:\s*'\*\/5 \* \* \* \*'/);
   assert.match(workflow,/push:\s*\n\s*branches:\s*\n\s*- main/);
-  assert.match(workflow,/github\.event_name == 'push'/);
-  assert.match(workflow,/wait-dabbir-production-sha\.mjs/);
-  for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(workflow,/if:\s*\$\{\{\s*false\s*\}\}/);
+  for(const token of ['contents: read','pull-requests: read','actions: read','checks: read','cancel-in-progress: false'])assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const token of ['id-token: write','contents: write','pull-requests: write','actions: write'])assert.doesNotMatch(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(worker,/mergePr\(pr\.number,headSha\)/);
+  assert.match(worker,/dispatch\('barman-independent-verifier\.yml','main',\{\}\)/);
   assert.match(waitProduction,/release-evidence/);
   assert.match(waitProduction,/commit_sha/);
   assert.match(waitProduction,/environment/);
@@ -79,7 +81,7 @@ test('required branch-protection test context is emitted only by pull_request CI
   assert.match(ci,/if:\s*github\.event_name == 'pull_request'/);
 });
 
-test('DONE requires CI, exact Production release and full customer journey',()=>{
+test('latent DONE path still requires CI, exact Production release and full customer journey',()=>{
   assert.match(ci,/workflow_dispatch:/);
   assert.match(worker,/dispatch\('ci\.yml'/);
   assert.match(worker,/waitWorkflow\('ci\.yml'/);
@@ -90,7 +92,7 @@ test('DONE requires CI, exact Production release and full customer journey',()=>
   assert.match(worker,/finalize\('DONE'/);
 });
 
-test('executor persists independent-required state before waking verifier and cannot self-promote',()=>{
+test('latent executor persists independent-required state before waking verifier and cannot self-promote',()=>{
   assert.match(worker,/FINALIZE_DONE_NOT_PERSISTED/);
   assert.match(worker,/verification_status!=='INDEPENDENT_REQUIRED'/);
   assert.match(worker,/terminalPersisted=true/);

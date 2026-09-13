@@ -120,7 +120,7 @@ test('Vercel Pro cron is configured every five minutes with secret-first authent
   const officialHeaders={'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'*/5 * * * *'};
   assert.equal(cronAuthMode({headers:{authorization:'Bearer strong-secret'}},{CRON_SECRET:'strong-secret',VERCEL_ENV:'production'}),'secret');
   assert.equal(cronAuthMode({headers:officialHeaders},{CRON_SECRET:'strong-secret',VERCEL_ENV:'production'}),null,'configured secret must disable structural fallback');
-  assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'production'}),'vercel_schedule');
+  assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'production'}),null);
   assert.equal(cronAuthMode({headers:officialHeaders},{VERCEL_ENV:'preview'}),null);
   assert.equal(cronAuthMode({headers:{...officialHeaders,'user-agent':'browser'}},{VERCEL_ENV:'production'}),null);
   assert.equal(cronAuthMode({headers:{...officialHeaders,'x-vercel-cron-schedule':'0 * * * *'}},{VERCEL_ENV:'production'}),null);

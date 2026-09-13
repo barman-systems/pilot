@@ -4,6 +4,9 @@ on:
     paths:
       - index.html
       - try.html
+      - public/try.html
+      - api/dabbir-market-preview.js
+      - api/dabbir-market-demo.js
       - api/dabbir-owner-first-ui.js
       - test/dabbir-public-visual-qa.mjs
       - .github/workflows/dabbir-public-visual-qa.yml
@@ -12,6 +15,9 @@ on:
     paths:
       - index.html
       - try.html
+      - public/try.html
+      - api/dabbir-market-preview.js
+      - api/dabbir-market-demo.js
       - api/dabbir-owner-first-ui.js
       - test/dabbir-public-visual-qa.mjs
       - .github/workflows/dabbir-public-visual-qa.yml

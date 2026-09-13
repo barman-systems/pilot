@@ -1,9 +1,7 @@
-// Stable production gateway for the DABBIR Owner Command Center.
-// Production imports one generated flat runtime only. Numbered/stable source layers are build-time history inputs and never runtime dependencies.
-import dashboard from './_owner-command-center-runtime.generated.js';
-import { OWNER_COMMAND_CENTER_DESIGN_SYSTEM } from './_owner-command-center-design-system.js';
-import { OWNER_PLATFORM_TEAM_UI } from './_owner-platform-team-ui.js';
-import { parseCookies } from './_auth-core.js';
+// The only authenticated HTML gateway for the owner workspace.
+import { renderOwnerCommandCenter } from './owner-command-center.js';
+import { ownerSessionToken } from './_owner-broker-client.js';
+import { singleQueryValue } from './_request-query.js';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const BROKER_URL = String(process.env.DABBIR_OWNER_BROKER_URL || `${SUPABASE_URL}/functions/v1/dabbir-owner-broker`).replace(/\/$/, '');
@@ -19,28 +17,31 @@ function redirectToOwner(res, clear = false) {
 
 async function verifyOwnerSession(token) {
   const response = await fetch(BROKER_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'owner_session_verify', session_token: token }), cache:'no-store', signal:AbortSignal.timeout(10000) });
-  if (!response.ok) return false;
+  if (response.status===401||response.status===403) return null;
+  if (!response.ok) throw new Error('OWNER_SESSION_VERIFICATION_UNAVAILABLE');
   const payload = await response.json().catch(() => null);
-  return payload?.authenticated === true && ['ROOT_OWNER','OWNER_DELEGATE'].includes(String(payload?.authority_role||''));
-}
-
-function injectOwnerExtensions(res){
-  const end=res.end.bind(res);let body='';
-  res.end=(chunk,...args)=>{
-    body+=chunk?String(chunk):'';
-    if(!body.includes('</body>'))return end(body,...args);
-    const extensions=(body.includes('ownerCommandCenterDesignSystem')?'':OWNER_COMMAND_CENTER_DESIGN_SYSTEM)+(body.includes('ownerPlatformTeamStyles')?'':OWNER_PLATFORM_TEAM_UI);
-    return end(body.replace('</body>',extensions+'</body>'),...args);
-  };
+  if(!payload||typeof payload.authenticated!=='boolean')throw new Error('OWNER_SESSION_INVALID_RESPONSE');
+  return payload?.authenticated === true && ['ROOT_OWNER','OWNER_DELEGATE'].includes(String(payload?.authority_role||''))?payload:null;
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.setHeader('allow', 'GET, HEAD'); return res.end('Method Not Allowed'); }
-  const sessionToken = parseCookies(req.headers.cookie || '')[SESSION_COOKIE];
+  res.setHeader('cache-control','no-store, max-age=0');
+  const sessionToken = ownerSessionToken(req);
   if (!sessionToken) return redirectToOwner(res);
   try {
-    if (!(await verifyOwnerSession(sessionToken))) return redirectToOwner(res, true);
-    injectOwnerExtensions(res);
-    return dashboard(req, res);
-  } catch { return redirectToOwner(res, true); }
+    const session=await verifyOwnerSession(sessionToken);
+    if (!session) return redirectToOwner(res, true);
+    // Explicit allowlist: session tokens and broker internals never enter HTML.
+    const identity=Object.fromEntries(['authority_role','role_code','permissions','granular_permissions','access_scope','access_expires_at','mfa_required','display_name','expires_at'].map(key=>[key,session[key]]));
+    res.statusCode=200;
+    res.setHeader('content-type','text/html; charset=utf-8');
+    res.setHeader('x-content-type-options','nosniff');
+    res.setHeader('x-dabbir-owner-command-center','canonical');
+    return res.end(req.method==='HEAD'?'':renderOwnerCommandCenter(identity,singleQueryValue(req,'lang')));
+  } catch {
+    // An unavailable broker is not evidence that an otherwise valid cookie expired.
+    res.statusCode=503;res.setHeader('content-type','text/html; charset=utf-8');res.setHeader('retry-after','15');
+    return res.end(req.method==='HEAD'?'':'<!doctype html><html lang="ar" dir="rtl"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DABBIR</title><main><h1>تعذر التحقق من الجلسة مؤقتًا</h1><p>أعد تحميل الصفحة للمحاولة مجددًا.</p><a href="/owner-dashboard">إعادة المحاولة</a></main></html>');
+  }
 }

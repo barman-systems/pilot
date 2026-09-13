@@ -39,7 +39,6 @@ export default async function handler(req,res){
     const action=String(body.action||'').trim().toLowerCase();
     const login=normalizeLogin(body.username||body.login);
     if(action==='request'){
-      // Do not reveal whether an employee email exists.
       if(!validLogin(login))return json(res,200,{ok:true,otp_required:true});
       const resendKey=String(process.env.RESEND_API_KEY||'').trim();
       const oidcToken=await ownerMailerOidc();

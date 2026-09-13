@@ -1,8 +1,5 @@
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "npm:jose@6.1.0";
 
-const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
-const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
-const JSON_HEADERS={'content-type':'application/json','cache-control':'no-store'};
 const OWNER_SLUG='nd56cm4j5v-3619s-projects';
 const OWNER_ID='team_pwfKq8jHuyW1XFVSZirAJiId';
 const PROJECT_NAME='dabbir';
@@ -13,6 +10,10 @@ const ALLOWED_ISSUERS=new Set([
  'https://oidc.vercel.com',
  `https://oidc.vercel.com/${OWNER_SLUG}`,
 ]);
+const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
+const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
+const JSON_HEADERS={'content-type':'application/json','cache-control':'no-store'};
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const serviceKeyIsJwt=()=>SERVICE_KEY.split('.').length===3;
 const sbHeaders=()=>{const h:Record<string,string>={'apikey':SERVICE_KEY,'content-type':'application/json'};if(serviceKeyIsJwt())h.authorization=`Bearer ${SERVICE_KEY}`;return h};
@@ -49,7 +50,7 @@ async function requestOtp(body:any,resendKey:string){
  if(!identity.ok||!identity.payload?.user_id||!identity.payload?.email)return reply(404,{ok:false,error:'PLATFORM_IDENTITY_NOT_FOUND'});
  const userId=String(identity.payload.user_id),email=String(identity.payload.email),invitationId=identity.payload.invitation_id||null;
  const invitationGeneration=invitationId?Number(identity.payload.invitation_generation):null;
- if(invitationId&&(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(invitationId))||!Number.isInteger(invitationGeneration)||Number(invitationGeneration)<1))return reply(503,{ok:false,error:'INVITATION_IDENTITY_INVALID'});
+ if(invitationId&&(!UUID_RE.test(String(invitationId))||!Number.isInteger(invitationGeneration)||Number(invitationGeneration)<1))return reply(503,{ok:false,error:'INVITATION_IDENTITY_INVALID'});
  const since=new Date(Date.now()-10*60*1000).toISOString();
  const c=await sb(`/rest/v1/dabbir_owner_otp_challenges?actor_user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(since)}&select=id`,{headers:{prefer:'count=exact'}});
  if(c.ok){const total=Number((c.headers.get('content-range')||'').split('/')[1]);if(Number.isFinite(total)&&total>=3)return reply(429,{ok:false,error:'OTP_RATE_LIMITED'})}

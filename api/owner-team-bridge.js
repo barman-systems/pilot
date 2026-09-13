@@ -1,5 +1,0 @@
-import { json } from './_auth-core.js';
-import { singleQueryValue } from './_request-query.js';
-import { ownerBroker } from './_owner-broker-client.js';
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export default async function handler(req,res){res.setHeader('cache-control','no-store, max-age=0');if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});const businessId=String(singleQueryValue(req,'business_id')||'').trim();if(!UUID.test(businessId))return json(res,400,{ok:false,error:'INVALID_BUSINESS_ID'});const{status,payload}=await ownerBroker(req,'team',{business_id:businessId});if(status===401)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});if(status!==200||!payload?.ok)return json(res,status>=500?503:status,{ok:false,error:payload?.error||'OWNER_TEAM_READ_FAILED'});return json(res,200,{ok:true,business_id:businessId,mode:'platform_owner_brokered_read',members:Array.isArray(payload.members)?payload.members:[],invitations:Array.isArray(payload.invitations)?payload.invitations:[]})}

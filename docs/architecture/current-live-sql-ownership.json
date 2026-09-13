@@ -1,0 +1,5548 @@
+{
+  "observed_at": "2026-09-10T11:37:51.735Z",
+  "project_ref": "fphpoysqdsceniwduxjq",
+  "scope": "Expanded read-only inventory of all public dabbir_* and private functions. Earlier focused subset retained separately. Qualified body-call/write regex candidates may include comments/string literals; dynamic SQL and unqualified calls are not exhaustive. Not deletion authorization.",
+  "metrics": {
+    "function_signatures": 445,
+    "qualified_cycle_candidates": 1,
+    "dynamic_sql_candidates": 11
+  },
+  "cycles": [
+    [
+      "public.dabbir_create_business"
+    ]
+  ],
+  "functions": [
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "cdce27e5d30e2a4d59ec1964427b9b18",
+      "dynamic_sql": false,
+      "name": "dabbir_private.account_active",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_service_id uuid, p_action text",
+      "calls": [
+        "dabbir_private.activity_contract_v1"
+      ],
+      "definition_md5": "08b3e7b970685b6a1b42c4b5ef6ad056",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_assert_action_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_customer_id uuid, p_conversation_id uuid, p_state jsonb, p_service_id uuid, p_owner_id uuid",
+      "calls": [
+        "dabbir_private.activity_assert_action_v1",
+        "dabbir_private.activity_owner_authorized_v1"
+      ],
+      "definition_md5": "f1d110c9a758364306d3873e27c3ef19",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_assert_execution_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_customer_id uuid, p_conversation_id uuid, p_state jsonb, p_service_id uuid",
+      "calls": [
+        "dabbir_private.activity_assert_execution_v1"
+      ],
+      "definition_md5": "a9fb6fa8cb4793ba0e4daa2d5ef8de80",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_assert_state_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.activity_assert_state_v1",
+        "dabbir_private.understanding_assert_batch_v2"
+      ],
+      "definition_md5": "0b422b1655051c79d0beefed133468d2",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_booking_invariant_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_service_id uuid",
+      "calls": [
+        "dabbir_private.activity_contract_v1"
+      ],
+      "definition_md5": "1ba02e75a87b6365f43254f59d077a80",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_configuration_contract_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_service_id uuid",
+      "calls": [
+        "dabbir_private.activity_validate_config_v1"
+      ],
+      "definition_md5": "d5c094e2d1b4c17918a3aeb50fa468e6",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_contract_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_actor uuid",
+      "calls": [
+        "dabbir_private.is_active_member"
+      ],
+      "definition_md5": "10594a1d8f32240f8e8e838e0331e953",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_owner_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_config jsonb",
+      "calls": [],
+      "definition_md5": "2087568bfd86b74be5db1f4d9a315f65",
+      "dynamic_sql": false,
+      "name": "dabbir_private.activity_validate_config_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_booking_funnel_event"
+      ],
+      "definition_md5": "40027caf24ec3e2ea06212b91cf61fff",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_booking_funnel_action_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_booking_funnel_event"
+      ],
+      "definition_md5": "33ed8aa16e179ce81e9bb5651ec0604b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_booking_funnel_appointment_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_booking_funnel_event"
+      ],
+      "definition_md5": "a36525ba41214f783cba9668d5ad1e2f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_booking_funnel_decision_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_booking_funnel_event"
+      ],
+      "definition_md5": "c02ce7cf604be13b7d5277bf2b98c6bb",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_booking_funnel_payment_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event"
+      ],
+      "definition_md5": "b36ecb46bd5f80b26d25c67020cf9425",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_operator_action_event_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event"
+      ],
+      "definition_md5": "93cedb8b0bcb6b19f7d23952a8b8b69f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_operator_appointment_event_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event"
+      ],
+      "definition_md5": "daa042bcc2126a5e7c7218f9d35dde19",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_operator_batch_event_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event",
+        "public.dabbir_conversation_outcomes"
+      ],
+      "definition_md5": "121aa987800c262e26a21aef26e9f006",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_operator_handoff_event_trigger",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversation_outcomes"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event"
+      ],
+      "definition_md5": "644ae041e9f16ddeb55448a29226f159",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ai_operator_outbound_event_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.allocate_customer_number_if_real"
+      ],
+      "definition_md5": "ad78d917c26746842f928a08504e9b34",
+      "dynamic_sql": false,
+      "name": "dabbir_private.allocate_customer_number_from_business",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [
+        "dabbir_private.next_customer_number",
+        "public.dabbir_user_accounts"
+      ],
+      "definition_md5": "3bd7c67dc31aab4dccb73e7ef46339d0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.allocate_customer_number_if_real",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_user_accounts"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "e8ddde7807b3eb2429e47726949b84fd",
+      "dynamic_sql": false,
+      "name": "dabbir_private.apple_entitlement_touch",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_run_id uuid",
+      "calls": [
+        "public.dabbir_procedure_audit"
+      ],
+      "definition_md5": "9d9f0a5a17cd73f54861b5b4236f0159",
+      "dynamic_sql": false,
+      "name": "dabbir_private.approve_procedure_run_internal",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_procedure_audit",
+        "public.dabbir_procedure_runs"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.owner_mode_events"
+      ],
+      "definition_md5": "8ef442b85017e4466d8be09233c316e1",
+      "dynamic_sql": false,
+      "name": "dabbir_private.audit_owner_mode_change",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_mode_events"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_privacy_audit"
+      ],
+      "definition_md5": "a9234678df5ef1a08dbc94bc27c1cf67",
+      "dynamic_sql": false,
+      "name": "dabbir_private.audit_privacy_row",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_privacy_audit"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c53108b18560a79004384a7f23bd69f0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.auto_confirm_paid_deposit",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "633930c8741e6e3d2aaf9864c7da3f63",
+      "dynamic_sql": false,
+      "name": "dabbir_private.block_customer_number_ledger_mutation",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "b61bb382c50ebb7947a811c598bc0693",
+      "dynamic_sql": false,
+      "name": "dabbir_private.block_legacy_whatsapp_account_offboarding",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid",
+      "calls": [
+        "dabbir_private.account_active"
+      ],
+      "definition_md5": "b96851a749d741469a91e60b2da8db2b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.branch_access_allowed",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [],
+      "definition_md5": "0a1b8a3bc5316fcf6618dd1eb803b6b0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.business_currency_minor_units",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_local_start timestamp without time zone, p_duration_minutes integer",
+      "calls": [],
+      "definition_md5": "63d7fb0ece81f2ad25adf71b952fc7bb",
+      "dynamic_sql": false,
+      "name": "dabbir_private.business_operating_hours_window_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_permissions text[]",
+      "calls": [
+        "dabbir_private.can_user_grant_permissions"
+      ],
+      "definition_md5": "d743b4826b12fe5594fb219360b9c945",
+      "dynamic_sql": false,
+      "name": "dabbir_private.can_grant_permissions",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_target_role text",
+      "calls": [
+        "dabbir_private.can_user_manage_role"
+      ],
+      "definition_md5": "4cee81d18b260a308d9ae785ff4f6703",
+      "dynamic_sql": false,
+      "name": "dabbir_private.can_manage_role",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_permissions text[]",
+      "calls": [
+        "dabbir_private.user_has_permission",
+        "dabbir_private.valid_permissions"
+      ],
+      "definition_md5": "ab5631acdc0604570f98afa738508799",
+      "dynamic_sql": false,
+      "name": "dabbir_private.can_user_grant_permissions",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_target_role text",
+      "calls": [
+        "dabbir_private.user_has_permission"
+      ],
+      "definition_md5": "8ad5fa082707ecd59e90b71881f5c443",
+      "dynamic_sql": false,
+      "name": "dabbir_private.can_user_manage_role",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_customer_id uuid, p_appointment_id uuid, p_source_kind text, p_source_id uuid, p_event_key text, p_stage text, p_status text, p_value_amount numeric, p_currency_code text, p_verification_class text, p_metadata jsonb, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_ai_booking_funnel_events"
+      ],
+      "definition_md5": "20a27d2b203fa18b4cf73df38cca12d0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_ai_booking_funnel_event",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_booking_funnel_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_batch_id uuid, p_source_kind text, p_source_id uuid, p_event_key text, p_stage text, p_event_type text, p_status text, p_action text, p_risk_level text, p_confidence numeric, p_entity_id uuid, p_provider_reference text, p_provider_verified boolean, p_metadata jsonb, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_ai_operator_events"
+      ],
+      "definition_md5": "1415e0129ce932ac76fe3e75ec8ecabf",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_ai_operator_event",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_operator_events"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.business_currency_minor_units",
+        "public.dabbir_commissions",
+        "public.dabbir_workflow_audit",
+        "public.dabbir_workflow_notifications",
+        "public.dabbir_workflow_status_history"
+      ],
+      "definition_md5": "2ba933b5ee3148661885632b9943b326",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_appointment_workflow",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointment_services",
+        "public.dabbir_commissions",
+        "public.dabbir_workflow_audit",
+        "public.dabbir_workflow_notifications",
+        "public.dabbir_workflow_status_history"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_followups",
+        "public.dabbir_operation_outcomes"
+      ],
+      "definition_md5": "1a0bb687ff0fe022b78f7461b0af753c",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_cash_guardian_internal_followups",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups",
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.explicit_followup_requested",
+        "dabbir_private.followup_due_from_explicit_text",
+        "public.dabbir_followups",
+        "public.dabbir_operation_outcomes"
+      ],
+      "definition_md5": "3dcd6cb9489455504b1726e662a39e26",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_safe_internal_followup",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups",
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_workflow_audit"
+      ],
+      "definition_md5": "39e083465bf92222f0afe56fb0b064e1",
+      "dynamic_sql": false,
+      "name": "dabbir_private.capture_salon_admin_audit",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_workflow_audit"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "22866b4f9d7ee60c63b1cbe40603b92f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.car_wash_whatsapp_booking_grounding_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "aa9607a971083f422af2e5c6812c2ad0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.cleanup_dabbir_identity_on_account_tombstone",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_apple_entitlements",
+        "public.dabbir_owner_decision_observations",
+        "public.dabbir_owner_policy_versions"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "67993b35ba0ccc126608a71db16fba7f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.clinic_package_recount",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_clinic_packages"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "0b43765d70656970680881ed3d6b6d99",
+      "dynamic_sql": false,
+      "name": "dabbir_private.clinic_session_guard",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.dabbir_owner_memory_sensitive_action",
+        "dabbir_private.dabbir_record_owner_decision",
+        "dabbir_private.is_active_member"
+      ],
+      "definition_md5": "5ea349146e6e12071072d2e17c73c801",
+      "dynamic_sql": true,
+      "name": "dabbir_private.conversation_return_to_ai_v3",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state"
+      ]
+    },
+    {
+      "arguments": "p_token text",
+      "calls": [
+        "dabbir_private.can_user_grant_permissions",
+        "dabbir_private.can_user_manage_role",
+        "dabbir_private.primary_branch_for_business",
+        "public.dabbir_access_audit",
+        "public.dabbir_membership_branches",
+        "public.dabbir_memberships"
+      ],
+      "definition_md5": "fc2baf3189a54c31b216a4e129e14879",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_accept_employee_invitation",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_access_audit",
+        "public.dabbir_employee_invitations",
+        "public.dabbir_membership_branches",
+        "public.dabbir_memberships"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_action_key text, p_decision_key text, p_decision_value text, p_match_bounds jsonb, p_confirmation_source text",
+      "calls": [
+        "dabbir_private.dabbir_owner_memory_sensitive_action",
+        "public.dabbir_owner_policy_audit",
+        "public.dabbir_owner_policy_versions"
+      ],
+      "definition_md5": "a8c8f29661c5c6998bfbbd9cdb72d5de",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_activate_owner_policy",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_owner_policy_audit",
+        "public.dabbir_owner_policy_versions"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_email text, p_display_name text, p_role text, p_permissions text[], p_token_hash text, p_expires_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.can_grant_permissions",
+        "dabbir_private.can_manage_role",
+        "public.dabbir_access_audit",
+        "public.dabbir_employee_invitations"
+      ],
+      "definition_md5": "9ce21b2f663e8f281fcbf145af798d0a",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_create_employee_invitation",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_access_audit",
+        "public.dabbir_employee_invitations"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid",
+      "calls": [],
+      "definition_md5": "49291712bbc7c5ff9f7a00905c3a7523",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_customer_export_payload",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_confirmation text",
+      "calls": [
+        "dabbir_private.account_deletion_receipts",
+        "public.account_access_state"
+      ],
+      "definition_md5": "7ca7c9627f59fb16b527a6e8f43b67da",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_delete_current_user_account_impl",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.account_deletion_receipts",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "public.account_access_state",
+        "public.dabbir_access_audit",
+        "public.dabbir_businesses",
+        "public.dabbir_creator_profiles",
+        "public.dabbir_employee_invitations",
+        "public.dabbir_handoffs",
+        "public.dabbir_memberships",
+        "public.dabbir_messages",
+        "public.dabbir_offers",
+        "public.dabbir_owner_policy_audit",
+        "public.dabbir_payments",
+        "public.dabbir_procedure_definitions",
+        "public.dabbir_procedure_runs",
+        "public.dabbir_user_accounts",
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_confirmation text",
+      "calls": [],
+      "definition_md5": "e567c1e9872b129ec5c8d09135507993",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_delete_current_user_account_preflight_impl",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_request_id uuid, p_confirmation text",
+      "calls": [
+        "dabbir_private.dabbir_customer_export_payload",
+        "public.dabbir_privacy_audit"
+      ],
+      "definition_md5": "501f30efaf91eb13af7505fe25bb4510",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_execute_customer_privacy_request",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointments",
+        "public.dabbir_conversations",
+        "public.dabbir_customer_consents",
+        "public.dabbir_customer_evidence",
+        "public.dabbir_customer_identities",
+        "public.dabbir_customer_management",
+        "public.dabbir_customer_memory",
+        "public.dabbir_customers",
+        "public.dabbir_event_inbox",
+        "public.dabbir_financial_evidence",
+        "public.dabbir_followups",
+        "public.dabbir_handoffs",
+        "public.dabbir_message_batches",
+        "public.dabbir_messages",
+        "public.dabbir_offers",
+        "public.dabbir_orders",
+        "public.dabbir_payments",
+        "public.dabbir_privacy_audit",
+        "public.dabbir_privacy_requests",
+        "public.dabbir_verification_challenges"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "c9a3346de79600d2ab4368d0a9ae9477",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_list_team",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_action_key text, p_match_bounds jsonb",
+      "calls": [
+        "dabbir_private.dabbir_owner_memory_sensitive_action"
+      ],
+      "definition_md5": "886e0bfb4ee18f939e872189fb8e9ca8",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_match_owner_policy",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_action_key text",
+      "calls": [],
+      "definition_md5": "24873caae9d8ddc42a2b50a788713417",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_owner_memory_sensitive_action",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "dabbir_private.dabbir_owner_memory_sensitive_action"
+      ],
+      "definition_md5": "7aab07b0456b9f3bbd91ec97db89010d",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_owner_policy_candidates",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_route_class text, p_reason text, p_priority integer",
+      "calls": [
+        "dabbir_private.dabbir_match_owner_policy",
+        "dabbir_private.dabbir_owner_memory_sensitive_action",
+        "public.dabbir_owner_policy_audit"
+      ],
+      "definition_md5": "060d5517537e4585ff932e2094a678f9",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_owner_policy_skip_handoff",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_owner_policy_audit"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_action_key text, p_decision_key text, p_decision_value text, p_risk_class text, p_match_bounds jsonb, p_source_type text, p_source_id uuid",
+      "calls": [
+        "dabbir_private.dabbir_owner_memory_sensitive_action",
+        "public.dabbir_owner_decision_observations"
+      ],
+      "definition_md5": "903b5e5f387c958f69421dd191726149",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_record_owner_decision",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_owner_decision_observations"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "9f28795e05da91d9e67a636fb86be5e0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_scrub_retained_customer_records",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_procedure_runs",
+        "public.dabbir_quality_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.can_manage_role",
+        "public.dabbir_access_audit"
+      ],
+      "definition_md5": "404660218390d0d56ede5835f86a427f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_set_employee_status",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_access_audit",
+        "public.dabbir_employee_invitations",
+        "public.dabbir_memberships"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_policy_id uuid, p_state text",
+      "calls": [
+        "public.dabbir_owner_policy_audit"
+      ],
+      "definition_md5": "08cf6b06b1e3ade3178626db54465e73",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_set_owner_policy_state",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_owner_policy_audit",
+        "public.dabbir_owner_policy_versions"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_role text, p_permissions text[]",
+      "calls": [
+        "dabbir_private.can_grant_permissions",
+        "dabbir_private.can_manage_role",
+        "public.dabbir_access_audit"
+      ],
+      "definition_md5": "d6f5b30fcc7a4edd3e8c5e3e2fc00e73",
+      "dynamic_sql": false,
+      "name": "dabbir_private.dabbir_update_employee_access",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_access_audit",
+        "public.dabbir_memberships"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "2299d8e604e3394fe18c8dacca55ce82",
+      "dynamic_sql": false,
+      "name": "dabbir_private.delete_apple_entitlement_on_account_tombstone",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_apple_entitlements"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "80b042c1f8e9e3186f6d4aa5e39f5bad",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_action_verification",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "2a558b8315dbdfba89c98bd0c653ad89",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_appointment_currency_snapshot",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "13205b0aeab8248762aee8a6e30d76e1",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_business_currency_snapshot",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "ffb337be07df957847c4b67e85ce1a62",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_external_booking_confirmation_gate",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "537ace973ca63927224602129b083894",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_hypothesis_validation",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "b5cf6f7ca03e850cf092516d1c1c2025",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_insight_triangulation",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "9ba8c20ac22920a49331b1e77e617e6a",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_order_currency_snapshot",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "890118d8770e6ae3e9e55d238b54b3b0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_owner_unrestricted_membership",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "ec0317994c166488c96beb55d454a56f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enforce_principle_adoption",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_integration_outbox"
+      ],
+      "definition_md5": "da7bc2a3a2a1bac974be0da4d1f5436f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.enqueue_calendar_sync_from_appointment",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_integration_outbox"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.allocate_customer_number_if_real",
+        "public.dabbir_user_accounts"
+      ],
+      "definition_md5": "b6f0cc59e85c1c7305de1c96ba80f309",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ensure_dabbir_user_account",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_user_accounts"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "3ecafa910eb26715d4f44db6adde53ca",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ensure_dabbir_user_account_from_auth",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.primary_branch_for_business"
+      ],
+      "definition_md5": "7533955a51140f7c8de0c803592ef77e",
+      "dynamic_sql": false,
+      "name": "dabbir_private.ensure_operational_branch",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_body text",
+      "calls": [],
+      "definition_md5": "3521d7d7cea8a485cbc74e59fe9ca035",
+      "dynamic_sql": false,
+      "name": "dabbir_private.explicit_followup_requested",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_body text, p_created_at timestamp with time zone",
+      "calls": [],
+      "definition_md5": "3f724c372b0b8107ab8feaa5ee7d0723",
+      "dynamic_sql": false,
+      "name": "dabbir_private.followup_due_from_explicit_text",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "6184d8ccea634da86cde9e97eae92943",
+      "dynamic_sql": false,
+      "name": "dabbir_private.google_entitlement_touch",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "938e3241e63332979c3e4fa2ce1bd6d3",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_appointment_deposit_snapshot",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "3bad8e056f41c8bc4e2862b14f9cb3df",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_business_delete_whatsapp_offboarding",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c6759536813a71a91ffc636968929ab6",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_customer_whatsapp_display_name",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "f3cde410f31380c2d0cf17e061b75e18",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_dabbir_user_account_identity",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "9606498f3cad7d27bf52d583db208b86",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_designated_owner_membership",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "16acd05c67256f59c4d7b6cf3aac20ba",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_membership_identity",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "9495a0f1eb83b23172a3052f735cef51",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_offer_identity_terms",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "bb34affed0ce3cc3f8b6e97aa0206087",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_operational_payment_identity",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c6f9d934cec7ecc55af95734e4f76454",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_owner_booking_decision",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "d74c116f1379265849172bba9a068916",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_platform_root_owner",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "64118fe5f2b37ad97d192968d22a3130",
+      "dynamic_sql": false,
+      "name": "dabbir_private.guard_whatsapp_token_context",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "d31713647623233a1847a34ea2dab069",
+      "dynamic_sql": false,
+      "name": "dabbir_private.handle_booking_confirmation_gate_notifications",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_workflow_notifications"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_permission text",
+      "calls": [
+        "dabbir_private.user_has_permission"
+      ],
+      "definition_md5": "394adc6e7d14ac0df990ca5a10f9251e",
+      "dynamic_sql": false,
+      "name": "dabbir_private.has_permission",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "dabbir_private.account_active"
+      ],
+      "definition_md5": "fa3e8f958101add7d10f4907c776cca3",
+      "dynamic_sql": false,
+      "name": "dabbir_private.is_active_member",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "7c947e2cee4caafcc3607bc96866aceb",
+      "dynamic_sql": false,
+      "name": "dabbir_private.lock_booking_calendar_business",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "5a5d78fcd4b7245942c44be2cca41436",
+      "dynamic_sql": false,
+      "name": "dabbir_private.next_customer_number",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "df2a72dc66aaf3e0dafd51f076632fe8",
+      "dynamic_sql": false,
+      "name": "dabbir_private.normalize_followup_lifecycle_status",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_value jsonb, p_state text, p_source text, p_definition text, p_aggregation text",
+      "calls": [],
+      "definition_md5": "672e491792c0ef9791fc8a57b7b1647c",
+      "dynamic_sql": false,
+      "name": "dabbir_private.owner_metric_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb",
+      "calls": [],
+      "definition_md5": "a3d7aaa02db1499c314f5eaac3698a66",
+      "dynamic_sql": false,
+      "name": "dabbir_private.owner_scope_businesses_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "4c3590a96e0a0346172e0db9d8a9b281",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_admin_audit_immutable",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [],
+      "definition_md5": "58edc40b1fe4a007083c5b0b8ee33980",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_admin_is_active",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_action_code text, p_amount_aed numeric",
+      "calls": [],
+      "definition_md5": "35e83b54c2111762504fa2586c41950b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_approval_requires_root",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [],
+      "definition_md5": "7517a2532a0e8d41dce4034e1337e557",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_admin",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_business_id uuid",
+      "calls": [
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "21e88fd6fb25c6281a92eb210b57769d",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_business_scope",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_permissions text[]",
+      "calls": [
+        "dabbir_private.platform_has_permission",
+        "dabbir_private.platform_permissions_valid"
+      ],
+      "definition_md5": "34861c12124782a067edca281e617103",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_can_grant",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_permissions text[]",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_granular_permissions_valid",
+        "dabbir_private.platform_has_permission"
+      ],
+      "definition_md5": "b7925339c791dce800d9428e72fa4baf",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_can_grant_granular",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_granular text[], p_coarse text[], p_scope jsonb, p_access_expires_at timestamp with time zone, p_approval_limit_aed numeric",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_assert_can_grant",
+        "dabbir_private.platform_assert_can_grant_granular",
+        "dabbir_private.platform_assert_scope_grant_v2",
+        "dabbir_private.platform_effective_capability"
+      ],
+      "definition_md5": "85c4b2a444823dcfa61c90f230a4c756",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_invite_grant_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_required boolean",
+      "calls": [
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "6c54eb11701c35b892f6f0ebec422d92",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_mfa_grant_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_permission text",
+      "calls": [
+        "dabbir_private.platform_has_permission"
+      ],
+      "definition_md5": "f5f9897a0a28150cf4fd8447637eb8c1",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_permission",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_target_user_id uuid",
+      "calls": [],
+      "definition_md5": "f67f0c6f2875f6c308988142532e0daa",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_recovery_frozen",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [],
+      "definition_md5": "455c2f7f56ebfef0ffafb0ba3e615911",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_root",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_scope jsonb",
+      "calls": [
+        "dabbir_private.platform_scope_grant_allowed_v2"
+      ],
+      "definition_md5": "490f891956dee89835945486ffb4450b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_assert_scope_grant_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_role_code text, p_granular text[]",
+      "calls": [],
+      "definition_md5": "15f08b6892290019a62ee0de147d7651",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_coarse_permissions_for_role",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_code text",
+      "calls": [
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "44c1d3587d7484080a2fea7461ac877b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_effective_capability",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_permissions text[]",
+      "calls": [],
+      "definition_md5": "fa1b01dc566883d6d7b7fb7e7af79045",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_granular_permissions_valid",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_permission text",
+      "calls": [
+        "dabbir_private.platform_permission_allowed"
+      ],
+      "definition_md5": "b4ff52051335c9095265964d14654524",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_has_permission",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [],
+      "definition_md5": "e6d10d8aa1e92424821e2a9a1caf3155",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_identity",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_role_code text, p_requested_granular text[], p_access_scope jsonb, p_access_expires_at timestamp with time zone, p_mfa_required boolean, p_approval_limit_aed numeric",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_assert_can_grant",
+        "dabbir_private.platform_assert_can_grant_granular",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_granular_permissions_valid",
+        "dabbir_private.platform_role_permissions_v1",
+        "dabbir_private.platform_scope_contains_v1"
+      ],
+      "definition_md5": "badbe51dd232cba58464eaa988e0df6e",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_invitation_grant_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_role_code text, p_granular text[]",
+      "calls": [
+        "dabbir_private.platform_granular_permissions_valid",
+        "dabbir_private.platform_role_permissions_v1"
+      ],
+      "definition_md5": "bfa67f69b5cce9f8cdf6b248c26f6a2e",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_invite_granular_for_role_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_permission text",
+      "calls": [],
+      "definition_md5": "3c391bef8d1410f8e6d460b6e2fb0d39",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_permission_allowed",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_permissions text[]",
+      "calls": [
+        "dabbir_private.platform_permission_allowed"
+      ],
+      "definition_md5": "57338880f587b619e1cfa7454e67e4ff",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_permissions_valid",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_role_code text",
+      "calls": [],
+      "definition_md5": "11b7b4e9fd2d96cd42fceda5e56a0997",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_role_permissions_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_business_id uuid",
+      "calls": [
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "e7e78916d3a2147cb27344a8ed735054",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_scope_allows_business",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_requested jsonb",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "089b627babd85b7439e17a939c8f90ef",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_scope_contains_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_scope jsonb",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_shape_valid_v2"
+      ],
+      "definition_md5": "a327a9c5247f952b49f5874bcbadf851",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_scope_grant_allowed_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "7634f5ec4c97b00c9ec8adc124193219",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_scope_is_global",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb",
+      "calls": [],
+      "definition_md5": "1ec0ca584bf48d5293ea5f3d3c34baf7",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_scope_shape_valid_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "219aeae39ff6c34359432ec4ba99632a",
+      "dynamic_sql": false,
+      "name": "dabbir_private.platform_staff_audit_immutable",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "160387f3b2048f368bf0a407d21ab7d0",
+      "dynamic_sql": false,
+      "name": "dabbir_private.prevent_appointment_calendar_conflict",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "6f87e1be698d5d5989e5bfe8c8601dfa",
+      "dynamic_sql": false,
+      "name": "dabbir_private.prevent_past_appointment",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [],
+      "definition_md5": "08527c10b1ea71af2a079dd4c2f57250",
+      "dynamic_sql": false,
+      "name": "dabbir_private.primary_branch_for_business",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.dabbir_customer_number_ledger"
+      ],
+      "definition_md5": "f65a82db535aa86d91bfa04f7c3d8f1c",
+      "dynamic_sql": false,
+      "name": "dabbir_private.record_customer_number_ledger",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.dabbir_customer_number_ledger"
+      ]
+    },
+    {
+      "arguments": "p_case_id uuid",
+      "calls": [
+        "dabbir_private.recovery_delete_row",
+        "dabbir_private.recovery_restore_events",
+        "dabbir_private.recovery_runtime_context",
+        "dabbir_private.recovery_upsert_row"
+      ],
+      "definition_md5": "fec95c5329e8f6273d83f8c285699807",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_apply_case",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.recovery_cases",
+        "dabbir_private.recovery_restore_events",
+        "dabbir_private.recovery_runtime_context"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "e941e460abcb09d649799e30e93be017",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_block_mutation",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.recovery_capture_business_snapshot"
+      ],
+      "definition_md5": "eda96ea9739859f6e018686a880c0c2a",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_capture_all_business_snapshots",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_reason text",
+      "calls": [
+        "dabbir_private.recovery_snapshot_batches",
+        "dabbir_private.recovery_snapshots"
+      ],
+      "definition_md5": "6894f99ce4955894a1d2b170bc07cacf",
+      "dynamic_sql": true,
+      "name": "dabbir_private.recovery_capture_business_snapshot",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.recovery_snapshot_batches",
+        "dabbir_private.recovery_snapshots"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.recovery_change_journal",
+        "dabbir_private.recovery_is_active"
+      ],
+      "definition_md5": "176fec9c67082c31efdf8a9eb40353af",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_capture_change",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.recovery_change_journal"
+      ]
+    },
+    {
+      "arguments": "p_table_name text, p_row_key jsonb",
+      "calls": [],
+      "definition_md5": "90543e86191511a2f7e55781050ed13f",
+      "dynamic_sql": true,
+      "name": "dabbir_private.recovery_delete_row",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c35cb6a08901d98fa582d25e7b592347",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_health_check",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "2ad0dbfcc601a9712c7febd953961e7c",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_is_active",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_target_at timestamp with time zone, p_customer_id uuid, p_reason text, p_requested_by_user_id uuid",
+      "calls": [
+        "dabbir_private.recovery_cases",
+        "dabbir_private.recovery_preview"
+      ],
+      "definition_md5": "72ff90a44615a493bfffcd6029f54fe3",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_open_case",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.recovery_cases"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_target_at timestamp with time zone, p_customer_id uuid",
+      "calls": [],
+      "definition_md5": "03c4b5dab625780cfea8ceedd37956a9",
+      "dynamic_sql": false,
+      "name": "dabbir_private.recovery_preview",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.recovery_capture_change",
+        "dabbir_private.recovery_supported_tables"
+      ],
+      "definition_md5": "893984dbc722d912fcf4d22c0872c39d",
+      "dynamic_sql": true,
+      "name": "dabbir_private.recovery_refresh_registry",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.recovery_supported_tables"
+      ]
+    },
+    {
+      "arguments": "p_table_name text, p_row jsonb",
+      "calls": [],
+      "definition_md5": "2aac268381f89cbe123f9830d456cfdc",
+      "dynamic_sql": true,
+      "name": "dabbir_private.recovery_upsert_row",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [
+        "public.dabbir_user_accounts"
+      ],
+      "definition_md5": "070c88051663d96846022ac3e8e41a92",
+      "dynamic_sql": false,
+      "name": "dabbir_private.repair_customer_number",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_user_accounts"
+      ]
+    },
+    {
+      "arguments": "p_query text",
+      "calls": [],
+      "definition_md5": "b30d22fc033c344f92bad29ece4f5178",
+      "dynamic_sql": false,
+      "name": "dabbir_private.resolve_account_lookup",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_customer_no text",
+      "calls": [],
+      "definition_md5": "74a2d3ee65f65dbce45ef4eb19c9f798",
+      "dynamic_sql": false,
+      "name": "dabbir_private.resolve_customer_number",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_sender_handle text, p_display_name text",
+      "calls": [
+        "public.dabbir_customers"
+      ],
+      "definition_md5": "a271c5b9adbc1de1ad6bfa8a3b3d10c7",
+      "dynamic_sql": false,
+      "name": "dabbir_private.resolve_whatsapp_customer_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_customers"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid, p_manage boolean",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "a6170f62e20092f6df5fd20c696e6e4f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.salon_customer_scope",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_worker_id uuid, p_manage boolean",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "2c5caacc049bd62a9eaaa70878f62ee3",
+      "dynamic_sql": false,
+      "name": "dabbir_private.salon_member_scope",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_action_policies"
+      ],
+      "definition_md5": "7a188134873191d87e4bc63d2ed67651",
+      "dynamic_sql": false,
+      "name": "dabbir_private.seed_autonomous_daily_operator_policy_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_action_policies"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_action_policies"
+      ],
+      "definition_md5": "5d8e62813e70c389ff39f08effd5df9c",
+      "dynamic_sql": false,
+      "name": "dabbir_private.seed_cash_guardian_policy",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_action_policies"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.primary_branch_for_business",
+        "public.dabbir_branch_products",
+        "public.dabbir_branch_services",
+        "public.dabbir_worker_branches"
+      ],
+      "definition_md5": "26e89ae0e83198e737ca9204cacbdde2",
+      "dynamic_sql": false,
+      "name": "dabbir_private.seed_primary_branch_resource",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_branch_products",
+        "public.dabbir_branch_services",
+        "public.dabbir_worker_branches"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_privacy_controls",
+        "public.dabbir_retention_policies"
+      ],
+      "definition_md5": "7bb88415be4a7290dd7a54b6ba928825",
+      "dynamic_sql": false,
+      "name": "dabbir_private.seed_privacy_defaults",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_privacy_controls",
+        "public.dabbir_retention_policies"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_action_policies"
+      ],
+      "definition_md5": "25f98279f3867e87a644d1002dbff74d",
+      "dynamic_sql": false,
+      "name": "dabbir_private.seed_safe_followup_policy",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_action_policies"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "27b98101c1d49944b37d18474efb433b",
+      "dynamic_sql": false,
+      "name": "dabbir_private.set_updated_at",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c812eded8c397ccb9c10beb31c886317",
+      "dynamic_sql": false,
+      "name": "dabbir_private.sync_appointment_payment_status",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_creator_profiles"
+      ],
+      "definition_md5": "dd744f9b299c923fb190bf007810c771",
+      "dynamic_sql": false,
+      "name": "dabbir_private.sync_creator_profile",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_creator_profiles"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "229b3bb11e23b6398f77de0b714dac32",
+      "dynamic_sql": false,
+      "name": "dabbir_private.sync_gcc_business_profile",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_revision bigint",
+      "calls": [],
+      "definition_md5": "c35bd475e58bb67a8933115dc10db2db",
+      "dynamic_sql": false,
+      "name": "dabbir_private.understanding_assert_batch_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "7a1f4ce45a64d20b8b201a82611eb68d",
+      "dynamic_sql": false,
+      "name": "dabbir_private.understanding_memory_edit_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "61097c215cb667c8712855a8de35d7db",
+      "dynamic_sql": false,
+      "name": "dabbir_private.understanding_message_revision_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations"
+      ]
+    },
+    {
+      "arguments": "p_reservation_id uuid",
+      "calls": [],
+      "definition_md5": "22967dd67f9f1607101e764e6f66123f",
+      "dynamic_sql": false,
+      "name": "dabbir_private.understanding_outbound_receipt_verified_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_permission text",
+      "calls": [],
+      "definition_md5": "b96989673adf5c4295c9e5544ab2b1a6",
+      "dynamic_sql": false,
+      "name": "dabbir_private.user_has_permission",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_permissions text[]",
+      "calls": [],
+      "definition_md5": "0be050d925473f89f9865c98bf919e36",
+      "dynamic_sql": false,
+      "name": "dabbir_private.valid_permissions",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "a67b9384f416dec0577635fd312ba765",
+      "dynamic_sql": false,
+      "name": "dabbir_private.validate_appointment_branch_resources",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "4c297c4cc982dba8d31fb55d0659d1ca",
+      "dynamic_sql": false,
+      "name": "dabbir_private.validate_order_item_branch_product",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "0c3929dcd31610a5cf75b6dc5f9c6506",
+      "dynamic_sql": false,
+      "name": "dabbir_private.validate_payment_identity_route",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_worker_id uuid, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone",
+      "calls": [],
+      "definition_md5": "a61370bcc2560ccc9a4e48f77254b643",
+      "dynamic_sql": false,
+      "name": "dabbir_private.whatsapp_ai_slot_available",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_worker_id uuid, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.business_operating_hours_window_v1"
+      ],
+      "definition_md5": "9de5cc0dc8ef1ece7f6ef845e9e85dd4",
+      "dynamic_sql": false,
+      "name": "dabbir_private.whatsapp_ai_slot_available_branch",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_token text",
+      "calls": [
+        "dabbir_private.dabbir_accept_employee_invitation"
+      ],
+      "definition_md5": "c1613acf7234bc0fe0bed698e66b5fe9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_accept_employee_invitation",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_action_key text, p_decision_key text, p_decision_value text, p_match_bounds jsonb, p_confirmation_source text",
+      "calls": [
+        "dabbir_private.dabbir_activate_owner_policy",
+        "dabbir_private.is_active_member"
+      ],
+      "definition_md5": "67e20993edf6e6891dbf01034165d213",
+      "dynamic_sql": false,
+      "name": "public.dabbir_activate_owner_policy",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid",
+      "calls": [
+        "dabbir_private.activity_configuration_contract_v1"
+      ],
+      "definition_md5": "c17daed79798f08338387ec325c11c56",
+      "dynamic_sql": false,
+      "name": "public.dabbir_activity_profile_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_service_id uuid, p_expected_version bigint, p_config jsonb, p_action text, p_restore_version bigint",
+      "calls": [
+        "dabbir_private.activity_configuration_contract_v1",
+        "dabbir_private.activity_validate_config_v1",
+        "public.dabbir_activity_service_versions"
+      ],
+      "definition_md5": "f2626999196afb66ba9c6b486177a64e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_activity_service_configure_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_activity_service_versions"
+      ]
+    },
+    {
+      "arguments": "p_since interval, p_limit integer",
+      "calls": [
+        "public.dabbir_ai_eval_cases"
+      ],
+      "definition_md5": "94494dcd2f98b2155628cd72ca520382",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ai_eval_ingest_recent_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_eval_cases"
+      ]
+    },
+    {
+      "arguments": "p_since interval",
+      "calls": [
+        "public.dabbir_ai_eval_ingest_recent_v1",
+        "public.dabbir_ai_failure_clusters",
+        "public.dabbir_ai_improvement_proposals"
+      ],
+      "definition_md5": "f00af21da2ab2286db1c7719f4a0dd8b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ai_failure_mine_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_failure_clusters",
+        "public.dabbir_ai_improvement_proposals"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "666653f2e8ab16e1be6a0ba49acec5ab",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ai_may_reply",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_knowledge_key text, p_answer_ar text",
+      "calls": [
+        "public.dabbir_business_knowledge"
+      ],
+      "definition_md5": "44e91a688e0bb5747f77f68f0b029239",
+      "dynamic_sql": false,
+      "name": "public.dabbir_approve_business_knowledge",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_business_knowledge"
+      ]
+    },
+    {
+      "arguments": "p_run_id uuid",
+      "calls": [
+        "dabbir_private.approve_procedure_run_internal"
+      ],
+      "definition_md5": "6c2bdb1b1bbdcd6ca0b637d36865397e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_approve_procedure_run",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_limit integer, p_visibility_seconds integer, p_job_type text",
+      "calls": [],
+      "definition_md5": "cc4ac24a88e8a8ea4fbcf284c939d9d2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_async_claim_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_msg_id bigint",
+      "calls": [],
+      "definition_md5": "296be926e632870f82440430bf4ae177",
+      "dynamic_sql": false,
+      "name": "public.dabbir_async_complete_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_job_type text, p_payload jsonb, p_delay_seconds integer, p_max_attempts integer, p_headers jsonb",
+      "calls": [],
+      "definition_md5": "b20043c7fd9fb8b52384cd23de0f2449",
+      "dynamic_sql": false,
+      "name": "public.dabbir_async_enqueue_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_intent text, p_action text, p_activity_type text",
+      "calls": [],
+      "definition_md5": "1c184f5d52080ee96f9ef75829d8ed98",
+      "dynamic_sql": false,
+      "name": "public.dabbir_capability_resolve_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [
+        "public.dabbir_followups"
+      ],
+      "definition_md5": "10d2fd3b250a015465dea870568fc07a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_capture_abandoned_booking_followups_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_business_knowledge"
+      ],
+      "definition_md5": "6d095907efb654f7fb9c058aa1567574",
+      "dynamic_sql": false,
+      "name": "public.dabbir_capture_missing_business_knowledge",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_business_knowledge"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "840d0282725e67cd7fea7a8e28398ec4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_car_wash_public_booking_abuse_guard",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_command_text text, p_priority text, p_objective text, p_acceptance_criteria jsonb, p_due_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_ceo_command_create_v2"
+      ],
+      "definition_md5": "c8eef041bd48e4b10c30d6a339c614e4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_command_create_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_created_by uuid, p_command_text text, p_priority text",
+      "calls": [
+        "public.dabbir_ceo_command_create_v2"
+      ],
+      "definition_md5": "681b2c2966635348b094a630512f1881",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_command_create_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_created_by uuid, p_command_text text, p_priority text, p_objective text, p_acceptance_criteria jsonb, p_due_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.dabbir_ceo_commands",
+        "dabbir_private.executive_events"
+      ],
+      "definition_md5": "66d409685c94be6ae58b0658061fb329",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_command_create_v2",
+      "security_definer": false,
+      "writes": [
+        "dabbir_private.dabbir_ceo_commands",
+        "dabbir_private.executive_events"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_command_id uuid, p_operation text, p_priority text, p_due_at timestamp with time zone, p_guidance text",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_ceo_command_update_v2"
+      ],
+      "definition_md5": "253d6ee966fb05b921b0bb399930111c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_command_update_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_command_id uuid, p_operation text, p_priority text, p_due_at timestamp with time zone, p_guidance text",
+      "calls": [
+        "public.dabbir_ceo_commands_recent_v2"
+      ],
+      "definition_md5": "0ff004974264a5b54633daed840ef5d3",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_command_update_v2",
+      "security_definer": false,
+      "writes": [
+        "dabbir_private.dabbir_ceo_commands",
+        "dabbir_private.executive_events"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_ceo_commands_recent_v2"
+      ],
+      "definition_md5": "c91563128ce1d14456d95e18bd5118e1",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_commands_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [
+        "public.dabbir_ceo_commands_recent_v2"
+      ],
+      "definition_md5": "e90ca3c67603826d1d3c6949f3d8c893",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_commands_recent_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [],
+      "definition_md5": "268984c3f67cef8f317a5c8edccff7fd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ceo_commands_recent_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_operation_key text, p_operation_type text, p_autonomous boolean, p_reserve_microusd bigint, p_external_spent_microusd bigint, p_hard_limit_microusd bigint",
+      "calls": [
+        "public.dabbir_operation_outcomes"
+      ],
+      "definition_md5": "e26df60c3d46e9f87f65e4ee6a44ff15",
+      "dynamic_sql": false,
+      "name": "public.dabbir_claim_ai_budget_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "p_handoff_id uuid",
+      "calls": [],
+      "definition_md5": "f30b5ab6e40b5d9e80475da8ade05da7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_claim_handoff",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [],
+      "definition_md5": "298f95c8dcb1fd9e73aeb2cfe66c37ca",
+      "dynamic_sql": false,
+      "name": "public.dabbir_claim_integration_jobs",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_integration_outbox"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "3ef3a625567600e7291f3f4039f1b38e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_claim_ready_message_batch",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [],
+      "definition_md5": "18f42f997ee1621e7b7223499284972b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_claim_workflow_notifications",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_workflow_notifications"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "563493129fb71ca073e39fcd02536dc9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_cleanup_calendar_outbox",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_integration_outbox"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint, p_provider_message_id text, p_next_field text",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "dabbir_private.understanding_outbound_receipt_verified_v1",
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_semantic_assert_current_v2"
+      ],
+      "definition_md5": "ae9d75593e45e4cd6f0d106097f4393a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_cognitive_record_delivery_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events"
+      ]
+    },
+    {
+      "arguments": "p_name text, p_business_type text, p_locale text",
+      "calls": [
+        "public.dabbir_create_business"
+      ],
+      "definition_md5": "75e5badebcd3d057112a823c3ef0427e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_create_business",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_name text, p_business_type text, p_locale text, p_country_code text",
+      "calls": [
+        "public.dabbir_business_branches",
+        "public.dabbir_businesses",
+        "public.dabbir_memberships"
+      ],
+      "definition_md5": "9c9ec55f95882cf6af04169c8519f2df",
+      "dynamic_sql": false,
+      "name": "public.dabbir_create_business",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_business_branches",
+        "public.dabbir_businesses",
+        "public.dabbir_memberships"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_email text, p_display_name text, p_role text, p_permissions text[], p_token_hash text, p_expires_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.dabbir_create_employee_invitation"
+      ],
+      "definition_md5": "4db5fc89acd8256ead25d13bc3ea8939",
+      "dynamic_sql": false,
+      "name": "public.dabbir_create_employee_invitation",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_customer_id uuid, p_route_class text, p_reason text, p_priority integer, p_routing_strategy text, p_summary text, p_attempted_actions jsonb, p_unresolved_items jsonb",
+      "calls": [
+        "dabbir_private.dabbir_owner_policy_skip_handoff",
+        "dabbir_private.has_permission",
+        "public.dabbir_handoffs"
+      ],
+      "definition_md5": "2a3b52c43d8cf4ffc657a9027685d46b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_create_handoff",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid, p_identity_id uuid, p_purpose text, p_action_key text, p_code_hash text, p_delivery_channel text, p_provider_ready boolean, p_ttl_minutes integer",
+      "calls": [
+        "public.dabbir_verification_challenges"
+      ],
+      "definition_md5": "cbd102bcf1c9f7f66624082011126746",
+      "dynamic_sql": false,
+      "name": "public.dabbir_create_stepup_challenge",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_verification_challenges"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_business_id uuid, p_category text, p_priority text, p_subject text, p_message text, p_context jsonb",
+      "calls": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_messages"
+      ],
+      "definition_md5": "eafa8efb424eaf70891428e5915b3f2d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_customer_support_create",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_messages"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_case_id uuid, p_message text",
+      "calls": [
+        "dabbir_private.platform_customer_support_messages"
+      ],
+      "definition_md5": "154386e7f5b3bc14ff3c4dfa31b9b497",
+      "dynamic_sql": false,
+      "name": "public.dabbir_customer_support_reply",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_messages"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_business_id uuid",
+      "calls": [],
+      "definition_md5": "2a0bf17bb553757380cb4e46c3cd1c0d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_customer_support_summary",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_business_id uuid, p_customer_id uuid, p_display_name text",
+      "calls": [],
+      "definition_md5": "c198d849646092e0e48516b7e511fb8e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_customer_update_display_name",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_customers"
+      ]
+    },
+    {
+      "arguments": "p_confirmation text",
+      "calls": [
+        "dabbir_private.dabbir_delete_current_user_account_impl"
+      ],
+      "definition_md5": "1020dfb19eb0dabc44954e6ac9484cf7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_delete_current_user_account",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_confirmation text",
+      "calls": [
+        "dabbir_private.dabbir_delete_current_user_account_preflight_impl"
+      ],
+      "definition_md5": "871beb7d308c340dbee04bbbdd5b137e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_delete_current_user_account_preflight",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_service_id uuid, p_starts_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_appointments",
+        "public.dabbir_demo_events"
+      ],
+      "definition_md5": "fa1afd07669dc828f2412402b2b87fbf",
+      "dynamic_sql": false,
+      "name": "public.dabbir_demo_book_appointment",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointments",
+        "public.dabbir_demo_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_sku text",
+      "calls": [
+        "public.dabbir_demo_events",
+        "public.dabbir_orders"
+      ],
+      "definition_md5": "433890bbf1ec0e6bdd6679569a42d18d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_demo_reserve_order",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_demo_events",
+        "public.dabbir_inventory",
+        "public.dabbir_orders"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_customer_id uuid, p_channel_type text, p_message_id uuid, p_batch_window_ms integer, p_immediate_bypass boolean, p_bypass_reason text",
+      "calls": [
+        "public.dabbir_message_batch_items",
+        "public.dabbir_message_batches"
+      ],
+      "definition_md5": "c14dbc1d5be9ab350de9f5dc787712b5",
+      "dynamic_sql": false,
+      "name": "public.dabbir_enqueue_message_batch",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batch_items",
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_followup_id uuid",
+      "calls": [],
+      "definition_md5": "13e370d3acda3d794f3ff9da875e9115",
+      "dynamic_sql": false,
+      "name": "public.dabbir_evaluate_followup_policy",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups"
+      ]
+    },
+    {
+      "arguments": "p_request_id uuid, p_confirmation text",
+      "calls": [
+        "dabbir_private.dabbir_execute_customer_privacy_request"
+      ],
+      "definition_md5": "d33cfc830f58d353ad2c903108b7e7c5",
+      "dynamic_sql": false,
+      "name": "public.dabbir_execute_customer_privacy_request",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_operation_key text, p_outcome text, p_failure_class text, p_actual_cost_microusd bigint, p_safe_eligible boolean, p_estimated_manual_seconds integer, p_metadata jsonb",
+      "calls": [],
+      "definition_md5": "344ccf4fb73b4a5b518b6fa04e7fa7d0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_finalize_ai_budget_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_outcome text, p_summary text, p_next_action text, p_verified_external_result boolean, p_external_reference text, p_evidence jsonb",
+      "calls": [
+        "public.dabbir_conversation_outcomes"
+      ],
+      "definition_md5": "1c0225607f1e3715c5e7e85a74405031",
+      "dynamic_sql": false,
+      "name": "public.dabbir_finalize_conversation_outcome",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversation_outcomes",
+        "public.dabbir_conversations"
+      ]
+    },
+    {
+      "arguments": "p_job_id uuid, p_lock_token uuid, p_success boolean, p_retryable boolean, p_error text, p_provider_correlation_id text",
+      "calls": [],
+      "definition_md5": "6887c0e50f72aac735120e8b725ffd24",
+      "dynamic_sql": false,
+      "name": "public.dabbir_finalize_integration_job",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_integration_outbox"
+      ]
+    },
+    {
+      "arguments": "p_notification_id uuid, p_status text, p_provider_message_id text, p_error text",
+      "calls": [
+        "public.dabbir_workflow_audit"
+      ],
+      "definition_md5": "3ad310a8168e71ebb4c15a1f8c12c191",
+      "dynamic_sql": false,
+      "name": "public.dabbir_finalize_workflow_notification",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_workflow_audit",
+        "public.dabbir_workflow_notifications"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "91cb76a24e7504d59e6f8b93b0d0a00e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_guard_appointment_business_type",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_identity_type text, p_channel_type text, p_identity_value text",
+      "calls": [
+        "public.dabbir_normalize_identity_value"
+      ],
+      "definition_md5": "8e8c09a115d848d7fc8456bb45f3fce4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_identity_hash",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid, p_event_type text, p_external_event_id_hash text, p_source_system text, p_occurred_at timestamp with time zone, p_safe_metadata jsonb",
+      "calls": [
+        "public.dabbir_event_inbox"
+      ],
+      "definition_md5": "2c26aace808014139048e2a04e0f3f6b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_ingest_business_event",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_event_inbox"
+      ]
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [],
+      "definition_md5": "4b8d815a6ca191becb5a16052a8470b8",
+      "dynamic_sql": false,
+      "name": "public.dabbir_knowledge_embedding_queue_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_knowledge_id uuid, p_content text, p_content_hash text, p_embedding_text text, p_model text",
+      "calls": [
+        "public.dabbir_business_knowledge_embeddings"
+      ],
+      "definition_md5": "82bdb763079381b6efbac967e9b1e9e6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_knowledge_embedding_upsert_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_business_knowledge_embeddings"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_query text, p_embedding_text text, p_limit integer",
+      "calls": [],
+      "definition_md5": "9bec05490764668c122f963a183410ed",
+      "dynamic_sql": false,
+      "name": "public.dabbir_knowledge_hybrid_search_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_correction_id uuid, p_entity_type text, p_alias text, p_target_id uuid",
+      "calls": [
+        "dabbir_private.is_active_member",
+        "public.dabbir_ai_knowledge_proposals",
+        "public.dabbir_ai_understanding_events"
+      ],
+      "definition_md5": "0c583e037b8f5ca64927072671561b9b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_knowledge_propose_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_knowledge_proposals",
+        "public.dabbir_ai_understanding_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_proposal_id uuid, p_action text",
+      "calls": [
+        "dabbir_private.is_active_member",
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_business_knowledge"
+      ],
+      "definition_md5": "80a3e92de69def2846119eeacf846e75",
+      "dynamic_sql": false,
+      "name": "public.dabbir_knowledge_review_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_knowledge_proposals",
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_business_knowledge"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid, p_identity_type text, p_identity_value text, p_channel_type text, p_display_hint text, p_verification_method text",
+      "calls": [
+        "public.dabbir_customer_identities",
+        "public.dabbir_identity_hash"
+      ],
+      "definition_md5": "43da3cb695802bb8fceef3f4d21d329c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_link_verified_customer_identity",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_customer_identities"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [],
+      "definition_md5": "d0275242923a9b8ddcb88389b474459c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_list_owner_attention",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "dabbir_private.dabbir_list_team"
+      ],
+      "definition_md5": "f070a6375f78e641528f8ff78a3b5c73",
+      "dynamic_sql": false,
+      "name": "public.dabbir_list_team",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_followup_id uuid, p_recovered boolean",
+      "calls": [],
+      "definition_md5": "86b390aaf6a7163fc139d43673067609",
+      "dynamic_sql": false,
+      "name": "public.dabbir_mark_followup_replied",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups"
+      ]
+    },
+    {
+      "arguments": "p_followup_id uuid, p_external_message_id text, p_external_verified boolean",
+      "calls": [],
+      "definition_md5": "1f021a02ece283ffcd33fd90ec7d6366",
+      "dynamic_sql": false,
+      "name": "public.dabbir_mark_followup_sent",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_followups"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid",
+      "calls": [],
+      "definition_md5": "eb7ac8c764d7b6aea598755ea50e8739",
+      "dynamic_sql": false,
+      "name": "public.dabbir_mark_message_batch_processed",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_secret_key text, p_webhook_secret text",
+      "calls": [],
+      "definition_md5": "debb40560affad4fd68454728a46a05c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_migrate_stripe_sandbox_secrets_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_identity_type text, p_identity_value text",
+      "calls": [],
+      "definition_md5": "0ff5deddaaae667c07ff35e4a85510cb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_normalize_identity_value",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_request jsonb, p_execute boolean, p_quote_hash text, p_operation_key text",
+      "calls": [
+        "dabbir_private.activity_assert_action_v1",
+        "dabbir_private.activity_assert_execution_v1",
+        "dabbir_private.activity_owner_authorized_v1",
+        "dabbir_private.whatsapp_ai_slot_available_branch",
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ],
+      "definition_md5": "5fcb598a6fde44a56c1657dfaf935a8b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_activity_booking_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_customer_id uuid",
+      "calls": [
+        "dabbir_private.activity_owner_authorized_v1"
+      ],
+      "definition_md5": "c20581dbeaf5a1cfe782a8adc5497e26",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_booking_locations_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "fd0f43c23035a8e1c6789de04afdf767",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_business_metrics",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_items jsonb, p_payment_method text, p_customer_id uuid, p_note text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_order_items",
+        "public.dabbir_orders"
+      ],
+      "definition_md5": "32c2e0937aa6d092806a615366862d34",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_complete_sale",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_order_items",
+        "public.dabbir_orders"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_sku text, p_name text, p_price_aed numeric, p_quantity integer",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_products"
+      ],
+      "definition_md5": "ea96b935ee096d14a56c416d4ce5244f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_create_product",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_products"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_escalation_id uuid, p_resolution text, p_note text",
+      "calls": [
+        "dabbir_private.platform_assert_root",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "0e61c7b3620329c53544722e166b99f9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_decision_resolve_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.executive_actions",
+        "dabbir_private.executive_escalations",
+        "dabbir_private.executive_events",
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_root"
+      ],
+      "definition_md5": "d8d7119ae3da1ad5e2d6521e34b62b80",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_decisions_recent_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_business_id uuid, p_branch_id uuid, p_channel text, p_provider text, p_model text",
+      "calls": [
+        "dabbir_private.owner_scope_businesses_v1"
+      ],
+      "definition_md5": "2733cb4454837186a7bd05be53e074cb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_funnel_measurement_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb",
+      "calls": [
+        "dabbir_private.owner_scope_businesses_v1"
+      ],
+      "definition_md5": "28d0a187b1dae55aded84e792d3b9003",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_measurement_options_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_business_id uuid, p_branch_id uuid, p_activity_type text, p_channel text, p_provider text, p_model text",
+      "calls": [
+        "dabbir_private.owner_metric_v1",
+        "dabbir_private.owner_scope_businesses_v1",
+        "public.dabbir_owner_funnel_measurement_v1",
+        "public.dabbir_owner_quality_measurement_v1",
+        "public.dabbir_owner_usage_measurement_v1"
+      ],
+      "definition_md5": "1aeb1d2521529837b4d5d94841defd2a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_measurement_snapshot_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "3fd25ca09374188266d66c9e792847f1",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_ops_metrics_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_api_ok boolean, p_api_status integer, p_api_latency_ms numeric, p_db_ok boolean, p_db_latency_ms numeric, p_details jsonb",
+      "calls": [
+        "dabbir_private.owner_operational_samples"
+      ],
+      "definition_md5": "29ca90da8367af309741a7ad7fad9960",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_ops_sample_write_v1",
+      "security_definer": false,
+      "writes": [
+        "dabbir_private.owner_operational_samples"
+      ]
+    },
+    {
+      "arguments": "p_challenge_id uuid, p_otp_hash text, p_session_token_hash text, p_expires_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_owner_session_issue_v1",
+        "public.dabbir_platform_staff_accept_for_user_v2"
+      ],
+      "definition_md5": "8d80e8de1f7699ccf6b09db158259538",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_otp_complete_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_owner_otp_challenges"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "dabbir_private.dabbir_owner_policy_candidates",
+        "dabbir_private.is_active_member"
+      ],
+      "definition_md5": "7fbcceb994a40957ffbd17cef8190ef6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_policy_candidates",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_scope jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_business_id uuid, p_branch_id uuid, p_channel text, p_provider text, p_model text",
+      "calls": [
+        "dabbir_private.owner_metric_v1",
+        "dabbir_private.owner_scope_businesses_v1"
+      ],
+      "definition_md5": "aa756828f15000146ade540e18d231d4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_quality_measurement_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_product_id uuid, p_quantity integer, p_note text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements"
+      ],
+      "definition_md5": "ff836d23b3fef9b45a4993516e9ecb94",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_receive_stock",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "dabbir_private.owner_recovery_checks",
+        "dabbir_private.recovery_capture_all_business_snapshots",
+        "dabbir_private.recovery_health_check",
+        "dabbir_private.recovery_preview"
+      ],
+      "definition_md5": "9bb766a6b6307fa66341b560ca7bdbec",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_recovery_maintenance_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_recovery_checks"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_order_id uuid, p_items jsonb, p_reason text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_order_returns"
+      ],
+      "definition_md5": "05cf0acaf0ab83ad111f25109e626e61",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_return_sale",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_order_returns"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_token_hash text, p_expires_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.owner_sessions",
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "f65c147065cc8c11a6e203727ff3e7e4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_session_issue_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_sessions"
+      ]
+    },
+    {
+      "arguments": "p_token_hash text",
+      "calls": [],
+      "definition_md5": "82f099f2a0137067565ca2009b0db062",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_session_revoke_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_sessions"
+      ]
+    },
+    {
+      "arguments": "p_token_hash text",
+      "calls": [],
+      "definition_md5": "00a867309361639aeaca8a86054291ed",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_session_verify_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_sessions"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_product_id uuid, p_quantity integer",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements"
+      ],
+      "definition_md5": "184e6d689a4824237410b760bcad3192",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_set_inventory",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_order_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "e532c6947d92f6958f7d2c327fd2cecf",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_update_order_status",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_orders"
+      ]
+    },
+    {
+      "arguments": "p_scope jsonb, p_start timestamp with time zone, p_end timestamp with time zone, p_business_id uuid, p_branch_id uuid, p_channel text, p_provider text, p_model text",
+      "calls": [
+        "dabbir_private.owner_metric_v1",
+        "dabbir_private.owner_scope_businesses_v1"
+      ],
+      "definition_md5": "7dc2a5f553aae4bd85be5e07d1991d7c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_owner_usage_measurement_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "37fbb53696a23afebe7ee69b803c394c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_ai_usage_snapshot_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "0d2c5b49d085b95518cd4abc70631623",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_audit_list_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_email text",
+      "calls": [],
+      "definition_md5": "8d34713459c16e1bac4bf78ee1b4ba54",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_auth_user_by_email_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_identity",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_owner_ops_metrics_v1"
+      ],
+      "definition_md5": "0bd72a4ab627d375cb37d20f01595728",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_command_center_overview_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_platform_customer_360_v1"
+      ],
+      "definition_md5": "f1e67987baa092e8319410e12f2255df",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_360_scoped_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "685a7e09320e8f39247bfcbfeed54b8c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_360_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid, p_business_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "cb8aa964fefa73f9f77bbe50eeaae5c7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_business_access_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "604604d2e79b468fb0229bc8253a6e4f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_detail",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "c5b62591faf3b5bfe7a4a8cd9f3ff1af",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_finance_overview_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "70028cb6cc07f1b04ae78161227a9b33",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_finance_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_query text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "693863e13359a58ad5b986552448dfbb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_search",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_query text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "ee58b7eb53a76987beb17a55f6113c4f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_search_scoped_v3",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_query text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "4a66e8cd851fa20cd9abdc5b1c1a2a3b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_customer_search_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_feedback_id uuid, p_target text",
+      "calls": [
+        "dabbir_private.executive_escalations",
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_product_improvements",
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_platform_owner_incidents",
+        "public.dabbir_tasks"
+      ],
+      "definition_md5": "a52858d6b474ec0b430808dd33571c7e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_feedback_convert_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.executive_escalations",
+        "dabbir_private.platform_product_improvements",
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_feedback",
+        "public.dabbir_platform_owner_incidents",
+        "public.dabbir_tasks"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "1399be6052a2c4da00063c4ab99fd30e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_feedback_list_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_feedback_id uuid, p_status text, p_linked_entity_type text, p_linked_entity_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "a5541d3845c6d0ef5ce034e193e66493",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_feedback_update_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_feedback"
+      ]
+    },
+    {
+      "arguments": "p_source_event_key text, p_direction text, p_category text, p_provider text, p_business_id uuid, p_amount numeric, p_currency text, p_amount_aed numeric, p_authority text, p_occurred_at timestamp with time zone, p_metadata jsonb",
+      "calls": [
+        "dabbir_private.platform_finance_events"
+      ],
+      "definition_md5": "5d9db2ca6d67c2aff4e96df0b4f25062",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_finance_record_event_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_finance_events"
+      ]
+    },
+    {
+      "arguments": "p_email text",
+      "calls": [
+        "dabbir_private.platform_identity"
+      ],
+      "definition_md5": "e4503aae6e0fa285d44a382536669c81",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_identity_by_email_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_customer_no text, p_business_id uuid, p_category text, p_priority text, p_summary text, p_description text, p_assigned_queue text",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_platform_owner_incident_create_v1"
+      ],
+      "definition_md5": "a16fbc858c178149207c85ca4ce482bd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_incident_create_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_incident_id uuid, p_customer_no text, p_business_id uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "6686b5b02cb13d56e5830fd16b785d6e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_incident_read_scoped_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_incident_id uuid, p_status text, p_priority text, p_assigned_queue text, p_root_cause text, p_resolution text, p_note text",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_platform_owner_incident_update_v1"
+      ],
+      "definition_md5": "62c5dc841090a5ebe58ca951d5833006",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_incident_update_authorized_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_login text",
+      "calls": [
+        "dabbir_private.platform_admin_is_active"
+      ],
+      "definition_md5": "a06ea280bc5f373a9f822f6d2f6a74b9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_login_identity_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_action text, p_entity_id uuid, p_reason text, p_confirmation text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "public.dabbir_platform_operational_action_v1",
+        "public.dabbir_platform_owner_audit"
+      ],
+      "definition_md5": "8c656b8686265c0d17928aa8f014fcbe",
+      "dynamic_sql": true,
+      "name": "public.dabbir_platform_operational_action_legacy_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_business_branches",
+        "public.dabbir_platform_owner_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_action text, p_entity_id uuid, p_reason text, p_confirmation text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "public.dabbir_platform_operational_action_v2"
+      ],
+      "definition_md5": "e929fbaaa59ce1ad0c5adba753839a17",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_action_scoped_v3",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_action text, p_entity_id uuid, p_reason text, p_confirmation text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "public.dabbir_platform_owner_audit"
+      ],
+      "definition_md5": "dcd1b5ccf19ca13bd559757397a27399",
+      "dynamic_sql": true,
+      "name": "public.dabbir_platform_operational_action_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_appointments",
+        "public.dabbir_calendar_connections",
+        "public.dabbir_orders",
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_products",
+        "public.dabbir_services",
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_action text, p_entity_id uuid, p_reason text, p_confirmation text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_assert_permission",
+        "public.dabbir_platform_operational_action_v1",
+        "public.dabbir_platform_owner_audit"
+      ],
+      "definition_md5": "41c3d66ecac8a79c3e009e0b97d67e3e",
+      "dynamic_sql": true,
+      "name": "public.dabbir_platform_operational_action_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_business_branches",
+        "public.dabbir_platform_owner_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_entity_type text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_permission"
+      ],
+      "definition_md5": "4c1269badfa59cd21b36a02e4e82da61",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_entities_legacy_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_entity_type text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "public.dabbir_platform_operational_entities_v1"
+      ],
+      "definition_md5": "35dff33a8df3d047fc2095d21cbe9fd1",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_entities_scoped_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_business_id uuid, p_entity_type text, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_assert_permission"
+      ],
+      "definition_md5": "bf2891a6fe28f3a92d91a26df1b47f56",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_entities_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_has_permission",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "7a801b6dfc26c2fcfc427dbae1a6a98f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_snapshot_scoped_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_limit integer",
+      "calls": [
+        "dabbir_private.platform_has_permission",
+        "dabbir_private.platform_scope_allows_business"
+      ],
+      "definition_md5": "58fa4cadf5e0200689cec3f81a82f1ef",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_operational_snapshot_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_action text, p_entity_id uuid, p_reason text, p_confirmation text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "public.dabbir_platform_owner_audit"
+      ],
+      "definition_md5": "dd2d1d814312e31a07a4275ff968f88c",
+      "dynamic_sql": true,
+      "name": "public.dabbir_platform_owner_action_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "public.dabbir_businesses",
+        "public.dabbir_inventory",
+        "public.dabbir_orders",
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_products",
+        "public.dabbir_services"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_limit integer",
+      "calls": [],
+      "definition_md5": "cd853578824afc1f4ed6dec85e2112eb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_audit_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_no text, p_reason text, p_confirmation text, p_profile jsonb",
+      "calls": [
+        "public.dabbir_platform_owner_audit"
+      ],
+      "definition_md5": "60976e014ec38054d05e7f8fd58cae73",
+      "dynamic_sql": true,
+      "name": "public.dabbir_platform_owner_customer_profile_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_user_accounts"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "0f895bfe77b692ec5665ea816f51efb4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_executive_base_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "public.dabbir_platform_owner_executive_v3"
+      ],
+      "definition_md5": "862500d27b91d3114713aab13552d954",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_executive_v1",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "public.dabbir_platform_owner_executive_v3"
+      ],
+      "definition_md5": "a3fe900e89686b63eb719d701300d99e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_executive_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "dabbir_private.platform_customer_admin_audit",
+        "public.dabbir_owner_ops_metrics_v1",
+        "public.dabbir_platform_owner_executive_base_v1"
+      ],
+      "definition_md5": "6c870316d62dcca479804fa147196a6f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_executive_v2_base",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "public.dabbir_platform_owner_executive_v2_base"
+      ],
+      "definition_md5": "79f82cbed51ae9d9e9b56015d1cb039d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_executive_v3",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_customer_no text, p_business_id uuid, p_category text, p_priority text, p_summary text, p_description text, p_assigned_queue text",
+      "calls": [
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_platform_owner_incident_events",
+        "public.dabbir_platform_owner_incidents"
+      ],
+      "definition_md5": "319768c086a09e51aefbc638cb93161e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_incident_create_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_platform_owner_incident_events",
+        "public.dabbir_platform_owner_incidents"
+      ]
+    },
+    {
+      "arguments": "p_incident_id uuid, p_status text, p_priority text, p_assigned_queue text, p_root_cause text, p_resolution text, p_note text",
+      "calls": [
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_platform_owner_incident_events"
+      ],
+      "definition_md5": "25d9de676ac1f11ab8bbe8b3e41acade",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_incident_update_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_platform_owner_incident_events",
+        "public.dabbir_platform_owner_incidents"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "public.dabbir_platform_owner_overview_base_v1"
+      ],
+      "definition_md5": "547adfb3d6e478f7ac5d60294cca62e4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_overview",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "a41cf1e275f9b996816dc4719c41dafc",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_overview_base_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_customer_no text",
+      "calls": [],
+      "definition_md5": "d47ba5dd880c3bd375beac00a0af9602",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_owner_support_summary_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_month date",
+      "calls": [],
+      "definition_md5": "93ec2c91affe460f8179e69ae17caa95",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_pnl_month_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid, p_case_id uuid, p_confirmation text",
+      "calls": [
+        "dabbir_private.platform_assert_recovery_frozen",
+        "dabbir_private.platform_assert_root",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.recovery_apply_case"
+      ],
+      "definition_md5": "ce425227359a7dab4deaeaefef7e6a4e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_recovery_apply",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid, p_business_id uuid, p_target_at timestamp with time zone, p_reason text",
+      "calls": [
+        "dabbir_private.platform_assert_recovery_frozen",
+        "dabbir_private.platform_assert_root",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.recovery_open_case"
+      ],
+      "definition_md5": "a2851d9e27a4936edac9f40dbbb60d28",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_recovery_open",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid, p_business_id uuid, p_target_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.platform_assert_root",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.recovery_preview"
+      ],
+      "definition_md5": "8cbf45e45f1c1a7a83002b4d1c99a9dc",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_recovery_preview",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_target_user_id uuid, p_status text, p_reason text",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "public.account_access_state"
+      ],
+      "definition_md5": "7870a8b8a4ea9e36ddd8360f83607362",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_set_account_access",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "public.account_access_state"
+      ]
+    },
+    {
+      "arguments": "p_user_id uuid",
+      "calls": [],
+      "definition_md5": "9f9c04de076e2e5e0cd34cfea5ac7879",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_accept_for_user_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_user_id uuid, p_invitation_id uuid, p_generation integer",
+      "calls": [
+        "dabbir_private.platform_assert_invite_grant_v2",
+        "dabbir_private.platform_assert_mfa_grant_v1",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_invite_granular_for_role_v2",
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_platform_admins"
+      ],
+      "definition_md5": "3d3dddb0712731fa1cc420df37088094",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_accept_for_user_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations",
+        "public.dabbir_platform_admins"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_scope_allows_business",
+        "public.dabbir_platform_staff_list_v2"
+      ],
+      "definition_md5": "e13d67b8db692dbe7fe85a912aef402f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_directory_v3",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target uuid, p_role_code text, p_granular_permissions text[], p_access_scope jsonb, p_access_expires_at timestamp with time zone, p_mfa_required boolean, p_approval_limit_aed numeric, p_reason text",
+      "calls": [
+        "dabbir_private.platform_assert_can_grant",
+        "dabbir_private.platform_assert_can_grant_granular",
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "39ce60f2b8b913f7f8f121d9ee13cf41",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_governance_update_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_sessions",
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_platform_admins"
+      ]
+    },
+    {
+      "arguments": "p_token_hash text",
+      "calls": [
+        "public.dabbir_platform_staff_accept_for_user_v2"
+      ],
+      "definition_md5": "9b0739f86852b8118186070825e84476",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_accept_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target_user_id uuid, p_email text, p_display_name text, p_permissions text[], p_preset text, p_token_hash text, p_expires_at timestamp with time zone",
+      "calls": [],
+      "definition_md5": "a6ef779497c3882cc017375b9db24f72",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_create_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target_user_id uuid, p_email text, p_display_name text, p_permissions text[], p_preset text, p_token_hash text, p_expires_at timestamp with time zone, p_role_code text, p_granular_permissions text[], p_access_scope jsonb, p_access_expires_at timestamp with time zone, p_mfa_required boolean, p_approval_limit_aed numeric",
+      "calls": [
+        "dabbir_private.platform_assert_invite_grant_v2",
+        "dabbir_private.platform_assert_mfa_grant_v1",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_invite_granular_for_role_v2",
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations"
+      ],
+      "definition_md5": "d08e8376988dbc3abe920a5d4773ab4f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_create_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations"
+      ]
+    },
+    {
+      "arguments": "p_invitation_id uuid, p_status text",
+      "calls": [],
+      "definition_md5": "bde757366d78d77198954afb633320c6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_delivery_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_invitations"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_invitation_id uuid, p_status text, p_provider text, p_provider_message_id text, p_error_code text",
+      "calls": [],
+      "definition_md5": "8b63a57d85d81324b8e45b0ee94e9232",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_delivery_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_invitation_id uuid, p_status text, p_provider text, p_provider_message_id text, p_error_code text, p_generation integer",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_assert_invite_grant_v2",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_invite_granular_for_role_v2",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "0ed6500c38621a613d7aaecbb869d657",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_delivery_v3",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_invitation_id uuid, p_new_token_hash text, p_new_expires_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_assert_invite_grant_v2",
+        "dabbir_private.platform_assert_mfa_grant_v1",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_invite_granular_for_role_v2",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "348b89f8c34057eeae66fa92c4bb9e99",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_resend_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_invitation_id uuid, p_reason text",
+      "calls": [
+        "public.dabbir_platform_staff_invite_revoke_v2"
+      ],
+      "definition_md5": "8e18b13ce32100f4a40cda2393643b29",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_revoke_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_invitation_id uuid, p_reason text",
+      "calls": [
+        "dabbir_private.platform_admin_is_active",
+        "dabbir_private.platform_assert_invite_grant_v2",
+        "dabbir_private.platform_coarse_permissions_for_role",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_invite_granular_for_role_v2",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "3c5adfefeeb0214bec1da5298dba1e85",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_invite_revoke_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_staff_audit",
+        "dabbir_private.platform_staff_invitations"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid",
+      "calls": [
+        "dabbir_private.platform_assert_permission"
+      ],
+      "definition_md5": "8484da64f835695c1df774641893016f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_list_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_role_permissions_v1"
+      ],
+      "definition_md5": "012df81a4f036c9b104339731b53fa8a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_list_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor uuid, p_target uuid, p_action text, p_permissions text[], p_reason text",
+      "calls": [
+        "dabbir_private.platform_assert_can_grant",
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "6a10f06a5fe46c93a304722ff83e27d2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_staff_update_v1",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.owner_sessions",
+        "dabbir_private.platform_staff_audit",
+        "public.dabbir_platform_admins"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_action text, p_case_id uuid, p_target_user_id uuid, p_customer_no text, p_business_id uuid, p_category text, p_priority text, p_subject text, p_note text, p_status text, p_diagnostic text, p_resolution text, p_sla_due_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global",
+        "dabbir_private.platform_staff_audit"
+      ],
+      "definition_md5": "c117a579abf92b93c0824293b0e34a5d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_action_v2",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "dabbir_private.platform_staff_audit"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_case_id uuid, p_note text",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_notes"
+      ],
+      "definition_md5": "f24ae5146a83f76b98792ed2d3982763",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_add_note",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_business_id uuid, p_category text, p_priority text, p_subject text, p_initial_note text",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes"
+      ],
+      "definition_md5": "49eb44329dca34caadf9319920d61618",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_create",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_business_id uuid",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "public.dabbir_platform_support_ensure_recovery_reconciliation"
+      ],
+      "definition_md5": "2e334a7da5f54b981540a93bbb25cbbd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_ensure_latest_recovery_reconciliation",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_business_id uuid, p_target_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.platform_assert_admin",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes",
+        "dabbir_private.recovery_preview"
+      ],
+      "definition_md5": "d32fe54a2fe2ec8d1d0be6283dbdc410",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_ensure_recovery_reconciliation",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_notes"
+      ]
+    },
+    {
+      "arguments": "p_actor uuid, p_customer_no text",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "f6881622af3eaf6b81a638ec8f887c59",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_list_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_case_id uuid, p_message text",
+      "calls": [
+        "dabbir_private.platform_assert_business_scope",
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_messages",
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_is_global"
+      ],
+      "definition_md5": "29a590732a55e89ebe0a6a7bd0896ece",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_reply_customer",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases",
+        "dabbir_private.platform_customer_support_messages"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text, p_case_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.platform_assert_permission",
+        "dabbir_private.platform_customer_admin_audit"
+      ],
+      "definition_md5": "bd618f1be17eaba07a86f5154953aacc",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_set_status",
+      "security_definer": true,
+      "writes": [
+        "dabbir_private.platform_customer_admin_audit",
+        "dabbir_private.platform_customer_support_cases"
+      ]
+    },
+    {
+      "arguments": "p_actor_user_id uuid, p_customer_no text",
+      "calls": [
+        "dabbir_private.platform_effective_capability",
+        "dabbir_private.platform_scope_allows_business",
+        "dabbir_private.platform_scope_is_global",
+        "public.dabbir_platform_support_list_v2"
+      ],
+      "definition_md5": "f61df5a36dc9e9c6b2a37c06da3d9b7d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_support_summary",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_email text",
+      "calls": [],
+      "definition_md5": "59bb20a161de54b76c2c728d96f1f985",
+      "dynamic_sql": false,
+      "name": "public.dabbir_platform_user_by_email_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_slug text, p_offer_id uuid, p_vehicle_type text, p_starts_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_location_lat numeric, p_location_lng numeric, p_location_label text",
+      "calls": [
+        "public.dabbir_car_wash_booking_requests",
+        "public.dabbir_public_car_wash_slots"
+      ],
+      "definition_md5": "53cb6f0e071c9cb0c3a20bffcc0e176f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_public_car_wash_book",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_car_wash_booking_requests"
+      ]
+    },
+    {
+      "arguments": "p_slug text",
+      "calls": [],
+      "definition_md5": "79b434401e5e144de886f55d99e740fd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_public_car_wash_catalog",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_slug text, p_offer_id uuid, p_from_date date, p_to_date date",
+      "calls": [],
+      "definition_md5": "01ab141c5cec947bf557734dcdd9ebb1",
+      "dynamic_sql": false,
+      "name": "public.dabbir_public_car_wash_slots",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_token uuid",
+      "calls": [],
+      "definition_md5": "0bda384bf7bfc082fe8109595e19ae0c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_public_order_status",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [],
+      "definition_md5": "1075fb927690ca32957c9ef5d4bf826e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_qa_cleanup_business",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_access_audit",
+        "public.dabbir_action_policies",
+        "public.dabbir_appointments",
+        "public.dabbir_business_knowledge",
+        "public.dabbir_businesses",
+        "public.dabbir_channels",
+        "public.dabbir_conversation_outcomes",
+        "public.dabbir_conversations",
+        "public.dabbir_customer_consents",
+        "public.dabbir_customer_evidence",
+        "public.dabbir_customer_identities",
+        "public.dabbir_customer_management",
+        "public.dabbir_customer_memory",
+        "public.dabbir_demo_events",
+        "public.dabbir_employee_invitations",
+        "public.dabbir_event_inbox",
+        "public.dabbir_followups",
+        "public.dabbir_handoffs",
+        "public.dabbir_inventory",
+        "public.dabbir_inventory_movements",
+        "public.dabbir_memberships",
+        "public.dabbir_message_batch_items",
+        "public.dabbir_message_batches",
+        "public.dabbir_messages",
+        "public.dabbir_operation_outcomes",
+        "public.dabbir_order_items",
+        "public.dabbir_order_returns",
+        "public.dabbir_orders",
+        "public.dabbir_platform_owner_audit",
+        "public.dabbir_privacy_audit",
+        "public.dabbir_privacy_controls",
+        "public.dabbir_privacy_requests",
+        "public.dabbir_procedure_audit",
+        "public.dabbir_procedure_definitions",
+        "public.dabbir_procedure_runs",
+        "public.dabbir_procedure_steps",
+        "public.dabbir_products",
+        "public.dabbir_quality_cases",
+        "public.dabbir_quality_events",
+        "public.dabbir_quality_regression_cases",
+        "public.dabbir_retention_policies",
+        "public.dabbir_services",
+        "public.dabbir_verification_challenges"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "1efa54fffc40895000c715152a9e825a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_qa_consume_protected_share",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_category text",
+      "calls": [],
+      "definition_md5": "be75c5dbc4100c642d219e9a6ccc239e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_quality_auto_remediation_allowed",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_operation_key text, p_model text, p_input_tokens bigint, p_output_tokens bigint, p_reasoning_tokens bigint, p_request_count integer, p_actual_cost_microusd bigint, p_period_start timestamp with time zone, p_period_end timestamp with time zone, p_metadata jsonb",
+      "calls": [
+        "public.dabbir_operation_outcomes"
+      ],
+      "definition_md5": "5aad240c3907165977fc1519b0f23832",
+      "dynamic_sql": false,
+      "name": "public.dabbir_reconcile_ai_gateway_cost_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_batch_id uuid, p_action text, p_intent text, p_confidence numeric, p_risk_level text, p_missing_fields text[], p_reason_code text",
+      "calls": [
+        "dabbir_private.capture_ai_operator_event"
+      ],
+      "definition_md5": "4ecb4b20f6b1e13e99e93d3858789b30",
+      "dynamic_sql": false,
+      "name": "public.dabbir_record_ai_operator_decision_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_operation_key text, p_operation_type text, p_channel text, p_provider text, p_model text, p_cost_mode text, p_input_tokens bigint, p_output_tokens bigint, p_reasoning_tokens bigint, p_request_count integer, p_actual_cost_microusd bigint, p_cost_source text, p_metadata jsonb",
+      "calls": [
+        "public.dabbir_operation_outcomes"
+      ],
+      "definition_md5": "0a7dc09d1d5472eaf60051a6d238e59c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_record_ai_usage_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_operation_key text, p_operation_type text, p_channel text, p_provider text, p_model text, p_cost_mode text, p_input_tokens bigint, p_output_tokens bigint, p_reasoning_tokens bigint, p_request_count integer, p_actual_cost_microusd bigint, p_cost_source text, p_metadata jsonb, p_conversation_id uuid, p_customer_id uuid, p_branch_id uuid",
+      "calls": [
+        "public.dabbir_record_ai_usage_v1"
+      ],
+      "definition_md5": "3438b44e3f06ca569672fb7f13a51177",
+      "dynamic_sql": false,
+      "name": "public.dabbir_record_ai_usage_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_operation_outcomes"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_appointment_id uuid, p_amount numeric, p_method text, p_idempotency_key text, p_reference text",
+      "calls": [
+        "public.dabbir_operational_payments"
+      ],
+      "definition_md5": "a4b990cbd08be0e03696c5b839cae9a0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_record_operational_payment",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_operational_payments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_category text, p_severity text, p_fingerprint text, p_metric_name text, p_metric_value numeric, p_context jsonb",
+      "calls": [
+        "public.dabbir_quality_auto_remediation_allowed",
+        "public.dabbir_quality_cases",
+        "public.dabbir_quality_events"
+      ],
+      "definition_md5": "7d1fb4bd022783468e8e904c0d65d1a6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_record_quality_event",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_quality_cases",
+        "public.dabbir_quality_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_payment_id uuid",
+      "calls": [],
+      "definition_md5": "4c1d6f387d66ac99d7aefc20702d7e46",
+      "dynamic_sql": false,
+      "name": "public.dabbir_refund_operational_payment",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_operational_payments"
+      ]
+    },
+    {
+      "arguments": "p_handoff_id uuid, p_resolution_note text",
+      "calls": [],
+      "definition_md5": "344e8f52e58609ac10d85ce4e9dc075b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_resolve_handoff",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_identity_type text, p_identity_value text, p_channel_type text",
+      "calls": [
+        "public.dabbir_identity_hash"
+      ],
+      "definition_md5": "039896d1d5efa53286981c25e0eb969f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_resolve_verified_customer_identity",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "efc538db7d7f791232f131edabf00433",
+      "dynamic_sql": false,
+      "name": "public.dabbir_return_conversation_to_ai",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_handoff_id uuid, p_resolution_note text",
+      "calls": [],
+      "definition_md5": "7ec6c3b72c395c32bafbe7af52b3bbfc",
+      "dynamic_sql": false,
+      "name": "public.dabbir_return_handoff_to_ai",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_id uuid",
+      "calls": [],
+      "definition_md5": "cc6a29d89bc5f774437c18942bf69bdd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_customer_360",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_appointment_id uuid, p_decision text",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "825f8d003474dba1781924a7f3e086ff",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_owner_decide_booking",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_name text, p_customer_phone text, p_service_id uuid, p_worker_id uuid, p_starts_at timestamp with time zone, p_discount_aed numeric, p_notes text, p_source text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments",
+        "public.dabbir_customers"
+      ],
+      "definition_md5": "64fa4eecd1471c24239149df2170f866",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_quick_book",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments",
+        "public.dabbir_customers"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_customer_name text, p_customer_phone text, p_service_id uuid, p_worker_id uuid, p_starts_at timestamp with time zone, p_discount_aed numeric, p_notes text, p_source text, p_idempotency_key text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_salon_quick_book"
+      ],
+      "definition_md5": "7088520119051ba5674561ac2582c591",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_quick_book_idempotent",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_appointment_id uuid, p_starts_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ],
+      "definition_md5": "e4bcfc55450ceb21b8ec79ec9d6b2e46",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_rebook",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_day date",
+      "calls": [],
+      "definition_md5": "690bac6aed74bda1237e1cfa82ad65db",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_today",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_appointment_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "425e38044dc1e9fc7dc4aef8de10322b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_transition_appointment",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_appointment_id uuid",
+      "calls": [],
+      "definition_md5": "8b47adab766f2528ce8b05f1d7080c5c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_salon_waitlist_matches",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_stale_minutes integer",
+      "calls": [
+        "public.dabbir_followups"
+      ],
+      "definition_md5": "e8fab55f374cc87729f0767b4bb85b85",
+      "dynamic_sql": false,
+      "name": "public.dabbir_scan_lead_recovery",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_followups"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [
+        "public.dabbir_tasks"
+      ],
+      "definition_md5": "504dfb2683036fc19148732a13652024",
+      "dynamic_sql": false,
+      "name": "public.dabbir_seed_activity_tasks",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_tasks"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_seed_activity_tasks"
+      ],
+      "definition_md5": "61dc3d73511c93a8fcf1d9fed59a96d9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_seed_activity_tasks_trigger",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint",
+      "calls": [
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_semantic_assert_current_v2"
+      ],
+      "definition_md5": "b2a54b37c4f0f29d4d9d06f1b1c6598a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_advance_availability_date_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2"
+      ],
+      "definition_md5": "b007d564436cb13fc01c1d5dfafe178a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_assert_current_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_whatsapp_ai_check_availability"
+      ],
+      "definition_md5": "c2163a9307728f5308257db9b457f138",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_check_availability_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_expected_version bigint, p_message_revision bigint, p_state jsonb, p_error text",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_semantic_commit_v2"
+      ],
+      "definition_md5": "753f48912d342d3ede43ee702e329384",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_checkpoint_failure_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_expected_version bigint, p_message_revision bigint, p_state jsonb, p_metrics jsonb",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events"
+      ],
+      "definition_md5": "3e3e8a9ed9cf4dec2983af67a12a6c7b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_commit_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint, p_action text",
+      "calls": [
+        "dabbir_private.activity_assert_action_v1",
+        "dabbir_private.activity_assert_state_v1",
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_customer_memory",
+        "public.dabbir_whatsapp_ai_cancel_booking",
+        "public.dabbir_whatsapp_ai_create_booking",
+        "public.dabbir_whatsapp_ai_reschedule_booking"
+      ],
+      "definition_md5": "2cff7c9ce0805a070113c818614f4762",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_execute_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_ai_understanding_events",
+        "public.dabbir_customer_memory"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "dabbir_private.understanding_outbound_receipt_verified_v1",
+        "public.dabbir_activity_profile_v1",
+        "public.dabbir_customer_memory"
+      ],
+      "definition_md5": "878dbc92d6ff5ab2f6435bffdf7ee2fd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_load_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_customer_memory"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint, p_key text, p_hash text, p_body text",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_semantic_assert_current_v2",
+        "public.dabbir_whatsapp_ai_reserve_outbound"
+      ],
+      "definition_md5": "0270b4e50e45bff23c4e20d34cb62907",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_reserve_outbound_v2",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_version bigint, p_action text, p_payload jsonb",
+      "calls": [
+        "dabbir_private.understanding_assert_batch_v2",
+        "public.dabbir_whatsapp_ai_set_state"
+      ],
+      "definition_md5": "62d978aae79fd7a1003540a8909f96c0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_semantic_set_pending_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_body text",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_messages"
+      ],
+      "definition_md5": "2e05d56e0c8599449fc5218e00f35e45",
+      "dynamic_sql": false,
+      "name": "public.dabbir_send_human_message",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs",
+        "public.dabbir_messages"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_country_code text",
+      "calls": [],
+      "definition_md5": "eb06d78f2051f60ad2ee2ad4c0cd21c7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_set_business_country",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_business_branches",
+        "public.dabbir_businesses"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_enabled boolean, p_mode text, p_value numeric",
+      "calls": [
+        "public.dabbir_salon_settings"
+      ],
+      "definition_md5": "4e1d0ea63b696f0ddfecde97affdb20a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_set_deposit_policy",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_salon_settings"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.dabbir_set_employee_status"
+      ],
+      "definition_md5": "0f8d5e6329533e2e70fbe64c5caba0cc",
+      "dynamic_sql": false,
+      "name": "public.dabbir_set_employee_status",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_policy_id uuid, p_state text",
+      "calls": [
+        "dabbir_private.dabbir_set_owner_policy_state",
+        "dabbir_private.is_active_member"
+      ],
+      "definition_md5": "e9f53f0e9339cf2fe81a059a78390628",
+      "dynamic_sql": false,
+      "name": "public.dabbir_set_owner_policy_state",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_task_id uuid, p_status text",
+      "calls": [
+        "dabbir_private.has_permission"
+      ],
+      "definition_md5": "71c2c7d29ce2a3b6e3a91db79e2adc80",
+      "dynamic_sql": false,
+      "name": "public.dabbir_set_task_status",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_tasks"
+      ]
+    },
+    {
+      "arguments": "p_github_run_id text",
+      "calls": [],
+      "definition_md5": "c5d77718906479718bce304fc9d4f86d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_source_control_claim_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_run_id uuid, p_lease_token text, p_status text, p_branch_name text, p_pr_number integer, p_head_sha text, p_work_unit_done boolean, p_evidence jsonb",
+      "calls": [],
+      "definition_md5": "e120c2ad0f70a1473b0a41d15e4a40a0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_source_control_report_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_run_id uuid, p_lease_token text",
+      "calls": [],
+      "definition_md5": "19f674d48cc682ddbc0315fc98bbaef0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_source_control_validate_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c095d14784a4283ecd53b642a46cab39",
+      "dynamic_sql": false,
+      "name": "public.dabbir_stripe_sandbox_runtime_secrets_v1",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid",
+      "calls": [
+        "dabbir_private.has_permission",
+        "public.dabbir_handoffs"
+      ],
+      "definition_md5": "1e6c27de73590d204beca4eef30d4d15",
+      "dynamic_sql": false,
+      "name": "public.dabbir_takeover_conversation",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "32a890a9e6224e6efac00d60a61a9980",
+      "dynamic_sql": false,
+      "name": "public.dabbir_touch_whatsapp_connection_updated_at",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_user_id uuid, p_role text, p_permissions text[]",
+      "calls": [
+        "dabbir_private.dabbir_update_employee_access"
+      ],
+      "definition_md5": "b8ff1bd58120c0a42ac5fa6f98419ab7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_update_employee_access",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "",
+      "calls": [],
+      "definition_md5": "c8a11385110f4081f2045da6bd075327",
+      "dynamic_sql": false,
+      "name": "public.dabbir_validate_procedure_run_transition",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_challenge_id uuid, p_code_hash text",
+      "calls": [],
+      "definition_md5": "f4e89c878ba535c5410b2d013d1ded76",
+      "dynamic_sql": false,
+      "name": "public.dabbir_verify_stepup_challenge",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_verification_challenges"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_appointment_id uuid, p_operation_key text",
+      "calls": [
+        "public.dabbir_ai_action_ledger"
+      ],
+      "definition_md5": "f515fe6a3c95f93075938b1b4f80f3d9",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_cancel_booking",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_action_ledger",
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_service_id uuid, p_worker_id uuid, p_requested_local timestamp without time zone",
+      "calls": [
+        "dabbir_private.whatsapp_ai_slot_available_branch"
+      ],
+      "definition_md5": "b05c8491422b1c895951de4f96237a50",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_check_availability",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_service_id uuid, p_worker_id uuid, p_requested_local timestamp without time zone",
+      "calls": [
+        "dabbir_private.business_operating_hours_window_v1",
+        "public.dabbir_whatsapp_ai_check_availability"
+      ],
+      "definition_md5": "df825c194c1686962963c6768a4c4b59",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_check_availability_v2",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_dispatch_token uuid",
+      "calls": [
+        "public.dabbir_whatsapp_ai_release_stale_provider_handoff"
+      ],
+      "definition_md5": "275832b3677140e8988e8dc9c309bdc4",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_claim_dispatch",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_whatsapp_ai_release_stale_provider_handoff"
+      ],
+      "definition_md5": "62c8affc0e7f63f2aa8b0803c099b86e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_claim_next",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid",
+      "calls": [],
+      "definition_md5": "966acdff3b6ab40e82c56c0d4f0ffe2c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_connection",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid",
+      "calls": [],
+      "definition_md5": "1e2fa4424c164c00c1e46d16659929b5",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_context",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_service_id uuid, p_worker_id uuid, p_starts_at timestamp with time zone, p_operation_key text, p_notes text",
+      "calls": [
+        "dabbir_private.whatsapp_ai_slot_available_branch",
+        "public.dabbir_ai_action_ledger",
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ],
+      "definition_md5": "eae52adbab86153144d14632c47cf550",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_create_booking",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_action_ledger",
+        "public.dabbir_appointment_services",
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_limit integer",
+      "calls": [],
+      "definition_md5": "ed6235bb64e24e57f29a08395ff982e7",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_customer_recent_bookings",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_batch_id uuid, p_lock_token uuid, p_outcome text, p_error text",
+      "calls": [],
+      "definition_md5": "67943db7506ccb3515ed75758dc63fee",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_finish_batch",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_route_class text, p_reason text, p_summary text",
+      "calls": [
+        "public.dabbir_handoffs",
+        "public.dabbir_whatsapp_ai_set_state"
+      ],
+      "definition_md5": "a30382ab4fd10e1d62452fda7fbf9a8c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_handoff",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_dispatch_token uuid, p_error text",
+      "calls": [
+        "public.dabbir_whatsapp_ai_handoff"
+      ],
+      "definition_md5": "4f2f5ecedd50e2260d97a1c08218b4bb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_provider_failover",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches"
+      ]
+    },
+    {
+      "arguments": "p_limit integer",
+      "calls": [],
+      "definition_md5": "a17231444ed836e2cfb38dfec49f9ee6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_provider_failover_candidates",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid",
+      "calls": [],
+      "definition_md5": "e98e92d95357ab90d77253aa2327b30a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_release_stale_provider_handoff",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_handoffs"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_appointment_id uuid, p_new_starts_at timestamp with time zone, p_operation_key text",
+      "calls": [
+        "public.dabbir_ai_action_ledger"
+      ],
+      "definition_md5": "04a3509ae9ff47a4e0faa1229bc5adcd",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_reschedule_booking",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_action_ledger",
+        "public.dabbir_appointments"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_idempotency_key text, p_payload_hash text, p_body text",
+      "calls": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ],
+      "definition_md5": "044c67b30b1e2af9f881e6f48c259aa0",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_reserve_outbound",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_pending_action text, p_payload jsonb, p_ttl_seconds integer",
+      "calls": [
+        "public.dabbir_ai_conversation_state"
+      ],
+      "definition_md5": "0500094e0763cf73246f330810f20bb5",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_ai_set_state",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_ai_conversation_state"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_customer_handle text, p_display_name text, p_action text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.resolve_whatsapp_customer_v1"
+      ],
+      "definition_md5": "c894c15e914a09e2e18e9c65044ff367",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_apply_coexistence_contact_sync",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_customers",
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_original_provider_message_id text, p_mutation_provider_message_id text, p_mutation_type text, p_new_body text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_whatsapp_coexistence_mutations"
+      ],
+      "definition_md5": "5ca12bb7439b15e26468bbc231404aa2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_apply_coexistence_mutation",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_coexistence_mutations",
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_status text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_whatsapp_event_ledger"
+      ],
+      "definition_md5": "6405a5c5afda0112dd72e748797cf67e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_apply_status",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_connections",
+        "public.dabbir_whatsapp_event_ledger",
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid",
+      "calls": [],
+      "definition_md5": "6a8291a1e0120b145545d6f4fd867469",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_branch_operational_evidence",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid, p_meta_catalog_id text, p_catalog_name text, p_items jsonb, p_make_primary boolean",
+      "calls": [
+        "public.dabbir_whatsapp_catalog_items",
+        "public.dabbir_whatsapp_catalogs"
+      ],
+      "definition_md5": "f7aac50d9d8f803cdb19e281005e058a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_catalog_apply_sync",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_catalog_items",
+        "public.dabbir_whatsapp_catalogs"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid, p_conversation_id uuid",
+      "calls": [],
+      "definition_md5": "bc4f949bd738e0219063f8fdf0f22a9a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_catalog_menu",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid, p_state text, p_retry_seconds integer, p_error_code text, p_provider_code text",
+      "calls": [
+        "public.dabbir_whatsapp_catalog_sync_state"
+      ],
+      "definition_md5": "2864afef8ffe1aab286f07eda9d31db2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_catalog_record_attempt",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_catalog_sync_state"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_meta_catalog_id text, p_product_retailer_id text",
+      "calls": [],
+      "definition_md5": "45c616b29d1841d880332b180d71c6bf",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_catalog_resolve_service",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid, p_conversation_id uuid",
+      "calls": [],
+      "definition_md5": "38f9617706e016d707d7fc83af25b823",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_catalog_sync_due",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_token_hash text, p_service_id uuid, p_location text, p_preferred_date text, p_preferred_time text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_whatsapp_persist_inbound"
+      ],
+      "definition_md5": "88514625e5e947ae6760cb4ddb8c0cff",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_consume_booking_flow_reply",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_flow_sessions"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_connection_id uuid, p_flow_id uuid, p_token_hash text, p_ttl_seconds integer",
+      "calls": [
+        "public.dabbir_whatsapp_flow_sessions"
+      ],
+      "definition_md5": "9a811aba0a6a7ef24e38d6454da6add2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_create_booking_flow_session",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_flow_sessions"
+      ]
+    },
+    {
+      "arguments": "p_reservation_id uuid, p_provider_message_id text",
+      "calls": [
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger"
+      ],
+      "definition_md5": "e07853c10ba2cdf466308d92ad69de6a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_finalize_outbound",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_ai_conversation_state",
+        "public.dabbir_conversations",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger",
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_connection_id uuid, p_schema_hash text",
+      "calls": [],
+      "definition_md5": "71976bed19ec162fdccd3828510b84b3",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_get_published_booking_flow",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_session_id uuid, p_state text, p_provider_message_id text, p_error text",
+      "calls": [],
+      "definition_md5": "882cbe866b96691594b3889386cf12ce",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_mark_booking_flow_delivery",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_flow_sessions"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_kind text, p_state text, p_request_id text, p_progress integer, p_error text, p_next_retry_at timestamp with time zone",
+      "calls": [],
+      "definition_md5": "adf63e089846b6539313dbfc58e472f6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_mark_coexistence_sync",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_reservation_id uuid, p_state text, p_error_code text",
+      "calls": [],
+      "definition_md5": "4509040e383f16e3e751f5463e532ef6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_mark_outbound_result",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid",
+      "calls": [],
+      "definition_md5": "b227e99542df23370fd0198ee5bc37b5",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_operational_evidence",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_customer_handle text, p_display_name text, p_body text, p_direction text, p_source_field text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.resolve_whatsapp_customer_v1",
+        "public.dabbir_conversations",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger"
+      ],
+      "definition_md5": "513b9622d73da04acf7635bb15e72731",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_persist_coexistence_message",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_customers",
+        "public.dabbir_message_batches",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_coexistence_mutations",
+        "public.dabbir_whatsapp_connections",
+        "public.dabbir_whatsapp_event_ledger"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_display_name text, p_body text, p_intent text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.resolve_whatsapp_customer_v1",
+        "public.dabbir_conversations",
+        "public.dabbir_enqueue_message_batch",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger"
+      ],
+      "definition_md5": "dcf210fd6ff23a5eedb9fd166a11bfdf",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_persist_inbound",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_message_batches",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_connections",
+        "public.dabbir_whatsapp_event_ledger"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_display_name text, p_body text, p_intent text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_whatsapp_persist_inbound"
+      ],
+      "definition_md5": "ab9732880a490489fbd9797d89e79d12",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_persist_inbound_v2",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_display_name text, p_body text, p_intent text, p_occurred_at timestamp with time zone, p_location jsonb",
+      "calls": [
+        "public.dabbir_whatsapp_location_receipts",
+        "public.dabbir_whatsapp_persist_inbound"
+      ],
+      "definition_md5": "c862c1fcd76f6db3b36be4c4d4d5d12e",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_persist_location_inbound_v1",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_location_receipts"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_display_name text, p_media_id text, p_claimed_mime_type text, p_is_voice_note boolean, p_occurred_at timestamp with time zone",
+      "calls": [
+        "dabbir_private.resolve_whatsapp_customer_v1",
+        "public.dabbir_conversations",
+        "public.dabbir_whatsapp_voice_ingest"
+      ],
+      "definition_md5": "f8d7f8818516d12eb15814337f89485d",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_persist_voice_inbound",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_whatsapp_connections",
+        "public.dabbir_whatsapp_voice_ingest"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_conversation_id uuid, p_sender_user_id uuid, p_idempotency_key text, p_payload_hash text, p_body text",
+      "calls": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ],
+      "definition_md5": "bca68119f96b13eb14c460d82883fc56",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_reserve_outbound",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_outbound_reservations"
+      ]
+    },
+    {
+      "arguments": "p_event_id uuid",
+      "calls": [],
+      "definition_md5": "71482193f7a2406e2140b85a5c186839",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_ai_context",
+      "security_definer": false,
+      "writes": []
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_status text",
+      "calls": [],
+      "definition_md5": "168b2401c1f8c4f5ffcf9be806ba1e8a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_apply_status",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_sandbox_events"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_token_hash text, p_platform_phone_number_id text, p_ttl_minutes integer",
+      "calls": [
+        "public.dabbir_whatsapp_sandbox_sessions"
+      ],
+      "definition_md5": "0f7e8dd45f4a0e65efd9f136c138317b",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_create_session",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_sandbox_sessions"
+      ]
+    },
+    {
+      "arguments": "p_event_id uuid, p_provider_reply_message_id text",
+      "calls": [
+        "public.dabbir_messages"
+      ],
+      "definition_md5": "b0f5e78da10599cf8ce14386d9042c59",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_finalize_reply",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_sandbox_events"
+      ]
+    },
+    {
+      "arguments": "p_event_id uuid, p_state text, p_error_code text",
+      "calls": [],
+      "definition_md5": "a3b6de56028358d93886104507a92167",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_mark_reply_result",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_sandbox_events"
+      ]
+    },
+    {
+      "arguments": "p_event_id uuid, p_reply_body text, p_reply_body_hash text",
+      "calls": [],
+      "definition_md5": "c8b96a8bc7f4b720ae419c0b8570a89f",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_prepare_reply",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_sandbox_events"
+      ]
+    },
+    {
+      "arguments": "p_phone_number_id text, p_provider_message_id text, p_sender_handle text, p_display_name text, p_token_hash text, p_body text, p_occurred_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_conversations",
+        "public.dabbir_customers",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_sandbox_events"
+      ],
+      "definition_md5": "02d88fd5dbfdc82b747d46b082db9019",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_sandbox_route_inbound",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_conversations",
+        "public.dabbir_customers",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_sandbox_events",
+        "public.dabbir_whatsapp_sandbox_sessions"
+      ]
+    },
+    {
+      "arguments": "p_token_hash text, p_platform_phone_number_id text",
+      "calls": [],
+      "definition_md5": "54ad9f3729bca359ad263b3e22b71403",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_test_bootstrap_claim",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_token_hash text, p_platform_phone_number_id text, p_meta_app_id text, p_waba_id text, p_display_phone_number text, p_verified_name text, p_access_token_ciphertext text, p_access_token_iv text, p_access_token_tag text, p_token_key_version text, p_last_provider_status integer",
+      "calls": [
+        "dabbir_private.primary_branch_for_business",
+        "public.dabbir_whatsapp_connections"
+      ],
+      "definition_md5": "46e92eab35f50aaac9861bc016a062b6",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_test_bootstrap_store",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_connections",
+        "public.dabbir_whatsapp_sandbox_sessions"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_branch_id uuid, p_provider text, p_status text, p_meta_app_id text, p_waba_id text, p_phone_number_id text, p_display_phone_number text, p_verified_name text, p_access_token_ciphertext text, p_access_token_iv text, p_access_token_tag text, p_token_expires_at timestamp with time zone, p_token_key_version text, p_connected_by uuid, p_connected_at timestamp with time zone, p_last_verified_at timestamp with time zone, p_last_provider_status integer, p_last_error text",
+      "calls": [
+        "dabbir_private.is_active_member",
+        "public.dabbir_whatsapp_connections"
+      ],
+      "definition_md5": "eeecb4e4f0b46602806f66a5ebe14b74",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_upsert_branch_connection",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_business_id uuid, p_provider text, p_status text, p_meta_app_id text, p_waba_id text, p_phone_number_id text, p_display_phone_number text, p_verified_name text, p_access_token_ciphertext text, p_access_token_iv text, p_access_token_tag text, p_token_expires_at timestamp with time zone, p_token_key_version text, p_connected_by uuid, p_connected_at timestamp with time zone, p_last_verified_at timestamp with time zone, p_last_provider_status integer, p_last_error text",
+      "calls": [
+        "dabbir_private.is_active_member",
+        "dabbir_private.primary_branch_for_business",
+        "public.dabbir_whatsapp_connections"
+      ],
+      "definition_md5": "cac4809b33aab2c69b12048e35f05dd2",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_upsert_connection",
+      "security_definer": false,
+      "writes": [
+        "public.dabbir_whatsapp_branch_intents",
+        "public.dabbir_whatsapp_connections"
+      ]
+    },
+    {
+      "arguments": "p_connection_id uuid, p_schema_hash text, p_flow_name text, p_meta_flow_id text, p_status text, p_validation_errors jsonb, p_provider_status integer, p_error text, p_next_retry_at timestamp with time zone",
+      "calls": [
+        "public.dabbir_whatsapp_flows"
+      ],
+      "definition_md5": "e11d656b64ce8d37f5f66f310fab424a",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_upsert_flow_provision",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_flows"
+      ]
+    },
+    {
+      "arguments": "p_dispatch_token uuid",
+      "calls": [],
+      "definition_md5": "38d14b59886de2dee8de91cc349d9814",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_voice_claim_dispatch",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_voice_ingest"
+      ]
+    },
+    {
+      "arguments": "",
+      "calls": [
+        "public.dabbir_whatsapp_voice_claim_dispatch"
+      ],
+      "definition_md5": "de6d14c936ce165467f26401bc587bcf",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_voice_claim_next",
+      "security_definer": true,
+      "writes": []
+    },
+    {
+      "arguments": "p_voice_ingest_id uuid, p_lock_token uuid",
+      "calls": [],
+      "definition_md5": "ac15de3b09483c7a71ff1bc0b8de600c",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_voice_complete_clarification",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_voice_ingest"
+      ]
+    },
+    {
+      "arguments": "p_voice_ingest_id uuid, p_lock_token uuid, p_error text, p_retry boolean",
+      "calls": [],
+      "definition_md5": "6d10f1502baabdd00bd92aecf9ca92cb",
+      "dynamic_sql": false,
+      "name": "public.dabbir_whatsapp_voice_fail",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_whatsapp_voice_ingest"
+      ]
+    },
+    {
+      "arguments": "p_voice_ingest_id uuid, p_lock_token uuid, p_transcript text, p_language text, p_confidence numeric, p_needs_confirmation boolean, p_provider text, p_model text, p_media_mime_type text, p_byte_length bigint",
+      "calls": [
+        "public.dabbir_enqueue_message_batch",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger"
+      ],
+      "definition_md5": "cc51f2d8766d7bf7994c1a9d0a2d0f19",
+      "dynamic_sql": true,
+      "name": "public.dabbir_whatsapp_voice_finalize",
+      "security_definer": true,
+      "writes": [
+        "public.dabbir_message_batches",
+        "public.dabbir_messages",
+        "public.dabbir_whatsapp_event_ledger",
+        "public.dabbir_whatsapp_voice_ingest"
+      ]
+    }
+  ],
+  "cycle_review": {
+    "candidate": "public.dabbir_create_business",
+    "finding": "Three-argument SQL wrapper calls the four-argument PLpgSQL overload; the latter has no return call. Not recursion or a dependency cycle. Both retained.",
+    "proven_cycles": 0
+  }
+}

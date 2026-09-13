@@ -37,28 +37,25 @@ for(const [name,width,height] of devices){
    await noOverflow();
    await page.screenshot({path:`public-visual-evidence/${name}-${lang}-signup.png`,fullPage:true});
    result.checks.push('signup route, heading, language, associated email label, focus, no horizontal overflow');
-   await page.locator('#demoFirstCta').click();
-   await page.locator('#demoForm').waitFor();
+   assert.equal(await page.locator('#demoFirstCta, .preSignupValue, a[href="/try"]').count(),0);
+   await page.locator('#loginTab').click();
+   await page.getByRole('heading',{name:lang==='ar'?'دخول أصحاب الأنشطة':'Business owner login',exact:true}).waitFor();
+   assert.equal(await page.locator('#loginTab').getAttribute('aria-selected'),'true');
+   assert.equal(await page.locator('#authPassword').getAttribute('autocomplete'),'current-password');
    await noOverflow();
-   assert.equal(await page.locator('html').getAttribute('lang'),lang);
-   assert.match(await page.locator('h1').innerText(),lang==='ar'?/أعمال نشاطك/:/Your business moves forward/);
-   await page.screenshot({path:`public-visual-evidence/${name}-${lang}-trial.png`,fullPage:true});
-   // Verify translated UI and requests in both languages.
-   await page.locator('#demoMessage').fill(lang==='ar'?'أحتاج تلميع لسيارة دفع رباعي في دبي مارينا بكرة الساعة 11 am':'premium polish SUV Dubai Marina tomorrow 11 am');
-   await page.locator('#runDemo').click();
-   await page.locator('#receipt.visible').waitFor({timeout:20000});
-   assert.match(await page.locator('#truthEvidence').innerText(),lang==='ar'?/لم تُرسل رسالة واتساب ولم يُحصّل مبلغ/:/No WhatsApp message was sent and no payment was collected/);
-   await page.locator('.executionDetails summary').click();
-   assert.ok(await page.locator('.executionDetails').getAttribute('open')!==null);
-   await noOverflow();
-   await page.screenshot({path:`public-visual-evidence/${name}-${lang}-receipt.png`,fullPage:true});
-   await page.locator('#resetDemo').click();
-   assert.equal(await page.locator('#receipt').isVisible(),false);
-   await page.locator('#demoMessage').fill(lang==='ar'?'مرحبا':'Hello');
-   await page.locator('#runDemo').click();
-   await page.waitForFunction(()=>document.querySelector('#runDemo').disabled===false&&document.querySelector('#demoStatus').textContent.length>0);
-   assert.equal(await page.locator('#receipt').isVisible(),false);
-   result.checks.push('business positioning, isolated booking, explicit no-charge truth, expandable history, reset, missing-detail state');
+   await page.screenshot({path:`public-visual-evidence/${name}-${lang}-login.png`,fullPage:true});
+   for(const path of ['/try','/try/','/try.html','/api/dabbir-market-preview']){
+    await page.goto(origin+path,{waitUntil:'domcontentloaded'});
+    await page.waitForURL(url=>url.pathname==='/',{waitUntil:'domcontentloaded'});
+    await page.locator('#authGate:not(.hidden)').waitFor({timeout:30000});
+    assert.equal(new URL(page.url()).pathname,'/');
+    assert.equal(await page.locator('html').getAttribute('lang'),lang);
+    assert.equal(await page.locator('#demoForm, #demoFirstCta').count(),0);
+   }
+   const retired=await page.request.post(origin+'/api/dabbir-market-demo',{data:{message:'Hello',operation_id:'retired_demo_check_123'}});
+   assert.equal(retired.status(),410);
+   assert.equal((await retired.json()).error,'DEMO_RETIRED');
+   result.checks.push('login tab and password semantics, demo absent, old links return to login in the selected language, demo API retired');
    result.status='PASS';
   }catch(error){failed=true;result.status='FAIL';result.error=String(error);await page.screenshot({path:`public-visual-evidence/${name}-${lang}-failure.png`,fullPage:true}).catch(()=>{});}
   await context.close();

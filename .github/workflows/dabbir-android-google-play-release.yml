@@ -1,0 +1,60 @@
+name: DABBIR Android Google Play Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_approval:
+        description: 'Type PUBLISH_DABBIR only after legal/store activation and explicit approval.'
+        required: true
+        default: 'BLOCKED'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-android-google-play-release
+  cancel-in-progress: true
+
+jobs:
+  signed-google-play-internal-release:
+    if: ${{ inputs.release_approval == 'PUBLISH_DABBIR' && vars.DABBIR_STORE_RELEASE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      DABBIR_EAS_PROJECT_ID: ${{ vars.DABBIR_EAS_PROJECT_ID }}
+      DABBIR_ANDROID_PACKAGE: com.barmansystems.dabbir
+      DABBIR_ANDROID_SUBSCRIPTION_PRODUCT_ID: com.barmansystems.dabbir.owner.subscription
+      EXPO_PUBLIC_ANDROID_SUBSCRIPTION_PRODUCT_ID: com.barmansystems.dabbir.owner.subscription
+      EXPO_PUBLIC_ANDROID_IAP_ENABLED: 'true'
+      EXPO_PUBLIC_DABBIR_API_BASE_URL: https://dabbir.bmalman.com
+      EXPO_PUBLIC_DABBIR_PRIVACY_URL: https://dabbir.bmalman.com/privacy
+      EXPO_PUBLIC_DABBIR_TERMS_URL: https://dabbir.bmalman.com/terms
+      EXPO_PUBLIC_DABBIR_SUPPORT_URL: https://dabbir.bmalman.com/support
+      EXPO_PUBLIC_DABBIR_DELETE_ACCOUNT_URL: https://dabbir.bmalman.com/delete-account
+      DABBIR_GOOGLE_PLAY_RELEASE_PREFLIGHT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require external release credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${EXPO_TOKEN:-}"
+          test -n "${DABBIR_EAS_PROJECT_ID:-}"
+      - name: Run release preflight
+        working-directory: .
+        run: node scripts/dabbir-google-play-preflight.mjs || status=$?; test "${status:-0}" -eq 3
+      - name: Install mobile dependencies and EAS
+        run: |
+          npm install --no-audit --no-fund
+          npm install --global eas-cli@latest
+      - name: Build signed production AAB
+        run: eas build --platform android --profile production --non-interactive --wait
+      - name: Submit latest build to Google Play Internal testing
+        run: eas submit --platform android --profile production --latest --non-interactive --wait

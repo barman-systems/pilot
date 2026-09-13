@@ -5,6 +5,7 @@ on:
       - 'api/**'
       - 'test/dabbir-booking-lifecycle*.test.mjs'
       - 'scripts/qa-booking-lifecycle-browser.mjs'
+      - 'scripts/qa-webkit-sidebar-navigation.mjs'
       - '.github/workflows/booking-lifecycle-regression.yml'
 permissions:
   contents: read
@@ -25,6 +26,14 @@ jobs:
         run: node --test test/dabbir-booking-lifecycle*.test.mjs
       - name: Install pinned isolated browser verifier
         run: |
+          # Playwright installs its own pinned Chromium/WebKit builds. The hosted
+          # runner's unrelated Google Chrome apt source can be temporarily
+          # inconsistent and must not prevent installing Ubuntu browser deps.
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then
+              sudo rm -f "$source"
+            fi
+          done
           npm install --prefix "$RUNNER_TEMP/booking-playwright" --no-audit --no-fund --ignore-scripts playwright@1.63.0
           node "$RUNNER_TEMP/booking-playwright/node_modules/playwright/cli.js" install --with-deps chromium webkit
       - name: iPhone and iPad browser matrix over real served UI
@@ -32,6 +41,16 @@ jobs:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
           BOOKING_BROWSER_OUTPUT: booking-browser-evidence
         run: node scripts/qa-booking-lifecycle-browser.mjs
+      - name: First appointment activation and retry on iPhone and iPad
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
+        run: node scripts/qa-activation-booking-browser.mjs
+      - name: Owner knowledge modal with active onboarding overlay
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: booking-browser-evidence
+        run: node scripts/qa-understanding-knowledge-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -39,3 +58,37 @@ jobs:
           path: booking-browser-evidence/
           retention-days: 7
           if-no-files-found: warn
+
+  navigation:
+    name: Production WebKit sidebar navigation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install the Production-pinned WebKit verifier
+        run: |
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then sudo rm -f "$source"; fi
+          done
+          npm install --prefix "$RUNNER_TEMP/navigation-playwright" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          node "$RUNNER_TEMP/navigation-playwright/node_modules/playwright/cli.js" install --with-deps webkit
+      - name: Real root and bundle navigation across language and viewport transitions
+        env:
+          PLAYWRIGHT_PATH: ${{ runner.temp }}/navigation-playwright/node_modules/playwright
+          BOOKING_BROWSER_OUTPUT: sidebar-browser-evidence
+        run: |
+          node scripts/build-dabbir-ui-bundles.mjs
+          node scripts/qa-webkit-sidebar-navigation.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sidebar-navigation-${{ github.run_id }}
+          path: sidebar-browser-evidence/
+          retention-days: 7
+          if-no-files-found: error

@@ -1,0 +1,45 @@
+{
+  "project_ref": "fphpoysqdsceniwduxjq",
+  "captured_at": "2026-09-09T05:51:50Z",
+  "policy": {
+    "fail_on_new_warning_or_error": true,
+    "fail_on_warning_or_error_count_increase": true,
+    "monitored_info_lints": [
+      "rls_enabled_no_policy",
+      "unindexed_foreign_keys"
+    ]
+  },
+  "security": {
+    "rls_enabled_no_policy": {
+      "level": "INFO",
+      "count": 0
+    },
+    "authenticated_security_definer_function_executable": {
+      "level": "WARN",
+      "count": 7,
+      "objects": [
+        "public.dabbir_activate_owner_policy",
+        "public.dabbir_activity_profile_v1",
+        "public.dabbir_activity_service_configure_v1",
+        "public.dabbir_knowledge_propose_v2",
+        "public.dabbir_knowledge_review_v2",
+        "public.dabbir_owner_policy_candidates",
+        "public.dabbir_set_owner_policy_state"
+      ]
+    }
+  },
+  "performance": {
+    "unindexed_foreign_keys": {
+      "level": "INFO",
+      "count": 26
+    },
+    "unused_index": {
+      "level": "INFO",
+      "count": 130
+    },
+    "auth_db_connections_absolute": {
+      "level": "INFO",
+      "count": 1
+    }
+  }
+}

@@ -21,9 +21,9 @@ for (const type of activityTypes) {
   });
 }
 
-test('store is inventory/order driven and cannot expose appointments or services', () => {
+test('store is inventory/order driven and cannot expose appointments or services', async () => {
   assert.match(activityApi, /store:\{[^\n]*show_appointments:false[^\n]*show_services:false[^\n]*show_operations:true/);
-  assert.match(ownerUi, /if\(type==='store'\)return item\?\.type!=='appointment'/);
+  assert.match(await read('api/owner-action-center-core-ui.js'), /activity==='store'\?item.type!=='appointment'/);
   assert.match(appointmentGuard, /if v_type = 'store'/);
   assert.match(appointmentGuard, /APPOINTMENTS_NOT_ALLOWED_FOR_STORE/);
 });

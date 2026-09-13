@@ -1,0 +1,39 @@
+name: DABBIR Brain real database proof
+on:
+  push:
+    branches: [codex/dabbir-real-world-validation-20260910, codex/dabbir-production-verification-fixes, fix/dabbir-greeting-requirement-loop, fix/dabbir-independent-read-loop, fix/dabbir-presented-delivery-confirmation]
+  workflow_dispatch:
+    inputs:
+      acknowledgement:
+        description: Isolated QA transactions in Production, no Meta messages
+        required: true
+        type: choice
+        options: [ISOLATED_QA_TRANSACTIONS]
+permissions:
+  contents: read
+concurrency:
+  group: dabbir-brain-real-db
+  cancel-in-progress: false
+jobs:
+  real-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Exercise overlapping transactions and cleanup
+        env:
+          SUPABASE_PROJECT_REF: fphpoysqdsceniwduxjq
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_TOKEN }}
+          DABBIR_REAL_DB_ACK: ${{ github.event_name == 'push' && 'ISOLATED_QA_TRANSACTIONS' || inputs.acknowledgement }}
+        run: node scripts/dabbir-brain-real-db.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dabbir-brain-real-db-evidence
+          path: test-results/brain-real-db
+          if-no-files-found: error

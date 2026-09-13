@@ -2,6 +2,11 @@ name: DABBIR BAR-12 Readiness
 
 on:
   workflow_dispatch:
+    inputs:
+      technical_review_json:
+        description: 'Fresh verified runtime, alert readback and security evidence for the deployed SHA (JSON, no secrets or customer data)'
+        required: false
+        type: string
   push:
     branches: [main]
     paths:
@@ -319,6 +324,8 @@ jobs:
               critical_gates:{security:null,financial:null,legal:null}
             }' > dabbir-bar12-live-evidence.json
       - name: Merge verified technical readiness evidence
+        env:
+          DABBIR_BAR12_TECHNICAL_REVIEW_JSON: ${{ inputs.technical_review_json || vars.DABBIR_BAR12_TECHNICAL_REVIEW_JSON }}
         run: node .github/scripts/dabbir-bar12-technical-evidence.mjs
       - name: Evaluate BAR-12 readiness
         run: node scripts/dabbir-readiness-gate.mjs
@@ -332,7 +339,7 @@ jobs:
             dabbir-bar12-live-evidence.json
             dabbir-bar12-readiness-report.json
             dabbir-bar12-technical-evidence-merge.json
-            docs/evidence/dabbir-bar12-technical-review.json
+            dabbir-bar12-technical-review-input.json
             dabbir-bar12-runtime-classification.log
             dabbir-bar12-journey-equivalence.log
             bar12-journey-evidence/dabbir-ai-customer-journey-report.json

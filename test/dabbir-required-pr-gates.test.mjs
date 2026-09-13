@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyChangedPaths } from '../scripts/dabbir-required-pr-gates.mjs';
+import { ALWAYS_REQUIRED_PR_WORKFLOWS, classifyChangedPaths } from '../scripts/dabbir-required-pr-gates.mjs';
+
+test('every pull request requires the DABBIR Security Gate',()=>{
+  assert.deepEqual(ALWAYS_REQUIRED_PR_WORKFLOWS,['DABBIR Security Gate']);
+});
 
 test('ordinary web changes do not require mobile release gates',()=>{
   assert.deepEqual(classifyChangedPaths(['api/app.js','index.html']),{mobileCi:false,maestro:false});

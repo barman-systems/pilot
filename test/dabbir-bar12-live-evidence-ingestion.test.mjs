@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { emitInternalVisualSummary, assertInternalVisualGate } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
 
 const workflow = fs.readFileSync(new URL('../.github/workflows/dabbir-bar12-readiness.yml', import.meta.url), 'utf8');
 const journey = fs.readFileSync(new URL('./ai-full-customer-journey-v2.mjs', import.meta.url), 'utf8');
@@ -45,9 +46,10 @@ test('BAR-12 imports only an exact or proven runtime-equivalent successful Full 
   assert.match(workflow, /FULL_JOURNEY_RUNTIME_EVIDENCE_PASS/);
 });
 
-test('Arabic and English iPhone evidence use the functional WebKit reports and do not depend on screenshot rasterization', () => {
+test('BAR-12 Arabic and English iPhone evidence requires successful functional WebKit reports, not screenshot files', () => {
   assert.match(journey, /locale:\s*'ar-AE'/);
-  assert.match(journey, /functional report is sufficient evidence/i);
+  assert.match(journey, /await step\('25_mobile_webkit_owner_journey', browserJourney\)/);
+  assert.equal((workflow.match(/\.verdict == "PASS" and \.required_failures == 0 and \.production_origin == \$origin and any\(\.steps\[\]; \.name == "25_mobile_webkit_owner_journey" and \.status == "PASS"\)/g) || []).length, 2, 'both Arabic and English reports must pass the functional journey and origin checks');
   assert.match(englishJourney, /locale:\s*'en-US'/);
   assert.match(englishJourney, /ai-full-customer-journey-v2\.mjs/);
   assert.match(producer, /Run English iPhone WebKit owner journey against exact Production/);
@@ -58,6 +60,18 @@ test('Arabic and English iPhone evidence use the functional WebKit reports and d
   assert.match(workflow, /iphone_safari_ar:\{verdict:"PASS"/);
   assert.match(workflow, /iphone_safari_en:\{verdict:"PASS"/);
   assert.doesNotMatch(workflow, /iphone_safari_en:null/);
+});
+
+test('enabled internal visual QA emits readable evidence and independently fails visible overflow', () => {
+  assert.match(producer, /DABBIR_INTERNAL_VISUAL_QA:\s*'1'/);
+  assert.match(journey, /if \(process\.env\.DABBIR_INTERNAL_VISUAL_QA === '1' && REPORT_PATH === 'dabbir-ai-customer-journey-report\.json'\)/);
+  assert.match(journey, /finally\s*\{[^}]*visualSummary = emitInternalVisualSummary\(visual\);[\s\S]*?\}\s*assertInternalVisualGate\(visualSummary\);/);
+  const lines = [];
+  const summary = emitInternalVisualSummary({ cases: [{ screen: 'dashboard', width: 390, height: 844, language: 'ar', overflow: true, status: 'OVERFLOW' }] }, line => lines.push(line));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /^DABBIR_INTERNAL_VISUAL_SUMMARY=/);
+  assert.equal(JSON.parse(lines[0].split('=')[1]).counts.OVERFLOW, 1);
+  assert.throws(() => assertInternalVisualGate(summary), /INTERNAL_VISUAL_VISIBLE_OVERFLOW/);
 });
 
 test('BAR-12 preserves external WhatsApp fail-closed truth while importing internal journey evidence', () => {

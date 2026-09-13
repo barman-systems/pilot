@@ -7,6 +7,7 @@ const workspace=read('api/branch-workspace.js');
 const operations=read('api/branch-operations.js');
 const context=read('api/branch-context.js');
 const ui=read('api/branch-context-ui.js');
+const actionCenter=read('api/owner-action-center-core-ui.js');
 const bundles=JSON.parse(read('config/dabbir-ui-bundles.json'));
 
 test('branch workspace filters branch-owned operational reads on the server',()=>{
@@ -47,4 +48,15 @@ test('branch UI reuses the bounded shell by replacing the duplicate owner-copilo
   assert.match(ui,/\['start_conversation','create_appointment'\]/);
   assert.match(ui,/dabbir_active_branch_scope:/);
   assert.match(ui,/dabbir:branch-scope-changed/);
+});
+
+
+test('owner action center revalidates a stale persisted branch once before retrying',()=>{
+  assert.match(ui,/async function sync\(force=false\)/);
+  assert.match(ui,/id!==activeBusiness\|\|force/);
+  assert.match(ui,/refresh:\(\)=>sync\(true\)/);
+  assert.match(actionCenter,/loadActionCenter\(force=false,recoveredStaleBranch=false\)/);
+  assert.match(actionCenter,/data\?\.error==='BRANCH_NOT_FOUND'/);
+  assert.match(actionCenter,/window\.dabbirBranchContext\.refresh\(\)/);
+  assert.match(actionCenter,/loadActionCenter\(true,true\)/);
 });

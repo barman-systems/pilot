@@ -6,6 +6,7 @@ const script=String.raw`(()=>{
 
   function loadGlobalSupport(){
     const modules=[
+      {ready:'__dabbirCustomerNameEditor',dataset:'dabbirCustomerNameEditorUi',selector:'script[data-dabbir-customer-name-editor-ui="1"]',src:'/api/customer-name-ui?v=20260908-1',error:'dabbir_customer_name_ui_load_failed'},
       {ready:'__dabbirCustomerSupportUi',dataset:'dabbirCustomerSupportUi',selector:'script[data-dabbir-customer-support-ui="1"]',src:'/api/customer-support-ui?v=20260907-1',error:'dabbir_customer_support_ui_load_failed'},
       {ready:'__dabbirPlatformCustomerSupportThreadUi',dataset:'dabbirPlatformSupportThreadUi',selector:'script[data-dabbir-platform-support-thread-ui="1"]',src:'/api/platform-customer-support-thread-ui?v=20260907-1',error:'dabbir_platform_support_thread_ui_load_failed'},
     ];

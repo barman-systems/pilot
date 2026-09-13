@@ -1,0 +1,134 @@
+{
+  "schema_version": 2,
+  "status": "PARTIALLY_VERIFIED",
+  "purpose": "Read-only live authority baseline for incremental consolidation. This file is evidence and classification input, not permission to delete or weaken any database object.",
+  "repository": "barman-systems/pilot",
+  "source_main_sha": "0beff1becf981fc85ef473921f50c421d5b04bf1",
+  "production_sha": "0beff1becf981fc85ef473921f50c421d5b04bf1",
+  "production_full_journey_run": 34626575060,
+  "project_ref": "fphpoysqdsceniwduxjq",
+  "collection_mode": "READ_ONLY",
+  "live_metrics": {
+    "public_tables": 140,
+    "public_tables_rls_enabled": 140,
+    "public_tables_force_rls": 90,
+    "app_function_signatures": 466,
+    "app_security_definer_functions": 358,
+    "dabbir_scoped_function_signatures": 445,
+    "dabbir_scoped_security_definer_functions": 337,
+    "public_barman_function_signatures": 21,
+    "public_barman_security_definer_functions": 21,
+    "non_internal_triggers": 145,
+    "tables_with_triggers": 74,
+    "indexes": 773,
+    "supabase_security_advisor_warnings": 9,
+    "supabase_unused_index_advisories": 131
+  },
+  "execution_grants": {
+    "postgres": {"functions": 466, "security_definer": 358},
+    "service_role": {"functions": 351, "security_definer": 272},
+    "authenticated": {"functions": 68, "security_definer": 21},
+    "PUBLIC": {"functions": 8, "security_definer": 2}
+  },
+  "public_execute_security_definer_candidates": [
+    "dabbir_private.allocate_customer_number_from_business()",
+    "dabbir_private.allocate_customer_number_if_real(uuid)"
+  ],
+  "authenticated_security_definer_advisories": [
+    "public.dabbir_activate_owner_policy",
+    "public.dabbir_activity_profile_v1",
+    "public.dabbir_activity_service_configure_v1",
+    "public.dabbir_knowledge_propose_v2",
+    "public.dabbir_knowledge_review_v2",
+    "public.dabbir_owner_activity_booking_v1",
+    "public.dabbir_owner_booking_locations_v1",
+    "public.dabbir_owner_policy_candidates",
+    "public.dabbir_set_owner_policy_state"
+  ],
+  "advisor_observation": {
+    "all_nine_have_authenticated_execute": true,
+    "all_nine_are_security_definer": true,
+    "all_nine_use_auth_uid": true,
+    "all_nine_reference_business_context": true,
+    "note": "Advisor findings are exposure-review candidates, not proof of an exploit and not permission to convert SECURITY DEFINER blindly."
+  },
+  "production_schema_lineage": {
+    "state": "AHEAD_OF_MERGED_MAIN",
+    "tracking_issue": 731,
+    "open_pr": 728,
+    "open_pr_head": "9de8123c5b07b29ebbc5282aef69a8d684389d5d",
+    "applied_but_not_merged_migrations": [
+      "20260911170343_barman_ceo_fresh_reality_context_v1",
+      "20260911170415_barman_ceo_situation_decision_prepare_v1",
+      "20260911170739_barman_ceo_runtime_semantic_route_v1"
+    ],
+    "observed_effect": "The original DABBIR inventory remains 445 signatures; the three already-applied BARMAN executive migrations account for the live app-scope increase to 466 signatures and 358 SECURITY DEFINER functions.",
+    "rollback_or_delete_authorized": false
+  },
+  "existing_machine_readable_sources": {
+    "dabbir_function_inventory": "docs/architecture/current-live-sql-ownership.json",
+    "focused_function_inventory": "docs/architecture/live-sql-ownership.json",
+    "critical_trigger_inventory": "docs/architecture/trigger-callers.json",
+    "api_ast_audit": "scripts/dabbir-architecture-audit.mjs",
+    "architecture_ledger": "docs/architecture/DABBIR_MODULAR_MONOLITH.md"
+  },
+  "known_inventory_drift": {
+    "current_live_sql_ownership_observed_function_signatures": 445,
+    "current_live_sql_ownership_observed_dynamic_sql_candidates": 11,
+    "current_live_dabbir_function_signatures": 445,
+    "current_live_dynamic_sql_heuristic_candidates": 12,
+    "interpretation": "Function count is stable for DABBIR scope, but dynamic-SQL candidate count drifted. Definitions/callers must be re-read before any legacy deletion."
+  },
+  "trigger_hotspots": [
+    {"table": "public.dabbir_appointments", "trigger_count": 16, "classification": "REVIEW_REQUIRED"},
+    {"table": "public.dabbir_businesses", "trigger_count": 10, "classification": "REVIEW_REQUIRED"},
+    {"table": "public.dabbir_memberships", "trigger_count": 5, "classification": "REVIEW_REQUIRED"},
+    {"table": "public.dabbir_operational_payments", "trigger_count": 5, "classification": "REVIEW_REQUIRED"},
+    {"table": "public.dabbir_whatsapp_connections", "trigger_count": 5, "classification": "REVIEW_REQUIRED"}
+  ],
+  "booking_authority_candidates": {
+    "confirmed_existing_entrypoints": [
+      "public.dabbir_owner_activity_booking_v1",
+      "public.dabbir_semantic_execute_v2",
+      "public.dabbir_whatsapp_ai_create_booking",
+      "public.dabbir_whatsapp_ai_reschedule_booking",
+      "public.dabbir_whatsapp_ai_cancel_booking",
+      "public.dabbir_salon_quick_book",
+      "public.dabbir_salon_quick_book_idempotent",
+      "public.dabbir_salon_rebook",
+      "public.dabbir_salon_transition_appointment"
+    ],
+    "non_canonical_or_special_purpose_candidates_requiring_body_and_caller_proof": [
+      "public.dabbir_demo_book_appointment",
+      "public.dabbir_platform_operational_action_v1",
+      "dabbir_private.auto_confirm_paid_deposit",
+      "dabbir_private.sync_appointment_payment_status"
+    ],
+    "current_state": "MULTIPLE_OPERATION_SPECIFIC_WRITERS",
+    "deletion_authorized": false
+  },
+  "authority_classification_contract": {
+    "allowed": ["AUTHORITY", "VALIDATOR", "HELPER", "SIDE_EFFECT", "LEGACY", "UNKNOWN"],
+    "legacy_requires_zero_callers_proof": true,
+    "unknown_requires_investigation": true,
+    "shared_table_write_does_not_prove_duplicate_authority": true
+  },
+  "blind_spots": [
+    "dynamic SQL",
+    "unqualified SQL calls",
+    "remote Edge-function callers not represented by repository AST",
+    "external provider callbacks",
+    "rare cron/recovery paths",
+    "runtime callers not observable in the current evidence window"
+  ],
+  "hard_invariants": {
+    "llm_is_authority": false,
+    "channel_is_business_logic_owner": false,
+    "unproven_legacy_deletion_allowed": false,
+    "mass_security_definer_conversion_allowed": false,
+    "mass_trigger_removal_allowed": false,
+    "mass_unused_index_removal_allowed": false,
+    "rls_weakening_allowed": false
+  },
+  "next_required_slice": "Refresh and classify business-sensitive function/trigger callers against this exact live baseline, starting with the nine authenticated SECURITY DEFINER advisories and booking execution writers."
+}

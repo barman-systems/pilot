@@ -19,6 +19,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'vercel-ignore-if-unaffected.sh'
+      - 'docs/audits/DABBIR_*PRODUCTION_SMOKE.sql'
       - 'test/ai-full-customer-journey-v2.mjs'
       - 'test/run-ai-full-customer-journey-en.mjs'
       - 'test/dabbir-cross-tenant-isolation.mjs'
@@ -33,6 +34,8 @@ on:
       - 'config/barman-integration-contract.json'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - '.github/scripts/dabbir-bar12-*'
+      - '.github/scripts/dabbir-booking-owner-journey.mjs'
+      - '.github/scripts/dabbir-internal-visual-summary.mjs'
       - 'test/dabbir-bar12-*'
       - 'supabase/migrations/*dabbir*'
       - 'supabase/functions/barman-qa-suite-runner/**'
@@ -189,9 +192,18 @@ jobs:
 
       - name: Install WebKit journey runner
         if: steps.journey-mode.outputs.ready == 'true'
+        shell: bash
         run: |
-          npm install --no-save playwright@1.62.1
-          npx playwright install --with-deps webkit
+          set -euo pipefail
+          # Playwright owns the pinned WebKit build. A stale/unrelated Google Chrome
+          # apt source must not consume the bounded Production verification window.
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then
+              sudo rm -f "$source"
+            fi
+          done
+          npm install --no-save --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          node node_modules/playwright/cli.js install --with-deps webkit
 
       - name: Run AI full customer journey against exact Production
         if: steps.journey-mode.outputs.ready == 'true'

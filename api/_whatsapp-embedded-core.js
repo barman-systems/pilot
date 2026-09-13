@@ -9,6 +9,8 @@ import {
 import { withServerReadTimeout } from './_server-read-timeout.js';
 
 const WHATSAPP_DATA_TIMEOUT_MS = 10_000;
+const TOKEN_CONTEXT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TOKEN_CONTEXT_TAG_RE = /^ctx1\.([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.([A-Za-z0-9_-]+)$/i;
 
 function firstEnv(...names) {
   for (const name of names) {
@@ -90,8 +92,12 @@ async function discoverAppIdFromExistingToken(config) {
   try {
     const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/app`);
     url.searchParams.set('fields', 'id');
-    url.searchParams.set('access_token', token);
-    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { accept: 'application/json', authorization: `Bearer ${token}` },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     const payload = await response.json().catch(() => ({}));
     const id = String(payload?.id || '').trim();
     if (!response.ok || !/^[0-9]{5,40}$/.test(id)) return '';
@@ -161,28 +167,41 @@ function keyFor(config, businessId, keyVersion = config.encryptionKeyVersion) {
     .digest();
 }
 
+function tokenCryptoMaterial(row, businessId) {
+  const rawTag = String(row?.access_token_tag || '').trim();
+  const tagged = TOKEN_CONTEXT_TAG_RE.exec(rawTag);
+  if (tagged) return { contextId: tagged[1], tag: tagged[2] };
+  const storedContext = String(row?.token_context_id || '').trim();
+  return {
+    contextId: TOKEN_CONTEXT_UUID_RE.test(storedContext) ? storedContext : String(businessId),
+    tag: rawTag,
+  };
+}
+
 export function sealAccessToken(token, config, businessId) {
   const keyVersion = String(config.encryptionKeyVersion || 'whatsapp_v1');
+  const contextId = String(businessId);
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', keyFor(config, businessId, keyVersion), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', keyFor(config, contextId, keyVersion), iv);
   const ciphertext = Buffer.concat([cipher.update(String(token), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  const tag = cipher.getAuthTag().toString('base64url');
   return {
     access_token_ciphertext: ciphertext.toString('base64url'),
     access_token_iv: iv.toString('base64url'),
-    access_token_tag: tag.toString('base64url'),
+    access_token_tag: TOKEN_CONTEXT_UUID_RE.test(contextId) ? `ctx1.${contextId}.${tag}` : tag,
     token_key_version: keyVersion,
   };
 }
 
 export function openAccessToken(row, config, businessId) {
   const keyVersion = String(row.token_key_version || 'whatsapp_v1');
+  const material = tokenCryptoMaterial(row, businessId);
   const decipher = crypto.createDecipheriv(
     'aes-256-gcm',
-    keyFor(config, businessId, keyVersion),
+    keyFor(config, material.contextId, keyVersion),
     Buffer.from(String(row.access_token_iv || ''), 'base64url'),
   );
-  decipher.setAuthTag(Buffer.from(String(row.access_token_tag || ''), 'base64url'));
+  decipher.setAuthTag(Buffer.from(material.tag, 'base64url'));
   const plaintext = Buffer.concat([
     decipher.update(Buffer.from(String(row.access_token_ciphertext || ''), 'base64url')),
     decipher.final(),
@@ -299,13 +318,20 @@ async function graphFetch(config, path, { method = 'GET', token, query, body } =
 export async function exchangeEmbeddedCode(config, code) {
   if (!config.ready) throw Object.assign(new Error('META_EMBEDDED_SIGNUP_PLATFORM_NOT_CONFIGURED'), { status: 503 });
   const url = new URL(`https://graph.facebook.com/${encodeURIComponent(config.graphVersion)}/oauth/access_token`);
-  url.searchParams.set('client_id', config.appId);
-  url.searchParams.set('client_secret', config.appSecret);
-  url.searchParams.set('code', String(code));
+  const form = new URLSearchParams();
+  form.set('client_id', config.appId);
+  form.set('client_secret', config.appSecret);
+  form.set('code', String(code));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload?.access_token) {
       const error = new Error(String(payload?.error?.message || 'META_CODE_EXCHANGE_FAILED').slice(0, 300));

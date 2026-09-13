@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "status": "VERIFIED",
+  "repository": "barman-systems/pilot",
+  "source_main_sha": "8cee4312f48c011045789851c366efbbc679eccf",
+  "runtime_production_sha": "12319b8dead2067833de81d868bebfe1de5ece73",
+  "runtime_production_deployment": "dpl_DQ54YHYBJ13YEdsFyr36ZuFzASQq",
+  "tracking_issue": 738,
+  "canonical_repository_migration": {
+    "version": "20260911184500",
+    "name": "barman_ceo_strict_closed_loop_v1",
+    "path": "supabase/migrations/20260911184500_barman_ceo_strict_closed_loop_v1.sql"
+  },
+  "root_cause": {
+    "classification": "GENERATED_REMOTE_VERSION_DIVERGED_FROM_REPOSITORY_VERSION",
+    "remote_generated_version_before_repair": "20260911190712",
+    "repository_version": "20260911184500",
+    "remote_name_matched_repository_name": true,
+    "tracked_statement_md5": "7174ce8a2b77b8d54d76451d60cc1b0f",
+    "repository_comment_statements_missing_before_repair": true
+  },
+  "repair": {
+    "mode": "GUARDED_SINGLE_TRANSACTION",
+    "first_attempt_parse_error_changed_state": false,
+    "function_bodies_changed": false,
+    "authorization_changed": false,
+    "rls_changed": false,
+    "tenant_data_changed": false,
+    "migration_history_version_before": "20260911190712",
+    "migration_history_version_after": "20260911184500",
+    "missing_repository_comments_applied": [
+      "public.barman_executive_claim_v1(text,text,integer)",
+      "public.barman_executive_verify_command_v1(uuid,text,text,text,jsonb)",
+      "public.barman_executive_rollup_v1()"
+    ]
+  },
+  "pre_and_post_function_evidence": {
+    "public.barman_executive_claim_v1": {
+      "definition_md5": "2ceabc16c01018442776b31c9df98fe1",
+      "search_path": "pg_catalog, public, dabbir_private, pg_temp",
+      "acl": "postgres=X/postgres,service_role=X/postgres"
+    },
+    "public.barman_executive_verify_command_v1": {
+      "definition_md5": "b56d82421ea0bd2eb7d91fa72bccb91b",
+      "search_path": "pg_catalog, public, dabbir_private, pg_temp",
+      "acl": "postgres=X/postgres,service_role=X/postgres"
+    },
+    "public.barman_executive_rollup_v1": {
+      "definition_md5": "dc8a561908808bd4dcad75b455c4b09e",
+      "search_path": "pg_catalog, public, dabbir_private, pg_temp",
+      "acl": "postgres=X/postgres,service_role=X/postgres"
+    },
+    "public.barman_executive_self_diagnostic_v1": {
+      "definition_md5": "3f494bae01084b97d4dc7ca74469ba60",
+      "search_path": "pg_catalog, public, dabbir_private, pg_temp",
+      "acl": "postgres=X/postgres,service_role=X/postgres"
+    }
+  },
+  "post_repair_history": {
+    "version": "20260911184500",
+    "name": "barman_ceo_strict_closed_loop_v1",
+    "statement_count": 1,
+    "statement_md5": "7174ce8a2b77b8d54d76451d60cc1b0f",
+    "generated_remote_version_still_present": false
+  },
+  "supersedes_lineage_state_in": [
+    "docs/architecture/database-authority-baseline-v2.json",
+    "docs/architecture/execution-writer-map-v1.json",
+    "docs/architecture/execution-writer-map-v1-validation.json"
+  ],
+  "execution_ddl_gate": {
+    "previous_state": "BLOCKED_BY_LINEAGE_MISMATCH",
+    "current_state": "LINEAGE_BLOCKER_CLOSED",
+    "new_execution_ddl_allowed_by_lineage_only": true,
+    "note": "This closes only the migration-lineage blocker. Every execution DDL slice still requires its own security, isolation, rollback and Production acceptance gates."
+  }
+}

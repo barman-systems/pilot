@@ -25,7 +25,7 @@ test('iPad WebKit journey runs inside the already-authorized canonical customer 
   assert.match(wrapper,/IPAD_WEBKIT_JOURNEY_PASS/);
 });
 
-test('iPad test follows the real 701-920px shell contract: menu button opens transformed sidebar before navigation',()=>{
+test('iPad test follows the real 701-920px shell contract and proves each menu handler transition before navigation',()=>{
   assert.match(shell,/@media\(max-width:920px\)\{[^}]*\.shell\{grid-template-columns:1fr\}\.side\{position:fixed;/);
   assert.match(shell,/\.side\.open\{transform:translateX\(0\)!important\}/);
   assert.match(shell,/\.mobileMenu\{display:block;/);
@@ -35,9 +35,13 @@ test('iPad test follows the real 701-920px shell contract: menu button opens tra
   assert.match(wrapper,/#side\.open #nav \[data-screen=\"operations\"\]:visible/);
   assert.match(wrapper,/BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING/);
   assert.match(wrapper,/BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING/);
+  assert.match(wrapper,/DABBIR_IPAD_CONVERSATIONS_MENU_TRANSITION/);
+  assert.match(wrapper,/DABBIR_IPAD_OPERATIONS_MENU_TRANSITION/);
+  assert.equal((wrapper.match(/document\.querySelector\('#menuBtn'\)\?\.click\(\)/g)||[]).length,2);
+  assert.equal((wrapper.match(/MenuTransition\.side_open/g)||[]).length,2);
 });
 
-test('iPad sidebar targets must be truly inside the viewport and pointer-hit-testable before Playwright clicks',()=>{
+test('iPad sidebar targets stay inside the viewport and pointer-hit-testable before native navigation events',()=>{
   assert.match(wrapper,/DABBIR_IPAD_CONVERSATIONS_NAV_STATE/);
   assert.match(wrapper,/DABBIR_IPAD_OPERATIONS_NAV_STATE/);
   assert.match(wrapper,/inside_viewport:/);
@@ -49,15 +53,16 @@ test('iPad sidebar targets must be truly inside the viewport and pointer-hit-tes
   assert.equal((wrapper.match(/rect\.right <= window\.innerWidth/g)||[]).length,2);
   assert.equal((wrapper.match(/rect\.top >= 0/g)||[]).length,2);
   assert.equal((wrapper.match(/rect\.bottom <= window\.innerHeight/g)||[]).length,2);
+  assert.equal((wrapper.match(/target\?\.click\(\)/g)||[]).length,2);
   assert.doesNotMatch(wrapper,/style\.display\s*=\s*['\"](?:flex|block|grid)['\"]/);
   assert.doesNotMatch(wrapper,/dispatchEvent\(/);
 });
 
 test('each iPad sidebar navigation proves the responsive shell closes after a successful destination change',()=>{
   assert.match(wrapper,/DABBIR_IPAD_CONVERSATIONS_TRANSITION/);
-  assert.match(wrapper,/conversationsTransition\.active && !conversationsTransition\.sidebar_open/);
+  assert.match(wrapper,/conversationsTransition\.target_found && conversationsTransition\.active && !conversationsTransition\.sidebar_open/);
   assert.match(wrapper,/DABBIR_IPAD_OPERATIONS_TRANSITION/);
-  assert.match(wrapper,/operationsTransition\.active && !operationsTransition\.sidebar_open/);
+  assert.match(wrapper,/operationsTransition\.target_found && operationsTransition\.active && !operationsTransition\.sidebar_open/);
   assert.match(wrapper,/menu-opened-responsive-sidebar/);
 });
 

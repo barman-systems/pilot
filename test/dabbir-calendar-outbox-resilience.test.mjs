@@ -56,7 +56,7 @@ test('appointment delete preserves operational history as cancellation',()=>{
 
 test('rescheduling preserves appointment duration',()=>{
   assert.match(appointmentApi,/function durationMs\(appointment\)/);
-  assert.match(appointmentApi,/patch\.ends_at=new Date\(start\.getTime\(\)\+durationMs\(current\)\)/);
+  assert.match(appointmentApi,/appointmentTimeWindow\(start,durationMs\(current\)\)/);
 });
 
 test('calendar outbox worker is authenticated and scheduled within five minutes',()=>{

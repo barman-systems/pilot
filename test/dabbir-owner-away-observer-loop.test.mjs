@@ -38,7 +38,8 @@ test('owner-away inactive state is cached instead of refetched on every DOM muta
 
 test('owner decision-memory MutationObserver cannot self-trigger through its button label',()=>{
   const {body}=renderClient(memoryUiHandler);
-  assert.match(body,/const hasCandidate=state\.candidates\.length>0/);
+  assert.match(body,/const pending=state\.candidates\.length\+state\.proposals\.filter/);
+  assert.match(body,/const hasCandidate=pending>0/);
   assert.match(body,/const nextLabel=hasCandidate\?/);
   assert.match(body,/if\(button\.textContent!==nextLabel\)button\.textContent=nextLabel/);
   assert.doesNotMatch(body,/button\.textContent=state\.candidates\.length\?/);

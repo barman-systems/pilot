@@ -73,7 +73,9 @@ const script=String.raw`(()=>{
     if(method==='POST'&&url.startsWith('/api/dabbir-runtime')){
       let body=null;try{body=typeof init?.body==='string'?JSON.parse(init.body):null}catch{}
       if(body?.action==='create_business'){
-        const code=selectedCountry();
+        const requested=String(body.country_code||'').toUpperCase();
+        const code=requested||selectedCountry();
+        // Explicit form state wins over a hidden onboarding field. The server validates the market.
         localStorage.setItem('dabbir_country',code);
         const next={...body,country_code:code,locale:localeFor(code,body.locale)};
         return baseFetch('/api/gcc-create-business',{...init,body:JSON.stringify(next)});

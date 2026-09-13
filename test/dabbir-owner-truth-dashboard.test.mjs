@@ -48,19 +48,10 @@ test('legacy owner endpoint redirects to canonical owner dashboard',()=>{
   assert.match(body,/canonical owner dashboard/i);
 });
 
-test('OTP-native owner dashboard uses the owner session data contract without a second login',()=>{
-  const headers={};
-  let body='';
-  const res={statusCode:0,setHeader(k,v){headers[String(k).toLowerCase()]=v},end(v=''){body=String(v)}};
+test('retired v2 layout redirects through the authenticated canonical gateway',()=>{
+  const headers={};let body='';const res={setHeader(k,v){headers[k]=v},end(v){body=v}};
   ownerDashboardV2({method:'GET'},res);
-  assert.equal(res.statusCode,200);
-  assert.equal(headers['cache-control'],'no-store, max-age=0');
-  assert.equal(headers['x-dabbir-owner-dashboard'],'otp-native-v2');
-  assert.match(body,/owner-dashboard-data\?action=overview/);
-  assert.match(body,/owner-dashboard-data\?action=search/);
-  assert.match(body,/تم التحقق من دخول المالك عبر OTP/);
-  assert.doesNotMatch(body,/api\/auth\/login/);
-  assert.doesNotMatch(body,/type="password"/);
+  assert.equal(res.statusCode,302);assert.equal(headers.location,'/owner-dashboard');assert.doesNotMatch(body,/<script|OTP/);
 });
 
 test('permanent owner route requires OTP gate before authenticated dashboard',()=>{

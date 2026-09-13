@@ -77,6 +77,18 @@ const script = String.raw`(()=>{
     return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
   }
 
+  function authFailureMessage(response,payload){
+    if(response?.status===429||payload?.error==='AUTH_RATE_LIMITED'){
+      return localized('طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.','Too many requests in a short time. Wait a little, then try again.');
+    }
+    if(response?.status>=500||payload?.retryable===true){
+      return authMode==='signup'
+        ? localized('تعذر تأكيد طلب التسجيل الآن. انتظر قليلًا ثم حاول مرة أخرى.','We could not confirm your signup request. Wait a little, then try again.')
+        : localized('خدمة الدخول غير متاحة مؤقتًا. انتظر قليلًا ثم حاول مرة أخرى.','Sign-in is temporarily unavailable. Wait a little, then try again.');
+    }
+    return T().invalid;
+  }
+
   function validNumericMfaCode(code){
     return code.length>=6&&code.length<=8&&[...code].every(char=>char>='0'&&char<='9');
   }
@@ -221,7 +233,7 @@ const script = String.raw`(()=>{
       event.preventDefault();
       const btn=document.querySelector('#authSubmit');
       const msg=document.querySelector('#authMsg');
-      if(!btn) return;
+      if(!btn||btn.disabled) return;
       btn.disabled=true;
       if(msg) msg.textContent='';
 
@@ -245,14 +257,14 @@ const script = String.raw`(()=>{
           }),
         });
 
-        if(authMode==='signup'&&j?.verification_required){
-          publishAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
-          if(msg) msg.textContent=T().verification;
-          return;
-        }
         if(!r.ok||!j?.ok){
           publishAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_REJECTED');
-          if(msg) msg.textContent=T().invalid;
+          if(msg) msg.textContent=authFailureMessage(r,j);
+          return;
+        }
+        if(authMode==='signup'&&j.verification_required===true){
+          publishAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
+          if(msg) msg.textContent=T().verification;
           return;
         }
 

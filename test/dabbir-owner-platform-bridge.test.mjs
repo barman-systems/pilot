@@ -1,22 +1,88 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-const [brokerClient,bridge,actionBridge,supportBridge,teamBridge,copilot,diagnostic,customerProfile,incidentApi,logout,ui14,ui15,ui16,ui17,ui18,ui19,ui20,ui21,gateway,migration,searchMigration,supportMigration,incidentMigration,feedbackMigration]=await Promise.all([
- read('api/_owner-broker-client.js'),read('api/owner-platform-bridge.js'),read('api/owner-action-bridge.js'),read('api/owner-support-bridge.js'),read('api/owner-team-bridge.js'),read('api/owner-platform-copilot.js'),read('api/owner-customer-diagnostic.js'),read('api/owner-customer-profile.js'),read('api/owner-incident-center.js'),read('api/auth/owner-logout.js'),read('api/owner-command-center-v14.js'),read('api/owner-command-center-v15.js'),read('api/owner-command-center-v16.js'),read('api/owner-command-center-v17.js'),read('api/owner-command-center-v18.js'),read('api/owner-command-center-v19.js'),read('api/owner-command-center-v20.js'),read('api/owner-command-center-v21.js'),read('api/owner-dashboard-gateway.js'),read('supabase/migrations/20260830102000_dabbir_platform_owner_action_bridge_v2.sql'),read('supabase/migrations/20260827155045_dabbir_platform_customer_search_escape_fix_v3.sql'),read('supabase/migrations/20260830112000_dabbir_platform_owner_support_summary_v1.sql'),read('supabase/migrations/20260830140500_dabbir_platform_owner_incident_center_v1.sql'),read('supabase/migrations/20260830190500_dabbir_platform_owner_feedback_inbox_v1.sql')]);
-test('owner broker client keeps owner session server-side and never exposes privileged credentials',()=>{assert.match(brokerClient,/__Host-dabbir_owner_session/);assert.match(brokerClient,/action:'owner_data'/);assert.match(brokerClient,/session_token/);assert.doesNotMatch(brokerClient,/SUPABASE_SERVICE_ROLE_KEY/);for(const f of [bridge,actionBridge,supportBridge,teamBridge,copilot,diagnostic,customerProfile,incidentApi,ui14,ui15,ui16,ui17,ui18,ui19,ui20,ui21])assert.doesNotMatch(f,/SUPABASE_SERVICE_ROLE_KEY/)});
-test('owner platform bridge uses brokered reads and exposes editable business profile',()=>{assert.match(bridge,/ownerBroker\(req,'platform_bridge'/);assert.match(bridge,/req\.method!=='GET'/);assert.match(bridge,/business:payload\.business/);assert.match(bridge,/recognized_sales_aed/);assert.match(bridge,/operations_verified:true/);assert.doesNotMatch(bridge,/serviceKey|apikey:|authorization:`Bearer/)});
-test('owner action bridge is explicitly allowlisted confirmed and brokered',()=>{assert.match(actionBridge,/requireSameOrigin/);assert.match(actionBridge,/confirmation!=='EXECUTE'/);assert.match(actionBridge,/ownerBroker\(req,'execute'/);assert.match(actionBridge,/ownerBroker\(req,'audit'/);for(const action of ['set_inventory','set_product_active','cancel_pending_order','set_service_active','support_create_case','support_add_note','support_set_status','update_business_profile','update_customer_profile'])assert.match(actionBridge,new RegExp(action));assert.doesNotMatch(actionBridge,/create_expense|disconnect|set_member_role|access_token_ciphertext/)});
-test('database action function remains service-role only and audited atomically',()=>{assert.match(migration,/security definer/);assert.match(migration,/grant execute[\s\S]*service_role/);assert.match(migration,/dabbir_platform_owner_audit/);assert.doesNotMatch(migration,/stripe|refund|create_expense|set_member_role/)});
-test('customer search contract remains accounts plus businesses',()=>{assert.match(searchMigration,/jsonb_build_object\('accounts',v_result,'count',v_count\)/);assert.match(ui14,/Array\.isArray\(j\.accounts\)/);assert.match(ui14,/Array\.isArray\(x\.businesses\)/)});
-test('unified owner command center has no legacy iframe or tenant-session dependency',()=>{assert.match(ui14,/v14-unified/);for(const hash of ['home','customers','operations','ai','governance','system'])assert.match(ui14,new RegExp(`id=\\"${hash}\\"`));assert.match(ui14,/owner-platform-bridge\?business_id/);assert.match(ui14,/owner-support-bridge\?customer_no/);assert.match(ui14,/owner-team-bridge\?business_id/);assert.match(ui14,/owner-platform-copilot/);assert.match(ui14,/owner-action-bridge/);assert.doesNotMatch(ui14,/<iframe/);assert.match(ui15,/owner-command-center-v14\.js/);assert.match(ui16,/owner-command-center-v15\.js/);assert.match(ui17,/owner-command-center-v16\.js/);assert.match(ui18,/owner-command-center-v17\.js/);assert.match(ui19,/owner-command-center-v18\.js/);assert.match(ui20,/owner-command-center-v19\.js/);assert.match(ui21,/owner-command-center-v20\.js/);assert.match(gateway,/import dashboard from '\.\/_owner-command-center-runtime\.generated\.js'/);assert.doesNotMatch(gateway,/import dashboard from '\.\/owner-command-center(?:-v\d+)?\.js'/)});
-test('owner profile editing is audited identity-safe and business type uses supported DABBIR activities only',()=>{assert.match(ui17,/تعديل بيانات النشاط/);assert.match(ui17,/update_business_profile/);assert.match(ui18,/تعديل بيانات صاحب حساب دبّر/);assert.match(ui18,/update_customer_profile/);assert.match(ui18,/لا تغيّر بريد أو هاتف تسجيل الدخول/);assert.match(customerProfile,/ownerBroker\(req,'customer_profile'/);assert.doesNotMatch(customerProfile,/PATCH|DELETE|SUPABASE_SERVICE_ROLE_KEY/);for(const type of ['store','laundry','car_wash','clinic','creator','salon','real_estate','services','other'])assert.match(ui19,new RegExp(type));assert.match(ui19,/نوع النشاط من قائمة دبّر المعتمدة فقط/)});
-test('owner support and team reads are brokered and read-only',()=>{assert.match(supportBridge,/ownerBroker\(req,'support'/);assert.match(teamBridge,/ownerBroker\(req,'team'/);assert.match(teamBridge,/req\.method!=='GET'/);assert.doesNotMatch(teamBridge,/PATCH|set_member_role|employee_removed|employee_suspended/);assert.match(supportMigration,/security definer/);assert.match(supportMigration,/grant execute[\s\S]*service_role/)});
-test('owner copilot is same-origin brokered grounded and has deterministic fallback',()=>{assert.match(copilot,/requireSameOrigin/);assert.match(copilot,/ownerBroker\(req,'platform_bridge'/);assert.match(copilot,/generateDABBIRAiReply/);assert.match(copilot,/DETERMINISTIC_VERIFIED_FALLBACK/);assert.match(copilot,/FREE_TIER_ONLY/);assert.doesNotMatch(copilot,/apikey:|SUPABASE_SERVICE_ROLE_KEY/)});
-test('customer diagnostic is deterministic read-only and brokered',()=>{assert.match(diagnostic,/ownerBroker\(req,'diagnostic_raw'/);for(const code of ['BILLING_INACTIVE','WHATSAPP_DEGRADED','OUT_OF_STOCK','PENDING_ORDERS','RECENT_OWNER_CHANGES'])assert.match(diagnostic,new RegExp(code));assert.match(diagnostic,/timeline/);assert.doesNotMatch(diagnostic,/method:'PATCH'|method:'DELETE'|dabbir_platform_owner_action_v1/);assert.match(ui15,/تشخيص العميل/)});
-test('v16 turns complaint into deterministic guided resolution without new mutation calls',()=>{for(const category of ['ACCESS','WHATSAPP','BILLING','INVENTORY','ORDERS','TEAM','DATA','TECHNICAL','GENERAL'])assert.match(ui16,new RegExp(category));assert.match(ui16,/استيعاب المشكلة/);assert.match(ui16,/مسار الحل/);assert.match(ui16,/رد قصير للعميل/)});
-test('incident API is brokered same-origin for writes and separates incident state from business mutation',()=>{assert.match(incidentApi,/ownerBroker\(req,'incidents'/);assert.match(incidentApi,/ownerBroker\(req,'incident_action'/);assert.match(incidentApi,/requireSameOrigin/);assert.match(incidentApi,/operation==='create'/);assert.match(incidentApi,/operation==='update'/);assert.doesNotMatch(incidentApi,/SUPABASE_SERVICE_ROLE_KEY|dabbir_platform_owner_action_v1|stripe|refund/i)});
-test('incident persistence is service-role only with forced RLS SLA timeline and audited lifecycle',()=>{assert.match(incidentMigration,/dabbir_platform_owner_incidents/);assert.match(incidentMigration,/dabbir_platform_owner_incident_events/);assert.match(incidentMigration,/force row level security/);assert.match(incidentMigration,/grant select,insert,update[\s\S]*service_role/);assert.match(incidentMigration,/15 minutes/);assert.match(incidentMigration,/1 hour/);assert.match(incidentMigration,/4 hours/);assert.match(incidentMigration,/incident_create/);assert.match(incidentMigration,/incident_update/);assert.doesNotMatch(incidentMigration,/grant .*authenticated/)});
-test('v20 provides complete incident response workflow and playbooks without opening financial or identity mutations',()=>{assert.match(ui20,/Incident Center/);for(const category of ['ACCESS','BILLING','WHATSAPP','INVENTORY','ORDERS','TEAM','DATA','TECHNICAL','INTEGRATION','GENERAL'])assert.match(ui20,new RegExp(category));for(const queue of ['owner','support','engineering','billing','identity','external_provider'])assert.match(ui20,new RegExp(queue));for(const phrase of ['SLA','Playbook','السبب الجذري','Timeline','مكتبة الإصلاحات الآمنة'])assert.match(ui20,new RegExp(phrase));assert.match(ui20,/owner-incident-center/);assert.doesNotMatch(ui20,/refund\(|stripe|change_password|updateUserById/i)});
-test('v21 exposes submitted feedback to platform owner through the brokered overview only',()=>{assert.match(ui21,/ملاحظات المستخدمين/);assert.match(ui21,/owner-dashboard-data\?action=overview/);assert.match(ui21,/average_rating/);assert.match(ui21,/customer_no/);assert.match(feedbackMigration,/dabbir_feedback/);assert.match(feedbackMigration,/dabbir_platform_owner_overview_base_v1/);assert.match(feedbackMigration,/grant execute[\s\S]*service_role/);assert.doesNotMatch(ui21,/SUPABASE_SERVICE_ROLE_KEY|apikey:|authorization:`Bearer/)});
-test('owner logout clears owner cookie through same-origin POST',()=>{assert.match(logout,/requireSameOrigin/);assert.match(logout,/req\.method!=='POST'/);assert.match(logout,/Max-Age=0/)});
+import {Readable} from 'node:stream';
+import {ownerFixture,ID} from './fixtures/owner-broker.mjs';
+process.env.DABBIR_OWNER_BROKER_URL='https://owner-broker.test';
+const handlers=Object.fromEntries(await Promise.all(['owner-dashboard-data','owner-action-bridge','owner-support-bridge','owner-team','owner-ceo-command','owner-decision','owner-incident-center','owner-dashboard-gateway'].map(async name=>[name,(await import('../api/'+name+'.js')).default])));
+const {ownerBroker}=await import('../api/_owner-broker-client.js');
+export async function invoke(name,{method='GET',url='/api/'+name,body,cookie='__Host-dabbir_owner_session=fixture',origin='https://dabbir.example'}={}){
+ const req=Readable.from(body===undefined?[]:[Buffer.from(JSON.stringify(body))]);Object.assign(req,{method,url,headers:{host:'dabbir.example',origin,cookie}});
+ const out={headers:{},statusCode:0,body:null,setHeader(k,v){this.headers[k.toLowerCase()]=v},end(v){this.text=String(v||'');try{this.body=JSON.parse(this.text)}catch{}}};
+ await handlers[name](req,out);return out;
+}
+function fixture(t){const f=ownerFixture();t.mock.method(globalThis,'fetch',f.fetchBroker);return f}
+test('customer reply validates its persisted message receipt and reads the same scoped case',async t=>{
+ const f=fixture(t);f.state.cases.push({id:ID.case,customer_no:'DAB-900001',customer_visible:true,notes:[],messages:[]});
+ const response=await invoke('owner-support-bridge',{method:'POST',body:{operation:'REPLY_CUSTOMER',case_id:ID.case,customer_no:'DAB-900001',note:'Synthetic customer-visible reply'}});
+ assert.equal(response.statusCode,200);assert.equal(response.body.readback_verified,true);
+ assert.equal(f.state.cases[0].notes.length,0);assert.equal(f.state.cases[0].messages[0].body,'Synthetic customer-visible reply');
+ assert.equal((await invoke('owner-support-bridge',{method:'POST',body:{operation:'REPLY_CUSTOMER',case_id:ID.case,note:'Missing customer'}})).statusCode,400);
+});
+for(const name of Object.keys(handlers))test(name+' rejects an absent or malformed session without contacting the broker',async t=>{
+ const f=fixture(t);for(const cookie of ['', '__Host-dabbir_owner_session=%zz']){const r=await invoke(name,{cookie});assert.equal(r.statusCode,name==='owner-dashboard-gateway'?302:name==='owner-action-bridge'?405:401)}assert.equal(f.calls.length,0);
+});
+test('same-origin mutation is mandatory and null/array JSON bodies fail closed',async t=>{
+ const f=fixture(t);
+ for(const name of ['owner-action-bridge','owner-support-bridge','owner-team','owner-ceo-command','owner-decision','owner-incident-center']){
+  assert.equal((await invoke(name,{method:'POST',origin:'https://attacker.example',body:{}})).statusCode,403);
+  for(const body of [null,[]])assert.equal((await invoke(name,{method:'POST',body})).statusCode,400,name);
+ }assert.equal(f.calls.length,0);
+});
+test('request body cannot replace the cookie, broker command, or team operation',async t=>{
+ const f=fixture(t);await ownerBroker({headers:{cookie:'__Host-dabbir_owner_session=bound-cookie'}},'identity',{session_token:'attacker',action:'owner_otp_request',data_action:'team'});
+ assert.deepEqual(f.calls[0],{session_token:'bound-cookie',action:'owner_data',data_action:'identity'});
+});
+test('HTTP errors and malformed broker JSON cannot be reported as success',async t=>{
+ for(const response of [new Response('{'),new Response(JSON.stringify({ok:true}),{status:500}),new Response(JSON.stringify({ok:false,error:'DENIED'}))]){
+  t.mock.method(globalThis,'fetch',async()=>response);
+  const call=await ownerBroker({headers:{cookie:'__Host-dabbir_owner_session=x'}},'identity');assert.equal(call.payload.ok,false);assert.ok(call.status>=500);t.mock.restoreAll();
+ }
+});
+test('gateway verifies authority, escapes identity, and preserves cookie on transient failure',async t=>{
+ const f=fixture(t);f.state.identity.display_name='</script><script>alert(1)</script>';
+ let out=await invoke('owner-dashboard-gateway');assert.equal(out.statusCode,200);assert.doesNotMatch(out.text,/must-never-render|<script>alert\(1\)/);assert.match(out.text,/\\u003c\/script>/);
+ f.state.fail='verify';out=await invoke('owner-dashboard-gateway');assert.equal(out.statusCode,503);assert.equal(out.headers['set-cookie'],undefined);
+ out=await invoke('owner-dashboard-gateway',{cookie:'__Host-dabbir_owner_session=expired'});assert.equal(out.statusCode,302);assert.match(out.headers['set-cookie'],/Max-Age=0/);
+});
+test('all canonical read actions use their live broker envelope',async t=>{
+ const f=fixture(t);for(const action of ['overview','executive','identity','search','operations','feedback','audit','customer360','operation_entities']){
+  const params=new URLSearchParams({action,user_id:ID.customer,business_id:ID.business,entity_type:'PRODUCT'});
+  const out=await invoke('owner-dashboard-data',{url:'/api/owner-dashboard-data?'+params});assert.equal(out.statusCode,200,action);assert.equal(out.body.ok,true);
+  f.state.bad=action;assert.equal((await invoke('owner-dashboard-data',{url:'/api/owner-dashboard-data?'+params})).statusCode,502,action);f.state.bad=null;
+ }
+});
+test('operation persists, returns an audit receipt and verifies the exact entity field',async t=>{
+ const f=fixture(t),body={business_id:ID.business,entity_id:ID.entity,action:'PRODUCT_SET_ACTIVE',reason:'QA regression reason',confirmation:'EXECUTE PRODUCT_SET_ACTIVE',payload:{active:false}};
+ const out=await invoke('owner-action-bridge',{method:'POST',body});assert.equal(out.statusCode,200);assert.equal(out.body.readback_verified,true);assert.equal(f.state.entities.PRODUCT[0].active,false);assert.equal(out.body.result.audit_id,ID.audit);assert.equal(f.state.audit.length,1);
+ f.state.readbackFail=true;const partial=await invoke('owner-action-bridge',{method:'POST',body:{...body,payload:{active:true}}});assert.equal(partial.body.ok,true);assert.equal(partial.body.readback_verified,false);assert.equal(partial.body.retry_safe,false);
+});
+test('unsafe lifecycle actions, unknown actions and malformed values never execute',async t=>{
+ const f=fixture(t),base={business_id:ID.business,entity_id:ID.entity,reason:'QA test reason',payload:{active:true}};
+ for(const action of ['WHATSAPP_SET_STATUS','ORDER_SET_STATUS','BOOKING_SET_STATUS','__proto__','CONSTRUCTOR'])assert.equal((await invoke('owner-action-bridge',{method:'POST',body:{...base,action,confirmation:'EXECUTE '+action}})).statusCode,400);
+ for(const payload of [{active:'false'},{active:null}])assert.equal((await invoke('owner-action-bridge',{method:'POST',body:{...base,action:'PRODUCT_SET_ACTIVE',confirmation:'EXECUTE PRODUCT_SET_ACTIVE',payload}})).statusCode,400);
+ assert.equal(f.calls.length,0);
+});
+test('support create, note and resolution round-trip through the existing RPC and notes',async t=>{
+ const f=fixture(t);for(const body of [{operation:'CREATE',target_user_id:ID.customer,customer_no:'DAB-900001',business_id:ID.business,subject:'QA support',note:'First note',priority:'normal'},{operation:'ADD_NOTE',case_id:ID.case,customer_no:'DAB-900001',note:'Second note'},{operation:'UPDATE',case_id:ID.case,customer_no:'DAB-900001',status:'resolved',resolution:'QA resolved'}]){
+  const out=await invoke('owner-support-bridge',{method:'POST',body});assert.equal(out.statusCode,200);assert.equal(out.body.readback_verified,true);
+ }assert.equal(f.state.cases[0].notes.length,2);assert.equal(f.state.cases[0].status,'resolved');assert.equal(f.state.audit.length,3);
+});
+test('CEO create and each lifecycle mutation have independent readback results',async t=>{
+ const f=fixture(t);let out=await invoke('owner-ceo-command',{method:'POST',body:{operation:'create',command_text:'Create fixture mission',objective:'QA objective',priority:'P2',acceptance_criteria:['QA evidence']}});assert.equal(out.body.readback_verified,true);
+ for(const body of [{operation:'reprioritize',priority:'P0'},{operation:'set_due_at',due_at:'2026-09-08T12:00:00Z'},{operation:'set_due_at',due_at:null},{operation:'add_guidance',guidance:'QA guidance'},{operation:'cancel'},{operation:'resume'}]){out=await invoke('owner-ceo-command',{method:'POST',body:{...body,command_id:ID.command}});assert.equal(out.body.readback_verified,true,body.operation)}
+ f.state.bad='ceo_command_update';out=await invoke('owner-ceo-command',{method:'POST',body:{operation:'cancel',command_id:ID.command}});assert.equal(out.statusCode,502);assert.equal(out.body.retry_safe,false);
+});
+test('owner decision success requires the resolved decision and matching readback',async t=>{
+ fixture(t);const out=await invoke('owner-decision',{method:'POST',body:{escalation_id:ID.decision,resolution:'modify',note:'QA modification'}});assert.equal(out.statusCode,200);assert.equal(out.body.readback_verified,true);assert.equal(out.body.decision.decision.resolution,'modify');
+});
+test('incident create and update verify persisted state',async t=>{
+ fixture(t);let out=await invoke('owner-incident-center',{method:'POST',body:{operation:'create',customer_no:'DAB-900001',business_id:ID.business,category:'GENERAL',priority:'normal',summary:'QA incident',assigned_queue:'owner'}});assert.equal(out.body.readback_verified,true);
+ out=await invoke('owner-incident-center',{method:'POST',body:{operation:'update',incident_id:ID.case,status:'resolved',resolution:'QA resolved'}});assert.equal(out.body.readback_verified,true);
+});
+test('team resend uses the server email key and verifies delivery without real mail',async t=>{
+ const f=fixture(t);process.env.RESEND_API_KEY='synthetic-test-only';
+ let out=await invoke('owner-team',{method:'POST',body:{operation:'invite',email:'qa@example.invalid',role_code:'CUSTOM',resend_key:'injected'}});assert.equal(out.body.readback_verified,true);
+ out=await invoke('owner-team',{method:'POST',body:{operation:'invite_resend',invitation_id:ID.case,resend_key:'injected'}});assert.equal(out.body.readback_verified,true);
+ assert.equal(f.calls.findLast(c=>c.operation==='invite_resend').resend_key,'synthetic-test-only');delete process.env.RESEND_API_KEY;
+ out=await invoke('owner-team',{method:'POST',body:{operation:'suspend',target_user_id:ID.root}});assert.equal(out.statusCode,403);
+});

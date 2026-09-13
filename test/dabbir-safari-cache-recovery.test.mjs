@@ -35,7 +35,7 @@ test('unsupported shell methods retain 405 without running HTML transforms', () 
 });
 
 test('root shell bypasses stale Safari UI bundle versions', () => {
-  assert.match(recovery, /UI_CACHE_BUST = '20260903-chat-render-lifecycle-v3'/);
+  assert.match(recovery, /UI_CACHE_BUST = '20260908-owner-policy-read-v6'/);
   assert.match(recovery, /dabbir-ui-critical\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-ui-deferred\\\.js\\\?v=/);
   assert.match(recovery, /dabbir-owner-first-ui\\\?v=/);
@@ -100,7 +100,7 @@ test('root route uses Safari recovery shell and includes index.html', () => {
   const rootRewrite = vercel.rewrites.find((rewrite) => rewrite.source === '/');
   assert.equal(rootRoute?.dest, '/api/app-safari-recovery');
   assert.equal(rootRewrite?.destination, '/api/app-safari-recovery');
-  assert.equal(vercel.functions?.['api/app-safari-recovery.js']?.includeFiles, 'index.html');
+  assert.ok(String(vercel.functions?.['api/app-safari-recovery.js']?.includeFiles || '').includes('index.html'));
 });
 
 test('generated DABBIR UI bundles cannot remain fresh in Safari after a deployment', () => {

@@ -11,7 +11,7 @@
     '#loading{font-size:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important;background-image:url("/dabbir-app-icon.png")!important;background-repeat:no-repeat!important;background-position:center!important;background-size:96px 96px!important}',
     '.dabbirMobileBrand{display:none!important}',
     '.dabbirWhatsAppIdentity{margin-top:10px;padding:9px 10px;border:1px solid #2a2e33;border-radius:11px;background:#101214;font-size:10px;line-height:1.55;color:#f7f8f9}.dabbirWhatsAppIdentity b{display:block;font-size:9px;color:#979da5;margin-bottom:2px}.dabbirWhatsAppIdentity .number{font-weight:900;font-size:12px;direction:ltr;unicode-bidi:embed}.dabbirWhatsAppIdentity .verifiedName{display:block;margin-top:2px;color:#979da5;font-size:9px}',
-    '@media(max-width:700px){#loading{background-size:88px 88px!important}body.dabbirAppActive>.dabbirMobileBrand{display:none!important}}'
+    '@media(max-width:700px){html,body{width:100%!important;max-width:100%!important;overflow-x:hidden!important}#appShell,.shell,.main,.content,.screen{width:100%!important;max-width:100%!important;min-width:0!important}#appShell,.shell,.main,.content{overflow-x:hidden!important}.top,.bottomNav{width:100%!important;max-width:100vw!important}.top img{max-width:44px!important;max-height:44px!important;object-fit:contain!important}#loading{background-size:88px 88px!important}body.dabbirAppActive>.dabbirMobileBrand{display:none!important}.dabbirMobileBrand{width:0!important;height:0!important;max-width:0!important;max-height:0!important;overflow:hidden!important;pointer-events:none!important}#screen-conversations,#screen-conversations .chatGrid,#screen-conversations .chatList,#screen-conversations .chatPanel{min-width:0!important;max-width:100%!important}#screen-conversations .chatPanel{width:100%!important}}'
   ].join('');
   document.head.appendChild(style);
 
@@ -278,6 +278,144 @@
   }
 
   setTimeout(()=>{installMobileBrand();installIdempotentConversationStart();repairActionRequiredChats();syncAppActive();applyWhatsAppCardState();refreshWhatsAppStatus(true)},500);
+})();
+(()=>{
+  if(window.__dabbirGccReadinessLoaded)return;
+  window.__dabbirGccReadinessLoaded=true;
+
+  const GCC=Object.freeze({"AE":{"country_code":"AE","currency":"AED","minorUnits":2,"timezone":"Asia/Dubai","offset":"+04:00","prefix":"+971","vatStatus":"implemented","vatRate":5,"ar":"الإمارات العربية المتحدة","en":"United Arab Emirates","moneyAr":"درهم"},"SA":{"country_code":"SA","currency":"SAR","minorUnits":2,"timezone":"Asia/Riyadh","offset":"+03:00","prefix":"+966","vatStatus":"implemented","vatRate":15,"ar":"السعودية","en":"Saudi Arabia","moneyAr":"ريال سعودي"},"KW":{"country_code":"KW","currency":"KWD","minorUnits":3,"timezone":"Asia/Kuwait","offset":"+03:00","prefix":"+965","vatStatus":"not_implemented","vatRate":null,"ar":"الكويت","en":"Kuwait","moneyAr":"دينار كويتي"},"QA":{"country_code":"QA","currency":"QAR","minorUnits":2,"timezone":"Asia/Qatar","offset":"+03:00","prefix":"+974","vatStatus":"not_implemented","vatRate":null,"ar":"قطر","en":"Qatar","moneyAr":"ريال قطري"},"BH":{"country_code":"BH","currency":"BHD","minorUnits":3,"timezone":"Asia/Bahrain","offset":"+03:00","prefix":"+973","vatStatus":"implemented","vatRate":10,"ar":"البحرين","en":"Bahrain","moneyAr":"دينار بحريني"},"OM":{"country_code":"OM","currency":"OMR","minorUnits":3,"timezone":"Asia/Muscat","offset":"+04:00","prefix":"+968","vatStatus":"implemented","vatRate":5,"ar":"عُمان","en":"Oman","moneyAr":"ريال عماني"}});
+  const baseFetch=window.fetch.bind(window);
+  const ar=()=>String(document.documentElement.lang||'ar').toLowerCase()!=='en';
+  const selectedCountry=()=>{
+    const select=document.querySelector('#businessCountry');
+    const value=String(select?.value||localStorage.getItem('dabbir_country')||'AE').toUpperCase();
+    return GCC[value]?value:'AE';
+  };
+  const profileFor=code=>GCC[String(code||'').toUpperCase()]||GCC.AE;
+  const localeFor=(code,language)=>String(language||'').toLowerCase().startsWith('en')?'en-'+code:'ar-'+code;
+
+  function copy(){return ar()?{
+    country:'الدولة',currency:'العملة',derived:'تُحدد العملة تلقائيًا حسب الدولة ولا يمكن اختيارها بشكل منفصل.',profile:'إعدادات الدولة',timezone:'المنطقة الزمنية',phone:'مفتاح الهاتف'
+  }:{
+    country:'Country',currency:'Currency',derived:'Currency is set automatically from the selected country and cannot be chosen separately.',profile:'Country settings',timezone:'Time zone',phone:'Phone prefix'
+  }}
+
+  function refreshCountryField(){
+    const select=document.querySelector('#businessCountry');
+    if(!select)return;
+    const c=copy();
+    const label=document.querySelector('#businessCountryLabel');if(label)label.textContent=c.country;
+    [...select.options].forEach(option=>{const p=GCC[option.value];if(p)option.textContent=ar()?p.ar:p.en});
+    const code=selectedCountry();const p=GCC[code];
+    const derived=document.querySelector('#businessCurrencyDerived');
+    if(derived)derived.textContent=c.currency+': '+p.currency+' · '+p.timezone+' · '+p.prefix;
+    const hint=document.querySelector('#businessCurrencyHint');if(hint)hint.textContent=c.derived;
+  }
+
+  function ensureOnboarding(){
+    const form=document.querySelector('#businessForm');
+    if(!form||document.querySelector('#businessCountry')){refreshCountryField();return}
+    const submit=document.querySelector('#setupSubmit');
+    const field=document.createElement('div');field.className='field';field.id='businessCountryField';
+    const label=document.createElement('label');label.id='businessCountryLabel';label.htmlFor='businessCountry';
+    const select=document.createElement('select');select.id='businessCountry';select.required=true;select.autocomplete='country';
+    for(const code of Object.keys(GCC)){const option=document.createElement('option');option.value=code;select.append(option)}
+    const saved=String(localStorage.getItem('dabbir_country')||'AE').toUpperCase();select.value=GCC[saved]?saved:'AE';
+    const derived=document.createElement('div');derived.id='businessCurrencyDerived';derived.className='muted';derived.style.cssText='font-size:12px;margin-top:7px;font-weight:800';
+    const hint=document.createElement('div');hint.id='businessCurrencyHint';hint.className='muted';hint.style.cssText='font-size:11px;line-height:1.5;margin-top:3px';
+    field.append(label,select,derived,hint);
+    if(submit)form.insertBefore(field,submit);else form.append(field);
+    select.addEventListener('change',()=>{localStorage.setItem('dabbir_country',selectedCountry());refreshCountryField()});
+    refreshCountryField();
+  }
+
+  async function enrichRuntimeResponse(response){
+    if(!response?.ok)return response;
+    let payload;try{payload=await response.clone().json()}catch{return response}
+    const businessId=payload?.business?.id;
+    if(!businessId)return response;
+    try{
+      const profileResponse=await baseFetch('/api/gcc-business-profile?business_id='+encodeURIComponent(businessId),{cache:'no-store',headers:{accept:'application/json'}});
+      const profilePayload=await profileResponse.json().catch(()=>null);
+      if(!profileResponse.ok||!profilePayload?.profile)return response;
+      payload.business={...payload.business,...profilePayload.profile};
+      const headers=new Headers(response.headers);headers.delete('content-length');headers.set('content-type','application/json; charset=utf-8');
+      return new Response(JSON.stringify(payload),{status:response.status,statusText:response.statusText,headers});
+    }catch{return response}
+  }
+
+  window.fetch=async function(input,init){
+    const url=typeof input==='string'?input:String(input?.url||'');
+    const method=String(init?.method||input?.method||'GET').toUpperCase();
+    if(method==='POST'&&url.startsWith('/api/dabbir-runtime')){
+      let body=null;try{body=typeof init?.body==='string'?JSON.parse(init.body):null}catch{}
+      if(body?.action==='create_business'){
+        const requested=String(body.country_code||'').toUpperCase();
+        const code=requested||selectedCountry();
+        // Explicit form state wins over a hidden onboarding field. The server validates the market.
+        localStorage.setItem('dabbir_country',code);
+        const next={...body,country_code:code,locale:localeFor(code,body.locale)};
+        return baseFetch('/api/gcc-create-business',{...init,body:JSON.stringify(next)});
+      }
+    }
+    const response=await baseFetch(input,init);
+    if(method==='GET'&&url.startsWith('/api/dabbir-runtime'))return enrichRuntimeResponse(response);
+    return response;
+  };
+
+  function currentBusiness(){try{return typeof workspace!=='undefined'&&workspace?.business?workspace.business:null}catch{return null}}
+  function currentGeo(){const b=currentBusiness();const code=String(b?.country_code||'AE').toUpperCase();const base=profileFor(code);return {...base,...b,country_code:code,currency:b?.currency_code||base.currency,timezone:b?.timezone||base.timezone,prefix:b?.phone_country_prefix||base.prefix}}
+  function runtimeLocale(){const g=currentGeo();return (ar()?'ar-':'en-')+g.country_code}
+  function formatTime(value){
+    if(!value)return '—';
+    const g=currentGeo();
+    try{return new Intl.DateTimeFormat(runtimeLocale(),{dateStyle:'medium',timeStyle:'short',timeZone:g.timezone}).format(new Date(value))}catch{return String(value)}
+  }
+  function localTimeToIso(value){
+    const raw=String(value||'').trim();if(!raw)return null;
+    if(/[zZ]$|[+-]\\d\\d:\\d\\d$/.test(raw)){const d=new Date(raw);return Number.isNaN(d.getTime())?null:d.toISOString()}
+    const normalized=raw.length===16?raw+':00':raw;const d=new Date(normalized+currentGeo().offset);return Number.isNaN(d.getTime())?null:d.toISOString();
+  }
+  function money(value){
+    const g=currentGeo();const n=Number(value||0);
+    try{return new Intl.NumberFormat(runtimeLocale(),{style:'currency',currency:g.currency,maximumFractionDigits:Number(g.minorUnits??3)}).format(n)}catch{return n.toFixed(Number(g.minorUnits??2))+' '+g.currency}
+  }
+
+  function reassertAuthorities(){
+    const g=currentGeo();
+    window.__dabbirTimeZone=g.timezone;window.dabbirFormatTime=formatTime;window.dabbirLocalTimeToIso=localTimeToIso;window.dabbirFormatMoney=money;
+    try{fmt=formatTime}catch{}
+    document.documentElement.dataset.dabbirCountry=g.country_code;
+    document.documentElement.dataset.dabbirCurrency=g.currency;
+    document.documentElement.dataset.dabbirTimezone=g.timezone;
+
+    const selectors=['#adaptiveApptFields label','.dk-payments-help','.dk-payment-option','.ownerOperations label','.serviceOperations label'];
+    document.querySelectorAll(selectors.join(',')).forEach(node=>{
+      if(node.closest?.('.messages'))return;
+      let text=String(node.textContent||'');
+      text=text.replace(/AED/g,g.currency);
+      if(ar()&&g.country_code!=='AE')text=text.replace(/درهم/g,g.moneyAr);
+      if(text!==node.textContent)node.textContent=text;
+    });
+
+    const settings=document.querySelector('#settingsList');
+    if(settings&&currentBusiness()){
+      let row=document.querySelector('#dabbirGccProfileSummary');
+      if(!row){row=document.createElement('div');row.id='dabbirGccProfileSummary';row.className='item';settings.prepend(row)}
+      const c=copy();const countryName=ar()?profileFor(g.country_code).ar:profileFor(g.country_code).en;
+      row.innerHTML='<div class="grow"><b>'+c.profile+'</b><small>'+countryName+' · '+g.currency+' · '+g.timezone+' · '+g.prefix+'</small></div><span class="badge green">'+g.country_code+'</span>';
+    }
+  }
+
+  ensureOnboarding();
+  new MutationObserver(()=>{refreshCountryField();reassertAuthorities()}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+  const lifecycle=window.__dabbirUiLifecycle;
+  if(lifecycle?.on){
+    lifecycle.on('afterRender','gcc-readiness-v1',()=>{reassertAuthorities()});
+    lifecycle.on('afterNavigate','gcc-readiness-v1',()=>{reassertAuthorities()});
+  }
+  document.addEventListener('click',event=>{if(event.target?.closest?.('#newApptBtn,#quickAppt,[data-screen="settings"]'))setTimeout(reassertAuthorities,0)},true);
+  setTimeout(()=>{ensureOnboarding();reassertAuthorities()},0);
 })();
 (()=>{
   if(window.__dabbirRecoveryUiLoaded) return;
@@ -645,6 +783,18 @@
     return String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar')?keyAr:keyEn;
   }
 
+  function authFailureMessage(response,payload){
+    if(response?.status===429||payload?.error==='AUTH_RATE_LIMITED'){
+      return localized('طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.','Too many requests in a short time. Wait a little, then try again.');
+    }
+    if(response?.status>=500||payload?.retryable===true){
+      return authMode==='signup'
+        ? localized('تعذر تأكيد طلب التسجيل الآن. انتظر قليلًا ثم حاول مرة أخرى.','We could not confirm your signup request. Wait a little, then try again.')
+        : localized('خدمة الدخول غير متاحة مؤقتًا. انتظر قليلًا ثم حاول مرة أخرى.','Sign-in is temporarily unavailable. Wait a little, then try again.');
+    }
+    return T().invalid;
+  }
+
   function validNumericMfaCode(code){
     return code.length>=6&&code.length<=8&&[...code].every(char=>char>='0'&&char<='9');
   }
@@ -789,7 +939,7 @@
       event.preventDefault();
       const btn=document.querySelector('#authSubmit');
       const msg=document.querySelector('#authMsg');
-      if(!btn) return;
+      if(!btn||btn.disabled) return;
       btn.disabled=true;
       if(msg) msg.textContent='';
 
@@ -813,14 +963,14 @@
           }),
         });
 
-        if(authMode==='signup'&&j?.verification_required){
-          publishAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
-          if(msg) msg.textContent=T().verification;
-          return;
-        }
         if(!r.ok||!j?.ok){
           publishAuthStage(authMachine.stages.SIGNED_OUT,'AUTH_REJECTED');
-          if(msg) msg.textContent=T().invalid;
+          if(msg) msg.textContent=authFailureMessage(r,j);
+          return;
+        }
+        if(authMode==='signup'&&j.verification_required===true){
+          publishAuthStage(authMachine.stages.SIGNED_OUT,'EMAIL_VERIFICATION_REQUIRED');
+          if(msg) msg.textContent=T().verification;
           return;
         }
 

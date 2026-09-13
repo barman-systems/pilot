@@ -23,7 +23,6 @@ const report = {
   cleanup: [],
 };
 
-let oidcToken = null;
 let qaA = null;
 let qaB = null;
 let businessA = null;
@@ -115,7 +114,7 @@ const sessionA = new Session('owner-a');
 const sessionB = new Session('owner-b');
 
 async function getGitHubOidcToken() {
-  if (oidcToken) return oidcToken;
+  // Cleanup must not reuse the bootstrap token after a long isolation run.
   const requestUrl = String(process.env.ACTIONS_ID_TOKEN_REQUEST_URL || '').trim();
   const requestToken = String(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN || '').trim();
   assert(requestUrl && requestToken, 'GITHUB_ACTIONS_OIDC_CONTEXT_REQUIRED');
@@ -124,8 +123,7 @@ async function getGitHubOidcToken() {
     headers: { authorization: `Bearer ${requestToken}`, accept: 'application/json' },
   });
   assert(result.ok && result.json?.value, `GITHUB_OIDC_ISSUE_FAILED_${result.status}`);
-  oidcToken = String(result.json.value);
-  return oidcToken;
+  return String(result.json.value);
 }
 
 async function qaControl(action, runId, body = {}) {
@@ -166,6 +164,23 @@ async function runtime(session, businessId) {
 
 async function whatsappStatus(session, businessId) {
   return session.request(`/api/dabbir-whatsapp-status?business_id=${encodeURIComponent(businessId)}`);
+}
+
+async function serviceCatalogRead(session, businessId) {
+  return session.request(`/api/service-catalog?business_id=${encodeURIComponent(businessId)}`);
+}
+
+async function serviceCatalogWrite(session, businessId) {
+  return session.request('/api/service-catalog', {
+    method: 'POST',
+    body: {
+      action: 'create_service',
+      business_id: businessId,
+      name: `Isolation Probe ${RUN_BASE}`,
+      price_aed: 1,
+      duration_minutes: 15,
+    },
+  });
 }
 
 async function cleanup(label, runId, identitySet, businessId) {
@@ -259,6 +274,38 @@ try {
     assert(String(result.json?.error || '') === 'BUSINESS_ACCESS_REQUIRED', `WHATSAPP_B_TO_A_WRONG_ERROR_${result.json?.error}`);
     assert(result.json?.waba_id == null && result.json?.phone_number_id == null && result.json?.phone == null, 'WHATSAPP_B_TO_A_METADATA_LEAK');
     return { status: result.status, detail: 'Reverse WhatsApp cross-tenant access is denied without WABA/phone leakage.' };
+  });
+
+  await check('10_owner_a_service_catalog_tenant_b_read_denied', async () => {
+    const result = await serviceCatalogRead(sessionA, businessB);
+    assert(result.status === 403, `SERVICE_READ_A_TO_B_NOT_DENIED_${result.status}`);
+    assert(String(result.json?.error || '') === 'BUSINESS_ACCESS_DENIED', `SERVICE_READ_A_TO_B_WRONG_ERROR_${result.json?.error}`);
+    assert(result.json?.services == null && result.json?.business_id == null, 'SERVICE_READ_A_TO_B_DATA_LEAK');
+    return { status: result.status, detail: 'Owner A cannot enumerate Tenant B services.' };
+  });
+
+  await check('11_owner_b_service_catalog_tenant_a_read_denied', async () => {
+    const result = await serviceCatalogRead(sessionB, businessA);
+    assert(result.status === 403, `SERVICE_READ_B_TO_A_NOT_DENIED_${result.status}`);
+    assert(String(result.json?.error || '') === 'BUSINESS_ACCESS_DENIED', `SERVICE_READ_B_TO_A_WRONG_ERROR_${result.json?.error}`);
+    assert(result.json?.services == null && result.json?.business_id == null, 'SERVICE_READ_B_TO_A_DATA_LEAK');
+    return { status: result.status, detail: 'Owner B cannot enumerate Tenant A services.' };
+  });
+
+  await check('12_owner_a_service_catalog_tenant_b_write_denied', async () => {
+    const result = await serviceCatalogWrite(sessionA, businessB);
+    assert(result.status === 403, `SERVICE_WRITE_A_TO_B_NOT_DENIED_${result.status}`);
+    assert(String(result.json?.error || '') === 'BUSINESS_ACCESS_DENIED', `SERVICE_WRITE_A_TO_B_WRONG_ERROR_${result.json?.error}`);
+    assert(result.json?.service == null, 'SERVICE_WRITE_A_TO_B_RESULT_LEAK');
+    return { status: result.status, detail: 'Owner A cannot create or mutate a service inside Tenant B.' };
+  });
+
+  await check('13_owner_b_service_catalog_tenant_a_write_denied', async () => {
+    const result = await serviceCatalogWrite(sessionB, businessA);
+    assert(result.status === 403, `SERVICE_WRITE_B_TO_A_NOT_DENIED_${result.status}`);
+    assert(String(result.json?.error || '') === 'BUSINESS_ACCESS_DENIED', `SERVICE_WRITE_B_TO_A_WRONG_ERROR_${result.json?.error}`);
+    assert(result.json?.service == null, 'SERVICE_WRITE_B_TO_A_RESULT_LEAK');
+    return { status: result.status, detail: 'Owner B cannot create or mutate a service inside Tenant A.' };
   });
 } catch (error) {
   report.required_failures += 1;

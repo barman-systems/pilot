@@ -6,7 +6,6 @@ import { sendMetaTemplate } from './_whatsapp-live-core.js';
 
 const clean=(value,max=500)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const serviceKey=()=>clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);
-const EXPECTED_SCHEDULE='*/5 * * * *';
 const EDGE_WORKER_URL=`${SUPABASE_URL}/functions/v1/dabbir-salon-reminder-worker`;
 
 export function adminRpcHeaders(key){
@@ -28,10 +27,7 @@ export function cronAuthMode(req,env=process.env){
   const secret=clean(env.CRON_SECRET,4096);
   const authorization=clean(req.headers?.authorization,8192);
   if(secret)return sameSecret(authorization,`Bearer ${secret}`)?'secret':null;
-  const userAgent=clean(req.headers?.['user-agent'],120).toLowerCase();
-  const schedule=clean(req.headers?.['x-vercel-cron-schedule'],120);
-  const production=clean(env.VERCEL_ENV,32)==='production';
-  return production&&userAgent==='vercel-cron/1.0'&&schedule===EXPECTED_SCHEDULE?'vercel_schedule':null;
+  return null; // Schedule headers are caller-controlled, never authentication.
 }
 
 async function readRpc(response,fallback){

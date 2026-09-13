@@ -1,0 +1,4765 @@
+{
+  "spec_sha256": "94be8589f0d718ddb67b18fa4fde45a9c3bd3a68bd33e18183a08f22c237b9e0",
+  "scope": "Actual orchestrator, deterministic interpretation, fixture SQL/Meta adapters. No real provider or database execution claimed.",
+  "cases": 105,
+  "passed": 101,
+  "metrics": {
+    "goal_understanding": {
+      "correct": 12,
+      "total": 12,
+      "percent": 100
+    },
+    "entity_resolution": {
+      "correct": 154,
+      "total": 155,
+      "percent": 99.35
+    },
+    "reference_resolution": {
+      "correct": 28,
+      "total": 28,
+      "percent": 100
+    },
+    "context_carryover": {
+      "correct": 70,
+      "total": 71,
+      "percent": 98.59
+    },
+    "next_action": {
+      "correct": 66,
+      "total": 68,
+      "percent": 97.06
+    },
+    "tool_selection": {
+      "correct": 19,
+      "total": 20,
+      "percent": 95
+    },
+    "hallucinated_action_rate": null,
+    "state_persistence_accuracy": null,
+    "unnecessary_question": {
+      "count": 0,
+      "total": 44
+    }
+  },
+  "results": [
+    {
+      "id": "carry/date",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "field",
+          "expected": "time",
+          "actual": "time",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/time",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/reversed",
+      "activity": "clinic",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "17:00",
+          "actual": "17:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "carry/price-side",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "PRICING",
+          "actual": "PRICING",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "1) قص شعر — 65 AED\nأي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "PRICING",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/duration-side",
+      "activity": "services",
+      "pass": false,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "REPLY",
+          "actual": "CLARIFY",
+          "pass": false
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/english-fragment",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "17:30",
+          "actual": "17:30",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "Which day works for you?"
+        },
+        {
+          "turn": 1,
+          "text": "What time works for you?"
+        },
+        {
+          "turn": 2,
+          "text": "No nearby time is available. What other time works for you?"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 2,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/mixed",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "16:00",
+          "actual": "16:00",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "What time works for you?"
+        },
+        {
+          "turn": 2,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 2,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/maghrib",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "part",
+          "expected": "after_maghrib",
+          "actual": "after_maghrib",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي ساعة تناسبك بعد المغرب؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/already-told",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "carry/no-date-repeat",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "field",
+          "expected": "time",
+          "actual": "time",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 2,
+          "text": "أي ساعة تناسبك بعد المغرب؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/worker",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": "10000000-0000-4000-8000-000000000007",
+          "actual": "10000000-0000-4000-8000-000000000007",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "carry/customer-hours",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "19:00",
+          "actual": "19:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "carry/twenty-real-turns",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        },
+        {
+          "field": "worker",
+          "expected": "10000000-0000-4000-8000-000000000007",
+          "actual": "10000000-0000-4000-8000-000000000007",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 2,
+          "text": "1) قص شعر — 65 AED\nأي وقت يناسبك؟"
+        },
+        {
+          "turn": 3,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 4,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 5,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 6,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 7,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 8,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 9,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 10,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 11,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 12,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 13,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 14,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 15,
+          "text": "1) قص شعر — 65 AED"
+        },
+        {
+          "turn": 16,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 17,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 18,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 19,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 4,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 5,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 6,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 7,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 8,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 9,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 10,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 11,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 12,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 13,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 14,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 16,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 17,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 18,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 19,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "PRICING",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "PRICING",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "history/yesterday-period",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "part",
+          "expected": "after_maghrib",
+          "actual": "after_maghrib",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، كوي. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "history/latest-repeat",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "history/yesterday-absent",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "history/new-conversation",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "history/return-day",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-12",
+          "actual": "2026-09-12",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-12",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "history/current-over-memory",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "history/explicit-override",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي موعد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "RESCHEDULE_BOOKING",
+          "field": "appointment"
+        }
+      ]
+    },
+    {
+      "id": "history/preference-change",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": "10000000-0000-4000-8000-000000000007",
+          "actual": "10000000-0000-4000-8000-000000000007",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "history/no-identity-leak",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "history/no-branch-leak",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "history/no-cancelled-service",
+      "activity": "clinic",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "history/two-actual-services",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "history/revoked-preference",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "reference/bare-this",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "reference"
+        }
+      ]
+    },
+    {
+      "id": "reference/bare-feminine",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "reference"
+        }
+      ]
+    },
+    {
+      "id": "reference/bare-second",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "offered_option"
+        }
+      ]
+    },
+    {
+      "id": "reference/same-unknown",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "reference/pronoun-worker-unknown",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "reference"
+        }
+      ]
+    },
+    {
+      "id": "reference/replace-unknown",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي موعد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "RESCHEDULE_BOOKING",
+          "field": "appointment"
+        }
+      ]
+    },
+    {
+      "id": "reference/restore-unknown",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "reference"
+        }
+      ]
+    },
+    {
+      "id": "reference/same-worker-no-history",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي موظف تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "reference/second-car-not-slot",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي سيارة تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "vehicle"
+        }
+      ]
+    },
+    {
+      "id": "reference/second-worker-not-slot",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي موظف تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "worker"
+        }
+      ]
+    },
+    {
+      "id": "reference/service-menu-second",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "reference/prior-not-this",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "reference/option-question",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تبا تحجز هذا الوقت؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "slot_confirmation"
+        }
+      ]
+    },
+    {
+      "id": "correction/date",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-10",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "correction/hour",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "correction/service",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "correction/withdraw",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "UNKNOWN",
+          "actual": "UNKNOWN",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "تمام، وقفت متابعة الطلب الحالي."
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "correction/no-book",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "UNKNOWN",
+          "actual": "UNKNOWN",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حجزت. هل تريد اختيار وقت آخر؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "correction/conditional",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-10",
+          "actual": "2026-09-10",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "correction/reverse-conditional",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-10",
+          "actual": "2026-09-10",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "offered_option"
+        }
+      ]
+    },
+    {
+      "id": "correction/negated-date",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "date",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "correction/not-first",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": 1,
+          "actual": 1,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CREATE_BOOKING",
+          "actual": "CREATE_BOOKING",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تم حجز الموعد."
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CREATE_BOOKING",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CREATE_BOOKING",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "correction/two-options",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "multiple_options"
+        }
+      ]
+    },
+    {
+      "id": "correction/changed-vehicle",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "vehicle",
+          "expected": "station",
+          "actual": "station",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        },
+        {
+          "turn": 1,
+          "text": "تمام، غسيل كامل. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "correction/second-vehicle-same-service",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "vehicle",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        },
+        {
+          "turn": 1,
+          "text": "أي سيارة تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "vehicle"
+        }
+      ]
+    },
+    {
+      "id": "correction/current-beats-old",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "time",
+          "expected": "19:00",
+          "actual": "19:00",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-11",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "No nearby time is available. What other time works for you?"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "authority/employee-is-not-free",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": "10000000-0000-4000-8000-000000000007",
+          "actual": "10000000-0000-4000-8000-000000000007",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "authority/unknown-employee",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "authority/unknown-service",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تبا؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
+        }
+      ]
+    },
+    {
+      "id": "authority/current-db-price",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "PRICING",
+          "actual": "PRICING",
+          "pass": true
+        },
+        {
+          "field": "price",
+          "expected": 65,
+          "actual": 65,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "1) قص شعر — 65 AED"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "PRICING",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "authority/quoted-price-history",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "PRICING",
+          "actual": "PRICING",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "1) قص شعر — 65 AED\nأي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "PRICING",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "authority/foreign-branch",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي فرع تقصد؟ هذه المحادثة مرتبطة بفرع محدد."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "authority/user-price",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "price",
+          "expected": 80,
+          "actual": 80,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "authority/user-availability",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "authority/user-success",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تبا؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "service"
+        }
+      ]
+    },
+    {
+      "id": "authority/spoof-customer",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "REPLY",
+          "actual": "REPLY",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "I can help with this business and your own appointments only."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "authority/text-gps",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "location",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "authority/removed-service",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خدمة تقصد من آخر مرة؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "verified_history"
+        }
+      ]
+    },
+    {
+      "id": "authority/service-mode",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "وين تبا الخدمة: في الفرع؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "delivery_mode"
+        }
+      ]
+    },
+    {
+      "id": "activity/laundry-pickup",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "mode",
+          "expected": "PICKUP",
+          "actual": "PICKUP",
+          "pass": true
+        },
+        {
+          "field": "field",
+          "expected": "location",
+          "actual": "location",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، كوي، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "activity/laundry-options",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "PRICING",
+          "actual": "PRICING",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "1) التنظيف الجاف — 40 AED"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "PRICING",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/salon-no-vehicle",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "activity/clinic-administration",
+      "activity": "clinic",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "activity/clinic-no-diagnosis",
+      "activity": "clinic",
+      "pass": false,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "REPLY",
+          "pass": false
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/store-order",
+      "activity": "store",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/store-quantity-correction",
+      "activity": "store",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        },
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/store-order-status",
+      "activity": "store",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/property-request",
+      "activity": "real_estate",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/creator-request",
+      "activity": "creator",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "activity/wash-needs-vehicle",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "field",
+          "expected": "vehicle",
+          "actual": "vehicle",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل، 2026-09-11، الساعة 17:00. السيارة صالون ولا ستيشن/SUV؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "vehicle"
+        }
+      ]
+    },
+    {
+      "id": "activity/wash-needs-gps",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "field",
+          "expected": "location",
+          "actual": "location",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل، 2026-09-11، الساعة 17:00. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "activity/service-options",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "operations/cancel-only-owned",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CANCEL_BOOKING",
+          "actual": "CANCEL_BOOKING",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": "10000000-0000-4000-8000-000000000009",
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تم إلغاء الموعد ✅."
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CANCEL_BOOKING",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CANCEL_BOOKING",
+          "goal": "CANCEL_BOOKING"
+        }
+      ]
+    },
+    {
+      "id": "operations/cancel-ambiguous",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي موعد تقصد؟\n1) 12‏/09‏/2026، 2:00 م\n2) 12‏/09‏/2026، 2:00 م"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "CANCEL_BOOKING",
+          "field": "appointment"
+        }
+      ]
+    },
+    {
+      "id": "operations/negated-cancel",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "REPLY",
+          "actual": "REPLY",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "REPLY",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "operations/reschedule",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "RESCHEDULE_BOOKING",
+          "actual": "RESCHEDULE_BOOKING",
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": "10000000-0000-4000-8000-000000000009",
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "RESCHEDULE_BOOKING"
+        }
+      ]
+    },
+    {
+      "id": "operations/feminine-reschedule",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "RESCHEDULE_BOOKING",
+          "actual": "RESCHEDULE_BOOKING",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": "10000000-0000-4000-8000-000000000009",
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، كوي، 2026-09-11. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "RESCHEDULE_BOOKING",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "operations/expired-offer",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "offered_option"
+        }
+      ]
+    },
+    {
+      "id": "operations/unverified-offer",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي خيار واحد تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "offered_option"
+        }
+      ]
+    },
+    {
+      "id": "operations/takeover",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "operations/newer-message",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "SUPERSEDED",
+          "actual": "SUPERSEDED",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "SUPERSEDED"
+        }
+      ]
+    },
+    {
+      "id": "operations/complaint",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "HANDOFF",
+          "actual": "HANDOFF",
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "HANDOFF",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "HANDOFF",
+          "goal": "HUMAN_ASSISTANCE"
+        }
+      ]
+    },
+    {
+      "id": "operations/English-cancel",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CANCEL_BOOKING",
+          "actual": "CANCEL_BOOKING",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": "10000000-0000-4000-8000-000000000009",
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "Your appointment has been cancelled ✅."
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CANCEL_BOOKING",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CANCEL_BOOKING",
+          "goal": "CANCEL_BOOKING"
+        }
+      ]
+    },
+    {
+      "id": "operations/English-move",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "action",
+          "expected": "CHECK_AVAILABILITY",
+          "actual": "CHECK_AVAILABILITY",
+          "pass": true
+        },
+        {
+          "field": "appointment",
+          "expected": "10000000-0000-4000-8000-000000000009",
+          "actual": "10000000-0000-4000-8000-000000000009",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "No nearby time is available. What other time works for you?"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "RESCHEDULE_BOOKING"
+        }
+      ]
+    },
+    {
+      "id": "operations/other-customer",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "appointment",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "Which appointment do you mean?"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "CANCEL_BOOKING",
+          "field": "appointment"
+        }
+      ]
+    },
+    {
+      "id": "complex/restart-with-new-service",
+      "activity": "salon",
+      "pass": false,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000006",
+          "actual": "10000000-0000-4000-8000-000000000006",
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": "2026-09-11",
+          "actual": "2026-09-12",
+          "pass": false
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "complex/two-services",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "complex/one-cancel-one-new",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي طلب تبانا نبدأ فيه؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "CANCEL_BOOKING",
+          "field": "request"
+        }
+      ]
+    },
+    {
+      "id": "complex/question-not-confirm",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تبا تحجز هذا الوقت؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "slot_confirmation"
+        }
+      ]
+    },
+    {
+      "id": "complex/no-vehicle-carry-from-history",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "vehicle",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل. السيارة صالون ولا ستيشن/SUV؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "vehicle"
+        }
+      ]
+    },
+    {
+      "id": "complex/unknown-old-price",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "1) قص شعر — 65 AED\n2) صبغة — 150 AED"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "PRICING",
+          "goal": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "id": "complex/same-service-new-worker",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "worker",
+          "expected": "10000000-0000-4000-8000-000000000007",
+          "actual": "10000000-0000-4000-8000-000000000007",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        },
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "complex/English-contradiction",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "date",
+          "expected": "2026-09-12",
+          "actual": "2026-09-12",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "No nearby time is available. What other time works for you?"
+        },
+        {
+          "turn": 1,
+          "text": "No nearby time is available. What other time works for you?"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 0,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-11",
+          "verified": true
+        },
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-12",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE"
+        }
+      ]
+    },
+    {
+      "id": "complex/past-date-denied",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "date",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    },
+    {
+      "id": "complex/no-fabricated-branch",
+      "activity": "laundry",
+      "pass": true,
+      "checks": [
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي فرع تقصد؟ هذه المحادثة مرتبطة بفرع محدد."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "branch"
+        }
+      ]
+    },
+    {
+      "id": "complex/same-worker-after-removal",
+      "activity": "salon",
+      "pass": true,
+      "checks": [
+        {
+          "field": "worker",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي موظف تقصد؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "UNKNOWN",
+          "field": "worker"
+        }
+      ]
+    },
+    {
+      "id": "complex/now-over-preference",
+      "activity": "car_wash",
+      "pass": true,
+      "checks": [
+        {
+          "field": "vehicle",
+          "expected": "saloon",
+          "actual": "saloon",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "تمام، غسيل كامل. أرسل موقع الخدمة من خيار «الموقع» في واتساب."
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "location"
+        }
+      ]
+    },
+    {
+      "id": "complex/malformed-time",
+      "activity": "services",
+      "pass": true,
+      "checks": [
+        {
+          "field": "time",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "slot",
+          "expected": null,
+          "actual": null,
+          "pass": true
+        },
+        {
+          "field": "action",
+          "expected": "CLARIFY",
+          "actual": "CLARIFY",
+          "pass": true
+        }
+      ],
+      "error": null,
+      "question_evaluated": false,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي وقت يناسبك؟"
+        }
+      ],
+      "toolCalls": [],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "time"
+        }
+      ]
+    },
+    {
+      "id": "strict/conditional-empty-availability",
+      "activity": "salon",
+      "pass": false,
+      "checks": [
+        {
+          "field": "goal",
+          "expected": "BOOK_SERVICE",
+          "actual": "BOOK_SERVICE",
+          "pass": true
+        },
+        {
+          "field": "service",
+          "expected": "10000000-0000-4000-8000-000000000005",
+          "actual": "10000000-0000-4000-8000-000000000005",
+          "pass": true
+        },
+        {
+          "field": "time",
+          "expected": "18:00",
+          "actual": "18:00",
+          "pass": true
+        },
+        {
+          "field": "conditional_availability_dates",
+          "expected": [
+            "2026-09-10",
+            "2026-09-11"
+          ],
+          "actual": [
+            "2026-09-10"
+          ],
+          "pass": false
+        }
+      ],
+      "error": null,
+      "question_evaluated": true,
+      "unnecessary_question": false,
+      "replies": [
+        {
+          "turn": 0,
+          "text": "أي يوم يناسبك؟"
+        },
+        {
+          "turn": 1,
+          "text": "ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟"
+        }
+      ],
+      "toolCalls": [
+        {
+          "turn": 1,
+          "action": "CHECK_AVAILABILITY",
+          "date": "2026-09-10",
+          "verified": true
+        }
+      ],
+      "trace": [
+        {
+          "action": "CLARIFY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        },
+        {
+          "action": "CHECK_AVAILABILITY",
+          "goal": "BOOK_SERVICE",
+          "field": "date"
+        }
+      ]
+    }
+  ]
+}

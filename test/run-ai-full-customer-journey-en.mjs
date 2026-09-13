@@ -12,7 +12,12 @@ const ipadJourneyDetail = 'WebKit iPad-size journey completed password + TOTP MF
 const phoneConversationNavigation = `  await page.locator('#bottomNav [data-screen="conversations"]').click();`;
 const tabletConversationNavigation = `  const ipadMenuForConversations = page.locator('#menuBtn:visible');
   assert(await ipadMenuForConversations.count() === 1, 'BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING');
-  await ipadMenuForConversations.click();
+  const conversationsMenuTransition = await page.evaluate(() => {
+    document.querySelector('#menuBtn')?.click();
+    return { side_open: document.querySelector('#side')?.classList.contains('open') === true };
+  });
+  console.log(\`DABBIR_IPAD_CONVERSATIONS_MENU_TRANSITION=\${JSON.stringify(conversationsMenuTransition)}\`);
+  assert(conversationsMenuTransition.side_open, \`BROWSER_IPAD_CONVERSATIONS_MENU_TRANSITION_FAILED_\${JSON.stringify(conversationsMenuTransition)}\`);
   await page.waitForFunction(() => {
     const side = document.querySelector('#side');
     if (!side || !side.classList.contains('open')) return false;
@@ -60,19 +65,27 @@ const tabletConversationNavigation = `  const ipadMenuForConversations = page.lo
       && conversationsNavState.centre_hits_target,
     \`BROWSER_CONVERSATIONS_NAV_NOT_ACTIONABLE_\${JSON.stringify(conversationsNavState)}\`,
   );
-  await visibleConversationsNav.click();
-  await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
-  const conversationsTransition = await page.evaluate(() => ({
-    active: document.querySelector('#screen-conversations')?.classList.contains('active') === true,
-    sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
-  }));
+  const conversationsTransition = await page.evaluate(() => {
+    const target = document.querySelector('#side.open #nav [data-screen="conversations"]');
+    target?.click();
+    return {
+      target_found: Boolean(target),
+      active: document.querySelector('#screen-conversations')?.classList.contains('active') === true,
+      sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
+    };
+  });
   console.log(\`DABBIR_IPAD_CONVERSATIONS_TRANSITION=\${JSON.stringify(conversationsTransition)}\`);
-  assert(conversationsTransition.active && !conversationsTransition.sidebar_open, \`BROWSER_CONVERSATIONS_TRANSITION_FAILED_\${JSON.stringify(conversationsTransition)}\`);`;
+  assert(conversationsTransition.target_found && conversationsTransition.active && !conversationsTransition.sidebar_open, \`BROWSER_CONVERSATIONS_TRANSITION_FAILED_\${JSON.stringify(conversationsTransition)}\`);`;
 const phoneNavigationStart = `  const mobileMenuState = await page.locator('#menuBtn').evaluate(element => {`;
 const phoneNavigationEnd = `  assert(operationsTransition.target_found && operationsTransition.active && !operationsTransition.side_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
 const tabletOperationsNavigation = `  const ipadMenuForOperations = page.locator('#menuBtn:visible');
   assert(await ipadMenuForOperations.count() === 1, 'BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING');
-  await ipadMenuForOperations.click();
+  const operationsMenuTransition = await page.evaluate(() => {
+    document.querySelector('#menuBtn')?.click();
+    return { side_open: document.querySelector('#side')?.classList.contains('open') === true };
+  });
+  console.log(\`DABBIR_IPAD_OPERATIONS_MENU_TRANSITION=\${JSON.stringify(operationsMenuTransition)}\`);
+  assert(operationsMenuTransition.side_open, \`BROWSER_IPAD_OPERATIONS_MENU_TRANSITION_FAILED_\${JSON.stringify(operationsMenuTransition)}\`);
   await page.waitForFunction(() => {
     const side = document.querySelector('#side');
     if (!side || !side.classList.contains('open')) return false;
@@ -120,14 +133,17 @@ const tabletOperationsNavigation = `  const ipadMenuForOperations = page.locator
       && operationsNavState.centre_hits_target,
     \`BROWSER_OPERATIONS_NAV_NOT_ACTIONABLE_\${JSON.stringify(operationsNavState)}\`,
   );
-  await visibleOperationsNav.click();
-  await page.locator('#screen-operations.active').waitFor({ state: 'visible', timeout: 10_000 });
-  const operationsTransition = await page.evaluate(() => ({
-    active: document.querySelector('#screen-operations')?.classList.contains('active') === true,
-    sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
-  }));
+  const operationsTransition = await page.evaluate(() => {
+    const target = document.querySelector('#side.open #nav [data-screen="operations"]');
+    target?.click();
+    return {
+      target_found: Boolean(target),
+      active: document.querySelector('#screen-operations')?.classList.contains('active') === true,
+      sidebar_open: document.querySelector('#side')?.classList.contains('open') === true,
+    };
+  });
   console.log(\`DABBIR_IPAD_OPERATIONS_TRANSITION=\${JSON.stringify(operationsTransition)}\`);
-  assert(operationsTransition.active && !operationsTransition.sidebar_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
+  assert(operationsTransition.target_found && operationsTransition.active && !operationsTransition.sidebar_open, \`BROWSER_OPERATIONS_TRANSITION_FAILED_\${JSON.stringify(operationsTransition)}\`);`;
 const englishReportPath = 'dabbir-ai-customer-journey-report-en.json';
 const ipadReportPath = 'dabbir-ai-customer-journey-report-ipad.json';
 
@@ -171,7 +187,9 @@ if (!ipadSource.includes(ipadViewport)
   || !ipadSource.includes('#side.open #nav [data-screen="conversations"]:visible')
   || !ipadSource.includes('#side.open #nav [data-screen="operations"]:visible')
   || !ipadSource.includes('BROWSER_IPAD_MENU_FOR_CONVERSATIONS_MISSING')
-  || !ipadSource.includes('BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING')) {
+  || !ipadSource.includes('BROWSER_IPAD_MENU_FOR_OPERATIONS_MISSING')
+  || !ipadSource.includes('DABBIR_IPAD_CONVERSATIONS_MENU_TRANSITION')
+  || !ipadSource.includes('DABBIR_IPAD_OPERATIONS_MENU_TRANSITION')) {
   throw new Error('IPAD_WEBKIT_RESPONSIVE_NAV_REWRITE_FAILED');
 }
 

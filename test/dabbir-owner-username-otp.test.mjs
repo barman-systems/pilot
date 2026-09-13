@@ -20,36 +20,25 @@ test('platform authentication is actor-bound brokered Resend OTP with isolated s
   assert.match(source, /challenge_id/);
   assert.match(source, /session_token/);
   assert.match(source, /__Host-dabbir_owner_session/);
-  assert.doesNotMatch(source, /ownerMailerAuth|x-dabbir-owner-mailer-auth/);
+  assert.match(source, /actor-bound-otp-v12/);
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(source, /x-dabbir-supabase-service-key/);
   assert.doesNotMatch(source, /grant_type=password/);
   assert.doesNotMatch(source, /barman2013@icloud\.com/);
 });
 
-test('owner OTP mailer accepts only the exact Vercel production workload identity', async () => {
+test('owner OTP mailer uses verified auth domain, server-only authentication and invitation generation binding', async () => {
   const mailer = await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
-  assert.match(mailer, /createRemoteJWKSet, decodeJwt, jwtVerify/);
-  assert.match(mailer, /OWNER_SLUG='nd56cm4j5v-3619s-projects'/);
-  assert.match(mailer, /OWNER_ID='team_pwfKq8jHuyW1XFVSZirAJiId'/);
-  assert.match(mailer, /PROJECT_NAME='dabbir'/);
-  assert.match(mailer, /PROJECT_ID='prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq'/);
-  assert.match(mailer, /EXPECTED_AUDIENCE=`https:\/\/vercel\.com\/\$\{OWNER_SLUG\}`/);
-  assert.match(mailer, /EXPECTED_SUBJECT=`owner:\$\{OWNER_SLUG\}:project:\$\{PROJECT_NAME\}:environment:production`/);
-  assert.match(mailer, /ALLOWED_ISSUERS/);
-  assert.match(mailer, /jwtVerify\(token,jwks,\{issuer,audience:EXPECTED_AUDIENCE,subject:EXPECTED_SUBJECT\}\)/);
-  assert.match(mailer, /payload\.owner_id!==OWNER_ID/);
-  assert.match(mailer, /payload\.project_id!==PROJECT_ID/);
-  assert.match(mailer, /payload\.project!==PROJECT_NAME/);
-  assert.match(mailer, /payload\.environment!=='production'/);
-  assert.match(mailer, /req\.headers\.get\('authorization'\)/);
-  assert.match(mailer, /OWNER_MAILER_OIDC_REQUIRED/);
   assert.match(mailer, /no-reply@auth\.bmalman\.com/);
-  assert.match(mailer, /DABBIR-owner-otp-mailer\/4/);
-  assert.doesNotMatch(mailer, /x-dabbir-owner-mailer-auth|dabbir-owner-otp-mailer-v2|validMailerSignature|safeEqual/);
+  assert.doesNotMatch(mailer, /dabbir-owner-otp-mailer-v1/);
+  assert.match(mailer, /OWNER_MAILER_OIDC_REQUIRED/);
+  assert.match(mailer, /jwtVerify\(token,jwks/);
+  assert.doesNotMatch(mailer, /validMailerSignature|x-dabbir-owner-mailer-auth/);
+  assert.match(mailer, /invitation_generation/);
+  assert.match(mailer, /identity\.payload\.invitation_generation/);
+  assert.match(mailer, /INVITATION_IDENTITY_INVALID/);
+  assert.match(mailer, /invitation_generation:invitationId\?invitationGeneration:null/);
   assert.doesNotMatch(mailer, /onboarding@resend\.dev/);
   assert.doesNotMatch(mailer, /\/domains/);
-  assert.doesNotMatch(mailer, /x-dabbir-supabase-service-key/);
 });
 
 test('owner broker supports modern Supabase secret keys and actor-aware incidents', async () => {
@@ -114,4 +103,55 @@ test('ordinary DABBIR customer login remains email/password and is not replaced 
   assert.match(source, /grant_type=password/);
   assert.match(source, /body\.email/);
   assert.match(source, /body\.password/);
+});
+
+
+import vm from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
+
+async function mailerBoundary({token='synthetic',claims={},signatureValid=true}={}){
+  const text=await read('supabase/functions/dabbir-owner-otp-mailer/index.ts');
+  const executable=stripTypeScriptTypes(text.replace(/^import .*from "npm:jose[^\n]*\n/m,''));
+  let handler,bodyReads=0,jwksReads=0;
+  const payload={iss:'https://oidc.vercel.com',owner_id:'team_pwfKq8jHuyW1XFVSZirAJiId',project_id:'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq',project:'dabbir',environment:'production',...claims};
+  const context=vm.createContext({
+    Deno:{env:{get:()=> 'synthetic-config'},serve:fn=>{handler=fn}},
+    Response,URL,TextEncoder,Uint8Array,Uint32Array,crypto:globalThis.crypto,
+    console:{warn(){}},
+    decodeJwt:()=>payload,
+    createRemoteJWKSet:()=>{jwksReads++;return {}},
+    jwtVerify:async(_token,_keys,options)=>{
+      assert.equal(options.audience,'https://vercel.com/nd56cm4j5v-3619s-projects');
+      assert.equal(options.subject,'owner:nd56cm4j5v-3619s-projects:project:dabbir:environment:production');
+      assert.equal(options.issuer,payload.iss);
+      if(!signatureValid)throw new Error('SIGNATURE_REJECTED');
+      return {payload};
+    },
+    fetch:()=>{throw new Error('LIVE_HTTP_FORBIDDEN')}
+  });
+  new vm.Script(executable).runInContext(context);
+  const res=await handler({method:'POST',headers:new Headers(token?{authorization:'Bearer '+token}:{}),json:async()=>{bodyReads++;return {resend_key:'synthetic',action:'unsupported'}}});
+  return {status:res.status,bodyReads,jwksReads};
+}
+
+for(const [name,options] of [
+  ['missing token',{token:''}],
+  ['untrusted issuer',{claims:{iss:'https://attacker.invalid'}}],
+  ['signature rejection',{signatureValid:false}],
+  ['wrong owner',{claims:{owner_id:'other'}}],
+  ['wrong project ID',{claims:{project_id:'other'}}],
+  ['wrong project name',{claims:{project:'other'}}],
+  ['preview workload',{claims:{environment:'preview'}}],
+]){
+  test('mailer denies '+name+' before reading request body',async()=>{
+    const r=await mailerBoundary(options);
+    assert.equal(r.status,401);
+    assert.equal(r.bodyReads,0);
+    if(name==='untrusted issuer'||name==='missing token')assert.equal(r.jwksReads,0);
+  });
+}
+test('verified identity reaches action validation without outbound side effects',async()=>{
+  const r=await mailerBoundary();
+  assert.equal(r.status,400);
+  assert.equal(r.bodyReads,1);
 });

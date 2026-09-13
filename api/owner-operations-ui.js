@@ -49,6 +49,8 @@ const script=String.raw`(()=>{
 
   let data=null;
   let loading=false;
+  let loadGeneration=0;
+  let pendingLoad=null;
   let businessId=null;
   let editingProductId=null;
 
@@ -137,9 +139,9 @@ const script=String.raw`(()=>{
     render();
   }
 
-  async function request(options={}){
+  async function request(options={},requestedBusinessId=businessId){
     if(!businessId)businessId=workspace?.business?.id||null;
-    const url='/api/owner-operations?business_id='+encodeURIComponent(businessId||'');
+    const url='/api/owner-operations?business_id='+encodeURIComponent(requestedBusinessId||businessId||'');
     const response=await fetch(url,{cache:'no-store',...options,headers:{'content-type':'application/json',...(options.headers||{})}});
     const payload=await response.json().catch(()=>({}));
     if(!response.ok||!payload.ok)throw new Error(payload.detail||payload.error||'OWNER_OPERATIONS_FAILED');
@@ -149,9 +151,30 @@ const script=String.raw`(()=>{
   async function load(force=false){
     if(!isStore())return;
     businessId=workspace?.business?.id||businessId;
-    if(loading||(!force&&data&&data.business_id===businessId))return;
+    const requestedBusinessId=businessId;
+    if(pendingLoad?.businessId===businessId)return pendingLoad.promise;
+    if(!force&&data&&data.business_id===businessId)return;
+    const generation=++loadGeneration;
+    if(data?.business_id!==businessId)data=null;
     loading=true;render();
-    try{data=await request();render()}catch(error){data={error:error.message};render()}finally{loading=false;render()}
+    const valid=()=>generation===loadGeneration&&workspace?.business?.id===requestedBusinessId;
+    const promise=(async()=>{try{const result=await request({},requestedBusinessId);if(!valid())return;if(result.business_id!==requestedBusinessId)throw new Error('OPERATIONS_CONTEXT_MISMATCH');data=result;render()}catch(error){if(valid()){data={error:error.message};render()}}finally{if(generation===loadGeneration){pendingLoad=null;loading=false;if(valid())render()}}})();
+    pendingLoad={businessId,generation,promise};return promise;
+  }
+
+  async function openRecord({business_id:requestedBusinessId,type,id,isCurrent=()=>true}){
+    if(!id||!isStore()||workspace?.business?.id!==requestedBusinessId)return false;
+    const before=current;
+    await load(true);
+    if(!isCurrent()||workspace?.business?.id!==requestedBusinessId||current!==before||data?.business_id!==requestedBusinessId)return false;
+    const collection=type==='order'?data.orders:type==='inventory'?data.products:null;
+    if(!Array.isArray(collection)||!collection.some(row=>row.id===id))return false;
+    if(typeof showScreen==='function')showScreen('operations');
+    const attribute=type==='order'?'data-ops-order-row':'data-ops-product-row';
+    const row=qa('['+attribute+']').find(node=>node.getAttribute(attribute)===id);
+    if(!row)return false;
+    row.setAttribute('tabindex','-1');row.scrollIntoView({behavior:'auto',block:'center'});row.focus({preventScroll:true});
+    return true;
   }
 
   function statusOptions(current){
@@ -163,6 +186,7 @@ const script=String.raw`(()=>{
   function render(){
     const body=q('#opsBody');
     if(!body||!isStore())return;
+    if(data?.business_id&&data.business_id!==workspace?.business?.id)data=null;
     const t=text();
     if(loading&&!data){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.loading)+'</div>';return}
     if(data?.error){body.innerHTML='<div class=\"empty\">'+escapeHtml(t.failed)+' — '+escapeHtml(data.error)+'</div>';return}
@@ -179,10 +203,10 @@ const script=String.raw`(()=>{
 
     const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
 
-    const productRows=products.length?products.map(product=>'<div class=\"opsRow\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
+    const productRows=products.length?products.map(product=>'<div class=\"opsRow\" data-ops-product-row=\"'+escapeHtml(product.id)+'\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
     const productsHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.products)+'</h2><div class=\"opsTable\"><div class=\"opsRow head\"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.qty)+'</span><span></span></div>'+productRows+'</div></div>';
 
-    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
+    const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\" data-ops-order-row=\"'+escapeHtml(order.id)+'\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
     const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" style=\"margin-top:9px\">'+escapeHtml(t.simulated)+'</div></div>';
 
     body.innerHTML='<div class=\"opsMetrics\">'+metrics+'</div>'+lowHtml+'<div class=\"opsGrid\"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
@@ -259,6 +283,7 @@ const script=String.raw`(()=>{
   }
 
   setTimeout(()=>{if(isStore()){ensureScreen();load()}},600);
+  window.__dabbirOwnerOperations={openRecord};
 })();`;
 
 export default function handler(req,res){

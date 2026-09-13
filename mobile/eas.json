@@ -9,6 +9,9 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "preview": {
@@ -16,20 +19,31 @@
       "environment": "preview",
       "env": {
         "EXPO_PUBLIC_DABBIR_API_BASE_URL": "https://dabbir-nd56cm4j5v-3619s-projects.vercel.app"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_DABBIR_API_BASE_URL": "https://dabbir-nd56cm4j5v-3619s-projects.vercel.app"
+        "EXPO_PUBLIC_DABBIR_API_BASE_URL": "https://dabbir.bmalman.com"
       },
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed"
+      }
+    }
   }
 }

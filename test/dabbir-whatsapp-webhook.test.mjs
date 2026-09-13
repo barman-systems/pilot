@@ -49,6 +49,40 @@ test('extracts inbound text message', () => {
   assert.ok(routed.workflow.includes('BOOKING'));
 });
 
+test('extracts a signed WhatsApp location as bounded readable coordinates', () => {
+  const payload = {
+    entry: [{ changes: [{ field: 'messages', value: {
+      metadata: { phone_number_id: '123', display_phone_number: '+971500000000' },
+      messages: [{ id: 'wamid.location.1', from: '971501234567', timestamp: '5', type: 'location', location: {
+        latitude: 24.4538844,
+        longitude: 54.3773432,
+        name: 'السيارة',
+        address: 'أبوظبي'
+      } }]
+    } }] }]
+  };
+  const events = extractWhatsAppEvents(payload);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].messageType, 'location');
+  assert.equal(events[0].text, '📍 موقع واتساب: 24.453884, 54.377343 — السيارة — أبوظبي');
+  assert.doesNotMatch(events[0].text, /\[DABBIR_/);
+});
+
+test('invalid WhatsApp coordinates never become a grounded location message', () => {
+  const payload = {
+    entry: [{ changes: [{ field: 'messages', value: {
+      metadata: { phone_number_id: '123' },
+      messages: [{ id: 'wamid.location.bad', from: '971501234567', timestamp: '6', type: 'location', location: {
+        latitude: 123.45,
+        longitude: 400
+      } }]
+    } }] }]
+  };
+  const [event] = extractWhatsAppEvents(payload);
+  assert.equal(event.messageType, 'location');
+  assert.equal(event.text, '');
+});
+
 test('extracts WhatsApp Business App message echoes for coexistence', () => {
   const payload = {
     entry: [{ changes: [{ field: 'smb_message_echoes', value: {

@@ -1,5 +1,9 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { scopedVisualCapabilities, visualAvailability, emitInternalVisualSummary, assertInternalVisualGate, captureSidebarFailure } from '../.github/scripts/dabbir-internal-visual-summary.mjs';
+import {runOwnerAiBookingJourney} from '../.github/scripts/dabbir-owner-ai-booking-journey.mjs';
+import { runBookingOwnerJourney } from '../.github/scripts/dabbir-booking-owner-journey.mjs';
+import {classifyProviderNoise,runCognitiveGate} from './support/dabbir-cognitive-gate.mjs';
 
 const ORIGIN = String(process.env.PRODUCTION_ORIGIN || '').trim().replace(/\/$/, '');
 if (!/^https:\/\/[^/]+$/i.test(ORIGIN)) throw new Error('PRODUCTION_ORIGIN_REQUIRED');
@@ -23,10 +27,10 @@ const report = {
   artifacts: {},
 };
 
-let oidcToken = null;
 let owner = null;
 let employee = null;
 let businessId = null;
+const bookingQaBusinessIds = new Set();
 let customerId = null;
 let conversationId = null;
 let productId = null;
@@ -126,11 +130,12 @@ async function step(name, fn, { required = true } = {}) {
   report.steps.push(row);
   try {
     const result = await fn();
-    row.status = 'PASS';
+    row.status = result?.classification === 'PROVIDER_NOISE' ? 'PROVIDER_NOISE' : 'PASS';
     row.duration_ms = Date.now() - started;
     if (result?.status != null) row.http_status = result.status;
     if (result?.detail != null) row.detail = small(result.detail);
-    console.log(`PASS ${name} (${row.duration_ms}ms)${row.detail ? ` — ${row.detail}` : ''}`);
+    const prefix = row.status === 'PROVIDER_NOISE' ? 'PROVIDER_NOISE' : 'PASS';
+    console.log(`${prefix} ${name} (${row.duration_ms}ms)${row.detail ? ` — ${row.detail}` : ''}`);
     return result;
   } catch (error) {
     row.status = 'FAIL';
@@ -140,6 +145,33 @@ async function step(name, fn, { required = true } = {}) {
     console.error(`FAIL ${name} (${row.duration_ms}ms) — ${row.detail}`);
     return null;
   }
+}
+
+async function runRequiredCognitiveStep(name,{scenario='critical',checkCount=null,expectedKeys=null,evidenceKey,requireCognitiveProbe=false,logKey=null}={}) {
+  return step(name,async()=>{
+    const gate=await runCognitiveGate({
+      scenario,
+      checkCount,
+      expectedKeys,
+      requireCognitiveProbe,
+      request:async currentScenario=>{
+        const body={synthetic:true,probe:'cognitive_dialogue'};
+        if(currentScenario&&currentScenario!=='critical')body.scenario=currentScenario;
+        return ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body});
+      },
+    });
+    const probe=gate.response||{status:0,json:{}};
+    const evidence={status:probe.status,checks:probe.json?.checks||null,providers:probe.json?.providers||null,evidence_scope:probe.json?.evidence_scope||null,error:probe.json?.error||null,gate:{classification:gate.classification,valid_failures:gate.valid_failures,attempts:gate.attempts}};
+    if(evidenceKey)report[evidenceKey]={...(probe.json||{}),gate:evidence.gate};
+    if(logKey)console.log(logKey+'='+JSON.stringify(evidence));
+    if(gate.classification==='PROVIDER_NOISE'){
+      report.provider_noise_events??=[];
+      report.provider_noise_events.push({step:name,scenario,attempts:gate.attempts});
+      return {status:probe.status,classification:'PROVIDER_NOISE',detail:JSON.stringify({scenario,attempts:gate.attempts})};
+    }
+    assert(gate.classification!=='COGNITIVE_FAILURE',`COGNITIVE_REPEATED_FAILURE:${name}:${JSON.stringify(evidence)}`);
+    return {status:probe.status,detail:JSON.stringify({classification:gate.classification,attempts:gate.attempts.length,checks:evidence.checks,evidence_scope:evidence.evidence_scope})};
+  });
 }
 
 class Session {
@@ -189,7 +221,8 @@ const ownerSession = new Session('owner');
 const employeeSession = new Session('employee');
 
 async function getGitHubOidcToken() {
-  if (oidcToken) return oidcToken;
+  // Long journeys can outlive an issued token. Each privileged QA request
+  // obtains a fresh GitHub token; the server still validates every claim.
   const requestUrl = String(process.env.ACTIONS_ID_TOKEN_REQUEST_URL || '').trim();
   const requestToken = String(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN || '').trim();
   assert(requestUrl && requestToken, 'GITHUB_ACTIONS_OIDC_CONTEXT_REQUIRED');
@@ -198,8 +231,7 @@ async function getGitHubOidcToken() {
     headers: { authorization: `Bearer ${requestToken}`, accept: 'application/json' },
   }, false);
   assert(result.ok && result.json?.value, `GITHUB_OIDC_ISSUE_FAILED_${result.status}:${small(result.text)}`);
-  oidcToken = String(result.json.value);
-  return oidcToken;
+  return String(result.json.value);
 }
 
 async function qaControl(action, body = {}) {
@@ -263,6 +295,13 @@ async function verifyTotp(session, factorId, secret) {
 
 async function browserJourney() {
   assert(mfaSecret, 'BROWSER_MFA_SECRET_REQUIRED');
+  const policyMemory=await ownerSession.request('/api/owner-decision-memory?business_id='+encodeURIComponent(businessId));
+  assert(policyMemory.ok&&policyMemory.json?.ok,'OWNER_POLICY_READ_FAILED:'+String(policyMemory.json?.error||policyMemory.status));
+  const service = await ownerSession.request('/api/owner-operations', {
+    method: 'POST', body: {business_id: businessId, action: 'create_service', name: 'QA Gold Wash', duration_minutes: 30},
+  });
+  assert(service.ok && service.json?.ok && service.json?.result?.id, 'KNOWLEDGE_QA_SERVICE_CREATE_FAILED');
+  const serviceId = service.json.result.id;
   const { webkit } = await import('playwright');
   browser = await webkit.launch({ headless: true });
   browserContext = await browser.newContext({
@@ -302,6 +341,86 @@ async function browserJourney() {
   const logo = page.locator('#appShell:not(.hidden) .brand .logo').first();
   await logo.waitFor({ state: 'visible', timeout: 10_000 });
   assert(String(await logo.evaluate(el => getComputedStyle(el).backgroundImage)).includes('dabbir-app-icon'), 'BROWSER_APPROVED_LOGO_MISSING');
+
+  // Disposable QA tenant only; every click uses the shipped UI and real API.
+  // Database readback proves a saved proposal has not silently activated.
+  await page.locator('#dabbirMemoryButton').click({timeout:15_000});
+  await page.locator('[data-knowledge-correction="v2"] summary').click();
+  const form=page.locator('[data-knowledge-correction-form="v2"]');
+  await form.waitFor({state:'visible',timeout:15_000});
+  const correctionLanguage=await page.locator('html').getAttribute('lang');
+  await form.locator('input[name="correction"]').fill(String(correctionLanguage).startsWith('ar')?'إذا قال العميل QA VIP فنحن نقصد QA Gold Wash':'when a customer says QA VIP, we mean QA Gold Wash');
+  await form.locator('button[type="submit"]').click();
+  const card=page.locator('[data-knowledge="v2"] article').filter({hasText:'QA VIP'});
+  await card.waitFor({state:'visible',timeout:15_000});
+  const readMeaning=async expected=>{
+    const result=await ownerSession.request('/api/understanding-knowledge?business_id='+encodeURIComponent(businessId));
+    assert(result.ok&&result.json?.ok,'KNOWLEDGE_READBACK_FAILED');
+    const proposal=result.json.proposals.find(p=>p.alias==='QA VIP'&&p.target_id===serviceId);
+    assert(proposal?.status===expected,'KNOWLEDGE_STATUS_MISMATCH_'+expected);
+    return {proposal,audit:result.json.audit.filter(e=>e.proposal_id===proposal.id)};
+  };
+  await readMeaning('PROPOSED');
+  await card.getByRole('button',{name:/اعتماد المعنى|^Approve meaning$/}).click();
+  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
+  const approved=await readMeaning('OWNER_APPROVED');
+  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).click();
+  await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).waitFor();
+  await readMeaning('REVOKED');
+  await card.getByRole('button',{name:/إعادة اعتماد هذا الإصدار|^Approve this version again$/}).click();
+  await card.getByRole('button',{name:/إلغاء الاعتماد|^Revoke approval$/}).waitFor();
+  const restored=await readMeaning('OWNER_APPROVED');
+  assert(restored.proposal.version>approved.proposal.version,'KNOWLEDGE_ROLLBACK_VERSION_NOT_INCREMENTED');
+  assert(['PROPOSED','OWNER_APPROVED','REVOKED','ROLLBACK'].every(type=>restored.audit.some(e=>e.event_type===type)),'KNOWLEDGE_AUDIT_INCOMPLETE');
+  await page.locator('.dabbir-memory-close').click();
+  console.log('OWNER_KNOWLEDGE_BROWSER_PASS owner_correction=true catalog_grounded=true propose_inactive=true approve=true revoke=true rollback=true audit_events=4');
+
+  // Real owner API + shipped mobile UI, scoped to the disposable QA tenant.
+  const operationalBranches=await ownerSession.request('/api/activity-intelligence?business_id='+encodeURIComponent(businessId));
+  assert(operationalBranches.ok&&operationalBranches.json?.branches?.length,'ACTIVITY_BRANCHES_READ_FAILED');
+  const operationalBranch=operationalBranches.json.branches[0].id;
+  const readOperational=()=>ownerSession.request('/api/activity-intelligence?'+new URLSearchParams({business_id:businessId,branch_id:operationalBranch}));
+  if(await page.locator('#bottomNav').isVisible()){
+    const supportNavigationClear=await page.evaluate(()=>{
+      const support=document.querySelector('#dshFab')?.getBoundingClientRect();
+      const navigation=document.querySelector('#bottomNav')?.getBoundingClientRect();
+      return !!support&&!!navigation&&support.bottom<=navigation.top;
+    });
+    assert(supportNavigationClear,'SUPPORT_BUTTON_OVERLAPS_MOBILE_NAVIGATION');
+    await page.locator('#bottomNav [data-screen="more"]').click();
+    await page.locator('#screen-more [data-screen="settings"]').click();
+    console.log('ACTIVITY_SETTINGS_NAVIGATION=bottom_navigation');
+  }else{
+    const menu=page.locator('#menuBtn:visible');
+    assert(await menu.count()===1,'ACTIVITY_RESPONSIVE_MENU_MISSING');
+    await menu.click();
+    const moreNav=page.locator('#side.open #nav [data-screen="more"]:visible');
+    await moreNav.waitFor({state:'visible',timeout:10000});
+    await moreNav.click();
+    await page.locator('#screen-more [data-screen="settings"]').click();
+    console.log('ACTIVITY_SETTINGS_NAVIGATION=responsive_sidebar');
+  }
+  await page.locator('#screen-settings.active').waitFor({state:'visible',timeout:10000});
+  const operationalForm=page.locator('#dabbirOperationalServices form');
+  await operationalForm.waitFor({state:'visible',timeout:20000});
+  await operationalForm.locator('[name="branch"]').selectOption(operationalBranch);
+  await operationalForm.locator('[name="service"] option[value="'+serviceId+'"]').waitFor({state:'attached',timeout:15000});
+  await operationalForm.locator('[name="service"]').selectOption(serviceId);
+  await operationalForm.locator('[name="activity"]').selectOption('consulting');
+  for(const mode of ['AT_BUSINESS','AT_CUSTOMER','MOBILE','REMOTE','PICKUP','DELIVERY'])await operationalForm.locator('[name="mode"][value="'+mode+'"]').setChecked(mode==='REMOTE');
+  await operationalForm.locator('button[type="submit"]').click();
+  await operationalForm.locator('[data-message]').filter({hasText:/تم حفظ متطلبات الخدمة|Service requirements saved/}).waitFor({timeout:15000});
+  const operationalSaved=await readOperational();
+  const operationalContract=operationalSaved.json?.profile?.services?.find(x=>x.service_id===serviceId);
+  assert(operationalSaved.ok&&operationalContract?.activity_type==='consulting'&&operationalContract.delivery_modes.join(',')==='REMOTE','ACTIVITY_OWNER_SAVE_READBACK_FAILED');
+  assert(!operationalContract.mode_requirements.REMOTE.required.includes('location'),'ACTIVITY_REMOTE_LOCATION_REQUIRED');
+  assert(operationalSaved.json.audit.some(x=>x.service_id===serviceId&&x.version===operationalContract.owner_version&&x.action==='SAVE'),'ACTIVITY_OWNER_AUDIT_MISSING');
+  await operationalForm.locator('[data-revoke]').click();
+  await operationalForm.locator('[name="restore"] option[value="'+(operationalContract.owner_version+1)+'"]').waitFor({state:'attached',timeout:15000});
+  await operationalForm.locator('[data-message]').filter({hasText:/تم حفظ متطلبات الخدمة|Service requirements saved/}).waitFor({timeout:15000});
+  const operationalRestored=await readOperational();
+  assert(operationalRestored.json?.audit?.some(x=>x.service_id===serviceId&&x.action==='REVOKE'&&x.version>operationalContract.owner_version),'ACTIVITY_REVOKE_AUDIT_MISSING');
+  console.log('ACTIVITY_OWNER_BROWSER_PASS branch_scope=true service_config=true remote_no_location=true save_readback=true revoke=true audit=true');
 
   await page.locator('#bottomNav [data-screen="conversations"]').click();
   await page.locator('#screen-conversations.active').waitFor({ state: 'visible', timeout: 10_000 });
@@ -405,20 +524,34 @@ async function browserJourney() {
     fs.mkdirSync(dir, { recursive: true });
     const visual = { sha: process.env.GITHUB_SHA, origin: ORIGIN, engine: 'WebKit emulation; not physical Safari', cases: [] };
     const screens = ['dashboard', 'tasks', 'notifications', 'customers', 'appointments', 'operations', 'integrations', 'settings', 'automations', 'analytics'];
+    let activeEntry = null;
+    let visualSummary;
     try {
+      // Read-only and tenant-checked. If unavailable, missing navigation remains
+      // UNAVAILABLE; it must not be inferred to be an intentional exclusion.
+      const capabilityResult = await ownerSession.request(`/api/activity-tasks?business_id=${encodeURIComponent(businessId)}`, { retry: false }).catch(() => null);
+      const capabilities = scopedVisualCapabilities(capabilityResult, businessId);
       for (const [device, width, height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]) {
         await page.setViewportSize({ width, height });
         for (const language of ['ar', 'en']) {
           await page.locator(`#${language}Btn`).click();
           for (const screen of screens) {
+            const entry = { device, width, height, language, screen, status: 'RUNNING' };
+            visual.cases.push(entry);
+            activeEntry = entry;
             if (await page.locator('#menuBtn:visible').count() && !(await page.locator('#side.open').count())) await page.locator('#menuBtn').click();
-            let nav = page.locator(`#side [data-screen="${screen}"]`);
-            if (!(await nav.count())) {
-              await page.locator('#side [data-screen="more"]').click();
-              nav = page.locator(`#screen-more [data-screen="${screen}"]`);
+            let nav = page.locator(`#side [data-screen="${screen}"]:visible`);
+            if (!(await nav.count()) && await page.locator('#side [data-screen="more"]:visible').count()) {
+              await page.locator('#side [data-screen="more"]:visible').click();
+              nav = page.locator(`#screen-more [data-screen="${screen}"]:visible`);
             }
-            const entry = { device, width, height, language, screen };
-            if (!(await nav.count())) { entry.status = 'UNAVAILABLE'; visual.cases.push(entry); continue; }
+            const availability = visualAvailability({ screen, hasVisibleNavigation: (await nav.count()) > 0, hasTarget: (await page.locator(`#screen-${screen}`).count()) > 0, capabilities });
+            if (availability !== 'READY') {
+              entry.status = availability;
+              if (availability === 'BROKEN_TARGET') throw new Error('INTERNAL_VISUAL_BROKEN_TARGET');
+              activeEntry = null;
+              continue;
+            }
             await nav.click({ timeout: 10000 });
             await page.locator(`#screen-${screen}.active`).waitFor({ state: 'visible', timeout: 10000 });
             await page.evaluate(()=>{window.scrollTo(0,0);for(const el of document.querySelectorAll('.main,.content'))el.scrollTop=0});
@@ -426,8 +559,6 @@ async function browserJourney() {
             entry.overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
             entry.file = `${device}-${language}-${screen}.png`;
             await page.screenshot({ path: `${dir}/${entry.file}`, fullPage: false, animations: 'disabled', timeout: 15000 });
-            entry.status = entry.overflow ? 'OVERFLOW' : 'CAPTURED';
-            visual.cases.push(entry);
             if(['dashboard','settings'].includes(screen)&&['iphone','desktop'].includes(device)){
               // Text-only 200% enlargement, separate from physical Safari/Dynamic Type.
               await page.evaluate(()=>{
@@ -462,6 +593,8 @@ async function browserJourney() {
                 }
               }
             }
+            entry.status = entry.overflow ? 'OVERFLOW' : 'PASS';
+            activeEntry = null;
           }
         }
       }
@@ -473,22 +606,34 @@ async function browserJourney() {
         await teamPage.locator('#members .row').first().waitFor({timeout:25000});
         visual.team={language:await teamPage.locator('html').getAttribute('lang'),cases:[]};
         for(const [device,width,height] of [['iphone',390,844],['iphone-max',430,932],['ipad',768,1024],['ipad-landscape',1024,768],['desktop',1440,900]]){
+          const entry = { device, width, height, status: 'RUNNING' };
+          visual.team.cases.push(entry);
+          activeEntry = entry;
           await teamPage.setViewportSize({width,height});
           await teamPage.screenshot({path:`${dir}/${device}-team.png`,timeout:15000});
-          visual.team.cases.push({device,width,height,overflow:await teamPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)});
+          entry.overflow = await teamPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);
+          entry.status = entry.overflow ? 'OVERFLOW' : 'PASS';
+          activeEntry = null;
         }
       }finally{await teamPage.close()}
     } catch (error) {
+      if (activeEntry && activeEntry.status !== 'BROKEN_TARGET') activeEntry.status = 'ACTION_FAILED';
+      visual.interrupted = true;
       visual.error = String(error.message);
+      visual.sidebar_failure = await captureSidebarFailure(page);
       throw error;
     } finally {
+      // Emit even on a failed click/wait/screenshot, before writing the artifact.
+      // The helper projects only fixed screen/status names, language and dimensions.
+      visualSummary = emitInternalVisualSummary(visual);
       fs.writeFileSync(`${dir}/report.json`, JSON.stringify(visual, null, 2));
     }
+    assertInternalVisualGate(visualSummary);
   }
 
-  // The functional report is sufficient evidence here. In protected WebKit,
-  // screenshot rasterization can block the browser channel long after every
-  // interaction has already passed, so it must not determine journey success.
+  // The functional report and optional visual gate are separate evidence.
+  // When visual QA is enabled, visible overflow fails the journey; screenshots
+  // alone do not certify the page's data, permissions or customer workflow.
   assert(pageErrors.length === 0, `BROWSER_PAGE_ERRORS:${pageErrors.join(' | ')}`);
   assert(consoleErrors.length === 0, `BROWSER_CONSOLE_ERRORS:${consoleErrors.slice(0, 5).join(' | ')}`);
   return { detail: 'WebKit iPhone-size journey completed password + TOTP MFA, then rendered owner workspace, conversation, product, and approved DABBIR identity.' };
@@ -685,14 +830,73 @@ async function runJourney() {
   if (!conversation) throw new Error('FATAL_CONVERSATION_CREATE_FAILED');
 
   await step('15_customer_message_gets_ai_reply', async () => {
+    // A persisted sender_type=ai can be a deterministic fallback. Exercise the
+    // real provider separately using this isolated QA owner's authenticated path.
+    const probe = await ownerSession.request('/api/dabbir-ai', {
+      method: 'POST', retry: false,
+      body: { synthetic: true, probe: 'whatsapp_semantic' },
+    });
+    const providerEvidence = {
+      status: probe.status, state: probe.json?.state || 'UNKNOWN',
+      error: probe.json?.error || null, provider: probe.json?.provider || null,
+      model: probe.json?.model || null, checks: probe.json?.checks || null,
+      policy_action:probe.json?.policy_action || null, proposed_risk:probe.json?.proposed_risk || null,
+    };
+    const providerNoise=classifyProviderNoise(probe);
+    if(providerNoise){
+      report.provider_noise_events??=[];
+      report.provider_noise_events.push({step:'15_customer_message_gets_ai_reply',probe:'whatsapp_semantic',http_status:probe.status,evidence:providerEvidence});
+    }else{
+      assert(probe.ok && probe.json?.ok === true && probe.json?.state === 'SUCCESS'
+        && probe.json?.synthetic_probe === true && probe.json?.external_side_effects === false
+        && probe.json?.semantic_probe === true && Object.values(probe.json?.checks || {}).length === 5
+        && Object.values(probe.json.checks).every(value => value === true),
+        `REAL_AI_PROVIDER_PROBE_FAILED:${JSON.stringify(providerEvidence)}`);
+    }
     const result = await ownerSession.request('/api/chat-customer', {
       method: 'POST',
       body: { business_id: businessId, conversation_id: conversationId, message: 'مرحبا، هل المنتج متوفر وما سعره؟' },
     });
     assert(result.ok && result.json?.customer_message?.sender_type === 'customer', `CUSTOMER_MESSAGE_FAILED_${result.status}:${small(result.text)}`);
     assert(result.json?.ai_message?.sender_type === 'ai', 'AI_REPLY_MISSING');
-    return { status: result.status, detail: `AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
+    return { status: result.status, classification:providerNoise?'PROVIDER_NOISE':undefined, detail: `${providerNoise?'Provider capacity noise recorded; customer path still succeeded':'Real provider verified'}: ${JSON.stringify(providerEvidence)}; AI reply persisted: ${small(result.json.ai_message.body, 120)}` };
   });
+
+  await runRequiredCognitiveStep('15b_cognitive_goal_continuity',{checkCount:9,evidenceKey:'cognitive_goal_continuity_evidence',requireCognitiveProbe:true});
+
+  await runRequiredCognitiveStep('15f_cognitive_context_references',{scenario:'context_references',checkCount:9,evidenceKey:'cognitive_context_reference_evidence'});
+
+  await runRequiredCognitiveStep('15g_unseen_multi_activity',{
+    scenario:'unseen_multi_activity',
+    checkCount:5,
+    expectedKeys:['services_duration_side_question','clinic_administrative_boundary','laundry_pickup_requirements','salon_typed_worker_reference','salon_conditional_date_preference'],
+    evidenceKey:'unseen_multi_activity_evidence',
+  });
+
+  // Bounded comparative measurement once per release, not once per viewport.
+  // Provider-capacity failures are recorded separately from cognitive quality.
+  // A valid provider response that repeatedly misses the contract still fails.
+  // No model priority is changed here.
+  if(REPORT_PATH==='dabbir-ai-customer-journey-report.json'){
+    await runRequiredCognitiveStep('15d_cognitive_independent_goals',{scenario:'multiple_requests',checkCount:12,evidenceKey:'cognitive_independent_goals_evidence',requireCognitiveProbe:true,logKey:'COGNITIVE_GOAL_SEPARATION'});
+    await runRequiredCognitiveStep('15e_cognitive_service_duration',{scenario:'service_details',checkCount:9,evidenceKey:'cognitive_service_details_evidence',logKey:'COGNITIVE_SERVICE_DETAILS'});
+    report.cognitive_model_comparison=[];
+    for(const provider of ['google-gemini','groq','cloudflare-workers-ai']){
+      await step('15c_compare_'+provider,async()=>{
+        const probe=await ownerSession.request('/api/dabbir-ai',{method:'POST',retry:false,body:{synthetic:true,probe:'cognitive_dialogue',provider,scenario:'correction_side_question'}});
+        const evidence={provider,status:probe.status,ok:probe.json?.ok===true,checks:probe.json?.checks||null,providers:probe.json?.providers||[],error:probe.json?.error||null,evidence_scope:probe.json?.evidence_scope||null};
+        report.cognitive_model_comparison.push(evidence);
+        console.log('COGNITIVE_MODEL_MEASUREMENT='+JSON.stringify(evidence));
+        if(classifyProviderNoise(probe)){
+          report.provider_noise_events??=[];
+          report.provider_noise_events.push({step:'15c_compare_'+provider,provider,http_status:probe.status,providers:evidence.providers});
+          return {status:probe.status,classification:'PROVIDER_NOISE',detail:provider+' unavailable from transient provider capacity/network failure; cognitive score not counted.'};
+        }
+        assert(probe.ok&&evidence.ok&&evidence.providers.length>0&&evidence.providers.every(x=>x.provider===provider)&&Object.keys(evidence.checks||{}).length===11&&Object.values(evidence.checks).every(x=>x===true),'COGNITIVE_CANDIDATE_FAILED:'+provider+':'+(evidence.error||'CHECK_FAILURE'));
+        return {status:probe.status,detail:provider+' passed the fixed five-turn real-model comparison; DB and WhatsApp delivery excluded.'};
+      },{required:false});
+    }
+  }
 
   await step('16_employee_human_takeover', async () => {
     const result = await employeeSession.request('/api/chat-control', {
@@ -827,6 +1031,13 @@ async function runJourney() {
 
   await step('25_mobile_webkit_owner_journey', browserJourney);
 
+  const ownerBookingProof=await step('25b_owner_booking_create_replay_complete', () => runBookingOwnerJourney({
+    ownerSession, employeeSession, runLabel: RUN_LABEL,
+    registerBusinessCleanup: id => { bookingQaBusinessIds.add(id); },
+  }));
+
+  await step('25c_owner_ai_activity_booking',()=>runOwnerAiBookingJourney({ownerSession,employeeSession,context:ownerBookingProof?.qa_context,browserContext,origin:ORIGIN}));
+
   await step('26_employee_logout_invalidates_session', async () => {
     const logout = await employeeSession.request('/api/auth/logout', { method: 'POST', body: {} });
     assert(logout.ok, `EMPLOYEE_LOGOUT_FAILED_${logout.status}`);
@@ -853,14 +1064,26 @@ try {
   if (browserContext) await browserContext.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
 
+  let bookingCleanupSucceeded = true;
+  for (const id of bookingQaBusinessIds) {
+    try {
+      const result = await qaControl('dabbir_ai_qa_cleanup', { business_id: id });
+      report.cleanup.push({ item: 'qa_booking_business', status: 'PASS', http_status: result.status, detail: 'Disposable booking tenant deleted.' });
+    } catch (error) {
+      bookingCleanupSucceeded = false;
+      report.cleanup.push({ item: 'qa_booking_business', status: 'FAIL', detail: small(error?.message || error) });
+      report.required_failures += 1;
+    }
+  }
+
   if (owner?.id || employee?.id || businessId) {
     try {
       const result = await qaControl('dabbir_ai_qa_cleanup', {
         business_id: businessId || undefined,
-        owner_user_id: owner?.id || undefined,
+        owner_user_id: bookingCleanupSucceeded ? owner?.id || undefined : undefined,
         employee_user_id: employee?.id || undefined,
       });
-      report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: 'PASS', http_status: result.status, detail: 'QA business data and disposable identities deleted.' });
+      report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: bookingCleanupSucceeded ? 'PASS' : 'PARTIAL', http_status: result.status, detail: bookingCleanupSucceeded ? 'QA business data and disposable identities deleted.' : 'Main QA tenant and employee deleted; owner retained because a booking tenant still needs cleanup.' });
     } catch (error) {
       report.cleanup.push({ item: 'qa_tenant_and_auth_users', status: 'FAIL', detail: small(error?.message || error) });
       report.required_failures += 1;

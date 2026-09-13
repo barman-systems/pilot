@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {execFileSync} from 'node:child_process';
+import {understandConversation} from '../api/_dabbir-semantic-engine.js';
+import {brainCases,evaluateBrainCase} from '../test/fixtures/understanding/brain-benchmark.mjs';
+const baselineRoot=process.env.DABBIR_BRAIN_BASELINE_ROOT;
+if(!baselineRoot)throw new Error('DABBIR_BRAIN_BASELINE_ROOT_REQUIRED');
+const baseline=await import(pathToFileURL(path.resolve(baselineRoot,'api/_dabbir-semantic-engine.js')));
+const rate=items=>({passed:items.filter(Boolean).length,total:items.length,percent:items.length?Math.round(items.filter(Boolean).length/items.length*10000)/100:null});
+const measure=reduce=>{
+ const results=brainCases.map(c=>evaluateBrainCase(c,reduce));
+ const fields=keys=>results.flatMap(r=>r.checks.filter(c=>keys.includes(c.field)).map(c=>c.pass));
+ return {all_cases:rate(results.map(r=>r.pass)),goal_understanding:rate(fields(['goal','intent'])),entity_resolution:rate(fields(['service','worker','date','time','part'])),correct_next_action:rate(fields(['action'])),context_carryover:rate(results.filter(r=>['known_reference','known_service_reference','after_five_turns','after_twenty_turns','worker_reference'].includes(r.scenario)).map(r=>r.pass)),unnecessary_clarification:rate(results.filter(r=>r.checks.some(c=>c.field==='action'&&c.expected==='CHECK_AVAILABILITY')).map(r=>r.checks.find(c=>c.field==='action').actual==='CLARIFY')),unconfirmed_mutations:results.filter(r=>r.mutation).length,failures:results.filter(r=>!r.pass).map(({id,checks})=>({id,checks:checks.filter(c=>!c.pass)}))};
+};
+const report={generated_at:new Date().toISOString(),baseline_sha:execFileSync('git',['-C',baselineRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),candidate_sha:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),candidate_dirty:!!execFileSync('git',['status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim(),scope:'120 labeled deterministic state-transition cases: 30 situations across four activity/language/timezone profiles. Empty transcript at every turn. No LLM, actual outbound, or database execution is claimed by these metrics.',baseline:measure(baseline.understandConversation),candidate:measure(understandConversation),unmeasured:['Live-model goal accuracy','Real WhatsApp hallucinated-action rate','Production duplicate execution rate','Production cross-tenant error rate','Durable persistence accuracy (covered separately by SQL tests)']};
+const output=process.env.DABBIR_BRAIN_REPORT||'docs/audits/DABBIR_CONVERSATIONAL_BRAIN_BENCHMARK.json';
+fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({baseline:report.baseline.all_cases,candidate:report.candidate.all_cases,failures:report.candidate.failures},null,2));
+if(report.candidate.failures.length)process.exitCode=1;

@@ -22,6 +22,8 @@ export default async function handler(req, res) {
   try {
     const response = await fetch(`${HOST}/capture/`, {
       method: 'POST',
+      signal: AbortSignal.timeout(3000),
+      redirect: 'error',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         api_key: TOKEN,

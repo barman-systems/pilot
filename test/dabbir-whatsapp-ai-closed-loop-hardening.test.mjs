@@ -2,21 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// Native bounded role history and invalid provider envelopes are behavior-tested
+// by dabbir-semantic-role-history and dabbir-semantic-provider-contract suites.
 const ai=fs.readFileSync(new URL('../api/_dabbir-whatsapp-ai-core.js',import.meta.url),'utf8');
-const menu=fs.readFileSync(new URL('../api/_dabbir-whatsapp-service-menu.js',import.meta.url),'utf8');
+const menu=fs.readFileSync(new URL('../api/_dabbir-whatsapp-dispatch.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260907095800_dabbir_whatsapp_ai_service_selected_state_v1.sql',import.meta.url),'utf8');
-
-test('planner receives bounded conversation history and filters legacy control envelopes',()=>{
-  assert.match(ai,/conversation_history:plannerHistory\(context\)/);
-  assert.match(ai,/sender==='ai'&&looksLikePlannerEnvelope\(body\)/);
-  assert.match(ai,/Use conversation_history and pending state for short follow-ups/);
-});
-
-test('malformed planner output can never be sent verbatim to a customer',()=>{
-  assert.match(ai,/AI_PLANNER_CONTRACT_INVALID/);
-  assert.match(ai,/function customerReply/);
-  assert.doesNotMatch(ai,/parseDecision\(ai\.reply\)\|\|\{action:'REPLY',reply:clean\(ai\.reply/);
-});
 
 test('general AI delivery is conversation and branch scoped',()=>{
   assert.match(ai,/loadConversationConnectionWithServiceKey/);
@@ -25,7 +15,6 @@ test('general AI delivery is conversation and branch scoped',()=>{
 });
 
 test('service selection is a valid durable AI state',()=>{
-  assert.match(menu,/setState\(context,'service_selected'/);
   assert.match(migration,/service_selected/);
   assert.match(migration,/dabbir_ai_conversation_state_action_check/);
   assert.match(migration,/v_action not in \('none','service_selected','choose_slot'/);
@@ -40,16 +29,7 @@ test('service-menu ambiguous and permanent failures do not loop until dead-lette
 });
 
 test('branch and business configuration drift escalates immediately instead of consuming retries',()=>{
-  for(const code of [
-    'AI_CONVERSATION_BRANCH_INACTIVE',
-    'AI_BLOCKED_BY_HUMAN_TAKEOVER',
-    'BUSINESS_PROFILE_UNVERIFIED',
-    'ACTION_SERVICE_NOT_AVAILABLE_IN_BRANCH',
-    'ACTION_WORKER_NOT_AVAILABLE_IN_BRANCH',
-    'ACTION_WORKER_SERVICE_MISMATCH',
-    'DABBIR_SERVICE_NOT_AVAILABLE_IN_BRANCH',
-    'DABBIR_WORKER_NOT_ASSIGNED_TO_BRANCH',
-  ]){
+  for(const code of ['AI_CONVERSATION_BRANCH_INACTIVE','AI_BLOCKED_BY_HUMAN_TAKEOVER','BUSINESS_PROFILE_UNVERIFIED','ACTION_SERVICE_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_SERVICE_MISMATCH','DABBIR_SERVICE_NOT_AVAILABLE_IN_BRANCH','DABBIR_WORKER_NOT_ASSIGNED_TO_BRANCH']){
     assert.match(menu,new RegExp(`PERMANENT_SERVICE_FAILURES[\\s\\S]*['\"]${code}['\"]`),`${code} must be terminal in service-menu policy`);
     assert.match(ai,new RegExp(`PERMANENT_AI_FAILURES[\\s\\S]*['\"]${code}['\"]`),`${code} must be terminal in general AI policy`);
   }
@@ -57,8 +37,9 @@ test('branch and business configuration drift escalates immediately instead of c
   assert.match(menu,/PERMANENT_SERVICE_FAILURES\.has\(code\)[\s\S]*serviceHandoff/);
 });
 
-test('persistent planner failures escalate before exhausting the standard five attempts',()=>{
+test('persistent legacy and V3 interpreter failures escalate before exhausting the standard five attempts',()=>{
   assert.match(ai,/code==='AI_PLANNER_CONTRACT_INVALID'&&Number\(claim\?\.attempt_count\|\|0\)>=2/);
+  assert.match(ai,/\['V3_INTERPRETER_CONTRACT_INVALID','V3_INTERPRETER_UNAVAILABLE'\]\.includes\(code\)&&Number\(claim\?\.attempt_count\|\|0\)>=2/);
   assert.match(ai,/Number\(claim\?\.attempt_count\|\|0\)>=5/);
   assert.match(ai,/requireHumanForFailure/);
 });

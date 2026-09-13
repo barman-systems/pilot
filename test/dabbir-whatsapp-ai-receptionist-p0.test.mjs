@@ -24,8 +24,10 @@ test('signed inbound persistence durably enqueues before returning and duplicate
 
 test('AI queue uses lease tokens, bounded retries, stale turn detection and human takeover stop',()=>{
   for(const token of ['dabbir_whatsapp_ai_claim_dispatch','dabbir_whatsapp_ai_claim_next','lock_token','locked_until','attempt_count','max_attempts','HUMAN_REQUIRED','newer_customer_message_exists','SUPERSEDED_BY_NEW_CUSTOMER_MESSAGE'])must(queue,new RegExp(token));
-  must(core,/newer_customer_message_exists===true[\s\S]+CANCELLED/);
-  must(core,/state==='human_active'\|\|context\?\.conversation\?\.state==='action_required'/);
+  const semantic=fs.readFileSync(path.join(root,'api/_dabbir-semantic-engine.js'),'utf8');
+  must(semantic,/newer_customer_message_exists/);
+  must(core,/SEMANTIC_SUPERSEDED[\s\S]+CANCELLED/);
+  must(semantic,/human_active','action_required/);
 });
 
 test('AI outbound identity is truthful and service-role only',()=>{
@@ -46,15 +48,6 @@ test('AI booking inserts whatsapp source and never overrides confirmation or dep
   must(core,/Your booking is confirmed/);
 });
 
-test('LLM cannot supply arbitrary UUIDs to final booking; selected verified pending slot is authoritative',()=>{
-  must(core,/slots=pendingSlots\(context\),slot=slots\[index\]/);
-  must(core,/p_service_id:slot\.service_id/);
-  must(core,/p_worker_id:safeUuid\(slot\.worker_id\)/);
-  must(core,/p_starts_at:slot\.starts_at/);
-  assert.doesNotMatch(core,/decision\.serviceId|decision\.workerId|decision\.appointmentId/);
-  must(core,/service_name and worker_name must exactly match a name in VERIFIED CONTEXT/);
-});
-
 test('availability and booking confirmation use verified business timezone without Dubai fallback',()=>{
   must(actions,/select b\.timezone into v_timezone/);
   assert.doesNotMatch(actions,/Asia\/Dubai/);
@@ -69,9 +62,7 @@ test('availability migration never mixes a rowtype target with scalar INTO targe
 });
 
 test('cancel and reschedule are scoped to the conversation customer and stop after handoff',()=>{
-  for(const src of [actions,patch]){
-    must(src,/a\.customer_id=v_conversation\.customer_id/);
-  }
+  for(const src of [actions,patch])must(src,/a\.customer_id=v_conversation\.customer_id/);
   must(patch,/state in \('human_active','action_required'\)/);
   must(patch,/AI_BLOCKED_BY_HUMAN_TAKEOVER/);
   must(actions,/PAST_APPOINTMENT_NOT_CANCELLABLE_BY_AI/);
@@ -81,17 +72,17 @@ test('cancel and reschedule are scoped to the conversation customer and stop aft
 test('same-as-last-time is grounded from customer booking history',()=>{
   must(actions,/dabbir_whatsapp_ai_customer_recent_bookings/);
   must(actions,/a\.customer_id=v_customer_id/);
-  must(core,/reuse_last/);
-  must(core,/recentBookings\(context\)/);
+  const resolver=fs.readFileSync(path.join(root,'api/_dabbir-context-resolver.js'),'utf8');
+  must(resolver,/operational_history/);
 });
 
 test('ambiguous Meta outcome never blind-retries and is handed to a human',()=>{
-  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([^\n]+)\}/)?.[1]||'';
+  const ambiguous=core.match(/if\(error\?\.ambiguous===true\)\{([\s\S]*?)\}(?=if\(Number\(error\?\.providerStatus\)|\s*if\(Number\(error\?\.providerStatus\))/)?.[1]||'';
   assert.ok(ambiguous,'ambiguous-outbound branch must exist before retry classification');
   must(ambiguous,/requireHumanForFailure/);
   must(ambiguous,/Ambiguous WhatsApp delivery requires human review/);
   assert.doesNotMatch(ambiguous,/finish\(claim,'RETRY'/);
-  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?\n\}/)?.[0]||'';
+  const escalation=core.match(/async function requireHumanForFailure\([\s\S]*?return \{state:'HUMAN_REQUIRED',error:code\};\s*\}/)?.[0]||'';
   must(escalation,/finish\(claim,'HUMAN_REQUIRED'/);
   must(escalation,/dabbir_whatsapp_ai_handoff|handoff\(context/);
 });

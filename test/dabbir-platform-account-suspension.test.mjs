@@ -62,5 +62,5 @@ test('admin UI exposes suspension and reactivation while enforcing recovery safe
   assert.match(ui, /apply_recovery/);
   assert.match(ui, /frozenRequired|يجب تعليق حساب العميل أولًا/);
   assert.match(ui, /manualRequired|مصالحة يدوية/);
-  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v4'/);
+  assert.match(ui, /x-dabbir-platform-customer-admin-ui','v5'/);
 });

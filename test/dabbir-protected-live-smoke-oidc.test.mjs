@@ -14,11 +14,30 @@ test('protected smoke can use short-lived GitHub trusted OIDC without opening pr
   assert.match(workflow,/steps\.bypass\.outputs\.generated == 'true'/);
 });
 
-test('blocked automation access is a real failing gate, never a green skipped journey',()=>{
-  const blocked=workflow.match(/echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'[\s\S]{0,900}?exit 2/);
-  assert.ok(blocked,'blocked protection access must terminate the job with exit 2');
-  assert.match(workflow,/browser journey did not run/);
-  assert.match(workflow,/BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'[\s\S]{0,240}?exit 2/);
+test('short-lived trusted OIDC is attempted before the Vercel API fallback',()=>{
+  const oidcAt=workflow.indexOf('oidc_response_file=');
+  const vercelApiAt=workflow.indexOf('project_endpoint=');
+  assert.ok(oidcAt>0,'trusted OIDC acquisition must exist');
+  assert.ok(vercelApiAt>oidcAt,'a stale Vercel API token must not preempt trusted OIDC');
+  assert.match(workflow,/TRUSTED_GITHUB_OIDC_REJECTED_HTTP_/);
+  assert.match(workflow,/VERCEL_API_PROJECT_ACCESS_UNAVAILABLE_HTTP_/);
+});
+
+test('optional Vercel API failures fall through while the aggregate protection gate stays fail-closed',()=>{
+  assert.match(workflow,/VERCEL_API_PROJECT_ACCESS_UNAVAILABLE_HTTP_/);
+  assert.match(workflow,/VERCEL_API_BYPASS_GENERATION_UNAVAILABLE_HTTP_/);
+  assert.match(workflow,/VERCEL_API_BYPASS_GENERATION_RESPONSE_INVALID/);
+  assert.doesNotMatch(workflow,/BLOCKED_VERCEL_BYPASS_GENERATION_FAILED'[\s\S]{0,240}?exit 2/);
+  const blocked=workflow.match(/echo 'BLOCKED_VERCEL_AUTOMATION_ACCESS_NOT_CONFIGURED'[\s\S]{0,1200}?exit 2/);
+  assert.ok(blocked,'all unavailable protection access methods must terminate the job with exit 2');
+  assert.match(workflow,/Production remains protected and the browser journey did not run/);
+});
+
+test('known stale temporary bypass cleanup cannot be ignored before minting another bypass',()=>{
+  assert.match(workflow,/cleanup_failed=0/);
+  assert.match(workflow,/cleanup_failed=\$\(\(cleanup_failed \+ 1\)\)/);
+  assert.match(workflow,/if \[ "\$cleanup_failed" -eq 0 \]; then/);
+  assert.match(workflow,/VERCEL_API_STALE_BYPASS_REVOKE_UNAVAILABLE_HTTP_/);
 });
 
 test('protected smoke is bound to the exact production release SHA',()=>{

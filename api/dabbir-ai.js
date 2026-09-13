@@ -1,5 +1,8 @@
+import { probeSemanticInterpreter } from './_dabbir-semantic-interpreter.js';
+import {probeCognitiveDialogue} from './_dabbir-cognitive-probe.js';
 import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
+import { configuredDirectProviders } from './_ai-provider-readiness.js';
 import { generateDABBIRAiReply, getDABBIRAiConfig, getDABBIRAiRedundancy } from './_ai-core.js';
 
 function json(res, status, body) {
@@ -29,6 +32,7 @@ export default async function handler(req, res) {
       cost_mode: config.cost_mode,
       configured_provider_count: redundancy.configured_provider_count,
       direct_provider_count: redundancy.direct_provider_count,
+      direct_providers: configuredDirectProviders(),
       gateway_fallback_configured: redundancy.gateway_fallback_configured,
       redundancy_ready: redundancy.redundancy_ready,
       data_mode: 'SYNTHETIC_ONLY',
@@ -53,7 +57,11 @@ export default async function handler(req, res) {
     return json(res, 403, { ok: false, error: 'synthetic_mode_required' });
   }
 
-  const result = await generateDABBIRAiReply({
+  const result = req.body?.probe === 'cognitive_dialogue'
+    ? await probeCognitiveDialogue({provider:req.body?.provider??null,scenario:req.body?.scenario??'critical'}).catch(error=>({ok:false,state:'PROVIDER_ERROR',error:/^COGNITIVE_(?:PROVIDER_NOT_ALLOWED|PROVIDER_NOT_CONFIGURED|SCENARIO_NOT_ALLOWED)$/.test(error?.message)?error.message:'COGNITIVE_PROBE_FAILED',cognitive_probe:true}))
+    : req.body?.probe === 'whatsapp_semantic'
+    ? await probeSemanticInterpreter().catch(error=>({ok:false,state:'PROVIDER_ERROR',error:['AI_PLANNER_UNAVAILABLE','AI_PLANNER_CONTRACT_INVALID'].includes(error?.code)?error.code:'SEMANTIC_PROBE_FAILED',semantic_probe:true}))
+    : await generateDABBIRAiReply({
     project: req.body?.project,
     message: req.body?.message,
     language: req.body?.language || 'auto',

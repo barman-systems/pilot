@@ -210,6 +210,11 @@ const script = String.raw`(()=>{
       const finish=(conversationRefresh=null)=>{
         if(epoch!==navigationEpoch) return;
         if(hit.name==='conversations'&&!workspace?.business?.id) return;
+        // paint() already completed the navigation and closed its menu. A menu
+        // open now is a newer user interaction, not stale navigation state.
+        // The canonical render must not undo it when a server refresh finishes.
+        const side=document.querySelector('#side');
+        const preserveMenu=Boolean(hit.screen.classList.contains('active')&&side?.classList.contains('open'));
         let error=null;
         try{
           if(typeof showScreen==='function') showScreen(hit.name);
@@ -219,6 +224,7 @@ const script = String.raw`(()=>{
         if(epoch!==navigationEpoch) return;
         if(!hit.screen.classList.contains('active')) safeFallback(hit,source,error||new Error('SCREEN_NOT_ACTIVATED'));
         else if(error) safeFallback(hit,source,error);
+        if(preserveMenu&&!error&&document.querySelector('#side')===side&&hit.screen.classList.contains('active')) side.classList.add('open');
         const finished=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
         window.__dabbirLastNavigationTiming={
           target:hit.name,
