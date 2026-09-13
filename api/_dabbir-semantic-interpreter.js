@@ -89,11 +89,10 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   const x=JSON.parse(result.reply);
-  const serviceName=groundedServiceName(x,message,context);
   const serviceQuestion=x.service_question&&x.confidence>=.8&&sanitizeSemanticText(message).includes(x.service_question.evidence)
-    ? {...x.service_question,explicit_service:serviceName!=null}:null;
+    ? {...x.service_question,explicit_service:x.service_name!=null}:null;
   const providerProposal={action:x.action,intent:x.intent,confidence:x.confidence,riskLevel:x.risk_level,
-    serviceName,knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:semanticRequestSpans(x.request_spans),
+    serviceName:groundedServiceName(x,message,context),knowledgeKey:x.knowledge_key,entities:x.entities,dialogue:x.dialogue||null,requestSpans:semanticRequestSpans(x.request_spans),
     serviceQuestion,contextReference:x.context_reference||null,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   if(serviceQuestion){providerProposal.intent=serviceQuestion.field==='price'?'PRICING':'SERVICE_DISCOVERY';providerProposal.action=serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU';}

@@ -1,8 +1,0 @@
-{
-  "baseline_head": "b13658f8b2cb8d4cfcd9a6395bee033df84e8a20",
-  "source_git_blob": "de8a0556668306e87114e48500728ae0849f078f",
-  "test_path": "test/dabbir-v3-social-current-evidence.test.mjs",
-  "test_sha256": "45a5a313ab862d7762cb753775992aced8d08d0555a037f2c69528680e1f8c79",
-  "baseline_result": {"tests": 25, "pass": 12, "fail": 13, "skipped": 0},
-  "test_scope": "real seed/reducer/planner, injected semantic proposals and trusted-fast-fact fixtures, modeled JSON reload; no live model, RPC, concurrency, Meta or phone"
-}
