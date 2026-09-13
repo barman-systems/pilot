@@ -8,6 +8,7 @@ import {
   supabaseRest,
 } from './_auth-core.js';
 import { branchWrite, resolveBranchScope } from './_branch-scope.js';
+import { createAppointment as createRuntimeAppointment } from './dabbir-runtime.js';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeId=value=>UUID_RE.test(String(value||'').trim())?String(value).trim():null;
@@ -109,42 +110,6 @@ async function startConversation(ctx,body){
   };
 }
 
-async function createAppointment(ctx,body){
-  const {businessId,branchId}=await selectedScope(ctx,body);
-  let customerId=safeId(body?.customer_id);
-  const startsAt=new Date(String(body?.starts_at||''));
-  if(Number.isNaN(startsAt.getTime()))throw Object.assign(new Error('VALID_START_TIME_REQUIRED'),{status:400});
-  if(!customerId){
-    const customer=await createCustomer(ctx,businessId,body?.customer_name||'Customer','dabbir_branch_appointment_runtime');
-    customerId=customer.id;
-  }
-  const rows=await rest(ctx.token,'dabbir_appointments?select=id,business_id,branch_id,customer_id,service_id,worker_id,starts_at,ends_at,status,simulated,created_at,updated_at',{
-    method:'POST',
-    headers:{prefer:'return=representation'},
-    body:JSON.stringify({
-      business_id:businessId,
-      branch_id:branchId,
-      customer_id:customerId,
-      service_id:safeId(body?.service_id),
-      starts_at:startsAt.toISOString(),
-      status:'requested',
-      simulated:false,
-    }),
-  },'APPOINTMENT_CREATE_FAILED');
-  const appointment=persisted(rows,'APPOINTMENT_PERSISTENCE_UNVERIFIED');
-  if(appointment.branch_id!==branchId)throw Object.assign(new Error('APPOINTMENT_BRANCH_UNVERIFIED'),{status:502});
-  return {
-    ok:true,
-    action:'create_appointment',
-    state:'VERIFIED_PERSISTED',
-    appointment,
-    branch_id:branchId,
-    verified_persisted:true,
-    truth:{state:'VERIFIED',source:'SUPABASE_RETURN_REPRESENTATION',branch_id:branchId,entity_id:appointment.id,verified_at:new Date().toISOString()},
-    external_side_effects:false,
-  };
-}
-
 export default async function handler(req,res){
   if(req.method!=='POST')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'POST'});
   if(!requireSameOrigin(req))return json(res,403,{ok:false,error:'ORIGIN_REQUIRED'});
@@ -155,7 +120,11 @@ export default async function handler(req,res){
     const action=clean(body?.action,60);
     let result;
     if(action==='start_conversation')result=await startConversation(ctx,body);
-    else if(action==='create_appointment')result=await createAppointment(ctx,body);
+    else if(action==='create_appointment')result=await createRuntimeAppointment(
+      {accessToken:ctx.token,user:ctx.user,memberships:ctx.memberships},
+      body,
+      {customerSource:'dabbir_branch_appointment_runtime'},
+    );
     else return json(res,400,{ok:false,error:'UNSUPPORTED_BRANCH_ACTION'});
     res.setHeader('x-dabbir-branch-write','verified');
     return json(res,200,result);
