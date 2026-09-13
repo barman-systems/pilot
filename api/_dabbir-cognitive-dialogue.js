@@ -92,6 +92,12 @@ export function cognitiveReduce(args,reduce){
    delete prepared.entities.slot;
   }
  }
+ // The reducer is intentionally allowed to update its working previous state.
+ // Preserve an immutable post-correction anchor before speculative provider
+ // interpretation so a read-only side question can never rewrite the active
+ // operational goal while we decide how to answer that question.
+ const retained=prepared?structuredClone(prepared):prepared;
+ const retainedPrevious=()=>retained?structuredClone(retained):retained;
  let result=reduce({...args,previous:prepared,context:{...c,cognitive_active:true,cognitive_read_question:!!args.proposal?.serviceQuestion,cognitive_message_role:social?'SOCIAL':d?.message_role||(args.proposal?.serviceQuestion?'SIDE_QUESTION':null)}});
  let {state,decision}=result;
  if(continuation&&previous?.language)state.language=previous.language;
@@ -114,21 +120,26 @@ export function cognitiveReduce(args,reduce){
  }
  if(partition)return decisionView(partition.state,partition.decision,previous,c,'NEW_REQUEST');
  const wasActive=activeJourney(previous);
+ const serviceRead=!!args.proposal?.serviceQuestion&&['PRICING','SERVICE_DISCOVERY'].includes(args.proposal?.intent);
  const knowledge=d?.message_role==='SIDE_QUESTION'?arr(c.knowledge).find(k=>k.key===args.proposal?.knowledgeKey&&k.source==='owner_approved'&&Number(k.confidence)>=.95):null;
- const proposedRead=d?.message_role==='SIDE_QUESTION'?({PRICING:'PRICING',SERVICE_DISCOVERY:'SERVICE_MENU'}[args.proposal?.intent]||null):null;
+ // serviceQuestion is its own grounded read-only contract. A provider that calls
+ // it ANSWER_TO_PENDING_QUESTION must not be allowed to convert "كم VIP" into
+ // an answer to the pending vehicle/location question of another booking.
+ const proposedRead=(d?.message_role==='SIDE_QUESTION'||serviceRead)?({PRICING:'PRICING',SERVICE_DISCOVERY:'SERVICE_MENU'}[args.proposal?.intent]||null):null;
  const side=wasActive&&(['PRICING','SERVICE_MENU'].includes(decision.action)||proposedRead||knowledge);
  let role=d?.message_role||(side?'SIDE_QUESTION':resolvesPending(previous,state)?'ANSWER_TO_PENDING_QUESTION':arr(state.user_corrections).length>arr(previous?.user_corrections).length?'CORRECTION':wasActive?'CONTINUATION':'NEW_REQUEST');
  if(side){
   const inquiry={action:proposedRead||(knowledge?'REPLY':decision.action),service_id:value(state,'service'),service_verified:verifiedOperationalFact(state.entities?.service)};
-  // Recompute the next business requirement from the retained goal. A pricing
-// target never overwrites the service being booked or reuses a slot approval.
-  result=reduce({...args,proposal:null,previous:prepared,context:{...c,batch_messages:[],cognitive_message_role:'SIDE_QUESTION'}});
+  // Recompute the next business requirement from the immutable retained goal.
+  // A pricing target never overwrites the service being booked or reuses a slot
+  // approval, even if the speculative reducer mutated its input state in place.
+  result=reduce({...args,proposal:null,previous:retainedPrevious(),context:{...c,batch_messages:[],cognitive_message_role:'SIDE_QUESTION'}});
   state=result.state;decision={...result.decision,action:inquiry.action,intent:inquiry.action==='PRICING'?'PRICING':'SERVICE_DISCOVERY',reasonCode:'SIDE_QUESTION_RESUME',queryServiceId:inquiry.service_id,queryServiceVerified:inquiry.service_verified,resumeReply:previous?.intent_confirmed!==false&&result.decision.action==='CLARIFY'?result.decision.reply:null};
   if(knowledge){const answer=state.language==='en'?knowledge.value?.answer_en||knowledge.value?.answer_ar:knowledge.value?.answer_ar||knowledge.value?.answer_en;if(typeof answer==='string')decision.reply=answer.slice(0,1400)+(decision.resumeReply?'\n'+decision.resumeReply:'');else decision=result.decision;}
   role='SIDE_QUESTION';
  }
  if(wasActive&&state.goal==='UNKNOWN'&&!mayReplaceGoal(previous,args.proposal,c.batch_messages)){
-  result=reduce({...args,proposal:null,previous:prepared});state=result.state;decision=result.decision;
+  result=reduce({...args,proposal:null,previous:retainedPrevious()});state=result.state;decision=result.decision;
  }
  state.cognitive_pending_resolved=resolvesPending(previous,state);
  decision=answerServiceQuestion({context:c,state,decision,proposal:args.proposal});
