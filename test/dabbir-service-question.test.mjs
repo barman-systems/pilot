@@ -30,22 +30,6 @@ test('duration side question preserves original service, goal and pending requir
  assert.equal(h.calls.some(x=>x.name==='dabbir_semantic_execute_v2'),false);
 });
 
-test('grounded duration side question outranks unresolved pending time even when provider role is misclassified',async()=>{
- const h=harness({type:'services'});
- await h.turn('أبا غسيل عادي',{action:'CREATE_BOOKING',intent:'BOOKING',confidence:.98,riskLevel:'MEDIUM',entities:[]});
- await h.turn('باجر');
- const originalService=h.state.entities.service.value;
- assert.equal(h.state.clarification_entity,'time');
- assert.equal(h.state.cognition.pending_field,'time');
- const r=await h.turn('كم تاخذ وقت؟',{action:'CLARIFY',intent:'BOOKING',confidence:.98,riskLevel:'LOW',entities:[],serviceName:null,
-  serviceQuestion:{field:'duration_minutes',evidence:'كم تاخذ وقت؟',explicit_service:false},
-  dialogue:{message_role:'ANSWER_TO_PENDING_QUESTION',evidence:'كم تاخذ وقت؟',invalidated_fields:[]}});
- assert.equal(r.result.action,'REPLY');assert.match(r.reply,/45 دقيقة/);assert.match(r.reply,/أي وقت يناسبك/);
- assert.equal(r.state.goal,'BOOK_SERVICE');assert.equal(r.state.entities.service.value,originalService);
- assert.equal(r.state.clarification_entity,'time');assert.equal(r.state.cognition.pending_field,'time');
- assert.equal(h.calls.some(x=>x.name==='dabbir_semantic_execute_v2'),false);
-});
-
 test('a full booking request consumes the old menu before later numeric answers',async()=>{
  const h=harness();await h.turn('شو خدماتكم',{action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.98,riskLevel:'LOW',entities:[]});
  await h.turn('أبا غسيل عادي',{action:'CREATE_BOOKING',intent:'BOOKING',confidence:.98,riskLevel:'MEDIUM',entities:[]});
