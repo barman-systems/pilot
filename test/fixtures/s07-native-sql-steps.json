@@ -1,0 +1,64 @@
+{
+  "sourceCommit": "7645f9df82fc8c365f42451b949f387ec24db3d5",
+  "sourceTest": "test/dabbir-understanding-v2-db.test.mjs",
+  "scope": "EXISTING_SYNTHETIC_TEST_BOOTSTRAP_NOT_PRODUCTION_DDL",
+  "steps": [
+    {
+      "file": "./fixtures/understanding/database.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260908025920_dabbir_understanding_engine_v2.sql"
+    },
+    {
+      "file": "./fixtures/understanding/activity-database.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260908155841_dabbir_activity_intelligence_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909085635_dabbir_activity_action_authority_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909091257_dabbir_activity_configuration_visibility_v1.sql"
+    },
+    {
+      "sql": "alter table public.dabbir_message_batches add column dispatch_token uuid,add column channel_type text default 'whatsapp',add column attempt_count integer default 1,add column last_error text,add column next_attempt_at timestamptz,add column processed_at timestamptz,add column updated_at timestamptz default now();\n alter table public.dabbir_conversations add column updated_at timestamptz default now();\n alter table public.dabbir_handoffs add column id uuid default gen_random_uuid(),add column customer_id uuid,add column route_class text,add column reason text,add column metadata jsonb,add column created_at timestamptz default now(),add column priority integer,add column routing_strategy text,add column summary text,add column attempted_actions jsonb,add column unresolved_items jsonb;"
+    },
+    {
+      "file": "../supabase/migrations/20260908173803_dabbir_provider_retry_checkpoint_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909121326_dabbir_cognitive_dialogue_state_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909121923_dabbir_cognitive_rollout_deny_clients_v1.sql"
+    },
+    {
+      "sql": "alter table public.dabbir_whatsapp_outbound_reservations add column provider_verified boolean not null default false"
+    },
+    {
+      "file": "../supabase/migrations/20260909134020_dabbir_cognitive_delivery_progress_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909142432_dabbir_service_presentation_receipts_v1.sql"
+    },
+    {
+      "sql": "alter table public.dabbir_whatsapp_outbound_reservations add column finalized_at timestamptz,add column provider_status text;\n alter table public.dabbir_messages add column intent text;\n alter table public.dabbir_whatsapp_event_ledger alter column id set default gen_random_uuid(),add column business_id uuid,add column connection_id uuid,add column event_key text,add column direction text,add column event_type text,add column provider_message_id text,add column conversation_id uuid,add column message_id uuid,add column provider_status text,add column provider_verified boolean,add column occurred_at timestamptz,add column evidence jsonb;"
+    },
+    {
+      "file": "../supabase/migrations/20260903105200_dabbir_whatsapp_ai_outbound_handoff_guard_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909143719_dabbir_cognitive_finalized_acceptance_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909144318_dabbir_atomic_cognitive_presentation_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909144913_dabbir_cognitive_receipt_reconciliation_v1.sql"
+    },
+    {
+      "file": "../supabase/migrations/20260909180619_dabbir_conversational_brain_context_v1.sql"
+    }
+  ]
+}
