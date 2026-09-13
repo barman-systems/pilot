@@ -44,7 +44,7 @@ jobs:
           QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           QA_URL: ${{ github.event_name == 'push' && 'https://dabbir.bmalman.com' || 'https://dabbir-git-ux-polish-nd56cm4j5v-3619s-projects.vercel.app' }}
         run: node test/dabbir-public-visual-qa.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: public-visual-${{ github.event.pull_request.head.sha || github.sha }}

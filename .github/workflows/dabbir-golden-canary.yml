@@ -231,7 +231,7 @@ jobs:
           cat /tmp/dabbir-golden-canary/receipt.json
       - name: Upload Golden Canary evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dabbir-golden-canary-${{ github.run_id }}
           path: |
