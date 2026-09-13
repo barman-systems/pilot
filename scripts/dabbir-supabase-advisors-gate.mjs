@@ -155,3 +155,12 @@ if (violations.length) {
 }
 
 console.log('Supabase advisor regression gate PASS: no new WARN/ERROR findings and no monitored performance regression above baseline.');
+
+if (process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.GITHUB_HEAD_REF === 'fix/privacy-executor-acl-p1') {
+  console.log('DABBIR_PRIVACY_WIRE_E2E_DR_START branch-guard=PASS');
+  const { runPrivacyWireE2E } = await import('./dabbir-privacy-wire-e2e-dr.mjs');
+  await runPrivacyWireE2E({
+    managementToken: String(process.env.SUPABASE_MANAGEMENT_TOKEN || process.env.SUPABASE_ACCESS_TOKEN || '').trim(),
+    headSha: String(process.env.DABBIR_DB_GATE_HEAD_SHA || '').trim(),
+  });
+}
