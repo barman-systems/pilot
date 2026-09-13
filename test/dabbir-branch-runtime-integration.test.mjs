@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const read=path=>fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const workspace=read('api/branch-workspace.js');
 const operations=read('api/branch-operations.js');
+const runtime=read('api/dabbir-runtime.js');
 const context=read('api/branch-context.js');
 const ui=read('api/branch-context-ui.js');
 const actionCenter=read('api/owner-action-center-core-ui.js');
@@ -25,11 +26,19 @@ test('branch workspace derives dependent rows from scoped conversation ids',()=>
   assert.match(workspace,/dabbir_messages\?[\s\S]*conversation_id=eq\.\$\{enc\(selectedConversationId\)\}/);
 });
 
-test('branch writes require an explicit selected scope and verify persisted branch id',()=>{
+test('branch writes preserve explicit scope while booking delegates to the existing runtime authority',()=>{
   assert.match(operations,/branchWrite\(scope\)/);
   assert.match(operations,/branch_id:branchId/);
   assert.match(operations,/conversation\.branch_id!==branchId/);
-  assert.match(operations,/appointment\.branch_id!==branchId/);
+  assert.match(operations,/createAppointment as createRuntimeAppointment/);
+  assert.match(operations,/createRuntimeAppointment\(/);
+  assert.doesNotMatch(operations,/dabbir_appointments\?select=/);
+  assert.match(runtime,/resolveBranchScope/);
+  assert.match(runtime,/branchWrite\(writeScope\)/);
+  assert.match(runtime,/branch_id:\s*branchId/);
+  assert.match(runtime,/appointment\.business_id !== businessId/);
+  assert.match(runtime,/appointment\.branch_id !== branchId/);
+  assert.match(runtime,/appointment\.customer_id !== customerId/);
 });
 
 test('authorized branch options are server-derived, not guessed from the business branch registry',()=>{
