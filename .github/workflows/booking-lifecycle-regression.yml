@@ -51,7 +51,7 @@ jobs:
           PLAYWRIGHT_PATH: ${{ runner.temp }}/booking-playwright/node_modules/playwright
           BOOKING_BROWSER_OUTPUT: booking-browser-evidence
         run: node scripts/qa-understanding-knowledge-browser.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: booking-lifecycle-browser-${{ github.run_id }}
@@ -85,7 +85,7 @@ jobs:
         run: |
           node scripts/build-dabbir-ui-bundles.mjs
           node scripts/qa-webkit-sidebar-navigation.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: sidebar-navigation-${{ github.run_id }}
