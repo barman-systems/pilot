@@ -1,4 +1,5 @@
 import {generateDABBIRAiReply} from './_dabbir-whatsapp-ai-meter.js';
+import {V3_SEMANTIC_JSON_SCHEMA} from './_dabbir-conversation-v3-semantic-contract.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,n);
@@ -11,6 +12,11 @@ const SIDE_QUESTIONS=new Set(['price','duration_minutes','availability']);
 const CONFIRM_RE=/^(?:هي|هيه|ايوه|ايوا|نعم|تمام|صح|yes|yeah|yep|ok|okay|correct)$/i;
 const DENY_RE=/^(?:لا|مب|مو|لا لا|no|nope)$/i;
 const ORDINAL_RE=/^(?:الخيار\s*)?(\d{1,2})$/u;
+const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
+const V3_PROVIDER_MAX_REQUESTS=4;
+const V3_PROVIDER_TOTAL_TIMEOUT_MS=18_000;
+const V3_GATEWAY_RESERVATION_MS=6_000;
+const V3_GATEWAY_MODEL='openai/gpt-5.6-luna';
 
 function scopedServices(context){return arr(context?.services).filter(s=>(!s?.business_id||s.business_id===context?.business?.id)&&(!s?.branch_id||s.branch_id===context?.conversation?.branch_id));}
 function currentMessage(context){return arr(context?.batch_messages).at(-1)||null;}
@@ -58,10 +64,41 @@ function fastPath({context,previousState,raw}){
   return {proposal:null,fastFacts};
 }
 
-export async function interpretConversationTurnV3({context,previousState=null,generate=generateDABBIRAiReply,now=new Date()}){
+function v3SemanticEnv(env){
+  const source=env&&typeof env==='object'?env:process.env;
+  if(!source.VERCEL_ENV&&!source.AI_GATEWAY_API_KEY&&!source.VERCEL_OIDC_TOKEN)return source;
+  return {...source,DABBIR_AI_GATEWAY_MODEL:String(source.DABBIR_V3_AI_GATEWAY_MODEL||V3_GATEWAY_MODEL)};
+}
+function v3GatewayStructuredOptions(url,options={}){
+  if(String(url)!==GATEWAY_ENDPOINT||!options.body)return options;
+  try{
+    const body=JSON.parse(String(options.body));
+    if(body?.response_format?.type==='json_object'){
+      body.response_format={type:'json_schema',json_schema:{name:'dabbir_v3_interpretation',strict:true,schema:V3_SEMANTIC_JSON_SCHEMA}};
+      return {...options,body:JSON.stringify(body)};
+    }
+  }catch{}
+  return options;
+}
+function createV3ProviderFetch({fetchImpl=fetch,env=process.env,now=Date.now}={}){
+  const deadline=now()+V3_PROVIDER_TOTAL_TIMEOUT_MS;let attempts=0;
+  return async(url,options={})=>{
+    const remaining=deadline-now();
+    if(attempts>=V3_PROVIDER_MAX_REQUESTS||remaining<=0)throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
+    const reserve=(env?.VERCEL_ENV||env?.AI_GATEWAY_API_KEY||env?.VERCEL_OIDC_TOKEN)&&String(url)!==GATEWAY_ENDPOINT?V3_GATEWAY_RESERVATION_MS:0;
+    if(reserve&&(attempts>=3||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
+    attempts++;
+    const nextOptions=v3GatewayStructuredOptions(url,options);
+    const timeoutSignal=AbortSignal.timeout(Math.max(1,remaining-reserve));
+    return fetchImpl(url,{...nextOptions,signal:nextOptions.signal?AbortSignal.any([timeoutSignal,nextOptions.signal]):timeoutSignal});
+  };
+}
+
+export async function interpretConversationTurnV3({context,previousState=null,generate=generateDABBIRAiReply,now=new Date(),env=process.env,fetchImpl=fetch}){
   const raw=currentText(context),msg=currentMessage(context),referenceTime=msg?.created_at||context?.batch?.last_message_at||(now instanceof Date?now.toISOString():String(now));
   const fast=fastPath({context,previousState,raw});if(fast.proposal)return {...fast,provider:'deterministic-v3-fast-path',model:null,telemetry:null};
-  const result=await generate({project:'dabbir_businesses',semantic:'v3',language:'auto',message:clean(raw,2000),businessContext:JSON.stringify(providerContext(context,previousState,referenceTime)),history:roleHistory(context),meteringContext:{business:{id:context?.business?.id},conversation:{id:context?.conversation?.id},batch_message_created_at:referenceTime}});
+  const providerEnv=v3SemanticEnv(env),providerFetch=createV3ProviderFetch({fetchImpl,env:providerEnv});
+  const result=await generate({project:'dabbir_businesses',semantic:'v3',language:'auto',message:clean(raw,2000),businessContext:JSON.stringify(providerContext(context,previousState,referenceTime)),history:roleHistory(context),meteringContext:{business:{id:context?.business?.id},conversation:{id:context?.conversation?.id},batch_message_created_at:referenceTime},env:providerEnv,fetchImpl:providerFetch});
   if(!result?.ok)throw Object.assign(new Error('V3_INTERPRETER_UNAVAILABLE'),{code:'V3_INTERPRETER_UNAVAILABLE',telemetry:result?.telemetry||null});
   const x=normalizeModelContract(parseJsonOnly(result.reply));if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result?.telemetry||null});
   let serviceName=null;if(x.service_candidate?.label&&x.service_candidate?.surface&&x.service_candidate.confidence>=.65){const s=serviceByLabel(context,x.service_candidate.label);if(s)serviceName=serviceLabel(s);}
@@ -73,4 +110,4 @@ export async function interpretConversationTurnV3({context,previousState=null,ge
   return {proposal,fastFacts:fast.fastFacts,provider:result.provider,model:result.model,telemetry:result.telemetry||null,raw_interpretation:{intent:x.intent,role:x.role,service_candidate_label:x.service_candidate?.label||null,requested_action:x.requested_action}};
 }
 
-export const _v3InterpreterTest={norm,serviceByLabel,serviceExactFromMessage,normalizeModelContract,validModelContract,fastPath,providerContext};
+export const _v3InterpreterTest={norm,serviceByLabel,serviceExactFromMessage,normalizeModelContract,validModelContract,fastPath,providerContext,v3SemanticEnv,v3GatewayStructuredOptions,createV3ProviderFetch,V3_PROVIDER_MAX_REQUESTS,V3_GATEWAY_MODEL};
