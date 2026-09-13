@@ -1,0 +1,23 @@
+{
+  "afterHash": "b251629466af0747a41af51aff8d29326feb19e32c8a165c1484227e9db95678",
+  "archiveHash": "5c0803236abbaa186e46aaec08a55c63ab9c3d61e4f86062ae87c52dd2e70dcf",
+  "assertions": [
+    "default deny",
+    "full row equality",
+    "bigint preserved",
+    "occupied target rejected",
+    "time loss detected"
+  ],
+  "beforeHash": "b251629466af0747a41af51aff8d29326feb19e32c8a165c1484227e9db95678",
+  "binaries": {
+    "pg_dump": "84b6c45e52a8e01a4e50784a09694633a84a530e6b8e19b4139698c4d1e3ac45",
+    "pg_restore": "37059a2e745d53e5d112223a31f76f9b53e0bda1fae3dfbc17fe11b83fdac791",
+    "psql": "937e4ea7a9c625c98b1c56e0127e80b1ccac0a57079f67e33fe711e52c41af4c"
+  },
+  "executorHash": "66c110f87bf8dc00b422fb0a10664a303fca05438edbbacdc92263f0935b6b5d",
+  "historicalDDL": false,
+  "independentWitness": false,
+  "scope": "SYNTHETIC_NATIVE_RECOVERY_ONLY_NOT_S07",
+  "server": "16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+  "status": "PASS"
+}
