@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
-import {createHash} from 'node:crypto';
-test('original B synthetic SQL bootstrap compiles on native PostgreSQL',()=>{
+import {createHash,generateKeyPairSync,sign} from 'node:crypto';
+import {runConversationV3Runtime as runtime} from './s07-preparation/instrumented-B/runtime.mjs';
+test('original B synthetic SQL bootstrap and real load RPC reach only a persisted boundary',async()=>{
   const bin=process.env.S07_PG_BIN;assert.ok(bin?.startsWith('/'));
   const env={PGHOST:'127.0.0.1',PGPORT:'55437',PGUSER:'s07_runner',PGPASSFILE:'/dev/null',LANG:'C'};
-  const sql=(db,q)=>execFileSync(join(bin,'psql'),['-X','--no-password','-At','-v','ON_ERROR_STOP=1','-d',db],{input:q,env,encoding:'utf8',maxBuffer:4000000}).trim();
+  const sql=(db,q)=>execFileSync(join(bin,'psql'),['-X','--no-password','-qAt','-v','ON_ERROR_STOP=1','-d',db],{input:q,env,encoding:'utf8',maxBuffer:4000000}).trim();
   const hash=v=>createHash('sha256').update(v).digest('hex');
   const manifest=JSON.parse(readFileSync(new URL('./s07-native-sql-steps.json',import.meta.url)));
   const evidence={scope:manifest.scope,status:'STARTED',commit:manifest.sourceCommit,steps:[]};
@@ -21,7 +22,29 @@ test('original B synthetic SQL bootstrap compiles on native PostgreSQL',()=>{
     assert.match(functions,/dabbir_semantic_load_v2/);assert.match(functions,/dabbir_semantic_commit_v2/);
     evidence.columns=JSON.parse(sql('s07_sql',"SELECT json_agg(t ORDER BY table_schema,table_name,ordinal_position) FROM (SELECT table_schema,table_name,column_name,data_type,ordinal_position FROM information_schema.columns WHERE table_schema IN ('public','dabbir_private')) t;"));
     assert.ok(evidence.columns.some(c=>c.table_name==='dabbir_ai_conversation_state'&&c.column_name==='semantic_state'));
-    evidence.status='PASS'; evidence.historicalRowScopeBound=false; evidence.rpcExecuted=false;
+    const id=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+    const [business,customer,branch,conversation,batch,lock]=[1,2,3,4,5,6].map(id);
+    sql('s07_sql',`INSERT INTO dabbir_businesses(id) VALUES('${business}');
+      INSERT INTO dabbir_customers(id,business_id) VALUES('${customer}','${business}');
+      INSERT INTO dabbir_business_branches(id,business_id) VALUES('${branch}','${business}');
+      INSERT INTO dabbir_conversations(id,business_id,customer_id,branch_id) VALUES('${conversation}','${business}','${customer}','${branch}');
+      INSERT INTO dabbir_message_batches(id,business_id,conversation_id,customer_id,lock_token) VALUES('${batch}','${business}','${conversation}','${customer}','${lock}');
+      INSERT INTO dabbir_private.cognitive_rollouts(business_id,mode,canary_percent) VALUES('${business}','active',100);
+      CREATE TABLE synthetic_capture(body text NOT NULL,payload jsonb NOT NULL,signature text NOT NULL);`);
+    const literal=v=>"'"+String(v).replaceAll("'","''")+"'";
+    const key=generateKeyPairSync('ed25519');let delivered=false,loaded=null;
+    await assert.rejects(runtime({claim:{},context:{},rpc:async name=>{
+      assert.equal(name,'dabbir_semantic_load_v2');
+      loaded=JSON.parse(sql('s07_sql',`SET request.jwt.claim.role='service_role'; SELECT public.dabbir_semantic_load_v2('${batch}','${lock}')::text;`));return loaded;
+    },evidence:{runId:'synthetic-sql-boundary',authorizationId:'synthetic-local-only',publicKey:key.publicKey,persist:async({body,payload})=>{
+      const signature=sign(null,Buffer.from(JSON.stringify(body)),key.privateKey).toString('base64');
+      sql('s07_sql',`INSERT INTO synthetic_capture VALUES(${literal(JSON.stringify(body))},${literal(JSON.stringify(payload))},${literal(signature)})`);
+      return {body,signature};
+    }},interpreter:async()=>{assert.equal(sql('s07_sql','SELECT count(*) FROM synthetic_capture'),'1');delivered=true;throw Error('SYNTHETIC_BOUNDARY_STOP');}}),/SYNTHETIC_BOUNDARY_STOP/);
+    assert.equal(delivered,true);
+    evidence.status='PASS'; evidence.historicalRowScopeBound=false; evidence.rpcExecuted=true;
+    evidence.rpc='public.dabbir_semantic_load_v2(uuid,uuid)';evidence.loadHash=hash(JSON.stringify(loaded));
+    evidence.independentWitness=false;evidence.interpreter='stopping sentinel';
   } catch(error) {evidence.status='FAIL';evidence.error=String(error.message);throw error;}
   finally {mkdirSync('test-results/s07-native',{recursive:true});writeFileSync('test-results/s07-native/sql-bootstrap.json',JSON.stringify(evidence,null,2));sql('postgres','DROP DATABASE s07_sql');}
 });
