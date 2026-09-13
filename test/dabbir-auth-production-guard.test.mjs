@@ -6,9 +6,16 @@ const workflow = fs.readFileSync('.github/workflows/dabbir-auth-production.yml',
 
 test('auth production guard attempts native Supabase HIBP only with management credential', () => {
   assert.match(workflow, /Enforce native Supabase leaked password protection/);
-  assert.match(workflow, /if: steps\.credential\.outputs\.available == 'true'/);
+  assert.match(workflow, /if: github\.event_name != 'pull_request' && steps\.credential\.outputs\.available == 'true'/);
   assert.match(workflow, /password_hibp_enabled/);
   assert.match(workflow, /password_hibp_enabled !== true/);
+});
+
+test('pull request code never receives Supabase management credentials', () => {
+  const jobEnv = workflow.slice(workflow.indexOf('jobs:'), workflow.indexOf('steps:'));
+  assert.doesNotMatch(jobEnv, /SUPABASE_(ACCESS|MANAGEMENT)_TOKEN/);
+  assert.match(workflow, /Resolve management credential\n\s+id: credential\n\s+if: github\.event_name != 'pull_request'/);
+  assert.match(workflow, /Enforce hosted Supabase Auth URLs\n\s+if: github\.event_name != 'pull_request'/);
 });
 
 test('missing management credential verifies the DABBIR compensating control instead of claiming native success', () => {
@@ -28,5 +35,5 @@ test('auth workflow reruns when the compensating control changes', () => {
 
 test('hosted Auth URL mutation remains credential-gated', () => {
   assert.match(workflow, /Enforce hosted Supabase Auth URLs/);
-  assert.match(workflow, /steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
+  assert.match(workflow, /github\.event_name != 'pull_request' && steps\.credential\.outputs\.available == 'true' && steps\.launch-gate\.outputs\.ready == 'true'/);
 });
