@@ -1,0 +1,76 @@
+name: P0-A Patch OIDC Transition Source Once
+
+on:
+  push:
+    branches:
+      - security/p0a-oidc-trust-transition-v1
+    paths:
+      - .github/workflows/_p0a-patch-oidc-transition-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: security/p0a-oidc-trust-transition-v1
+          fetch-depth: 1
+
+      - name: Replace env-only trust with explicit transition subject allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/aws-uae/github-oidc-bootstrap.yml')
+          s=p.read_text()
+          old="""                token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:environment:production
+"""
+          subjects=[
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-ec2-check.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation-bootstrap.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-deploy-now.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-s3-permission-hotfix.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-provision-direct.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-bootstrap-supabase.yml@refs/heads/main',
+          'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main',
+          ]
+          if s.count(old)!=1:
+              raise SystemExit(f'expected one canonical old trust subject, found {s.count(old)}')
+          repl='                token.actions.githubusercontent.com:sub:\n'+''.join(f'                  - {x}\n' for x in subjects)
+          s=s.replace(old,repl)
+          old_output="""  AllowedGitHubSubject:
+    Value: repo:barman-systems@319497139/pilot@1346817686:environment:production
+"""
+          new_output="""  OidcTrustStage:
+    Description: Transitional trust accepts the legacy environment-only subject plus exact main/workflow subjects until custom subject migration is verified.
+    Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS
+"""
+          if s.count(old_output)!=1:
+              raise SystemExit('canonical AllowedGitHubSubject output not found exactly once')
+          s=s.replace(old_output,new_output)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          git diff -- infra/aws-uae/github-oidc-bootstrap.yml
+          grep -F 'TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS' infra/aws-uae/github-oidc-bootstrap.yml >/dev/null
+          test "$(grep -c 'workflow_ref:barman-systems/pilot/.github/workflows/' infra/aws-uae/github-oidc-bootstrap.yml)" -eq 10
+
+      - name: Commit staged source-of-truth transition
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add infra/aws-uae/github-oidc-bootstrap.yml
+          git commit -m 'security(p0a): bind AWS transition trust to main workflow identities'
+          git push origin HEAD:security/p0a-oidc-trust-transition-v1
