@@ -25,23 +25,21 @@ jobs:
         run: node --test test/dabbir-ai-provider-reliability.test.mjs
       - name: postgres distributed authority
         run: node --test test/dabbir-ai-provider-reliability-db.test.mjs
-      - name: bypass scan - direct provider transport
+      - name: collect bypass scan
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import {checkProviderAuthority} from './scripts/check-ai-provider-authority.mjs';
-          const errors=checkProviderAuthority().errors.filter(x=>x.includes('direct AI provider transport'));
-          if(errors.length){
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`## Direct provider bypasses\n\n${errors.map(x=>`- ${x}`).join('\n')}\n`);
-            process.exit(1);
-          }
+          const result=checkProviderAuthority();
+          fs.writeFileSync('provider-authority-errors.txt',result.errors.join('\n')+'\n');
           NODE
-      - name: bypass scan - raw provider core imports
-        run: node -e "import('./scripts/check-ai-provider-authority.mjs').then(({checkProviderAuthority})=>{const e=checkProviderAuthority().errors.filter(x=>x.includes('imports raw'));if(e.length)process.exit(1)})"
-      - name: bypass scan - required authority markers
-        run: node -e "import('./scripts/check-ai-provider-authority.mjs').then(({checkProviderAuthority})=>{const e=checkProviderAuthority().errors.filter(x=>x.includes('authority marker')||x.includes('missing protected source')||x.includes('process-local provider circuit'));if(e.length)process.exit(1)})"
-      - name: bypass scan - diagnostic exemptions
-        run: node -e "import('./scripts/check-ai-provider-authority.mjs').then(({checkProviderAuthority})=>{const e=checkProviderAuthority().errors.filter(x=>x.includes('diagnostic exemption')||x.includes('diagnostic entrypoint')||x.includes('diagnostic workflow'));if(e.length)process.exit(1)})"
+      - name: upload bypass diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-authority-errors
+          path: provider-authority-errors.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: repository bypass scan complete
         run: node scripts/check-ai-provider-authority.mjs
       - name: bypass mutation detection
