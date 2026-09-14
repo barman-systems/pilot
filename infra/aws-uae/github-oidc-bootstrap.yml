@@ -170,7 +170,6 @@ Resources:
                   - backup:GetBackupPlan
                   - backup:ListBackupPlans
                   - backup:CreateBackupSelection
-                  - backup:UpdateBackupSelection
                   - backup:DeleteBackupSelection
                   - backup:GetBackupSelection
                   - backup:ListBackupSelections
