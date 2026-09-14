@@ -45,7 +45,7 @@ function observeProvider429(key,response,now=Date.now()){
   const previous=provider429Strikes.get(key);
   const consecutive=previous&&now-previous.at<=PROVIDER_429_STRIKE_WINDOW_MS?previous.count+1:1;
   provider429Strikes.set(key,{count:consecutive,at:now});
-  if(consecutive<2)return {retryAfterMs:null,cooldownMs:null,strikeCount:consecutive};
+  if(consecutive<2)return {retryAfterMs:null,cooldownMs:armProviderCooldown(key,PROVIDER_COOLDOWN_DEFAULT_MS,now),strikeCount:consecutive};
   return {retryAfterMs:null,cooldownMs:armProviderCooldown(key,PROVIDER_COOLDOWN_DEFAULT_MS,now),strikeCount:consecutive};
 }
 function clearProvider429Strikes(key){provider429Strikes.delete(key)}
@@ -167,7 +167,8 @@ export async function generateDABBIRAiReply(args={}){
         if(error?.code!=='PROVIDER_429_COOLDOWN')skippedAttempts.push({provider,reason:error.code});
         throw error;
       }
-      attempts.push({endpoint:provider,status:0,duration_ms:Date.now()-started,outcome:'NETWORK_ERROR'});
+      const cooldownMs=provider!=='vercel-ai-gateway'?armProviderCooldown(circuitKey,PROVIDER_COOLDOWN_DEFAULT_MS):null;
+      attempts.push({endpoint:provider,status:0,duration_ms:Date.now()-started,outcome:'NETWORK_ERROR',cooldown_ms:cooldownMs});
       throw error;
     }
     const attempt={endpoint:provider,model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started};
