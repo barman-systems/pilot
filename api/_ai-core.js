@@ -9,9 +9,11 @@ const DEFAULT_CLOUDFLARE_MODEL = '@cf/zai-org/glm-4.7-flash';
 const cloudflareEndpoint = env => `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID || ''))}/ai/v1/chat/completions`;
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7'];
+const RECOVERY_GATEWAY_MODELS = ['openai/gpt-5.6-sol'];
 const DIRECT_PROVIDER_TIMEOUT_MS = 5000;
 const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
-const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
+const GATEWAY_PRIMARY_TIMEOUT_MS = 3000;
+const GATEWAY_ATTEMPT_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
 
 function semanticSpec(semantic){
@@ -66,7 +68,7 @@ export function getDABBIRAiConfig(env = process.env) {
         : env.VERCEL_OIDC_TOKEN
           ? 'OIDC_ENV'
           : 'VERCEL_PROJECT_OIDC_RUNTIME',
-      cost_mode: 'FREE_TIER_ONLY',
+      cost_mode: 'FREE_FIRST_WITH_PAID_GATEWAY_RECOVERY',
     };
   }
 
@@ -252,7 +254,11 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
 }
 
 async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl, semantic = false }) {
-  const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
+  const models = [
+    primaryModel,
+    ...RECOVERY_GATEWAY_MODELS.filter(model => model !== primaryModel),
+    ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel && !RECOVERY_GATEWAY_MODELS.includes(model)),
+  ];
   const deadline = Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
 
@@ -261,7 +267,11 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
     if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
 
     const model = models[index];
-    const timeoutMs = semantic ? remaining : index === 0 ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining) : remaining;
+    const timeoutMs = semantic
+      ? Math.min(GATEWAY_ATTEMPT_TIMEOUT_MS, remaining)
+      : index === 0
+        ? Math.min(GATEWAY_PRIMARY_TIMEOUT_MS, remaining)
+        : Math.min(GATEWAY_ATTEMPT_TIMEOUT_MS, remaining);
     try {
       const { response, payload } = await callOpenAiCompatible({
         endpoint: GATEWAY_ENDPOINT,
