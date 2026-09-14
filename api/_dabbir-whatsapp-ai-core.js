@@ -6,7 +6,7 @@ import {serviceRpc,finalizeOutboundReply,markOutboundResult,sendMetaText} from '
 import {loadConversationConnectionWithServiceKey} from './_whatsapp-service-connection.js';
 
 const PERMANENT_AI_FAILURES=new Set([
-  'AI_CONTEXT_UNVERIFIED','SEMANTIC_TENANT_SCOPE_INVALID','SEMANTIC_STATE_SCOPE_INVALID','SEMANTIC_MUTATION_BLOCKED','SEMANTIC_OUTCOME_NOT_VERIFIED','SEMANTIC_BUDGET_EXCEEDED','AI_PENDING_ACTION_INVALID','AI_CONVERSATION_NOT_FOUND','AI_CONVERSATION_BRANCH_INACTIVE','AI_BLOCKED_BY_HUMAN_TAKEOVER','BUSINESS_PROFILE_UNVERIFIED','ACTION_SERVICE_NOT_AVAILABLE','ACTION_SERVICE_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_NOT_AVAILABLE','ACTION_WORKER_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_SERVICE_MISMATCH','CUSTOMER_APPOINTMENT_NOT_FOUND_IN_BRANCH','DABBIR_SERVICE_NOT_AVAILABLE_IN_BRANCH','DABBIR_WORKER_NOT_ASSIGNED_TO_BRANCH','BOOKING_TIMEZONE_UNVERIFIED','WHATSAPP_CONNECTION_AMBIGUOUS_BRANCH','WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH','WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED','V3_AUTHORITY_STATE_TOO_LARGE','V3_AUTHORITY_OUTCOME_UNVERIFIED','V3_PRESENTATION_UNVERIFIED',
+  'AI_CONTEXT_UNVERIFIED','SEMANTIC_TENANT_SCOPE_INVALID','SEMANTIC_STATE_SCOPE_INVALID','SEMANTIC_MUTATION_BLOCKED','SEMANTIC_OUTCOME_NOT_VERIFIED','SEMANTIC_BUDGET_EXCEEDED','AI_PENDING_ACTION_INVALID','AI_CONVERSATION_NOT_FOUND','AI_CONVERSATION_BRANCH_INACTIVE','AI_BLOCKED_BY_HUMAN_TAKEOVER','BUSINESS_PROFILE_UNVERIFIED','ACTION_SERVICE_NOT_AVAILABLE','ACTION_SERVICE_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_NOT_AVAILABLE','ACTION_WORKER_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_SERVICE_MISMATCH','CUSTOMER_APPOINTMENT_NOT_FOUND_IN_BRANCH','DABBIR_SERVICE_NOT_AVAILABLE_IN_BRANCH','DABBIR_WORKER_NOT_ASSIGNED_TO_BRANCH','BOOKING_TIMEZONE_UNVERIFIED','WHATSAPP_CONNECTION_AMBIGUOUS_BRANCH','WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH','WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED','V3_AUTHORITY_STATE_TOO_LARGE','V3_AUTHORITY_OUTCOME_UNVERIFIED','V3_PRESENTATION_UNVERIFIED','ACTIVITY_DELIVERY_MODE_UNRESOLVED',
 ]);
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
@@ -15,10 +15,14 @@ const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 
 function serviceKey(){return clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192)}
 function fmtWhen(value,timezone,lang){try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return clean(value,80)}}
-function slotsText(slots,lang){
-  const lines=arr(slots).slice(0,3).map((s,i)=>`${i+1}) ${fmtWhen(s.starts_at,s.timezone,lang)}${s.worker_name?(lang==='ar'?` مع ${s.worker_name}`:` with ${s.worker_name}`):''}`);
+function localStamp(value,timezone){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;}catch{return null}}
+function slotsText(slots,lang,requested=null){
+  const list=arr(slots).slice(0,3),lines=list.map((s,i)=>`${i+1}) ${fmtWhen(s.starts_at,s.timezone,lang)}${s.worker_name?(lang==='ar'?` مع ${s.worker_name}`:` with ${s.worker_name}`):''}`);
   if(!lines.length)return lang==='ar'?'لا يوجد وقت متاح قريب من طلبك. أعطني وقتًا آخر يناسبك.':'No nearby slot is available. Send me another time that works for you.';
-  return lang==='ar'?`المتاح:\n${lines.join('\n')}\nاختر الوقت المناسب.`:`Available:\n${lines.join('\n')}\nChoose the time that works for you.`;
+  const requestedStamp=requested?.date&&requested?.time?`${requested.date}T${requested.time}`:null,timezone=list[0]?.timezone||requested?.timezone||null,firstStamp=timezone?localStamp(list[0]?.starts_at,timezone):null;
+  const shifted=!!requestedStamp&&!!firstStamp&&firstStamp>requestedStamp;
+  if(lang==='ar')return `${shifted?`الوقت اللي طلبته ${requested.time} غير متاح؛ أقرب المتاح:\n`:'المتاح:\n'}${lines.join('\n')}\nاختر الوقت المناسب.`;
+  return `${shifted?`The requested time ${requested.time} is unavailable; the nearest options are:\n`:'Available:\n'}${lines.join('\n')}\nChoose the time that works for you.`;
 }
 export function bookingText(result,lang){
   const timezone=clean(result?.timezone,80);if(!timezone)throw Object.assign(new Error('BOOKING_TIMEZONE_UNVERIFIED'),{code:'BOOKING_TIMEZONE_UNVERIFIED'});
@@ -89,3 +93,4 @@ async function handleFailure(claim,error){
 }
 export async function processClaimedWhatsAppAiBatch(claim){try{return await processClaim(claim)}catch(error){return handleFailure(claim,error)}}
 export const _v3CutoverTest={engineForMode:conversationEngineForMode};
+export const _aiFailureTest={isPermanentCode:code=>PERMANENT_AI_FAILURES.has(String(code)),slotsText,localStamp};
