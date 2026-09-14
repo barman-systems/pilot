@@ -31,13 +31,25 @@ export function qwen37BenchmarkFetch(fetchImpl = fetch) {
     if (String(url) !== GATEWAY_ENDPOINT || !options.body) return fetchImpl(url, options);
     let body;
     try { body = JSON.parse(String(options.body)); }
-    catch { return fetchImpl(url, options); }
+    catch { throw new Error('QWEN37_BENCHMARK_GATEWAY_BODY_INVALID'); }
     if (String(body.model || '') !== QWEN37_BENCHMARK_MODEL) throw new Error('QWEN37_BENCHMARK_MODEL_DRIFT');
 
-    // Wave 2: give Qwen the same canonical generation contract that DABBIR
-    // already validates, rather than asking for unconstrained JSON. Keep
-    // reasoning low (not high/default) so the cheap model still represents a
-    // viable production candidate instead of winning by unbounded deliberation.
+    // The benchmark must prove Qwen itself, not an AI Gateway provider/model
+    // fallback. `only` is the hard routing allowlist; `order` alone would leave
+    // unlisted providers eligible as fallbacks.
+    body.providerOptions = {
+      ...(body.providerOptions || {}),
+      gateway: {
+        ...(body.providerOptions?.gateway || {}),
+        only: ['alibaba'],
+        order: ['alibaba'],
+      },
+    };
+
+    // Give Qwen the same canonical generation contract that DABBIR already
+    // validates. Qwen3.7 Flash reasoning is enabled by default, while structured
+    // output is documented for non-thinking mode, so this benchmark explicitly
+    // disables reasoning instead of spending hidden output budget on thinking.
     body.response_format = {
       type: 'json_schema',
       json_schema: {
@@ -46,7 +58,7 @@ export function qwen37BenchmarkFetch(fetchImpl = fetch) {
         schema: SEMANTIC_JSON_SCHEMA,
       },
     };
-    body.reasoning = { effort: 'low' };
+    body.reasoning = { effort: 'none' };
     body.max_tokens = Math.max(Number(body.max_tokens) || 0, 2400);
     return fetchImpl(url, { ...options, body: JSON.stringify(body) });
   };
@@ -85,9 +97,9 @@ export async function runQwen37Benchmark({ scenario = 'critical', env = process.
   return {
     ok: Boolean(result.ok && isolatedProvider),
     state: result.ok && isolatedProvider ? 'SUCCESS' : 'FAILED',
-    benchmark: 'DABBIR_QWEN37_STRICT_LOW_V2',
+    benchmark: 'DABBIR_QWEN37_STRICT_NONE_V3',
     model: QWEN37_BENCHMARK_MODEL,
-    configuration: 'STRICT_JSON_SCHEMA_LOW_REASONING_2400_MAX',
+    configuration: 'ALIBABA_ONLY_STRICT_JSON_SCHEMA_NON_THINKING_2400_MAX',
     scenario,
     isolated_provider: isolatedProvider,
     checks: result.checks || {},
