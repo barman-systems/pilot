@@ -3616,5 +3616,27 @@
       ],
       "reason": "Only parity test read these synthetic catalogs; parity now tests real shell dictionary recursively."
     }
+  },
+  "behaviorGeometry": {
+    "api/app-safari-recovery.js": [
+      {
+        "code": "document.documentElement.style.setProperty('--dabbir-sidebar-visual-left',String(sidebarLeft)+'px');",
+        "reason": "Measured visual viewport position; Safari recovery behavior, not a theme override."
+      },
+      {
+        "code": "document.documentElement.style.setProperty('--dabbir-sidebar-visual-width',String(sidebarWidth)+'px');",
+        "reason": "Measured visual viewport width; preserves the tested iPad sidebar geometry."
+      }
+    ],
+    "api/auth/recovery-ui.js": [
+      {
+        "code": "bar.style.width='0';",
+        "reason": "Reset password-strength progress when leaving signup."
+      },
+      {
+        "code": "bar.style.width=(score*25)+'%';",
+        "reason": "Password-strength score is data; the track presentation belongs to static CSS."
+      }
+    ]
   }
 }

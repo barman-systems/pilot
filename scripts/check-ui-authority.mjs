@@ -23,7 +23,15 @@ export function authorityViolations(registry,sources){
   if(/createElement(?:NS)?\(\s*(?:[^,]+,\s*)?['"]style['"]\s*\)|new\s+CSSStyleSheet|\.insertRule\s*\(|\.adoptedStyleSheets\s*=/.test(source))errors.push(`${file}: runtime style injection forbidden`);
   if(/head\.lastElementChild|head-tail-reassert|(?:document\.head|head)\.append(?:Child)?\(\s*(?:style|css|sheet|anchor)\s*\)|observe\(document\.head\s*,\s*\{\s*childList/.test(source))errors.push(`${file}: head-order authority forbidden`);
   const entry=registry.sources?.[file];
-  if(/\.[cm]?js$/.test(file)&&entry?.designOwner!==file&&/\.style\.(?:color|background\w*|font\w*|padding\w*|margin\w*|border\w*|cssText|boxShadow|textAlign)\s*=/.test(source))errors.push(`${file}: behavior module writes design properties`);
+  let presentationWrites=source;
+  for(const geometry of registry.behaviorGeometry?.[file]||[]){
+   if(!geometry.reason||!/\.style\.width\s*=|\.style\.setProperty\('--dabbir-sidebar-visual-(?:left|width)'/.test(geometry.code))errors.push(`${file}: unproved geometry exception`);
+   else presentationWrites=presentationWrites.replace(geometry.code,''); // one occurrence only
+  }
+  if(/\.(?:[cm]?js|html)$/.test(file)&&entry?.designOwner!==file&&(
+   /\.style\.(?!display\b)[\w$]+\s*=|\.style\s*\[/.test(presentationWrites)||
+   /\.style\.(?:setProperty|removeProperty)\(\s*(?!['"]display['"])/.test(presentationWrites)
+  ))errors.push(`${file}: behavior module writes design properties`);
   if(/querySelector(?:All)?\(\s*['"]style\b|\.styleSheets\b|\.rel\s*=\s*['"]stylesheet['"]/.test(source))errors.push(`${file}: runtime stylesheet authority forbidden`);
   if(/\.[cm]?js$/.test(file)&&entry?.designOwner!==file&&/\.[\w-]+[^{}\n]*\{[^{}]*(?:background|font-size|padding|border)\s*:/.test(source))errors.push(`${file}: behavior module defines component CSS`);
   const css=file.endsWith('.css')?source:[...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n');

@@ -27,6 +27,9 @@ test('D: mutation introduces a global literal outside its approved owner',()=>{
  assert.ok(violations({'api/bridge.js':measure("document.body.style.color='#123456'")},baseline).length>0);
  assert.match(authorityViolations(registry,{...clean,'api/bridge.js':"const css='.card{padding:var(--gap)}';"}).join('\n'),/defines component CSS/);
  assert.match(authorityViolations(registry,{...clean,'api/bridge.js':"document.body.style.background='var(--ds-brand)'"}).join('\n'),/writes design properties/);
+ for(const write of ["node.style.width='300px'","node.style['height']='200px'","node.style.setProperty('--ds-brand','var(--other)')"]){
+  assert.match(authorityViolations(registry,{...clean,'api/bridge.js':write}).join('\n'),/writes design properties/);
+ }
 });
 test('E: mutation restores a head-order hack without creating a style node',()=>{
  assert.match(authorityViolations(registry,{...clean,'api/bridge.js':'document.head.appendChild(style);'}).join('\n'),/head-order authority/);
