@@ -6,7 +6,7 @@ const EXPECTED_SHA=String(process.env.EXPECTED_CANARY_SHA||'').trim().toLowerCas
 const BYPASS=String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET||'').trim();
 const TRUSTED_OIDC=String(process.env.VERCEL_TRUSTED_OIDC_TOKEN||'').trim();
 const REPORT_PATH=String(process.env.QWEN37_CANARY_PROBE_REPORT_PATH||'dabbir-qwen37-live-canary-probe.json');
-const SCOPE='qwen37-canary-live-v1';
+const SCOPE='qwen37-canary-live-v2';
 const RUN_ID=`qwen37-canary-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
 if(!/^https:\/\/[^/]+$/i.test(ORIGIN))throw new Error('QWEN37_CANARY_PROBE_ORIGIN_REQUIRED');
@@ -57,8 +57,9 @@ async function run(){
   const exactModel=probe.model==='alibaba/qwen3.7-flash';
   const exactProvider=probe.provider==='vercel-ai-gateway';
   const selected=probe.canary?.selected===true&&probe.canary?.fallback===false&&probe.canary?.percent===1;
+  const syntheticControl=probe.canary?.control==='SYNTHETIC_PROBE_CONTROL';
   const noMutations=probe.synthetic_only===true&&probe.customer_delivery===false&&probe.database_metering===false&&probe.production_mutations===0;
-  report.verdict=r.status===200&&probe.ok===true&&exactModel&&exactProvider&&selected&&noMutations?'PASS':'FAIL';
+  report.verdict=r.status===200&&probe.ok===true&&exactModel&&exactProvider&&selected&&syntheticControl&&noMutations?'PASS':'FAIL';
 }
 
 try{await run();}

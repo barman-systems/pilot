@@ -7,15 +7,14 @@ const proposal={action:'CHECK_AVAILABILITY',intent:'BOOKING',confidence:.98,risk
   entities:[{entity:'date',value:'2026-09-09',evidence:'بكره',confidence:.99,correction:false},
     {entity:'time',value:'09:00',evidence:'9 الصبح',confidence:.99,correction:false}]};
 const response=(content=JSON.stringify(proposal),status=200,model)=>new Response(JSON.stringify(status===200?{model,choices:[{message:{content},finish_reason:'stop'}]}:{}),{status,headers:{'content-type':'application/json'}});
-const env={
-  DABBIR_QWEN37_CANARY_ENABLED:'1',DABBIR_QWEN37_CANARY_PERCENT:'1',
-  VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'gateway-test',GROQ_API_KEY:'groq-test',
-};
+const env={VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'gateway-test',GROQ_API_KEY:'groq-test'};
+const control={enabled:true,percent:1,source:'TEST_CAPABILITY'};
+const canaryControlLoader=async()=>control;
 
 function identity(selected=true){
   for(let i=0;i<10000;i++){
     const meteringContext={business:{id:'biz-canary-test'},conversation:{id:`conv-${i}`},batch_message_created_at:'2026-09-14T00:00:00Z'};
-    const decision=qwen37CanaryDecision({env,meteringContext});
+    const decision=qwen37CanaryDecision({control,meteringContext});
     if(decision.selected===selected)return {meteringContext,decision};
   }
   throw new Error('CANARY_TEST_IDENTITY_NOT_FOUND');
@@ -25,7 +24,7 @@ test('selected conversation is served by isolated Qwen3.7 semantic canary',async
   const {meteringContext,decision}=identity(true);
   const seen=[];
   const result=await interpretSemanticMessage({
-    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,
+    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,canaryControlLoader,
     fetchImpl:async(url,options)=>{
       const body=JSON.parse(options.body);seen.push({url,body});
       assert.match(url,/ai-gateway/);
@@ -42,6 +41,7 @@ test('selected conversation is served by isolated Qwen3.7 semantic canary',async
   assert.equal(result.model,QWEN37_CANARY_MODEL);
   assert.equal(result.telemetry.qwen37_canary.selected,true);
   assert.equal(result.telemetry.qwen37_canary.bucket,decision.bucket);
+  assert.equal(result.telemetry.qwen37_canary.source,'TEST_CAPABILITY');
   assert.equal(result.telemetry.qwen37_canary.fallback,false);
 });
 
@@ -49,7 +49,7 @@ test('failed Qwen3.7 candidate is discarded and control provider receives a fres
   const {meteringContext}=identity(true);
   const endpoints=[];
   const result=await interpretSemanticMessage({
-    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,
+    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,canaryControlLoader,
     fetchImpl:async(url,options)=>{
       endpoints.push(url);
       if(url.includes('ai-gateway')){
@@ -73,11 +73,25 @@ test('non-selected conversation follows the existing provider chain unchanged',a
   const {meteringContext}=identity(false);
   const endpoints=[];
   const result=await interpretSemanticMessage({
-    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,
+    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,canaryControlLoader,
     fetchImpl:async(url)=>{endpoints.push(url);assert.match(url,/groq/);return response(undefined,200,'openai/gpt-oss-20b');},
   });
   assert.equal(endpoints.length,1);
   assert.equal(result.provider,'groq');
   assert.equal(result.telemetry.qwen37_canary.selected,false);
   assert.equal(result.telemetry.qwen37_canary.fallback,false);
+});
+
+test('control loader failure fails closed to the unchanged provider chain',async()=>{
+  const {meteringContext}=identity(true);
+  const endpoints=[];
+  const result=await interpretSemanticMessage({
+    message:'فاضين بكره 9 الصبح',context:{business:{id:meteringContext.business.id},conversation:{id:meteringContext.conversation.id}},meteringContext,env,
+    canaryControlLoader:async()=>{throw new Error('db unavailable');},
+    fetchImpl:async(url)=>{endpoints.push(url);assert.match(url,/groq/);return response(undefined,200,'openai/gpt-oss-20b');},
+  });
+  assert.equal(endpoints.length,1);
+  assert.equal(result.provider,'groq');
+  assert.equal(result.telemetry.qwen37_canary.selected,false);
+  assert.equal(result.telemetry.qwen37_canary.source,'CAPABILITY_CONTROL_LOADER_FAILED');
 });

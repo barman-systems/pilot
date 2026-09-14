@@ -5,14 +5,16 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/qwen37-production-canary
+      - fix/qwen37-canary-capability-control
     paths:
       - 'api/_dabbir-qwen37-canary.js'
       - 'api/_dabbir-semantic-interpreter.js'
       - 'api/dabbir-qwen37-canary-probe.js'
+      - 'api/dabbir-qwen37-canary-readiness.js'
       - 'test/dabbir-qwen37-canary.test.mjs'
       - 'test/dabbir-qwen37-canary-integration.test.mjs'
       - 'test/dabbir-qwen37-canary-probe.test.mjs'
+      - 'test/dabbir-qwen37-canary-readiness.test.mjs'
       - 'test/dabbir-qwen37-live-canary-probe.mjs'
       - '.github/workflows/dabbir-qwen37-live-canary.yml'
 
@@ -30,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      QWEN37_CANARY_PROBE_ORIGIN: https://dabbir-git-feat-qwen37-product-87c661-nd56cm4j5v-3619s-projects.vercel.app
+      QWEN37_CANARY_PROBE_ORIGIN: https://dabbir-git-fix-qwen37-canary-c-3200c4-nd56cm4j5v-3619s-projects.vercel.app
       EXPECTED_CANARY_SHA: ${{ github.sha }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       QWEN37_CANARY_PROBE_REPORT_PATH: dabbir-qwen37-live-canary-probe.json
@@ -78,6 +80,7 @@ jobs:
             echo "**Provider:** $(jq -r '.probe.provider // "NONE"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Selected:** $(jq -r '.probe.canary.selected // false' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Fallback:** $(jq -r '.probe.canary.fallback // false' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Control:** $(jq -r '.probe.canary.control // "NONE"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Latency ms:** $(jq -r '.probe.usage.latency_ms // 0' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Actual cost USD:** $(jq -r '.probe.usage.actual_cost_usd // "UNKNOWN"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Production mutations:** $(jq -r '.production_mutations // 0' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
