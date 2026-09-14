@@ -1,4 +1,5 @@
 import {qualityGate as legacyQualityGate} from './_dabbir-cognitive-dialogue-core.js';
+import {semanticClarificationReply} from './_dabbir-conversation-brain-clarification.js';
 
 export const CONVERSATION_BRAIN_QUALITY_OWNER='DABBIR_CONVERSATION_BRAIN';
 
@@ -9,6 +10,9 @@ export const CONVERSATION_BRAIN_QUALITY_OWNER='DABBIR_CONVERSATION_BRAIN';
 // this module has no transport, tenant, tool or mutation authority.
 export function finalizeConversationBrainQuality({state,decision,previous,context}){
   const quality=legacyQualityGate({state,decision,previous,context});
+  if(quality?.decision?.action==='CLARIFY'&&quality.decision.reasonCode==='COGNITIVE_REPLAN'){
+    quality.decision.reply=semanticClarificationReply(quality.state,context);
+  }
   quality.state.cognitive_quality_violations=[...quality.violations];
   return quality;
 }
