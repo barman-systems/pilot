@@ -6,6 +6,7 @@ import {
 } from './_dabbir-semantic-engine-core.js';
 import {runConversationBrain} from './_dabbir-conversation-brain.js';
 import {repeatMemoryConfirmationReply,semanticRouteReply} from './_dabbir-conversation-brain-response.js';
+import {semanticClarificationReply} from './_dabbir-conversation-brain-clarification.js';
 
 export {
   SEMANTIC_VERSION,
@@ -14,12 +15,13 @@ export {
   normalizeSemanticText,
   resolveOrdinal,
   greetingOnly,
-  clarification,
   semanticPlannerContext,
 } from './_dabbir-semantic-engine-core.js';
+export {semanticClarificationReply as clarification} from './_dabbir-conversation-brain-clarification.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const VERIFIED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_CONFIRMED','OWNER_POLICY','PROVIDER_VERIFIED']);
+const BRAIN_CLARIFICATION_REASONS=new Set(['READ_SCOPE_UNRESOLVED','MISSING_OR_AMBIGUOUS_FACT','COGNITIVE_REPLAN']);
 const memoryKind=m=>String(m?.memory_key||'').replace(/^last_verified_|^preferred_|^known_|^usual_/,'');
 const activeEntity=(s,key)=>s?.entities?.[key]?.status==='active'?s.entities[key].value:null;
 const validPoint=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180;
@@ -28,6 +30,9 @@ function ownSemanticRoute(result,context){
   if(!result?.decision)return result;
   const reply=semanticRouteReply({reason:result.decision.reasonCode,state:result.state,context});
   if(reply!==null)result.decision.reply=reply;
+  else if(result.decision.action==='CLARIFY'&&BRAIN_CLARIFICATION_REASONS.has(result.decision.reasonCode)){
+    result.decision.reply=semanticClarificationReply(result.state,context);
+  }
   return result;
 }
 
