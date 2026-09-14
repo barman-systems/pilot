@@ -1,0 +1,488 @@
+name: DABBIR P0-A Agent Runtime Security Audit
+
+on:
+  push:
+    branches:
+      - audit/p0a-agent-runtime-hardening-v1
+    paths:
+      - .github/workflows/p0a-agent-runtime-security-audit.yml
+      - docs/p0b/data-egress-policy.DRAFT.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_SHA: 1796df7fa7eab418157ecc7531313f0af0e73ebf
+  AUDIT_BRANCH: audit/p0a-agent-runtime-hardening-v1
+  EVIDENCE_ROOT: evidence/p0a/1796df7fa7eab418157ecc7531313f0af0e73ebf/pilot
+  AWS_REGION: me-central-1
+  AWS_ROLE_NAME: DabbirGithubDeployRole
+  AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+  VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+  VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+
+jobs:
+  full-history-secret-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout complete repository history at frozen SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.FROZEN_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert frozen SHA and history availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$FROZEN_SHA"
+          git cat-file -e "${FROZEN_SHA}^{commit}"
+          echo "frozen_sha=$FROZEN_SHA"
+          echo "all_refs_commit_count=$(git rev-list --count --all)"
+          echo "frozen_ancestry_commit_count=$(git rev-list --count "$FROZEN_SHA")"
+
+      - name: Install pinned Gitleaks and TruffleHog binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-bin"
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '${RUNNER_TEMP}'/gitleaks.tar.gz' | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/p0a-bin" gitleaks
+
+          curl -fsSL -o "$RUNNER_TEMP/trufflehog.tar.gz" \
+            https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.1/trufflehog_3.97.1_linux_amd64.tar.gz
+          echo 'f863ea3a8d786f7d097870496c977944cce7372a2fe1e56707d965016e543ece  '${RUNNER_TEMP}'/trufflehog.tar.gz' | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trufflehog.tar.gz" -C "$RUNNER_TEMP/p0a-bin" trufflehog
+          "$RUNNER_TEMP/p0a-bin/gitleaks" version
+          "$RUNNER_TEMP/p0a-bin/trufflehog" --version
+
+      - name: Scan tree and complete fetched history without printing secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-raw" "$RUNNER_TEMP/p0a-secret-evidence"
+          set +e
+          "$RUNNER_TEMP/p0a-bin/gitleaks" dir . \
+            --redact=100 --report-format=json \
+            --report-path="$RUNNER_TEMP/p0a-raw/gitleaks-tree.json" \
+            --exit-code=42 >/dev/null 2>"$RUNNER_TEMP/p0a-raw/gitleaks-tree.stderr"
+          GITLEAKS_TREE_STATUS=$?
+
+          "$RUNNER_TEMP/p0a-bin/gitleaks" git . \
+            --log-opts="--all" --redact=100 --report-format=json \
+            --report-path="$RUNNER_TEMP/p0a-raw/gitleaks-history.json" \
+            --exit-code=42 >/dev/null 2>"$RUNNER_TEMP/p0a-raw/gitleaks-history.stderr"
+          GITLEAKS_HISTORY_STATUS=$?
+
+          "$RUNNER_TEMP/p0a-bin/trufflehog" git "file://$GITHUB_WORKSPACE" \
+            --only-verified --json --no-update --fail \
+            >"$RUNNER_TEMP/p0a-raw/trufflehog.jsonl" 2>"$RUNNER_TEMP/p0a-raw/trufflehog.stderr"
+          TRUFFLEHOG_STATUS=$?
+          set -e
+
+          export GITLEAKS_TREE_STATUS GITLEAKS_HISTORY_STATUS TRUFFLEHOG_STATUS
+          python3 - <<'PY'
+          import json, os, pathlib
+          raw=pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-raw'
+          out=pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-secret-evidence'
+          out.mkdir(parents=True,exist_ok=True)
+
+          def load_json(name):
+              p=raw/name
+              if not p.exists() or not p.read_text(errors='ignore').strip(): return []
+              return json.loads(p.read_text())
+
+          def safe_gitleaks(items,scope):
+              result=[]
+              for x in items:
+                  result.append({
+                      'scope':scope,'rule_id':x.get('RuleID'),'description':x.get('Description'),
+                      'file':x.get('File'),'start_line':x.get('StartLine'),'end_line':x.get('EndLine'),
+                      'commit':x.get('Commit'),'author':x.get('Author'),'date':x.get('Date'),
+                      'fingerprint':x.get('Fingerprint')})
+              return result
+
+          gitleaks=safe_gitleaks(load_json('gitleaks-tree.json'),'WORKING_TREE')+safe_gitleaks(load_json('gitleaks-history.json'),'FULL_FETCHED_HISTORY')
+          (out/'gitleaks-report.json').write_text(json.dumps(gitleaks,indent=2,sort_keys=True)+'\n')
+
+          verified=[]
+          p=raw/'trufflehog.jsonl'
+          if p.exists():
+              for line in p.read_text(errors='ignore').splitlines():
+                  try: x=json.loads(line)
+                  except Exception: continue
+                  meta=((x.get('SourceMetadata') or {}).get('Data') or {}).get('Git') or {}
+                  verified.append({'detector_name':x.get('DetectorName'),'detector_type':x.get('DetectorType'),
+                      'verified':bool(x.get('Verified')),'decoder_name':x.get('DecoderName'),
+                      'commit':meta.get('commit'),'file':meta.get('file'),'line':meta.get('line'),'repository':meta.get('repository')})
+          (out/'trufflehog-verified-report.json').write_text(json.dumps(verified,indent=2,sort_keys=True)+'\n')
+
+          exits={'gitleaks_tree_exit':int(os.environ['GITLEAKS_TREE_STATUS']),
+                 'gitleaks_history_exit':int(os.environ['GITLEAKS_HISTORY_STATUS']),
+                 'trufflehog_exit':int(os.environ['TRUFFLEHOG_STATUS'])}
+          scanner_error=(exits['gitleaks_tree_exit'] not in (0,42) or exits['gitleaks_history_exit'] not in (0,42) or exits['trufflehog_exit'] not in (0,183))
+          state='PASS' if not scanner_error and not gitleaks and not verified else 'FAIL'
+          summary={'state':state,'repo':os.environ['GITHUB_REPOSITORY'],'frozen_sha':os.environ['FROZEN_SHA'],
+                   'gitleaks_version':'8.30.1','trufflehog_version':'3.97.1','history_mode':'--all on fetch-depth=0 checkout',
+                   'gitleaks_findings':len(gitleaks),'trufflehog_verified_findings':len(verified),
+                   'scanner_error':scanner_error,'scanner_exit_codes':exits,'secret_values_persisted':False}
+          (out/'secret-scan-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          PY
+          rm -rf "$RUNNER_TEMP/p0a-raw"
+
+      - name: Upload sanitized secret evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-secret-audit
+          path: ${{ runner.temp }}/p0a-secret-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  discover-preview-environment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      preview_exists: ${{ steps.discover.outputs.preview_exists }}
+    steps:
+      - name: Discover GitHub environments without changing them
+        id: discover
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-env-discovery"
+          http="$(curl -sS -o "$RUNNER_TEMP/environments.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/environments?per_page=100")"
+          if [ "$http" = 200 ]; then
+            preview="$(jq '[.environments[]?.name | ascii_downcase | select(.=="preview")] | length' "$RUNNER_TEMP/environments.json")"
+            if [ "$preview" -gt 0 ]; then exists=true; else exists=false; fi
+            jq '{state:"PASS",http_status:200,environments:[.environments[]?.name],preview_environment_exists:'"$exists"'}' \
+              "$RUNNER_TEMP/environments.json" > "$RUNNER_TEMP/p0a-env-discovery/github-environment-inventory.json"
+          else
+            exists=unknown
+            jq -n --arg http "$http" '{state:"BLOCKED_EXTERNAL",http_status:($http|tonumber),environments:[],preview_environment_exists:"unknown"}' \
+              > "$RUNNER_TEMP/p0a-env-discovery/github-environment-inventory.json"
+          fi
+          echo "preview_exists=$exists" >> "$GITHUB_OUTPUT"
+          rm -f "$RUNNER_TEMP/environments.json"
+
+      - name: Upload environment discovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-github-env-discovery
+          path: ${{ runner.temp }}/p0a-env-discovery
+          if-no-files-found: error
+          retention-days: 30
+
+  aws-production-trust-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Obtain production-bound OIDC token and persist safe claims only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-aws"
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,time,pathlib
+          token=os.environ['TOKEN']; payload=token.split('.')[1]; payload += '='*(-len(payload)%4)
+          c=json.loads(base64.urlsafe_b64decode(payload))
+          keys=['iss','aud','sub','repository','repository_owner','environment','ref','workflow_ref','event_name','iat','nbf','exp','jti']
+          safe={k:c.get(k) for k in keys}
+          safe['lifetime_seconds']=(c.get('exp')-c.get('iat')) if isinstance(c.get('exp'),int) and isinstance(c.get('iat'),int) else None
+          safe['verification_time']=int(time.time())
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-aws'/'oidc-jwt-decoded.txt'
+          p.write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          expected=(safe.get('iss')=='https://token.actions.githubusercontent.com' and safe.get('aud')=='sts.amazonaws.com' and safe.get('repository')=='barman-systems/pilot' and safe.get('environment')=='production' and isinstance(safe.get('lifetime_seconds'),int) and 0 < safe['lifetime_seconds'] <= 600 and isinstance(safe.get('nbf'),int))
+          (p.parent/'oidc-claims-validation.json').write_text(json.dumps({'state':'PASS' if expected else 'FAIL','checks':{'issuer':safe.get('iss'),'audience':safe.get('aud'),'repository':safe.get('repository'),'environment':safe.get('environment'),'workflow_ref':safe.get('workflow_ref'),'event_name':safe.get('event_name'),'ref':safe.get('ref'),'lifetime_seconds':safe.get('lifetime_seconds'),'nbf_present':isinstance(safe.get('nbf'),int)}},indent=2,sort_keys=True)+'\n')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "dabbir-p0a-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 \
+            --output json >"$RUNNER_TEMP/aws-creds.json" 2>"$RUNNER_TEMP/aws-assume.stderr"
+          assume_status=$?
+          set -e
+          unset token response
+
+          if [ "$assume_status" -ne 0 ]; then
+            python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-aws'
+          msg=(pathlib.Path(os.environ['RUNNER_TEMP'])/'aws-assume.stderr').read_text(errors='ignore')[-2000:]
+          (p/'aws-trust-policy-access.json').write_text(json.dumps({'state':'FAIL','stage':'ASSUME_ROLE_WITH_WEB_IDENTITY','error':msg},indent=2)+'\n')
+          PY
+            rm -f "$RUNNER_TEMP/aws-creds.json" "$RUNNER_TEMP/aws-assume.stderr"
+          else
+            AWS_ACCESS_KEY_ID="$(jq -r '.Credentials.AccessKeyId' "$RUNNER_TEMP/aws-creds.json")"
+            AWS_SECRET_ACCESS_KEY="$(jq -r '.Credentials.SecretAccessKey' "$RUNNER_TEMP/aws-creds.json")"
+            AWS_SESSION_TOKEN="$(jq -r '.Credentials.SessionToken' "$RUNNER_TEMP/aws-creds.json")"
+            echo "::add-mask::$AWS_ACCESS_KEY_ID"
+            echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+            echo "::add-mask::$AWS_SESSION_TOKEN"
+            export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION="$AWS_REGION"
+            rm -f "$RUNNER_TEMP/aws-creds.json" "$RUNNER_TEMP/aws-assume.stderr"
+
+            set +e
+            aws iam get-role --role-name "$AWS_ROLE_NAME" --output json >"$RUNNER_TEMP/get-role.json" 2>"$RUNNER_TEMP/get-role.stderr"
+            role_status=$?
+            set -e
+            if [ "$role_status" -eq 0 ]; then
+              jq '.Role | {RoleName,Arn,CreateDate,MaxSessionDuration,PermissionsBoundary,AssumeRolePolicyDocument}' "$RUNNER_TEMP/get-role.json" > "$RUNNER_TEMP/p0a-aws/trust-policy.json"
+              jq -n '{state:"PASS",stage:"IAM_GET_ROLE"}' > "$RUNNER_TEMP/p0a-aws/aws-trust-policy-access.json"
+
+              provider_arn="$(jq -r '[.Role.AssumeRolePolicyDocument.Statement[]? | .Principal.Federated?] | map(select(.!=null)) | first // empty' "$RUNNER_TEMP/get-role.json")"
+              if [ -n "$provider_arn" ]; then
+                set +e
+                aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$provider_arn" --output json >"$RUNNER_TEMP/provider.json" 2>"$RUNNER_TEMP/provider.stderr"
+                provider_status=$?
+                set -e
+                if [ "$provider_status" -eq 0 ]; then
+                  jq '{Url,ClientIDList,ThumbprintList,CreateDate}' "$RUNNER_TEMP/provider.json" > "$RUNNER_TEMP/p0a-aws/oidc-provider.json"
+                else
+                  jq -n --arg state BLOCKED_EXTERNAL --arg stage IAM_GET_OIDC_PROVIDER '{state:$state,stage:$stage}' > "$RUNNER_TEMP/p0a-aws/oidc-provider.json"
+                fi
+              fi
+            else
+              python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); p=root/'p0a-aws'
+          msg=(root/'get-role.stderr').read_text(errors='ignore')[-2000:]
+          (p/'aws-trust-policy-access.json').write_text(json.dumps({'state':'BLOCKED_EXTERNAL','stage':'IAM_GET_ROLE','error':msg},indent=2)+'\n')
+          PY
+            fi
+          fi
+
+          python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-aws'
+          access=json.loads((p/'aws-trust-policy-access.json').read_text()) if (p/'aws-trust-policy-access.json').exists() else {'state':'FAIL'}
+          claims=json.loads((p/'oidc-claims-validation.json').read_text())
+          trust_state='NOT_AVAILABLE'
+          reasons=[]
+          if (p/'trust-policy.json').exists():
+              role=json.loads((p/'trust-policy.json').read_text()); doc=role.get('AssumeRolePolicyDocument') or {}
+              statements=doc.get('Statement') or []
+              wanted_sub='repo:barman-systems/pilot:environment:production'; aud='sts.amazonaws.com'
+              trust_state='PASS'
+              found=False
+              for s in statements:
+                  if s.get('Effect')!='Allow': continue
+                  actions=s.get('Action'); actions=[actions] if isinstance(actions,str) else (actions or [])
+                  if 'sts:AssumeRoleWithWebIdentity' not in actions: continue
+                  found=True
+                  cond=s.get('Condition') or {}; eq=cond.get('StringEquals') or {}
+                  sub=eq.get('token.actions.githubusercontent.com:sub'); a=eq.get('token.actions.githubusercontent.com:aud')
+                  if sub!=wanted_sub: reasons.append(f'sub_not_exact:{sub!r}')
+                  if a!=aud: reasons.append(f'aud_not_exact:{a!r}')
+                  if 'StringLike' in cond: reasons.append('stringlike_present')
+              if not found: reasons.append('no_web_identity_allow_statement')
+              if reasons: trust_state='FAIL'
+          state='PASS' if access.get('state')=='PASS' and claims.get('state')=='PASS' and trust_state=='PASS' else ('BLOCKED_EXTERNAL' if access.get('state')=='BLOCKED_EXTERNAL' else 'FAIL')
+          summary={'state':state,'iam_access_state':access.get('state'),'oidc_claims_state':claims.get('state'),'trust_policy_state':trust_state,'trust_policy_reasons':reasons,'role_name':os.environ['AWS_ROLE_NAME'],'frozen_sha':os.environ['FROZEN_SHA'],'production_mutation_performed':False}
+          (p/'aws-production-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - name: Upload AWS production trust evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-aws-production
+          path: ${{ runner.temp }}/p0a-aws
+          if-no-files-found: error
+          retention-days: 30
+
+  aws-nonproduction-negative-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Prove non-production branch token cannot assume production role
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-negative"
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          token=os.environ['TOKEN']; payload=token.split('.')[1]; payload+='='*(-len(payload)%4)
+          c=json.loads(base64.urlsafe_b64decode(payload)); safe={k:c.get(k) for k in ['iss','aud','sub','repository','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          (pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-negative'/'nonproduction-token-claims.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "dabbir-p0a-negative-${GITHUB_RUN_ID}" --web-identity-token "$token" \
+            --duration-seconds 900 --output json >"$RUNNER_TEMP/negative-creds.json" 2>"$RUNNER_TEMP/negative.stderr"
+          status=$?
+          set -e
+          unset token response
+          rm -f "$RUNNER_TEMP/negative-creds.json"
+          export NEGATIVE_STATUS="$status"
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); p=root/'p0a-negative'
+          claims=json.loads((p/'nonproduction-token-claims.json').read_text())
+          allowed=int(os.environ['NEGATIVE_STATUS'])==0
+          msg=(root/'negative.stderr').read_text(errors='ignore')[-1500:] if (root/'negative.stderr').exists() else ''
+          result={'state':'FAIL' if allowed else 'PASS','mode':'NON_PRODUCTION_BRANCH_TOKEN','exact_preview_environment_test':False,'subject':claims.get('sub'),'environment':claims.get('environment'),'ref':claims.get('ref'),'assume_role_allowed':allowed,'safe_error':None if allowed else msg}
+          (p/'preview-negative-test.log').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          (p/'aws-negative-summary.json').write_text(json.dumps({'state':result['state'],'mode':result['mode'],'assume_role_allowed':allowed},indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$RUNNER_TEMP/negative.stderr"
+
+      - name: Upload non-production negative evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-aws-negative
+          path: ${{ runner.temp }}/p0a-negative
+          if-no-files-found: error
+          retention-days: 30
+
+  vercel-env-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Export names metadata and sensitivity only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}"
+          echo "::add-mask::$VERCEL_TOKEN"
+          mkdir -p "$RUNNER_TEMP/p0a-vercel"
+          curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" | \
+          python3 - "$RUNNER_TEMP/p0a-vercel" <<'PY'
+          import sys,json,csv,re,pathlib
+          out=pathlib.Path(sys.argv[1]); payload=json.load(sys.stdin); envs=payload.get('envs') or []
+
+          def classify(key):
+              k=key.upper()
+              if k.startswith(('NEXT_PUBLIC_','PUBLIC_','VITE_PUBLIC_')) or 'PUBLISHABLE' in k or k.endswith('_ANON_KEY'):
+                  return 'PUBLIC_CONFIG'
+              if 'TOKEN' in k:
+                  return 'TOKEN'
+              if 'PRIVATE_KEY' in k or 'SECRET' in k or 'PASSWORD' in k or k.endswith('_PASS'):
+                  return 'SECRET'
+              if 'CREDENTIAL' in k or 'SERVICE_ROLE' in k or 'SERVICE_ACCOUNT' in k:
+                  return 'CREDENTIAL'
+              if 'KEY' in k:
+                  return 'KEY'
+              if any(x in k for x in ('URL','URI','HOST','DOMAIN','REGION','PROJECT_ID','TEAM_ID','ACCOUNT_ID','BUCKET','PORT','ENV','MODE','NAME')):
+                  return 'PRIVATE_CONFIG'
+              return 'UNKNOWN'
+
+          fields=['key','targets','type','git_branch','created_at','updated_at','custom_environment_ids']
+          with (out/'env-metadata.csv').open('w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader()
+              for e in envs:
+                  w.writerow({'key':e.get('key'),'targets':';'.join(e.get('target') or []),'type':e.get('type'),'git_branch':e.get('gitBranch') or '',
+                              'created_at':e.get('createdAt') or '', 'updated_at':e.get('updatedAt') or '',
+                              'custom_environment_ids':';'.join(e.get('customEnvironmentIds') or [])})
+
+          rows=[]; problematic=[]
+          for e in envs:
+              c=classify(str(e.get('key') or '')); secret_like=c in {'SECRET','CREDENTIAL','TOKEN','KEY'}
+              sensitive=(e.get('type')=='sensitive')
+              status='OK'
+              if secret_like and not sensitive:
+                  status='NEEDS_SENSITIVE_OR_EXCEPTION_EVIDENCE'; problematic.append(e.get('key'))
+              rows.append({'key':e.get('key'),'classification':c,'targets':';'.join(e.get('target') or []),'vercel_type':e.get('type'),
+                           'sensitive':str(sensitive).lower(),'secret_like':str(secret_like).lower(),'status':status,'exception_basis':''})
+          with (out/'classification-sheet.csv').open('w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=['key','classification','targets','vercel_type','sensitive','secret_like','status','exception_basis']); w.writeheader(); w.writerows(rows)
+          state='PASS' if not problematic else 'FAIL'
+          (out/'vercel-env-summary.json').write_text(json.dumps({'state':state,'project_id':'prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq','team_id':'team_pwfKq8jHuyW1XFVSZirAJiId','variable_count':len(envs),'secret_like_not_sensitive_count':len(problematic),'secret_like_not_sensitive_names':problematic,'values_exported':False},indent=2,sort_keys=True)+'\n')
+          PY
+
+      - name: Upload sanitized Vercel metadata evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-vercel-env
+          path: ${{ runner.temp }}/p0a-vercel
+          if-no-files-found: error
+          retention-days: 30
+
+  persist-and-enforce:
+    needs:
+      - full-history-secret-audit
+      - discover-preview-environment
+      - aws-production-trust-proof
+      - aws-nonproduction-negative-proof
+      - vercel-env-metadata
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.AUDIT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Download all sanitized P0-A evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pilot-p0a-*
+          path: ${{ runner.temp }}/p0a-all
+          merge-multiple: true
+
+      - name: Persist evidence bundle on audit branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          cp -f "$RUNNER_TEMP/p0a-all/"* "$EVIDENCE_ROOT/"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$EVIDENCE_ROOT"
+          if ! git diff --cached --quiet; then
+            git commit -m 'evidence(p0a): persist sanitized credential and OIDC audit [skip ci]'
+            git push origin "HEAD:$AUDIT_BRANCH"
+          fi
+
+      - name: Enforce P0-A pilot evidence contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$EVIDENCE_ROOT/trust-policy.json"
+          test -f "$EVIDENCE_ROOT/oidc-jwt-decoded.txt"
+          test -f "$EVIDENCE_ROOT/preview-negative-test.log"
+          test -f "$EVIDENCE_ROOT/env-metadata.csv"
+          test -f "$EVIDENCE_ROOT/classification-sheet.csv"
+          test -f "$EVIDENCE_ROOT/gitleaks-report.json"
+          test "$(jq -r '.state' "$EVIDENCE_ROOT/secret-scan-summary.json")" = PASS
+          test "$(jq -r '.state' "$EVIDENCE_ROOT/aws-production-summary.json")" = PASS
+          test "$(jq -r '.state' "$EVIDENCE_ROOT/aws-negative-summary.json")" = PASS
+          test "$(jq -r '.state' "$EVIDENCE_ROOT/vercel-env-summary.json")" = PASS
