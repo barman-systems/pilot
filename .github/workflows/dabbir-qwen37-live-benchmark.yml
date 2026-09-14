@@ -12,8 +12,13 @@ on:
       - 'api/_dabbir-cognitive-probe.js'
       - 'api/_dabbir-semantic-interpreter.js'
       - 'api/_ai-core.js'
+      - 'test/dabbir-qwen37-benchmark.test.mjs'
       - 'test/dabbir-qwen37-live-benchmark.mjs'
       - '.github/workflows/dabbir-qwen37-live-benchmark.yml'
+
+concurrency:
+  group: dabbir-qwen37-live-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
