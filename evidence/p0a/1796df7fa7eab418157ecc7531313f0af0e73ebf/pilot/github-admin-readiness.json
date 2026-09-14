@@ -1,0 +1,8 @@
+{
+  "admin_token_present": true,
+  "branch_protection_read": "PASS",
+  "environment_read": "PASS",
+  "mutation_performed": false,
+  "oidc_read": "PASS",
+  "state": "PASS"
+}

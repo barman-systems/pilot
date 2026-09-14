@@ -1,0 +1,10 @@
+{
+  "enforce_admins": true,
+  "error": null,
+  "http_status": 200,
+  "required_linear_history": true,
+  "required_status_checks": [
+    "test"
+  ],
+  "state": "PASS"
+}

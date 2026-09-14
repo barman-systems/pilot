@@ -1,0 +1,8 @@
+{
+  "error": null,
+  "http_status": 200,
+  "include_claim_keys": null,
+  "state": "PASS",
+  "use_default": true,
+  "use_immutable_subject": true
+}
