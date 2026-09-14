@@ -1,0 +1,298 @@
+name: DABBIR P0-A Security Follow-up Evidence
+
+on:
+  push:
+    branches:
+      - audit/p0a-agent-runtime-hardening-v1
+    paths:
+      - .github/workflows/p0a-agent-runtime-security-followup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_SHA: 1796df7fa7eab418157ecc7531313f0af0e73ebf
+  AUDIT_BRANCH: audit/p0a-agent-runtime-hardening-v1
+  EVIDENCE_ROOT: evidence/p0a/1796df7fa7eab418157ecc7531313f0af0e73ebf/pilot
+  AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+  AWS_REGION: me-central-1
+  VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+  VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+
+jobs:
+  github-environment-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Read environment protection metadata only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-env-policy"
+          for env_name in Production Preview; do
+            encoded="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$env_name")"
+            http="$(curl -sS -o "$RUNNER_TEMP/${env_name}.json" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/environments/${encoded}")"
+            if [ "$http" = 200 ]; then
+              jq '{name,protection_rules,deployment_branch_policy}' "$RUNNER_TEMP/${env_name}.json" \
+                > "$RUNNER_TEMP/p0a-env-policy/${env_name,,}-environment-policy.json"
+            else
+              jq -n --arg name "$env_name" --arg http "$http" \
+                '{name:$name,state:"BLOCKED_EXTERNAL",http_status:($http|tonumber)}' \
+                > "$RUNNER_TEMP/p0a-env-policy/${env_name,,}-environment-policy.json"
+            fi
+            rm -f "$RUNNER_TEMP/${env_name}.json"
+          done
+
+      - name: Upload environment policy evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-env-policy
+          path: ${{ runner.temp }}/p0a-env-policy
+          if-no-files-found: error
+          retention-days: 30
+
+  aws-preview-negative-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Preview
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Prove exact Preview environment cannot assume Production role
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-preview-negative"
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          t=os.environ['TOKEN']; p=t.split('.')[1]; p += '='*(-len(p)%4)
+          c=json.loads(base64.urlsafe_b64decode(p))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          (pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-preview-negative'/'preview-oidc-claims.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "dabbir-p0a-preview-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 --output json \
+            >"$RUNNER_TEMP/preview-creds.json" 2>"$RUNNER_TEMP/preview-assume.stderr"
+          status=$?
+          set -e
+          unset token response
+          rm -f "$RUNNER_TEMP/preview-creds.json"
+          export ASSUME_STATUS="$status"
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); out=root/'p0a-preview-negative'
+          claims=json.loads((out/'preview-oidc-claims.json').read_text())
+          allowed=int(os.environ['ASSUME_STATUS'])==0
+          err=(root/'preview-assume.stderr').read_text(errors='ignore')[-1500:] if (root/'preview-assume.stderr').exists() else ''
+          result={'state':'FAIL' if allowed else 'PASS','mode':'EXACT_PREVIEW_ENVIRONMENT','environment':claims.get('environment'),'ref':claims.get('ref'),'workflow_ref':claims.get('workflow_ref'),'subject':claims.get('sub'),'assume_role_allowed':allowed,'safe_error':None if allowed else err}
+          (out/'preview-negative-test.log').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          (out/'aws-preview-negative-summary.json').write_text(json.dumps({'state':result['state'],'assume_role_allowed':allowed,'mode':result['mode']},indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$RUNNER_TEMP/preview-assume.stderr"
+
+      - name: Upload exact Preview negative evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-preview-negative
+          path: ${{ runner.temp }}/p0a-preview-negative
+          if-no-files-found: error
+          retention-days: 30
+
+  aws-production-environment-branch-adversarial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Test whether non-main branch can assume role merely by naming Production environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-prod-branch"
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          t=os.environ['TOKEN']; p=t.split('.')[1]; p += '='*(-len(p)%4)
+          c=json.loads(base64.urlsafe_b64decode(p))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          (pathlib.Path(os.environ['RUNNER_TEMP'])/'p0a-prod-branch'/'production-branch-oidc-claims.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "dabbir-p0a-prodbranch-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 --output json \
+            >"$RUNNER_TEMP/prodbranch-creds.json" 2>"$RUNNER_TEMP/prodbranch-assume.stderr"
+          status=$?
+          set -e
+          unset token response
+          rm -f "$RUNNER_TEMP/prodbranch-creds.json"
+          export ASSUME_STATUS="$status"
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); out=root/'p0a-prod-branch'
+          claims=json.loads((out/'production-branch-oidc-claims.json').read_text())
+          allowed=int(os.environ['ASSUME_STATUS'])==0
+          state='FAIL' if allowed and claims.get('ref')!='refs/heads/main' else 'PASS'
+          result={'state':state,'test':'NON_MAIN_BRANCH_WITH_PRODUCTION_ENVIRONMENT','environment':claims.get('environment'),'ref':claims.get('ref'),'workflow_ref':claims.get('workflow_ref'),'subject':claims.get('sub'),'assume_role_allowed':allowed,'severity':'HIGH' if state=='FAIL' else None,'finding':'PRODUCTION_ENVIRONMENT_DOES_NOT_BIND_REF_OR_WORKFLOW' if state=='FAIL' else None}
+          (out/'production-environment-branch-negative.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$RUNNER_TEMP/prodbranch-assume.stderr"
+
+      - name: Upload production environment branch adversarial evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-production-branch-adversarial
+          path: ${{ runner.temp }}/p0a-prod-branch
+          if-no-files-found: error
+          retention-days: 30
+
+  vercel-env-metadata-v2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Export Vercel variable metadata without values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}"
+          echo "::add-mask::$VERCEL_TOKEN"
+          mkdir -p "$RUNNER_TEMP/p0a-vercel"
+          raw="$RUNNER_TEMP/vercel-env-raw.json"
+          curl -fsS "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" > "$raw"
+          RAW_FILE="$raw" OUT_DIR="$RUNNER_TEMP/p0a-vercel" python3 - <<'PY'
+          import os,json,csv,pathlib
+          payload=json.loads(pathlib.Path(os.environ['RAW_FILE']).read_text())
+          out=pathlib.Path(os.environ['OUT_DIR']); envs=payload.get('envs') or []
+          def classify(key):
+              k=key.upper()
+              if k.startswith(('NEXT_PUBLIC_','PUBLIC_','VITE_PUBLIC_')) or 'PUBLISHABLE' in k or k.endswith('_ANON_KEY'): return 'PUBLIC_CONFIG'
+              if 'TOKEN' in k: return 'TOKEN'
+              if 'PRIVATE_KEY' in k or 'SECRET' in k or 'PASSWORD' in k or k.endswith('_PASS'): return 'SECRET'
+              if 'CREDENTIAL' in k or 'SERVICE_ROLE' in k or 'SERVICE_ACCOUNT' in k: return 'CREDENTIAL'
+              if 'KEY' in k: return 'KEY'
+              if any(x in k for x in ('URL','URI','HOST','DOMAIN','REGION','PROJECT_ID','TEAM_ID','ACCOUNT_ID','BUCKET','PORT','ENV','MODE','NAME')): return 'PRIVATE_CONFIG'
+              return 'UNKNOWN'
+          with (out/'env-metadata.csv').open('w',newline='') as f:
+              fields=['key','targets','type','git_branch','created_at','updated_at','custom_environment_ids']
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader()
+              for e in envs:
+                  w.writerow({'key':e.get('key'),'targets':';'.join(e.get('target') or []),'type':e.get('type'),'git_branch':e.get('gitBranch') or '',
+                              'created_at':e.get('createdAt') or '','updated_at':e.get('updatedAt') or '','custom_environment_ids':';'.join(e.get('customEnvironmentIds') or [])})
+          rows=[]; problematic=[]
+          for e in envs:
+              c=classify(str(e.get('key') or '')); secret_like=c in {'SECRET','CREDENTIAL','TOKEN','KEY'}; sensitive=e.get('type')=='sensitive'; status='OK'
+              if secret_like and not sensitive:
+                  status='NEEDS_SENSITIVE_OR_EXCEPTION_EVIDENCE'; problematic.append(e.get('key'))
+              rows.append({'key':e.get('key'),'classification':c,'targets':';'.join(e.get('target') or []),'vercel_type':e.get('type'),'sensitive':str(sensitive).lower(),'secret_like':str(secret_like).lower(),'status':status,'exception_basis':''})
+          with (out/'classification-sheet.csv').open('w',newline='') as f:
+              fields=['key','classification','targets','vercel_type','sensitive','secret_like','status','exception_basis']
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          (out/'vercel-env-summary.json').write_text(json.dumps({'state':'PASS' if not problematic else 'FAIL','project_id':os.environ['VERCEL_PROJECT_ID'],'team_id':os.environ['VERCEL_TEAM_ID'],'variable_count':len(envs),'secret_like_not_sensitive_count':len(problematic),'secret_like_not_sensitive_names':problematic,'values_exported':False},indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$raw"
+
+      - name: Upload Vercel metadata evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-vercel-env-v2
+          path: ${{ runner.temp }}/p0a-vercel
+          if-no-files-found: error
+          retention-days: 30
+
+  persist-followup-evidence:
+    needs:
+      - github-environment-policy
+      - aws-preview-negative-proof
+      - aws-production-environment-branch-adversarial
+      - vercel-env-metadata-v2
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.AUDIT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Download follow-up evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pilot-p0a-*
+          path: ${{ runner.temp }}/followup
+          merge-multiple: true
+
+      - name: Persist sanitized evidence and compute gate state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          cp -f "$RUNNER_TEMP/followup/"* "$EVIDENCE_ROOT/"
+          EVIDENCE_ROOT="$EVIDENCE_ROOT" python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['EVIDENCE_ROOT'])
+          def state(name):
+              f=p/name
+              if not f.exists(): return 'BLOCKED_EXTERNAL'
+              try: return json.loads(f.read_text()).get('state','FAIL')
+              except Exception: return 'FAIL'
+          checks={
+              'secret_scan':state('secret-scan-summary.json'),
+              'aws_preview_negative':state('aws-preview-negative-summary.json'),
+              'aws_production_branch_adversarial':state('production-environment-branch-negative.json'),
+              'vercel_env':state('vercel-env-summary.json'),
+          }
+          if 'FAIL' in checks.values(): overall='FAIL'
+          elif 'BLOCKED_EXTERNAL' in checks.values(): overall='BLOCKED_EXTERNAL'
+          elif all(v=='PASS' for v in checks.values()): overall='PASS'
+          else: overall='FAIL'
+          summary={'state':overall,'frozen_sha':os.environ['FROZEN_SHA'],'checks':checks,'required_artifacts':['trust-policy.json','oidc-jwt-decoded.txt','preview-negative-test.log','env-metadata.csv','classification-sheet.csv','gitleaks-report.json'],'active_phase':'P0-A','p0b_activation_allowed':overall=='PASS'}
+          (p/'p0a-gate-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$EVIDENCE_ROOT"
+          if ! git diff --cached --quiet; then
+            git commit -m 'evidence(p0a): record preview Vercel and branch-authority proof [skip ci]'
+            git push origin "HEAD:$AUDIT_BRANCH"
+          fi
+
+      - name: Enforce follow-up gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.state' "$EVIDENCE_ROOT/p0a-gate-summary.json")" = PASS
