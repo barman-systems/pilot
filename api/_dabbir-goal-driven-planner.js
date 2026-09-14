@@ -1,12 +1,11 @@
 import {applyActivityRequirements,verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
+import {goalClarificationReply} from './_dabbir-conversation-brain-response.js';
 
-// Conversation policy only. This layer may choose what to ask next and how to
-// phrase that question, but it never grants tool, tenant, service, slot or
-// mutation authority. Missing fields remain execution prerequisites, not a
-// scripted questionnaire. It may also restore facts that are already explicit
-// in the customer turn or authoritative single-mode business contract so stale
-// AI inference cannot force a fake clarification.
+// Conversation policy only. This layer may choose what to ask next, but it never
+// grants tool, tenant, service, slot or mutation authority. Missing fields remain
+// execution prerequisites, not a scripted questionnaire. Customer-facing wording
+// is owned by the Conversation Brain response boundary.
 const ASKABLE=new Set(['service','delivery_mode','vehicle','location','property_details','worker','date','time','appointment','slot','request','intent_confirmation']);
 const ELIGIBLE_REASONS=new Set(['MISSING_OR_AMBIGUOUS_FACT','COGNITIVE_REPLAN']);
 const arr=v=>Array.isArray(v)?v:[];
@@ -146,28 +145,18 @@ function chooseFocus({state,previous,proposal}){
   return {fields:[first],singleDeliveryMode:oneMode};
 }
 function activityLabel(state,context){return clean(state?.service_type||context?.business?.business_type,80).toLowerCase();}
-function modeQuestion(state,lang){
-  const modes=arr(contract(state)?.delivery_modes).filter(x=>x!=='HYBRID');
-  const label=m=>lang==='ar'?({AT_BUSINESS:'في الفرع',AT_CUSTOMER:'عندك',MOBILE:'عندك',REMOTE:'عن بُعد',PICKUP:'استلام',DELIVERY:'توصيل'}[m]||m):({AT_BUSINESS:'at the branch',AT_CUSTOMER:'at your location',MOBILE:'at your location',REMOTE:'remotely',PICKUP:'pickup',DELIVERY:'delivery'}[m]||m);
-  if(modes.length>=2)return lang==='ar'?`تفضّل الخدمة ${modes.slice(0,3).map(label).join(' أو ')}؟`:`Would you prefer the service ${modes.slice(0,3).map(label).join(' or ')}?`;
-  return lang==='ar'?'وين تفضّل تكون الخدمة؟':'Where would you like the service?';
+function responseLanguage(state,context){
+  if(state?.language==='en')return 'en';
+  if(hasArabic(arr(context?.batch_messages).map(x=>x?.language_body??x?.body).join(' ')))return 'ar';
+  return state?.language==='ar'?'ar':'en';
 }
-function naturalQuestion(fields,state,context){
-  const lang=state?.language==='en'?'en':hasArabic(arr(context?.batch_messages).map(x=>x?.language_body??x?.body).join(' '))?'ar':state?.language==='ar'?'ar':'en';
-  const activity=activityLabel(state,context),field=fields[0];
-  if(fields.length===2&&fields.includes('date')&&fields.includes('time'))return lang==='ar'?'متى يناسبك؟ اذكر اليوم والوقت اللي تفضله.':'When works for you? Send the day and time you prefer.';
-  if(field==='service')return lang==='ar'?'أكيد. أي خدمة تبي بالضبط؟':'Sure. Which service would you like?';
-  if(field==='delivery_mode')return modeQuestion(state,lang);
-  if(field==='vehicle')return lang==='ar'?(activity.includes('car')||activity.includes('wash')?'تمام. أي سيارة نخدم لك؟':'تمام. أي نوع يناسب طلبك؟'):(activity.includes('car')||activity.includes('wash')?'Sure. Which vehicle is this for?':'Which option fits your request?');
-  if(field==='location')return lang==='ar'?'تمام. وين موقع الخدمة؟':'Sure. What location should we use?';
-  if(field==='property_details')return lang==='ar'?'تمام. عطِني تفاصيل المكان اللي نحتاجها للخدمة.':'Sure. What property details do we need for the service?';
-  if(field==='worker')return lang==='ar'?'هل تفضّل موظف معيّن؟':'Do you prefer a specific staff member?';
-  if(field==='date')return lang==='ar'?'أي يوم يناسبك؟':'Which day works for you?';
-  if(field==='time')return lang==='ar'?'أي وقت يناسبك؟':'What time works for you?';
-  if(field==='appointment')return lang==='ar'?'أي موعد تقصد؟':'Which appointment do you mean?';
-  if(field==='slot')return lang==='ar'?'أي وقت من الخيارات يناسبك؟':'Which available time works for you?';
-  if(field==='intent_confirmation')return lang==='ar'?'تبا نكمل الطلب؟':'Would you like to continue the request?';
-  return lang==='ar'?'وش تحتاج مني أكمله لك؟':'What would you like me to complete for you?';
+function renderGoalQuestion(fields,state,context){
+  return goalClarificationReply({
+    fields,
+    language:responseLanguage(state,context),
+    activity:activityLabel(state,context),
+    deliveryModes:arr(contract(state)?.delivery_modes).filter(x=>x!=='HYBRID'),
+  });
 }
 function updateCognition(state,fields,source,reply){
   if(!state.cognition)return;
@@ -198,7 +187,7 @@ export function applyGoalDrivenConversationPlan({args,result}){
   // precise ambiguity repair. We only rewrite when the planner actually changes
   // focus or deliberately combines a fresh date+time request.
   const keepExisting=focus.fields.length===1&&old===first&&clean(decision.reply,500).length>0;
-  const reply=keepExisting?decision.reply:naturalQuestion(focus.fields,state,context);
+  const reply=keepExisting?decision.reply:renderGoalQuestion(focus.fields,state,context);
   const nextDecision={...decision,action:'CLARIFY',reply,missingFields:arr(state.missing_fields),reasonCode:keepExisting?decision.reasonCode:'GOAL_DRIVEN_NEXT_BEST_QUESTION'};
   updateCognition(state,focus.fields,proposal?'MODEL_SEMANTICS_PLUS_BUSINESS_STATE':'BUSINESS_STATE',reply);
   return {state,decision:nextDecision};
