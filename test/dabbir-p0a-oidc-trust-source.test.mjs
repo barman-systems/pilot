@@ -22,17 +22,19 @@ const retiredAuthorities = [
   'dabbir-uae-provision-direct.yml',
   'dabbir-uae-bootstrap-supabase.yml',
   'dabbir-oidc-subject-migrate-once.yml',
+  'p0a-finalize-oidc-subject-binding.yml',
 ];
 
 const expectedSubjects = activeWorkflows.map(
   (workflow) => `repo:${repo}:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/${workflow}@refs/heads/main`,
 );
 
-test('P0-A AWS trust transition is exact, main-bound, workflow-bound, and non-wildcard', async () => {
+test('P0-A final AWS trust is exact, main-bound, workflow-bound, and non-wildcard', async () => {
   const source = await readFile(templateUrl, 'utf8');
 
   assert.match(source, /token\.actions\.githubusercontent\.com:aud: sts\.amazonaws\.com/u);
-  assert.match(source, /Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS/u);
+  assert.match(source, /Value: FINAL_EXACT_MAIN_WORKFLOWS_ONLY/u);
+  assert.equal(source.includes(`- ${legacy}`), false, 'legacy environment-only subject must be removed');
   assert.ok(!source.includes('token.actions.githubusercontent.com:sub: "*"'));
   assert.ok(!source.includes('token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:*'));
   assert.ok(!source.includes('StringLike:\n                token.actions.githubusercontent.com:sub'));
@@ -43,8 +45,8 @@ test('P0-A AWS trust transition is exact, main-bound, workflow-bound, and non-wi
     .filter((line) => line.startsWith('- repo:barman-systems@319497139/pilot@1346817686:'))
     .map((line) => line.slice(2));
 
-  assert.deepEqual(subjectLines, [legacy, ...expectedSubjects]);
-  assert.equal(subjectLines.length, 5);
+  assert.deepEqual(subjectLines, expectedSubjects);
+  assert.equal(subjectLines.length, activeWorkflows.length);
 
   for (const subject of expectedSubjects) {
     assert.match(subject, /:environment:production:ref:refs\/heads\/main:workflow_ref:/u);
@@ -52,7 +54,7 @@ test('P0-A AWS trust transition is exact, main-bound, workflow-bound, and non-wi
   }
 });
 
-test('P0-A AWS trust does not preserve retired bootstrap, hotfix, EC2, or self-hosted authorities', async () => {
+test('P0-A AWS trust does not preserve retired, bootstrap, migration, or self-hosted authorities', async () => {
   const source = await readFile(templateUrl, 'utf8');
 
   for (const workflow of retiredAuthorities) {
@@ -60,7 +62,7 @@ test('P0-A AWS trust does not preserve retired bootstrap, hotfix, EC2, or self-h
     assert.equal(
       source.includes(exactSubject),
       false,
-      `retired workflow must not remain in AWS OIDC trust: ${workflow}`,
+      `retired or one-time workflow must not remain in final AWS OIDC trust: ${workflow}`,
     );
   }
 });
