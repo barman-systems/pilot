@@ -1,0 +1,77 @@
+name: DABBIR P0-A Production Environment Containment
+
+on:
+  push:
+    branches:
+      - audit/p0a-agent-runtime-hardening-v1
+    paths:
+      - .github/workflows/p0a-production-environment-containment.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AUDIT_BRANCH: audit/p0a-agent-runtime-hardening-v1
+  EVIDENCE_ROOT: evidence/p0a/1796df7fa7eab418157ecc7531313f0af0e73ebf/pilot
+
+jobs:
+  contain-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_ADMIN_TOKEN: ${{ secrets.DABBIR_GITHUB_ADMIN_TOKEN }}
+    steps:
+      - name: Restrict Production environment deployments to main only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_ADMIN_TOKEN:-}"
+          echo "::add-mask::$GH_ADMIN_TOKEN"
+          api='https://api.github.com/repos/'"${GITHUB_REPOSITORY}"'/environments/Production'
+          headers=(-H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10')
+
+          curl -fsS -X PUT "${headers[@]}" -H 'Content-Type: application/json' \
+            -d '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' \
+            "$api" >/dev/null
+
+          policy_api="$api/deployment-branch-policies"
+          existing="$(curl -fsS "${headers[@]}" "$policy_api")"
+          if ! jq -e '.branch_policies[]? | select(.name=="main")' <<<"$existing" >/dev/null; then
+            curl -fsS -X POST "${headers[@]}" -H 'Content-Type: application/json' \
+              -d '{"name":"main","type":"branch"}' "$policy_api" >/dev/null
+          fi
+
+          mkdir -p "$RUNNER_TEMP/evidence"
+          env_json="$(curl -fsS "${headers[@]}" "$api")"
+          policies="$(curl -fsS "${headers[@]}" "$policy_api")"
+          ENV_JSON="$env_json" POLICIES="$policies" python3 - <<'PY'
+          import json,os,pathlib
+          env=json.loads(os.environ['ENV_JSON']); ps=json.loads(os.environ['POLICIES'])
+          branches=[{'name':x.get('name'),'type':x.get('type')} for x in ps.get('branch_policies',[]) if x.get('name')]
+          ok=(env.get('deployment_branch_policy')=={'protected_branches':False,'custom_branch_policies':True} and branches==[{'name':'main','type':'branch'}])
+          out={'state':'PASS' if ok else 'FAIL','environment':env.get('name'),'deployment_branch_policy':env.get('deployment_branch_policy'),'allowed_branch_policies':branches,'security_change':'PRODUCTION_ENVIRONMENT_MAIN_ONLY','rollback':'set deployment_branch_policy to null only if explicitly required after security review'}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'evidence','production-environment-containment.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - name: Upload containment evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-production-environment-containment
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  adversarial-non-main-production:
+    needs: contain-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Must never execute from non-main after containment
+        run: |
+          echo 'FAIL: non-main branch entered Production environment after containment' >&2
+          exit 97
