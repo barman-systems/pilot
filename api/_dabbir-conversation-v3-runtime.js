@@ -7,7 +7,7 @@ import {verifiedAvailability,assertResponseGrounding} from './_dabbir-brain-cont
 
 const arr=v=>Array.isArray(v)?v:[];
 const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,n);
-const ALLOWED_ENTITY_FIELDS=new Set(['service','date','time','location','vehicle','worker','branch','appointment','slot','price','customer_reference']);
+const ALLOWED_ENTITY_FIELDS=new Set(['service','date','time','location','vehicle','delivery_mode','worker','branch','appointment','slot','price','customer_reference']);
 const ALLOWED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED','AI_INFERENCE']);
 const LIVE_MODES=new Set(['canary','active']);
 
@@ -66,7 +66,7 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
     const availability=await rpc('dabbir_semantic_check_availability_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});const slots=verifiedAvailability(availability,enriched,projection);
     if(!slots.length){response=brainResponseV3({text:projection.language==='ar'?'ما حصلت وقتًا متاحًا قريبًا. عطِني وقتًا ثاني يناسبك.':'I could not find a nearby available time. Send another time that works for you.',plan_id:`${state.episode_id}:no-slots`,metadata:{goal:state.goal}});await sendV3(response,'v3-no-slots');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:0,engine:'V3',legacy_dialogue_called:false};}
     const payload={activity_contract_version:projection.activity_contract_version,mode:'booking',slots,presented:false};await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:payload});
-    response=brainResponseV3({text:slotsText(slots,projection.language),plan_id:`${state.episode_id}:availability`,metadata:{goal:state.goal}});const sent=await sendV3(response,'v3-availability');if(!sent?.providerMessageId)throw Object.assign(new Error('V3_PRESENTATION_UNVERIFIED'),{code:'V3_PRESENTATION_UNVERIFIED'});
+    response=brainResponseV3({text:slotsText(slots,projection.language,{date:factValue(state,'date'),time:factValue(state,'time'),timezone:enriched.business?.timezone||null}),plan_id:`${state.episode_id}:availability`,metadata:{goal:state.goal}});const sent=await sendV3(response,'v3-availability');if(!sent?.providerMessageId)throw Object.assign(new Error('V3_PRESENTATION_UNVERIFIED'),{code:'V3_PRESENTATION_UNVERIFIED'});
     await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:{...payload,presented:true,provider_message_id:sent.providerMessageId}});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};
   }
   await sendV3(response,action==='CLARIFY'?'v3-clarify':'v3-reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};

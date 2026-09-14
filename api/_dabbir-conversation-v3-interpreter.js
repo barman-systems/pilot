@@ -7,7 +7,8 @@ const norm=v=>clean(v,300).normalize('NFKD').replace(/[\u064b-\u065f\u0670ـ]/g,
 const INTENTS=new Set(['SUPPORT','SERVICE_DISCOVERY','PRICING','BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HUMAN_ASSISTANCE','UNKNOWN']);
 const ROLES=new Set(['GREETING','NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORRECTION','CONFIRMATION','DENIAL','SIDE_QUESTION','TOPIC_SWITCH','CONTINUATION','CANCELLATION','REFERENCE','SOCIAL']);
 const ACTIONS=new Set(['NONE','SERVICE_MENU','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF']);
-const ENTITIES=new Set(['vehicle','date','time','delivery_mode','property_details']);
+const TIME_WINDOWS=new Set(['EARLY_MORNING','MORNING','AFTERNOON','EVENING','NIGHT']);
+const ENTITIES=new Set(['vehicle','date','time','time_window','delivery_mode','property_details']);
 const SIDE_QUESTIONS=new Set(['price','duration_minutes','availability']);
 const CONFIRM_RE=/^(?:هي|هيه|ايوه|ايوا|نعم|تمام|صح|yes|yeah|yep|ok|okay|correct)$/i;
 const DENY_RE=/^(?:لا|مب|مو|لا لا|no|nope)$/i;
@@ -33,11 +34,11 @@ function normalizeModelContract(x){
 }
 function validModelContract(x,raw){
   if(!x||Array.isArray(x)||!INTENTS.has(x.intent)||!ROLES.has(x.role)||!ACTIONS.has(x.requested_action)||!finite01(x.confidence))return false;
-  if(!Array.isArray(x.entities)||x.entities.length>12||!Array.isArray(x.side_questions)||x.side_questions.length>4||!Array.isArray(x.invalidated_fields)||x.invalidated_fields.length>8)return false;
+  if(!Array.isArray(x.entities)||x.entities.length>12||!Array.isArray(x.side_questions)||x.side_questions.length>4||!Array.isArray(x.invalidated_fields)||x.invalidated_fields.length>10)return false;
   if(x.service_candidate!=null){const s=x.service_candidate;if(typeof s!=='object'||Array.isArray(s)||!(s.label===null||typeof s.label==='string')||!(s.surface===null||typeof s.surface==='string')||!finite01(s.confidence))return false;if(s.surface!=null&&!exactSurface(raw,s.surface))return false;}
-  if(!x.entities.every(e=>e&&ENTITIES.has(e.entity)&&typeof e.value==='string'&&typeof e.surface==='string'&&exactSurface(raw,e.surface)&&finite01(e.confidence)&&typeof e.correction==='boolean'))return false;
+  if(!x.entities.every(e=>e&&ENTITIES.has(e.entity)&&typeof e.value==='string'&&typeof e.surface==='string'&&exactSurface(raw,e.surface)&&finite01(e.confidence)&&typeof e.correction==='boolean'&&(e.entity!=='time_window'||TIME_WINDOWS.has(e.value))))return false;
   if(!x.side_questions.every(q=>q&&SIDE_QUESTIONS.has(q.type)&&typeof q.surface==='string'&&exactSurface(raw,q.surface)))return false;
-  if(!x.invalidated_fields.every(f=>['service','vehicle','date','time','delivery_mode','property_details','location','slot'].includes(f)))return false;
+  if(!x.invalidated_fields.every(f=>['service','vehicle','date','time','time_window','immediacy','delivery_mode','property_details','location','slot'].includes(f)))return false;
   return x.confirmation===null||typeof x.confirmation==='boolean';
 }
 function previousSummary(previousState){
