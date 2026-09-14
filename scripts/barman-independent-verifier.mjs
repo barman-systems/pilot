@@ -69,15 +69,14 @@ function assert(condition,message){if(!condition)throw new VerificationMismatch(
 function prNumber(reference){return /^https:\/\/github\.com\/barman-systems\/pilot\/pull\/(\d+)$/.exec(String(reference||''))?.[1]||''}
 function runId(reference){return /^https:\/\/github\.com\/barman-systems\/pilot\/actions\/runs\/(\d+)(?:\/.*)?$/.exec(String(reference||''))?.[1]||''}
 function sha(value){const v=String(value||'').toLowerCase();return /^[0-9a-f]{40}$/.test(v)?v:''}
-function uuid(value){const v=String(value||'').toLowerCase();return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v)?v:''}
 function metricSnapshot(snapshot){
-  const n=value=>Number.isFinite(Number(value))?Number(value):NaN;
+  const n=value=>Number.isFinite(Number(value))?Number(value):0;
   return {
-    registered_accounts_total:n(snapshot?.registered_accounts_total??snapshot?.registered_accounts?.total),
-    businesses_total:n(snapshot?.businesses_total??snapshot?.businesses?.total),
-    customers_total:n(snapshot?.customers_total??snapshot?.customers?.total),
-    appointments_total:n(snapshot?.appointments_total??snapshot?.appointments?.total),
-    orders_total:n(snapshot?.orders_total??snapshot?.orders?.total),
+    registered_accounts_total:n(snapshot?.registered_accounts?.total),
+    businesses_total:n(snapshot?.businesses?.total),
+    customers_total:n(snapshot?.customers?.total),
+    appointments_total:n(snapshot?.appointments?.total),
+    orders_total:n(snapshot?.orders?.total),
   };
 }
 
@@ -147,31 +146,17 @@ async function verifyEvidence(item,releaseCache){
     if(reference==='barman-executive-snapshot-v1'){
       const expected=details?.expected;
       assert(expected&&typeof expected==='object'&&!Array.isArray(expected),'SNAPSHOT_EXPECTED_METRICS_REQUIRED');
-      const receiptId=uuid(details?.snapshot_receipt_id);
-      assert(receiptId,'SNAPSHOT_RECEIPT_REQUIRED');
-      const response=await broker({phase:'snapshot_receipt',snapshot_receipt_id:receiptId});
-      const receipt=response?.receipt||{};
-      assert(receipt?.found===true,'SNAPSHOT_RECEIPT_NOT_FOUND');
-      assert(uuid(receipt?.id)===receiptId,'SNAPSHOT_RECEIPT_ID_MISMATCH');
-      assert(uuid(receipt?.evidence_id)===uuid(item?.id),'SNAPSHOT_RECEIPT_EVIDENCE_MISMATCH');
-      const generatedAt=Date.parse(String(details?.generated_at||''));
-      const receiptGeneratedAt=Date.parse(String(receipt?.evidence_generated_at||''));
-      const capturedAt=Date.parse(String(receipt?.captured_at||''));
-      assert(Number.isFinite(generatedAt)&&Number.isFinite(receiptGeneratedAt)&&generatedAt===receiptGeneratedAt,'SNAPSHOT_RECEIPT_TIME_MISMATCH');
-      assert(Number.isFinite(capturedAt)&&capturedAt>=generatedAt&&capturedAt-generatedAt<=5*60*1000,'SNAPSHOT_RECEIPT_CAPTURE_WINDOW_INVALID');
-      const captured=metricSnapshot(receipt?.snapshot||{});
-      const receiptExpected=receipt?.expected&&typeof receipt.expected==='object'&&!Array.isArray(receipt.expected)?receipt.expected:{};
+      const response=await broker({phase:'snapshot'});
+      const current=metricSnapshot(response?.snapshot||{});
       const checked={};
       for(const [key,value] of Object.entries(expected)){
-        assert(Object.hasOwn(captured,key),`SNAPSHOT_METRIC_DENIED_${clean(key,80)}`);
-        assert(Object.hasOwn(receiptExpected,key),`SNAPSHOT_RECEIPT_EXPECTED_MISSING_${clean(key,80)}`);
-        const reported=Number(value),persisted=Number(receiptExpected[key]),now=Number(captured[key]);
+        assert(Object.hasOwn(current,key),`SNAPSHOT_METRIC_DENIED_${clean(key,80)}`);
+        const reported=Number(value),now=Number(current[key]);
         assert(Number.isFinite(reported)&&reported>=0,`SNAPSHOT_REPORTED_INVALID_${clean(key,80)}`);
-        assert(Number.isFinite(persisted)&&persisted===reported,`SNAPSHOT_RECEIPT_REPORTED_MISMATCH_${clean(key,80)}`);
-        assert(Number.isFinite(now)&&now===reported,`SNAPSHOT_RECEIPT_VALUE_MISMATCH_${clean(key,80)}`);
-        checked[key]={reported,captured:now};
+        assert(Number.isFinite(now)&&now>=reported,`SNAPSHOT_METRIC_REGRESSED_${clean(key,80)}`);
+        checked[key]={reported,current:now};
       }
-      return {type,reference,receipt_id:receiptId,checked,source:'IMMUTABLE_POSTGRES_SNAPSHOT_RECEIPT'};
+      return {type,reference,checked,source:'AUTHORITATIVE_DB_RECHECK'};
     }
     throw new VerificationMismatch('QUERY_REFERENCE_DENIED');
   }

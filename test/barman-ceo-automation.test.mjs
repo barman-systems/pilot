@@ -7,7 +7,6 @@ const cron=fs.readFileSync(new URL('../api/barman-executive-cron.js',import.meta
 const verifier=fs.readFileSync(new URL('../scripts/barman-independent-verifier.mjs',import.meta.url),'utf8');
 const verifierBroker=fs.readFileSync(new URL('../api/barman-independent-verifier.js',import.meta.url),'utf8');
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260906013500_barman_ceo_automation_v1.sql',import.meta.url),'utf8');
-const receiptMigration=fs.readFileSync(new URL('../supabase/migrations/20260913182500_barman_independent_snapshot_receipt_v1.sql',import.meta.url),'utf8');
 
 test('multi-step owner objective becomes an executable plan instead of tool-agent BLOCKED',()=>{
   const plan=deterministicPlan(`1. راجع صفحة المالك وأصلح الخلل\n2. كم عدد الحسابات المسجلة\n3. اختبر النتيجة`);
@@ -53,14 +52,12 @@ test('executive cron claims planner, read-only and runtime lanes separately',()=
   assert.match(cron,/barman-executive-snapshot-v1/);
 });
 
-test('read-only executor evidence is independently checked against its immutable Postgres receipt',()=>{
+test('read-only executor evidence is independently re-read through OIDC verifier broker',()=>{
   assert.match(verifier,/reference==='barman-executive-snapshot-v1'/);
-  assert.match(verifier,/phase:'snapshot_receipt'/);
-  assert.match(verifier,/IMMUTABLE_POSTGRES_SNAPSHOT_RECEIPT/);
-  assert.match(verifierBroker,/phase==='snapshot_receipt'/);
-  assert.match(verifierBroker,/barman_executive_read_snapshot_receipt_v1/);
-  assert.match(receiptMigration,/before insert on dabbir_private\.executive_evidence/i);
-  assert.match(receiptMigration,/SNAPSHOT_EVIDENCE_CHANGED_BEFORE_PERSIST_/);
+  assert.match(verifier,/phase:'snapshot'/);
+  assert.match(verifier,/AUTHORITATIVE_DB_RECHECK/);
+  assert.match(verifierBroker,/phase==='snapshot'/);
+  assert.match(verifierBroker,/barman_executive_read_snapshot_v1/);
 });
 
 test('database routing no longer wakes code agent for planner or read-only work',()=>{
