@@ -17,6 +17,16 @@ json=(-H 'Content-Type: application/json')
 previous_id=''
 rollback_id=''
 
+preflight_vercel_access() {
+  local response status
+  response="$(mktemp)"
+  status="$(curl -sS -o "$response" -w '%{http_code}' \
+    "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_TEAM_ID}" \
+    "${auth[@]}" || true)"
+  [[ "$status" =~ ^2 ]] || { echo "VERCEL_PROJECT_ACCESS_HTTP_${status:-000}"; return 1; }
+  echo 'VERCEL_PROJECT_ACCESS_OK'
+}
+
 upsert_env() {
   local enabled="$1" percent="$2" response status payload
   payload="$(jq -cn --arg enabled "$enabled" --arg percent "$percent" '[
@@ -38,9 +48,13 @@ upsert_env() {
   echo 'CANARY_ENV_METADATA_OK enabled_target=production percent_target=production'
 }
 
+# Production truth is already exposed by DABBIR's release-evidence endpoint.
+# Avoid the Vercel alias API here: the repository token can manage this project
+# and env state, but alias lookup may require a broader account permission.
 current_alias_id() {
-  curl -fsS "https://api.vercel.com/v4/aliases/${PRODUCTION_HOST}?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}" "${auth[@]}" \
-    | jq -r '.deploymentId // .deployment.id // empty'
+  local release
+  release="$(curl -fsS --retry 4 --retry-delay 1 "https://${PRODUCTION_HOST}/api/release-evidence?t=$(date +%s)")"
+  jq -r '.deployment_id // empty' <<<"$release"
 }
 
 wait_deployment() {
@@ -155,6 +169,8 @@ rollback() {
   exit "$rc"
 }
 
+# Read-only permission check happens before any Production mutation.
+preflight_vercel_access
 previous_id="$(current_alias_id)"
 test -n "$previous_id" || { echo 'CURRENT_PRODUCTION_DEPLOYMENT_MISSING'; exit 12; }
 echo "PREVIOUS_PRODUCTION_DEPLOYMENT=$previous_id"
