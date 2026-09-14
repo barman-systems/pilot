@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: One-time AWS trust bootstrap for DABBIR managed UAE deployments
+Description: DABBIR GitHub OIDC bootstrap for AWS UAE deployments
 
 Parameters:
   ExistingGitHubOidcProviderArn:
     Type: String
     Default: ''
-    Description: Leave empty to create the GitHub OIDC provider; otherwise paste the existing provider ARN.
+    Description: Existing GitHub Actions OIDC provider ARN. Leave empty only when this account does not already have token.actions.githubusercontent.com configured.
 
 Conditions:
   CreateGitHubOidcProvider: !Equals [!Ref ExistingGitHubOidcProviderArn, '']
@@ -24,7 +24,7 @@ Resources:
         - Key: Purpose
           Value: GitHubOIDC
 
-  DabbirGithubDeployRole:
+  GitHubDeployRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: DabbirGithubDeployRole
@@ -42,25 +42,13 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub:
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-ec2-check.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation-bootstrap.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-deploy-now.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-s3-permission-hotfix.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-provision-direct.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-bootstrap-supabase.yml@refs/heads/main
-                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main
+                token.actions.githubusercontent.com:sub: !Ref OidcSubjectCondition
       Policies:
-        - PolicyName: DabbirManagedInfrastructureDeployment
+        - PolicyName: DabbirUaeCloudFormationDeployment
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Sid: CloudFormation
-                Effect: Allow
+              - Effect: Allow
                 Action:
                   - cloudformation:CreateStack
                   - cloudformation:UpdateStack
@@ -68,82 +56,22 @@ Resources:
                   - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplateSummary
                   - cloudformation:ListStackResources
-                  - cloudformation:GetTemplate
-                  - cloudformation:ValidateTemplate
-                  - cloudformation:CreateChangeSet
-                  - cloudformation:DescribeChangeSet
-                  - cloudformation:ExecuteChangeSet
-                  - cloudformation:DeleteChangeSet
                 Resource: '*'
-
-              - Sid: ReadAmiParameters
-                Effect: Allow
+              - Effect: Allow
                 Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                  - ssm:GetParametersByPath
+                  - ec2:*
+                  - rds:*
+                  - s3:*
+                  - ecr:*
+                  - ecs:*
+                  - logs:*
+                  - elasticloadbalancing:*
+                  - application-autoscaling:*
+                  - secretsmanager:*
                 Resource: '*'
-
-              - Sid: DabbirEc2AndNetwork
-                Effect: Allow
-                Action:
-                  - ec2:CreateVpc
-                  - ec2:DeleteVpc
-                  - ec2:ModifyVpcAttribute
-                  - ec2:Describe*
-                  - ec2:CreateSubnet
-                  - ec2:DeleteSubnet
-                  - ec2:ModifySubnetAttribute
-                  - ec2:CreateInternetGateway
-                  - ec2:DeleteInternetGateway
-                  - ec2:AttachInternetGateway
-                  - ec2:DetachInternetGateway
-                  - ec2:CreateRouteTable
-                  - ec2:DeleteRouteTable
-                  - ec2:AssociateRouteTable
-                  - ec2:DisassociateRouteTable
-                  - ec2:CreateRoute
-                  - ec2:DeleteRoute
-                  - ec2:CreateSecurityGroup
-                  - ec2:DeleteSecurityGroup
-                  - ec2:AuthorizeSecurityGroupIngress
-                  - ec2:AuthorizeSecurityGroupEgress
-                  - ec2:RevokeSecurityGroupIngress
-                  - ec2:RevokeSecurityGroupEgress
-                  - ec2:RunInstances
-                  - ec2:TerminateInstances
-                  - ec2:StartInstances
-                  - ec2:StopInstances
-                  - ec2:ModifyInstanceAttribute
-                  - ec2:CreateVolume
-                  - ec2:DeleteVolume
-                  - ec2:AttachVolume
-                  - ec2:DetachVolume
-                  - ec2:ModifyVolume
-                  - ec2:AllocateAddress
-                  - ec2:ReleaseAddress
-                  - ec2:AssociateAddress
-                  - ec2:DisassociateAddress
-                  - ec2:CreateTags
-                  - ec2:DeleteTags
-                Resource: '*'
-
-              - Sid: DabbirS3
-                Effect: Allow
-                Action:
-                  - s3:CreateBucket
-                  - s3:DeleteBucket
-                  - s3:GetBucket*
-                  - s3:PutBucket*
-                  - s3:ListBucket
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                Resource: '*'
-
-              - Sid: DabbirIamRuntimeRoles
-                Effect: Allow
+              - Effect: Allow
                 Action:
                   - iam:CreateRole
                   - iam:DeleteRole
@@ -151,189 +79,55 @@ Resources:
                   - iam:PutRolePolicy
                   - iam:DeleteRolePolicy
                   - iam:GetRolePolicy
-                  - iam:ListRolePolicies
                   - iam:AttachRolePolicy
                   - iam:DetachRolePolicy
-                  - iam:ListAttachedRolePolicies
-                  - iam:CreateInstanceProfile
-                  - iam:DeleteInstanceProfile
-                  - iam:GetInstanceProfile
-                  - iam:AddRoleToInstanceProfile
-                  - iam:RemoveRoleFromInstanceProfile
                   - iam:PassRole
-                Resource: '*'
-
-              - Sid: DabbirBackup
-                Effect: Allow
-                Action:
-                  - backup:CreateBackupVault
-                  - backup:DeleteBackupVault
-                  - backup:DescribeBackupVault
-                  - backup:ListBackupVaults
-                  - backup:CreateBackupPlan
-                  - backup:UpdateBackupPlan
-                  - backup:DeleteBackupPlan
-                  - backup:GetBackupPlan
-                  - backup:ListBackupPlans
-                  - backup:CreateBackupSelection
-                  - backup:UpdateBackupSelection
-                  - backup:DeleteBackupSelection
-                  - backup:GetBackupSelection
-                  - backup:ListBackupSelections
-                  - backup:ListTags
-                  - backup:TagResource
-                  - backup:UntagResource
-                Resource: '*'
-
-              - Sid: DabbirRds
-                Effect: Allow
-                Action:
-                  - rds:CreateDBInstance
-                  - rds:ModifyDBInstance
-                  - rds:DeleteDBInstance
-                  - rds:DescribeDBInstances
-                  - rds:CreateDBSubnetGroup
-                  - rds:ModifyDBSubnetGroup
-                  - rds:DeleteDBSubnetGroup
-                  - rds:DescribeDBSubnetGroups
-                  - rds:CreateDBSnapshot
-                  - rds:DeleteDBSnapshot
-                  - rds:DescribeDBSnapshots
-                  - rds:AddTagsToResource
-                  - rds:RemoveTagsFromResource
-                  - rds:ListTagsForResource
-                Resource: '*'
-
-              - Sid: DabbirEcs
-                Effect: Allow
-                Action:
-                  - ecs:CreateCluster
-                  - ecs:DeleteCluster
-                  - ecs:DescribeClusters
-                  - ecs:PutClusterCapacityProviders
-                  - ecs:RegisterTaskDefinition
-                  - ecs:DeregisterTaskDefinition
-                  - ecs:DescribeTaskDefinition
-                  - ecs:CreateService
-                  - ecs:UpdateService
-                  - ecs:DeleteService
-                  - ecs:DescribeServices
-                  - ecs:ListTasks
-                  - ecs:DescribeTasks
-                  - ecs:TagResource
-                  - ecs:UntagResource
-                Resource: '*'
-
-              - Sid: DabbirEcr
-                Effect: Allow
-                Action:
-                  - ecr:GetAuthorizationToken
-                  - ecr:CreateRepository
-                  - ecr:DeleteRepository
-                  - ecr:DescribeRepositories
-                  - ecr:PutLifecyclePolicy
-                  - ecr:GetLifecyclePolicy
-                  - ecr:TagResource
-                  - ecr:UntagResource
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                  - ecr:InitiateLayerUpload
-                  - ecr:UploadLayerPart
-                  - ecr:CompleteLayerUpload
-                  - ecr:PutImage
-                Resource: '*'
-
-              - Sid: DabbirSecrets
-                Effect: Allow
-                Action:
-                  - secretsmanager:CreateSecret
-                  - secretsmanager:DeleteSecret
-                  - secretsmanager:DescribeSecret
-                  - secretsmanager:GetSecretValue
-                  - secretsmanager:PutSecretValue
-                  - secretsmanager:UpdateSecret
-                  - secretsmanager:TagResource
-                  - secretsmanager:UntagResource
-                Resource: '*'
-
-              - Sid: DabbirLogsAndMonitoring
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:DeleteLogGroup
-                  - logs:DescribeLogGroups
-                  - logs:PutRetentionPolicy
-                  - logs:TagResource
-                  - logs:UntagResource
-                  - cloudwatch:PutMetricAlarm
-                  - cloudwatch:DeleteAlarms
-                  - cloudwatch:DescribeAlarms
-                  - cloudwatch:PutDashboard
-                  - cloudwatch:DeleteDashboards
-                Resource: '*'
-
-              - Sid: DabbirLoadBalancing
-                Effect: Allow
-                Action:
-                  - elasticloadbalancing:CreateLoadBalancer
-                  - elasticloadbalancing:DeleteLoadBalancer
-                  - elasticloadbalancing:DescribeLoadBalancers
-                  - elasticloadbalancing:CreateTargetGroup
-                  - elasticloadbalancing:DeleteTargetGroup
-                  - elasticloadbalancing:DescribeTargetGroups
-                  - elasticloadbalancing:CreateListener
-                  - elasticloadbalancing:DeleteListener
-                  - elasticloadbalancing:ModifyListener
-                  - elasticloadbalancing:DescribeListeners
-                  - elasticloadbalancing:CreateRule
-                  - elasticloadbalancing:DeleteRule
-                  - elasticloadbalancing:ModifyRule
-                  - elasticloadbalancing:DescribeRules
-                  - elasticloadbalancing:RegisterTargets
-                  - elasticloadbalancing:DeregisterTargets
-                  - elasticloadbalancing:AddTags
-                  - elasticloadbalancing:RemoveTags
-                Resource: '*'
-
-              - Sid: DabbirAutoscaling
-                Effect: Allow
-                Action:
-                  - application-autoscaling:RegisterScalableTarget
-                  - application-autoscaling:DeregisterScalableTarget
-                  - application-autoscaling:PutScalingPolicy
-                  - application-autoscaling:DeleteScalingPolicy
-                  - application-autoscaling:DescribeScalableTargets
-                  - application-autoscaling:DescribeScalingPolicies
-                Resource: '*'
-
-              - Sid: DabbirServiceLinkedRoles
-                Effect: Allow
-                Action:
-                  - iam:CreateServiceLinkedRole
-                Resource: '*'
-                Condition:
-                  StringEquals:
-                    iam:AWSServiceName:
-                      - rds.amazonaws.com
-                      - ecs.amazonaws.com
-                      - elasticloadbalancing.amazonaws.com
-                      - ecs.application-autoscaling.amazonaws.com
-      Tags:
-        - Key: App
-          Value: DABBIR
-        - Key: Environment
-          Value: production
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/dabbir-*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/Dabbir*
 
 Outputs:
-  DeployRoleArn:
-    Description: GitHub Actions OIDC deploy role ARN for DABBIR.
-    Value: !GetAtt DabbirGithubDeployRole.Arn
   GitHubOidcProviderArn:
     Value: !If
       - CreateGitHubOidcProvider
       - !Ref GitHubOidcProvider
       - !Ref ExistingGitHubOidcProviderArn
-  OidcTrustStage:
-    Description: Transitional trust accepts the legacy environment-only subject plus exact main/workflow subjects until custom subject migration is verified.
-    Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS
+  GitHubDeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
+  RequiredGitHubSecretName:
+    Value: AWS_DABBIR_DEPLOY_ROLE_ARN
+  RequiredGitHubSecretValue:
+    Value: !GetAtt GitHubDeployRole.Arn
+
+Metadata:
+  RepoSubject: barman-systems@319497139/pilot@1346817686
+  LegacySubject: repo:barman-systems@319497139/pilot@1346817686:environment:production
+  WorkflowRefs:
+    - barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main
+    - barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main
+    - barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main
+    - barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main
+  RetiredAuthorities:
+    - dabbir-uae-infra.yml
+    - dabbir-uae-ec2-check.yml
+    - dabbir-aws-uae-foundation-bootstrap.yml
+    - dabbir-uae-deploy-now.yml
+    - dabbir-aws-s3-permission-hotfix.yml
+    - dabbir-uae-provision-direct.yml
+    - dabbir-uae-bootstrap-supabase.yml
+    - dabbir-oidc-subject-migrate-once.yml
+  Subjects:
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main
+
+  # This pseudo-parameter is consumed by CloudFormation tooling in the deployment
+  # workflow and kept in source as the exact intended transition allowlist.
+  OidcSubjectCondition:
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main
+    - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main
