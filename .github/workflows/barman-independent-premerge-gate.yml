@@ -20,6 +20,7 @@ permissions:
   actions: read
   pull-requests: read
   statuses: write
+  id-token: write
 
 concurrency:
   group: barman-independent-premerge-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
