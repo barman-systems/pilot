@@ -17,6 +17,9 @@ export function isProtectedTrustPath(path){
   if(value.startsWith('.github/'))return true;
   return new Set([
     'scripts/barman-independent-premerge-gate.mjs',
+    'scripts/barman-independent-verifier.mjs',
+    'api/barman-independent-verifier.js',
+    'scripts/wait-dabbir-production-sha.mjs',
     'scripts/barman-tool-agent.mjs',
     'api/barman-tool-agent-broker.js',
     'scripts/dabbir-required-pr-gates.mjs',
