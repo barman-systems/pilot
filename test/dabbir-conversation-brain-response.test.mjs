@@ -16,9 +16,11 @@ import {
   noAvailabilityReply,
   availabilitySlotsReply,
   appendAppointmentOptions,
+  appointmentOptionsReply,
   serviceListReply,
   defaultServicePrompt,
   goalClarificationReply,
+  renderOperationalResponse,
 } from '../api/_dabbir-conversation-brain-response.js';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -103,4 +105,38 @@ test('availability, appointment and service presentation wording remains compati
   assert.equal(serviceListReply({services:[],language:'en',currencyCode:'AED',serviceLabel}),'There are no active services right now.');
   assert.equal(defaultServicePrompt('ar'),'أي خدمة تحتاج؟');
   assert.equal(defaultServicePrompt('en'),'Which service do you need?');
+});
+
+test('operational mutation reply is rebuilt only from verified receipt and preserves Brain-owned queue suffix',()=>{
+  const state={language:'ar',cognition:{decision:{action:'RESCHEDULE_BOOKING'}}};
+  const result={verified:true,appointment_id:'a1',starts_at:'2026-09-15T10:00:00+04:00'};
+  const primary='تم تعديل الموعد ✅ إلى 2026-09-15T10:00:00+04:00.';
+  const legacy=primary+'\nوبخصوص الحجز التالي: أي وقت يناسبك؟';
+  assert.equal(renderOperationalResponse({text:legacy,purpose:'reschedule_booking',state,executionResult:result,context:{},bookingText:()=>''}),legacy);
+  assert.equal(renderOperationalResponse({text:'legacy-unverified',purpose:'reschedule_booking',state,executionResult:{verified:false},context:{},bookingText:()=>''}),'legacy-unverified');
+});
+
+test('appointment options are rendered from committed decision plus structured presentation, not legacy lines',()=>{
+  const context={
+    business:{timezone:'UTC'},
+    appointmentPresentation:{appointments:[{id:'a1',starts_at:'2026-09-15T10:00:00Z'},{id:'a2',starts_at:'2026-09-16T12:30:00Z'}]},
+  };
+  const state={language:'en',cognition:{decision:{action:'CLARIFY',reply:'Which appointment?'}}};
+  const expected=appointmentOptionsReply({reply:'Which appointment?',appointments:context.appointmentPresentation.appointments,language:'en',timezone:'UTC'});
+  assert.equal(renderOperationalResponse({text:'legacy lines must not win',purpose:'clarify',context,state}),expected);
+});
+
+test('service menu and pricing are rendered from scoped structured services',()=>{
+  const context={
+    business:{id:'b1',currency_code:'AED'},conversation:{branch_id:'br1'},
+    services:[
+      {id:'s1',business_id:'b1',branch_id:'br1',name_ar:'غسيل',price:40},
+      {id:'s2',business_id:'b1',branch_id:'br1',name_ar:'تلميع',price:60},
+      {id:'foreign',business_id:'b2',branch_id:'br1',name_ar:'خارجي',price:1},
+    ],
+  };
+  const menuState={language:'ar',cognition:{decision:{action:'SERVICE_MENU',resumeReply:'نكمل؟'}}};
+  assert.equal(renderOperationalResponse({text:'legacy',purpose:'reply',context,state:menuState}),'1) غسيل — 40 AED\n2) تلميع — 60 AED\nنكمل؟');
+  const pricingState={language:'ar',entities:{service:{value:'s2'}},cognition:{decision:{action:'PRICING',queryServiceId:'s2'}}};
+  assert.equal(renderOperationalResponse({text:'legacy',purpose:'reply',context,state:pricingState}),'1) تلميع — 60 AED');
 });
