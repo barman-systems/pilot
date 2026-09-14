@@ -41,7 +41,7 @@ export function budgetPressure({ spentUsd = 0, budgetAed = HARD_MONTHLY_AI_BUDGE
     ratio,
     spent_aed: spentAed,
     remaining_aed: Math.max(0, hardLimitAed - spentAed),
-    premium_allowed: ratio < AI_BUDGET_PRESSURE_THRESHOLDS.RESTRICT,
+    premium_allowed: ratio < AI_BUDGET_PRESSURE_THRESHOLDS.CONSERVE,
     paid_allowed: ratio < AI_BUDGET_PRESSURE_THRESHOLDS.PROTECT,
   };
 }
@@ -125,6 +125,16 @@ export async function claimAiBudget({
     };
   }
   const pressure = budgetPressure({ spentUsd: external.usd, budgetAed });
+  if (!pressure.paid_allowed) {
+    return {
+      allowed: false,
+      reason: 'BUDGET_PROTECTION',
+      external_spend_usd: external.usd,
+      hard_limit_aed: budgetAed,
+      budget_pressure: pressure,
+      source: 'budget_pressure_guard_before_paid_model_call',
+    };
+  }
   const effectiveReserveAed = reserveAed == null
     ? reservationAedForOperation({ operationType, maxOutputTokens, maxSteps, autonomous })
     : clamp(reserveAed, 0.01, 2.50);
