@@ -18,6 +18,7 @@ import {
   appendAppointmentOptions,
   serviceListReply,
   defaultServicePrompt,
+  goalClarificationReply,
 } from '../api/_dabbir-conversation-brain-response.js';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -66,6 +67,19 @@ test('deterministic shortcut wording remains byte-for-byte compatible',()=>{
   assert.equal(plannerRecoveryReply('en'),'Are you asking about services and prices, or would you like to book?');
   assert.equal(repeatMemoryConfirmationReply('ar'),'نفس السيارة والموقع ولا بتغير؟');
   assert.equal(repeatMemoryConfirmationReply('en'),'Same vehicle and location, or would you like to change them?');
+});
+
+test('goal clarification wording remains byte-for-byte compatible',()=>{
+  assert.equal(goalClarificationReply({fields:['service'],language:'ar'}),'أكيد. أي خدمة تبي بالضبط؟');
+  assert.equal(goalClarificationReply({fields:['service'],language:'en'}),'Sure. Which service would you like?');
+  assert.equal(goalClarificationReply({fields:['date','time'],language:'ar'}),'متى يناسبك؟ اذكر اليوم والوقت اللي تفضله.');
+  assert.equal(goalClarificationReply({fields:['date','time'],language:'en'}),'When works for you? Send the day and time you prefer.');
+  assert.equal(goalClarificationReply({fields:['vehicle'],language:'ar',activity:'car_wash'}),'تمام. أي سيارة نخدم لك؟');
+  assert.equal(goalClarificationReply({fields:['vehicle'],language:'en',activity:'car_wash'}),'Sure. Which vehicle is this for?');
+  assert.equal(goalClarificationReply({fields:['delivery_mode'],language:'ar',deliveryModes:['AT_BUSINESS','MOBILE']}),'تفضّل الخدمة في الفرع أو عندك؟');
+  assert.equal(goalClarificationReply({fields:['delivery_mode'],language:'en',deliveryModes:['AT_BUSINESS','REMOTE']}),'Would you prefer the service at the branch or remotely?');
+  assert.equal(goalClarificationReply({fields:['location'],language:'ar'}),'تمام. وين موقع الخدمة؟');
+  assert.equal(goalClarificationReply({fields:['time'],language:'en'}),'What time works for you?');
 });
 
 test('verified execution wording remains compatible and only consumes verified result data',()=>{
