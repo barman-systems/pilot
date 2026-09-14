@@ -4,14 +4,16 @@ import { SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
 export const HARD_MONTHLY_AI_BUDGET_AED = 300;
-export const DEFAULT_AI_RESERVATION_AED = 5;
+export const DEFAULT_AI_RESERVATION_AED = 1;
 export const AED_PER_USD = 3.6725;
 export const HARD_MONTHLY_AI_BUDGET_MICROUSD = Math.floor((HARD_MONTHLY_AI_BUDGET_AED / AED_PER_USD) * 1_000_000);
+export const AI_BUDGET_PRESSURE_THRESHOLDS = Object.freeze({ CONSERVE: 0.60, RESTRICT: 0.80, PROTECT: 0.90 });
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const finite = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const toDate = value => value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
 const isoDate = value => value.toISOString().slice(0, 10);
+const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
 
 export function aedToMicrousd(value) {
   return Math.max(0, Math.ceil((finite(value) / AED_PER_USD) * 1_000_000));
@@ -24,6 +26,41 @@ export function usdToMicrousd(value) {
 export function configuredBudgetAed(env = process.env) {
   const requested = finite(env.DABBIR_AI_MONTHLY_BUDGET_AED || HARD_MONTHLY_AI_BUDGET_AED);
   return Math.min(HARD_MONTHLY_AI_BUDGET_AED, Math.max(1, requested || HARD_MONTHLY_AI_BUDGET_AED));
+}
+
+export function budgetPressure({ spentUsd = 0, budgetAed = HARD_MONTHLY_AI_BUDGET_AED } = {}) {
+  const hardLimitAed = Math.max(1, finite(budgetAed) || HARD_MONTHLY_AI_BUDGET_AED);
+  const spentAed = Math.max(0, finite(spentUsd)) * AED_PER_USD;
+  const ratio = spentAed / hardLimitAed;
+  let band = 'NORMAL';
+  if (ratio >= AI_BUDGET_PRESSURE_THRESHOLDS.PROTECT) band = 'PROTECT';
+  else if (ratio >= AI_BUDGET_PRESSURE_THRESHOLDS.RESTRICT) band = 'RESTRICT';
+  else if (ratio >= AI_BUDGET_PRESSURE_THRESHOLDS.CONSERVE) band = 'CONSERVE';
+  return {
+    band,
+    ratio,
+    spent_aed: spentAed,
+    remaining_aed: Math.max(0, hardLimitAed - spentAed),
+    premium_allowed: ratio < AI_BUDGET_PRESSURE_THRESHOLDS.RESTRICT,
+    paid_allowed: ratio < AI_BUDGET_PRESSURE_THRESHOLDS.PROTECT,
+  };
+}
+
+export function reservationAedForOperation({
+  operationType = '',
+  maxOutputTokens = 320,
+  maxSteps = 6,
+  autonomous = false,
+} = {}) {
+  const type = clean(operationType, 160).toLowerCase();
+  const tokens = clamp(maxOutputTokens, 64, 8192);
+  const steps = Math.trunc(clamp(maxSteps, 1, 12));
+  const base = type.includes('daily_business_review') ? 0.50 : type.includes('ai_planning') ? 0.35 : 0.40;
+  const outputBuffer = (tokens / 1000) * 0.35;
+  const stepBuffer = steps * 0.08;
+  const autonomousBuffer = autonomous === true ? 0.15 : 0;
+  const estimate = base + outputBuffer + stepBuffer + autonomousBuffer;
+  return Math.round(clamp(estimate, 0.25, 2.50) * 100) / 100;
 }
 
 export async function gatewayMonthlySpend({ now = new Date(), gatewayClient = gateway } = {}) {
@@ -66,7 +103,9 @@ export async function claimAiBudget({
   operationKey,
   operationType,
   autonomous = false,
-  reserveAed = DEFAULT_AI_RESERVATION_AED,
+  reserveAed = null,
+  maxOutputTokens = 320,
+  maxSteps = 6,
   env = process.env,
   gatewayClient = gateway,
   rpc = budgetRpc,
@@ -82,19 +121,29 @@ export async function claimAiBudget({
       reason: 'GATEWAY_SPEND_UNAVAILABLE',
       error: clean(error?.message || error, 160),
       hard_limit_aed: budgetAed,
-      source: 'fail_closed_before_model_call',
+      source: 'fail_closed_before_paid_model_call',
     };
   }
+  const pressure = budgetPressure({ spentUsd: external.usd, budgetAed });
+  const effectiveReserveAed = reserveAed == null
+    ? reservationAedForOperation({ operationType, maxOutputTokens, maxSteps, autonomous })
+    : clamp(reserveAed, 0.01, 2.50);
   const result = await rpc('dabbir_claim_ai_budget_v1', {
     p_business_id: businessId,
     p_operation_key: clean(operationKey, 240),
     p_operation_type: clean(operationType, 160),
     p_autonomous: autonomous === true,
-    p_reserve_microusd: aedToMicrousd(Math.max(0.1, finite(reserveAed))),
+    p_reserve_microusd: aedToMicrousd(effectiveReserveAed),
     p_external_spent_microusd: external.microusd,
     p_hard_limit_microusd: Math.min(HARD_MONTHLY_AI_BUDGET_MICROUSD, aedToMicrousd(budgetAed)),
   }, env);
-  return { ...result, external_spend_usd: external.usd, hard_limit_aed: budgetAed };
+  return {
+    ...result,
+    external_spend_usd: external.usd,
+    hard_limit_aed: budgetAed,
+    reservation_aed: effectiveReserveAed,
+    budget_pressure: pressure,
+  };
 }
 
 export async function finalizeAiBudget({
