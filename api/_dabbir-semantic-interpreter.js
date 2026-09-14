@@ -3,6 +3,7 @@ import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semanti
 import { validSemanticContract, semanticRequestSpans } from './_dabbir-semantic-contract.js';
 import { applyDeterministicSemanticIntentPolicy } from './_dabbir-semantic-intent-policy.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
+import { QWEN37_CANARY_MODEL, qwen37CanaryDecision, qwen37CanaryEnvironment, qwen37CanaryFetch } from './_dabbir-qwen37-canary.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -67,25 +68,65 @@ function gatewaySemanticOptions(url,options={}) {
   return options;
 }
 
-export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
-  const deadline=Date.now()+18000; let attempts=0;
-  const fetchBounded=async(url,options={})=>{
+function makeSemanticFetch({activeEnv,fetchImpl,budgetMs=18000,maxAttempts=4}){
+  const deadline=Date.now()+budgetMs;
+  let attempts=0;
+  return async(url,options={})=>{
     const remaining=deadline-Date.now();
-    if(attempts>=4 || remaining<=0) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
-    // Direct-provider schema repair shares the four-request budget. Reserve one
-    // request and the existing gateway primary deadline for the already-enabled
-    // final fallback, instead of exhausting both before it can be reached.
-    const reserve=env.VERCEL_ENV&&String(url)!==GATEWAY_ENDPOINT?6000:0;
-    if(reserve&&(attempts>=3||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
+    if(attempts>=maxAttempts || remaining<=0) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
+    // Direct-provider schema repair shares the request budget. Reserve one
+    // request and the existing gateway primary deadline for the final fallback.
+    const reserve=activeEnv.VERCEL_ENV&&String(url)!==GATEWAY_ENDPOINT?6000:0;
+    if(reserve&&(attempts>=maxAttempts-1||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
     attempts++;
     const nextOptions=gatewaySemanticOptions(url,options);
     const signal=AbortSignal.timeout(Math.max(1,remaining-reserve));
     return fetchImpl(url,{...nextOptions,signal:nextOptions.signal?AbortSignal.any([signal,nextOptions.signal]):signal});
   };
-  const result=await generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
+}
+
+async function requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv,fetchImpl,budgetMs,maxAttempts}){
+  const bounded=makeSemanticFetch({activeEnv,fetchImpl,budgetMs,maxAttempts});
+  return generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
     message:sanitizeSemanticText(message).slice(0,2000),
     businessContext:JSON.stringify(providerSemanticContext(context,referenceTime)),
-    history:semanticRoleHistory(context),fetchImpl:fetchBounded,env,meteringContext});
+    history:semanticRoleHistory(context),fetchImpl:bounded,env:activeEnv,meteringContext});
+}
+
+function acceptedQwen37CanaryResult(result){
+  return Boolean(result?.ok
+    && validSemanticContract(result.reply)
+    && result.provider==='vercel-ai-gateway'
+    && String(result.model||'')===QWEN37_CANARY_MODEL);
+}
+
+export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
+  const canary=qwen37CanaryDecision({env,meteringContext,context});
+  let result;
+  let canaryFallback=false;
+  let canaryFailure=null;
+
+  if(canary.selected){
+    try{
+      const candidateEnv=qwen37CanaryEnvironment(env);
+      result=await requestSemanticProvider({
+        message,context,referenceTime,meteringContext,
+        activeEnv:candidateEnv,
+        fetchImpl:qwen37CanaryFetch(fetchImpl),
+        budgetMs:7000,
+        maxAttempts:2,
+      });
+      if(!acceptedQwen37CanaryResult(result))throw Object.assign(new Error('QWEN37_CANARY_RESULT_REJECTED'),{code:'QWEN37_CANARY_RESULT_REJECTED'});
+    }catch(error){
+      canaryFallback=true;
+      canaryFailure=String(error?.code||error?.message||'QWEN37_CANARY_FAILED').slice(0,80);
+      console.warn('dabbir_qwen37_canary_fallback',{reason:canaryFailure,bucket:canary.bucket,percent:canary.percent});
+      result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,budgetMs:18000,maxAttempts:4});
+    }
+  }else{
+    result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,budgetMs:18000,maxAttempts:4});
+  }
+
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});
   if(!validSemanticContract(result.reply)) throw Object.assign(new Error('AI_PLANNER_CONTRACT_INVALID'),{code:'AI_PLANNER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   const x=JSON.parse(result.reply);
@@ -100,7 +141,8 @@ export async function interpretSemanticMessage({ message, context, referenceTime
   // operational intent. Explicit availability + grounded temporal evidence is
   // a booking-journey signal even if a stochastic provider says SERVICE_MENU.
   const proposal=applyDeterministicSemanticIntentPolicy({message,proposal:providerProposal});
-  return {proposal,provider:result.provider,model:result.model,telemetry:result.telemetry||null};
+  const telemetry={...(result.telemetry||{}),qwen37_canary:{eligible:canary.enabled,selected:canary.selected,bucket:canary.bucket,percent:canary.percent,fallback:canaryFallback,failure:canaryFailure}};
+  return {proposal,provider:result.provider,model:result.model,telemetry};
 }
 
 // Fixed, authenticated synthetic case exercises the SAME interpreter used by

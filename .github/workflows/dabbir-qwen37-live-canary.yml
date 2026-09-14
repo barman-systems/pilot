@@ -1,0 +1,92 @@
+name: DABBIR Qwen3.7 Live Canary
+# Protected synthetic Preview probe for the actual canary path. Never enables Production traffic.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/qwen37-production-canary
+    paths:
+      - 'api/_dabbir-qwen37-canary.js'
+      - 'api/_dabbir-semantic-interpreter.js'
+      - 'api/dabbir-qwen37-canary-probe.js'
+      - 'test/dabbir-qwen37-canary.test.mjs'
+      - 'test/dabbir-qwen37-canary-integration.test.mjs'
+      - 'test/dabbir-qwen37-canary-probe.test.mjs'
+      - 'test/dabbir-qwen37-live-canary-probe.mjs'
+      - '.github/workflows/dabbir-qwen37-live-canary.yml'
+
+concurrency:
+  group: dabbir-qwen37-live-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  qwen37-live-canary:
+    name: Protected Qwen3.7 canary probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      QWEN37_CANARY_PROBE_ORIGIN: https://dabbir-git-feat-qwen37-product-87c661-nd56cm4j5v-3619s-projects.vercel.app
+      EXPECTED_CANARY_SHA: ${{ github.sha }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      QWEN37_CANARY_PROBE_REPORT_PATH: dabbir-qwen37-live-canary-probe.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Prepare protected preview access
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'QWEN37_CANARY_PROTECTION=automation_bypass'
+            exit 0
+          fi
+          response="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}" || true)"
+          if [ "$status" != '200' ]; then
+            echo "TRUSTED_OIDC_REQUEST_FAILED_HTTP_${status:-000}"
+            exit 2
+          fi
+          token="$(jq -r '.value // empty' "$response")"
+          if [ -z "$token" ]; then
+            echo 'TRUSTED_OIDC_TOKEN_EMPTY'
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          echo "VERCEL_TRUSTED_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
+          echo 'QWEN37_CANARY_PROTECTION=trusted_oidc'
+      - name: Run exact-head live Qwen3.7 canary probe
+        run: node test/dabbir-qwen37-live-canary-probe.mjs
+      - name: Publish canary summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$QWEN37_CANARY_PROBE_REPORT_PATH" ]; then
+            echo '## DABBIR Qwen3.7 Live Canary' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Expected SHA:** $EXPECTED_CANARY_SHA" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verified SHA:** $(jq -r '.verified_sha // "NONE"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Model:** $(jq -r '.probe.model // "NONE"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Provider:** $(jq -r '.probe.provider // "NONE"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Selected:** $(jq -r '.probe.canary.selected // false' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Fallback:** $(jq -r '.probe.canary.fallback // false' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Latency ms:** $(jq -r '.probe.usage.latency_ms // 0' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Actual cost USD:** $(jq -r '.probe.usage.actual_cost_usd // "UNKNOWN"' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Production mutations:** $(jq -r '.production_mutations // 0' "$QWEN37_CANARY_PROBE_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload live canary evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-qwen37-live-canary-evidence
+          path: dabbir-qwen37-live-canary-probe.json
+          if-no-files-found: error
+          retention-days: 7
