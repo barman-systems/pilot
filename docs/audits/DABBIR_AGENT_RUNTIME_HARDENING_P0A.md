@@ -1,64 +1,56 @@
 # DABBIR — Agent Runtime Hardening P0-A
 
-Status: IN_PROGRESS
-Observed at: 2026-09-14T13:53:32Z
+Status: BLOCKED_EXTERNAL_AND_REMEDIATION
+Observed at: 2026-09-14
 
-This evidence file is intentionally maintained before any runtime mutation. It contains only non-secret metadata, exact-SHA findings, test evidence, and blockers for the Secret/OIDC/Credential Audit. No credential values may be recorded here.
+This evidence file contains only non-secret metadata, exact-SHA findings, test evidence, and blockers. No credential values are recorded here.
 
 ## Freeze current truth
 
-| item | observed truth |
-|---|---|
-| `barman-systems/pilot` | `main` = `00ffb68ab0dee7b184c97aa8c38c410720c23ab6` |
-| `barman-systems/barman-control-plane` | `main` = `26c64fc4c90375912bfef7186e009594d98e73fd` |
-| pilot AI SDK | `ai@7.0.62`, `@ai-sdk/openai-compatible@3.0.44`, `zod@4.5.4` |
-| pilot autonomous operator | `ToolLoopAgent`; `MAX_STEPS=6`; 14 read tools; 7 write tools |
-| default operator model | `DABBIR_AI_GATEWAY_MODEL` or `openai/gpt-5.4` |
-| default fallback chain | `anthropic/claude-sonnet-4.6`, `google/gemini-3-flash`, `openai/gpt-5.4-nano` |
-| WorkflowAgent | not shipped; dependency-contract test explicitly requires it to remain absent until a stable dependency graph passes the production audit |
-| BARMAN persistent tool-agent | workflow exists but executor remains intentionally disabled with `if: ${{ false }}` and read-only GitHub permissions |
-| browser worker | Node 24; `puppeteer-core@25.8.0`; `@sparticuz/chromium@149.0.0`; `@vercel/oidc@3.8.5`; local worker package still carries `ai@6.0.56` |
-| AI Council source | current control-plane main now contains canonical `apps/ai-council-p0`; release policy remains Preview-only / discussion-only and explicitly grants no execution authority |
-| Vercel Agent Runs | no project with Agent Runs data was returned by the live Vercel Agent Runs project listing during this audit; end-to-end Agent Runs visibility is therefore not yet proven |
+- Frozen pilot main for this P0-A audit: `00ffb68ab0dee7b184c97aa8c38c410720c23ab6`.
+- Control-plane protection is enforced by active repository ruleset `BARMAN Main Protection` with required PR/status-check rules; the classic branch-protection endpoint alone is not authoritative.
+- P0-B and later phases remain gated on P0-A PASS.
 
-## Correction: control-plane main protection
+## Current-tree secret finding classification
 
-A previous reading of the classic branch-protection endpoint showed `required_status_checks.enforcement_level=off`. That endpoint was incomplete for this repository because protection is enforced by an active GitHub repository ruleset.
+Latest classified PR #820 scan reported 10 current findings and 59 historical findings.
 
-Current repository ruleset evidence:
+| Location | Classification | Evidence-based disposition |
+| --- | --- | --- |
+| `api/auth/owner-otp.js:34` | FALSE_POSITIVE | Credential scanner matched the static response header value `actor-bound-otp-v12`; this is protocol/version metadata, not authentication material. |
+| `docs/architecture/legacy-removal-proof.json:35,63,87` | FALSE_POSITIVE | SHA-256 integrity hashes used to prove retained declarations; not credentials. |
+| `test/calendar-security-bootstrap.test.mjs:15` | TEST_FIXTURE | Test-only credential-shaped fixture. |
+| `test/dabbir-ai-budget-observability.test.mjs:6` | TEST_FIXTURE | Test-only Langfuse-shaped fixture. |
+| `test/dabbir-ai-observability.test.mjs:5` | TEST_FIXTURE | Test-only Langfuse-shaped fixture. |
+| `test/dabbir-whatsapp-booking-flows.test.mjs:37,45,112` | TEST_FIXTURE | Deterministic fixed WhatsApp Flow tokens inside unit tests; not production credentials. |
 
-- Ruleset: `BARMAN Main Protection` (`id=21149511`).
-- Enforcement: `active`.
-- Target: default branch.
-- Required pull request rule present.
-- Required status checks are strict and explicitly require:
-  - `BM Control Plane CI`
-  - `Executive Integrity`
-- `bypass_actors` is empty.
-- `current_user_can_bypass` is `never`.
-- Both required workflow names exist on current control-plane exact SHA `26c64fc4c90375912bfef7186e009594d98e73fd` and trigger on pull requests / main / merge queue.
+No blanket scanner allowlist is authorized by these classifications. Any future suppression must be exact and narrow enough that a new credential-shaped literal elsewhere still fails closed.
 
-Conclusion for this sub-check:
+## Historical findings
 
-`CONTROL_PLANE_REQUIRED_CHECKS_ENFORCED = true`
+Historical findings are not automatically safe because they are absent from the current tree. The scan found historical credential-shaped material in runtime, workflow, script, test, and retired paths. Each historical runtime/workflow finding must be proven synthetic/public/retired or have rotation/revocation evidence before P0-A PASS.
 
-The earlier interpretation that control-plane `main` lacked enforced required checks is superseded by the ruleset evidence above. P0-A must not use the classic branch-protection endpoint alone as authoritative protection evidence.
+## Vercel environment metadata
 
-## Secret / credential audit observations so far
+The value-free Vercel metadata audit is implemented and fail-closed. The configured Vercel credential currently returns HTTP 403 for all four audited projects:
 
-Only names / metadata are recorded here, never values.
+- `dabbir`
+- `barman-browser-worker`
+- `barman-live-ceo`
+- `ai-council-p0`
 
-Observed GitHub Actions secret-reference patterns include long-lived credentials or credential handles such as Supabase management/access tokens, Vercel token, Expo token, and an AWS deployment role ARN. AWS deployment uses GitHub OIDC for role assumption. This is an inventory observation only; it is not yet a PASS assertion for credential lifecycle or rotation.
+No environment-variable values were emitted. This is an authorization blocker, not evidence that the projects have no environment variables.
 
-The pilot repository already carries a dedicated security gate that scans tracked source for known committed-secret patterns and blocks selected client-surface secret names. That gate is useful evidence but is not by itself a complete historical secret scan equivalent to gitleaks/history inspection.
+## Gate
 
-## P0-A remaining work before PASS
+`P0_A_PASS = false`
 
-- Inventory Vercel Production and Preview environment-variable metadata without decrypting values.
-- Classify each variable by name/metadata only and verify sensitive/short-lived/OIDC-derived/documented-exception posture where applicable.
-- Complete repository + history secret scan using a strong scanner (gitleaks or equivalent) without exposing matched credential values.
-- Finish OIDC trust review across issuer, audience, repository, ref, workflow_ref, event_name, expiry, nbf and environment binding.
-- Identify obsolete / long-lived credentials and produce safe rotation/remediation plans where required.
-- Re-check both repository exact SHAs immediately before final P0-A verdict; if either main moved, refresh the frozen truth instead of relying on this snapshot.
+Remaining mandatory closure:
 
-No P0-A PASS is claimed yet.
+1. disposition historical credential-shaped runtime/workflow findings without exposing values;
+2. rotate/revoke any real or unprovable long-lived credential;
+3. restore least-privilege Vercel metadata-read authorization and obtain a value-free PASS;
+4. rerun the scanner with only reviewed exact suppressions for proven false positives/test fixtures;
+5. refresh exact main SHAs immediately before the final verdict.
+
+No P0-B work is authorized before these conditions are satisfied.
