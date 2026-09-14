@@ -1,6 +1,9 @@
 export const CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN';
 
 const isArabic=language=>language==='ar';
+const arr=value=>Array.isArray(value)?value:[];
+const entityValue=(state,key)=>state?.entities?.[key]?.value;
+const structuredServiceLabel=service=>String(service?.name_ar||service?.name||service?.name_en||'').trim().slice(0,180);
 
 export function recoveryGreetingReply(language){
   return isArabic(language)?'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟':'Hello. Your previous request is unfinished. Would you like to continue it?';
@@ -83,9 +86,8 @@ const exactStaticResponse=text=>{
   return null;
 };
 
-// Known deterministic legacy drafts are now canonicalized here by exact match.
-// Arbitrary Brain/model prose is deliberately passed through byte-for-byte; there
-// is no fuzzy matching, heuristic rewriting, or downstream intent inference.
+// Known deterministic legacy drafts are canonicalized by exact match only.
+// Arbitrary Brain/model prose stays byte-for-byte unchanged.
 export function finalizeCustomerResponse({text}){
   const value=typeof text==='string'?text:String(text??'');
   return exactStaticResponse(value)??value;
@@ -112,8 +114,69 @@ export function appendAppointmentOptions(reply,lines){
   return String(reply||'')+'\n'+lines.join('\n');
 }
 
+export function appointmentOptionsReply({reply,appointments,language,timezone}){
+  const locale=isArabic(language)?'ar-AE':'en-AE';
+  const lines=appointments.map((appointment,index)=>`${index+1}) ${new Intl.DateTimeFormat(locale,{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(appointment.starts_at))}`);
+  return appendAppointmentOptions(reply,lines);
+}
+
 export function serviceListReply({services,language,currencyCode,serviceLabel,resumeReply}){
-  let reply=services.map((service,index)=>`${index+1}) ${serviceLabel(service)} — ${service.price!=null&&Number.isFinite(Number(service.price))?Number(service.price):isArabic(language)?'السعر غير متحقق':'price unverified'} ${currencyCode||''}`).join('\n')||(isArabic(language)?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
+  const label=typeof serviceLabel==='function'?serviceLabel:structuredServiceLabel;
+  let reply=services.map((service,index)=>`${index+1}) ${label(service)} — ${service.price!=null&&Number.isFinite(Number(service.price))?Number(service.price):isArabic(language)?'السعر غير متحقق':'price unverified'} ${currencyCode||''}`).join('\n')||(isArabic(language)?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
   if(resumeReply)reply+='\n'+resumeReply;
   return reply;
+}
+
+function scopedServices(context){
+  return arr(context?.services).filter(service=>(!service?.business_id||service.business_id===context?.business?.id)&&(!service?.branch_id||service.branch_id===context?.conversation?.branch_id));
+}
+
+function mutationActionFromPurpose(purpose){
+  if(purpose==='cancel_booking')return 'CANCEL_BOOKING';
+  if(purpose==='reschedule_booking')return 'RESCHEDULE_BOOKING';
+  if(purpose==='create_booking')return 'CREATE_BOOKING';
+  return null;
+}
+
+// Compatibility bridge: the execution core can still produce its legacy draft,
+// but the authoritative customer reply is rebuilt here from committed Brain state,
+// verified execution receipts and presentation data. No regex/fuzzy parsing is used.
+export function renderOperationalResponse({text,purpose,context,state,executionResult,bookingText}){
+  const fallback=()=>finalizeCustomerResponse({text});
+  const language=state?.language||'ar';
+  const decision=state?.cognition?.decision;
+  const mutationAction=mutationActionFromPurpose(purpose);
+
+  if(mutationAction&&executionResult?.verified===true&&executionResult?.appointment_id&&typeof bookingText==='function'){
+    const primary=verifiedMutationReply({action:mutationAction,result:executionResult,language,bookingText});
+    const legacy=typeof text==='string'?text:String(text??'');
+    // Queued-goal prose is already Brain-owned. Preserve it only when the legacy
+    // draft starts with the exact primary response derived from the verified receipt.
+    if(legacy.startsWith(primary))return primary+legacy.slice(primary.length);
+    return fallback();
+  }
+
+  if(purpose==='no-slots')return noAvailabilityReply(language);
+
+  if(decision?.action==='CLARIFY'&&arr(context?.appointmentPresentation?.appointments).length){
+    return appointmentOptionsReply({
+      reply:decision.reply||'',
+      appointments:context.appointmentPresentation.appointments,
+      language,
+      timezone:context?.business?.timezone,
+    });
+  }
+
+  if(decision?.action==='PRICING'||decision?.action==='SERVICE_MENU'){
+    const target=decision.queryServiceId||entityValue(state,'service');
+    const services=scopedServices(context).filter(service=>decision.action==='SERVICE_MENU'||!target||service.id===target).slice(0,10);
+    return serviceListReply({
+      services,
+      language,
+      currencyCode:context?.business?.currency_code||'',
+      resumeReply:decision.resumeReply,
+    });
+  }
+
+  return fallback();
 }

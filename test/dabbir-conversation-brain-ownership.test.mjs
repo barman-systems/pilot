@@ -101,16 +101,22 @@ test('goal planner owns focus selection while conversation brain owns goal-quest
   }
 });
 
-test('legacy-visible delivery crosses one conversation-brain response boundary',()=>{
+test('operational delivery is rebuilt from committed state and verified receipts at the Brain boundary',()=>{
   const orchestrator=read('_dabbir-understanding-orchestrator.js');
   const core=read('_dabbir-understanding-orchestrator-core.js');
   const response=read('_dabbir-conversation-brain-response.js');
 
   assert.match(orchestrator,/from '\.\/_dabbir-understanding-orchestrator-core\.js'/);
   assert.match(orchestrator,/from '\.\/_dabbir-conversation-brain-response\.js'/);
-  assert.match(orchestrator,/finalizeCustomerResponse\(\{text,purpose\}\)/);
-  assert.match(orchestrator,/bookingConfirmationReply\(\{result,language,bookingText\}\)/);
+  assert.match(orchestrator,/renderOperationalResponse\(\{/);
+  assert.match(orchestrator,/name==='dabbir_semantic_commit_v2'/);
+  assert.match(orchestrator,/name==='dabbir_semantic_execute_v2'/);
+  assert.match(orchestrator,/rpc:brainRpc/);
   assert.match(response,/CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN'/);
+  assert.match(response,/export function renderOperationalResponse/);
+  assert.match(response,/appointmentPresentation/);
+  assert.match(response,/decision\?\.action==='PRICING'/);
+  assert.match(response,/executionResult\?\.verified===true/);
   assert.match(core,/export async function runUnderstandingTurn/);
 
   for(const forbidden of [
