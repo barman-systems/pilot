@@ -1,7 +1,26 @@
 {
-  "version": "DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V1",
+  "version": "DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V2",
   "authority": "api/_ai-provider-reliability.js",
   "authority_fetch_adapter": "api/_ai-provider-authority-fetch.js",
+  "background_recovery": {
+    "worker": "api/_ai-provider-recovery.js",
+    "cron": "api/dabbir-ai-provider-recovery-cron.js",
+    "attempt_type": "RECOVERY_PROBE",
+    "customer_content_allowed": false,
+    "single_probe_lease": true,
+    "required_successes_to_healthy": 2
+  },
+  "attempt_types": [
+    "CUSTOMER",
+    "RECOVERY_PROBE",
+    "BENCHMARK"
+  ],
+  "invariants": {
+    "customer_can_acquire_probe_lease": false,
+    "customer_network_probe_allowed": false,
+    "recovery_probe_requires_shared_lease": true,
+    "benchmark_mutates_customer_health_state": false
+  },
   "shared_state": {
     "backend": "supabase_postgres",
     "table": "dabbir_private.dabbir_ai_provider_health_v1",
