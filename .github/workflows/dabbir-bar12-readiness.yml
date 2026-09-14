@@ -331,7 +331,7 @@ jobs:
         run: node scripts/dabbir-readiness-gate.mjs
       - name: Upload readiness evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dabbir-bar12-readiness-evidence
           path: |

@@ -185,7 +185,7 @@ jobs:
           fi
       - name: Upload protected smoke evidence
         if: ${{ always() && steps.bypass.outputs.ready == 'true' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dabbir-protected-live-smoke-evidence
           path: |

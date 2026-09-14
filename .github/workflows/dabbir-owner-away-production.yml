@@ -61,7 +61,7 @@ jobs:
           fi
       - name: Upload Owner Away evidence
         if: ${{ always() && steps.launch-gate.outputs.ready == 'true' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dabbir-owner-away-production-evidence
           path: dabbir-owner-away-production-report.json
