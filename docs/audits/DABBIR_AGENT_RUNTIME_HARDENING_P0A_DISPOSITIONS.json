@@ -1,0 +1,120 @@
+{
+  "schema": "dabbir.agent_runtime_hardening.p0a_dispositions.v1",
+  "generated_at": "2026-09-14T14:00:00Z",
+  "values_included": false,
+  "repository": "barman-systems/pilot",
+  "frozen_main_sha": "00ffb68ab0dee7b184c97aa8c38c410720c23ab6",
+  "p0_a_pass": false,
+  "current_tree": [
+    {
+      "rule_id": "generic-api-key",
+      "file": "api/auth/owner-otp.js",
+      "lines": [34],
+      "disposition": "FALSE_POSITIVE_PROTOCOL_METADATA",
+      "reason": "scanner hit is the static x-dabbir-owner-auth protocol/version marker; no credential value is embedded"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "docs/architecture/legacy-removal-proof.json",
+      "lines": [35, 63, 87],
+      "disposition": "FALSE_POSITIVE_INTEGRITY_HASH",
+      "reason": "SHA-256 integrity hashes used as byte-identity evidence, not credentials"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "test/calendar-security-bootstrap.test.mjs",
+      "lines": [15],
+      "disposition": "TEST_FIXTURE",
+      "reason": "deterministic test-only synthetic secret-shaped value"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "test/dabbir-ai-budget-observability.test.mjs",
+      "lines": [6],
+      "disposition": "TEST_FIXTURE",
+      "reason": "synthetic Langfuse-shaped keys used only by unit tests"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "test/dabbir-ai-observability.test.mjs",
+      "lines": [5],
+      "disposition": "TEST_FIXTURE",
+      "reason": "synthetic Langfuse-shaped keys used only by unit tests"
+    },
+    {
+      "rule_id": "generic-api-key",
+      "file": "test/dabbir-whatsapp-booking-flows.test.mjs",
+      "lines": [37, 45, 112],
+      "disposition": "TEST_FIXTURE",
+      "reason": "fixed deterministic WhatsApp Flow tokens inside tests; not production credentials"
+    }
+  ],
+  "historical_reviewed_groups": [
+    {
+      "file": "api/_auth-core.js",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+      "reason": "Supabase publishable key explicitly documented and used as a public/client identifier; no service-role key"
+    },
+    {
+      "file": "api/public-car-wash.js",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+      "reason": "Supabase publishable fallback, not privileged service credentials"
+    },
+    {
+      "file": "api/public-order-status.js",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+      "reason": "source explicitly identifies the value as a Supabase publishable key and not a privileged credential"
+    },
+    {
+      "file": "status.html",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+      "reason": "browser-delivered Supabase publishable key"
+    },
+    {
+      "file": "scripts/dabbir-privacy-wire-e2e-dr-v2.mjs",
+      "disposition": "PUBLIC_ANON_CREDENTIAL",
+      "reason": "Supabase anon JWT used for a DR wire test; anon/client credential, not a service-role secret"
+    },
+    {
+      "file": ".github/workflows/dabbir-qwen37-canary-activation.yml",
+      "disposition": "FALSE_POSITIVE_CONFIG_METADATA",
+      "reason": "findings correspond to plain canary environment keys/values and metadata; Vercel authorization is referenced through GitHub secrets rather than embedded"
+    },
+    {
+      "file": "scripts/dabbir-qwen37-canary-control.sh",
+      "disposition": "FALSE_POSITIVE_CONFIG_METADATA",
+      "reason": "findings correspond to plain canary environment keys/values and metadata"
+    },
+    {
+      "file": ".github/workflows/dabbir-retired-supabase-cleanup-once.yml",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER_RETIRED",
+      "reason": "retired Supabase URL and publishable key used only to remove old public fallbacks"
+    },
+    {
+      "file": ".github/workflows/dabbir-mumbai-migration.yml",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE",
+      "reason": "literal is a Supabase publishable key; VERCEL_TOKEN is a GitHub secret reference, not embedded"
+    },
+    {
+      "file": ".github/workflows/dabbir-mumbai-promote-retry.yml",
+      "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE",
+      "reason": "literal is a Supabase publishable key; VERCEL_TOKEN is a GitHub secret reference, not embedded"
+    }
+  ],
+  "historical_pending": {
+    "state": "REVIEW_REQUIRED",
+    "policy": "tests/docs may be closed only after source inspection; runtime/workflow findings require explicit public/synthetic/retired proof or rotation/revocation evidence"
+  },
+  "vercel_metadata": {
+    "state": "BLOCKED_EXTERNAL_CREDENTIAL_SCOPE",
+    "github_actions_token_result": "HTTP_403_FOR_ALL_AUDITED_PROJECTS",
+    "projects": ["dabbir", "barman-browser-worker", "barman-live-ceo", "ai-council-p0"],
+    "connected_vercel_account_access": "TEAM_AND_PROJECT_READ_CONFIRMED",
+    "values_exposed": false,
+    "closure_required": "obtain least-privilege project environment metadata read access without decrypting values"
+  },
+  "gate": {
+    "p0_b_authorized": false,
+    "reason": "P0-A remains blocked until historical review and Vercel metadata-read closure are complete"
+  }
+}
