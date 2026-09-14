@@ -123,9 +123,9 @@ function skipFromClaim({provider,model,attemptType,claim,trace,reason}){
 export async function reliableAiProviderFetch(url,options={},meta={}){
   const provider=clean(meta.provider||providerForAiEndpoint(url),80);
   const model=clean(meta.model,160)||'unknown';
-  const attemptType=normalizeAiProviderAttemptType(meta.attemptType||'CUSTOMER');
-  if(!PROVIDERS.has(provider))throw Object.assign(new Error('AI_PROVIDER_AUTHORITY_UNRECOGNIZED_PROVIDER'),{code:'AI_PROVIDER_AUTHORITY_UNRECOGNIZED_PROVIDER'});
   const env=meta.env||process.env;
+  const attemptType=normalizeAiProviderAttemptType(meta.attemptType||env.DABBIR_AI_ATTEMPT_TYPE||'CUSTOMER');
+  if(!PROVIDERS.has(provider))throw Object.assign(new Error('AI_PROVIDER_AUTHORITY_UNRECOGNIZED_PROVIDER'),{code:'AI_PROVIDER_AUTHORITY_UNRECOGNIZED_PROVIDER'});
   const transport=meta.fetchImpl||globalThis.fetch;
   if(typeof transport!=='function')throw new TypeError('AI_PROVIDER_TRANSPORT_REQUIRED');
   const store=meta.healthStore===undefined?createSupabaseProviderHealthStore({env}):meta.healthStore;
@@ -145,9 +145,7 @@ export async function reliableAiProviderFetch(url,options={},meta={}){
 
   const decision=String(claim?.decision||'ATTEMPT').toUpperCase();
   if(decision==='SKIP')skipFromClaim({provider,model,attemptType,claim,trace});
-  // Defensive invariant: even a stale/legacy authority may not turn a customer request into a probe.
   if(attemptType==='CUSTOMER'&&decision==='PROBE')skipFromClaim({provider,model,attemptType,claim,trace,reason:'RECOVERY_PROBE_REQUIRED'});
-  // Background recovery may touch the provider only after the shared authority grants the single lease.
   if(attemptType==='RECOVERY_PROBE'&&decision!=='PROBE')skipFromClaim({provider,model,attemptType,claim,trace,reason:'RECOVERY_PROBE_NOT_GRANTED'});
 
   const started=Date.now();
