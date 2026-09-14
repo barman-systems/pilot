@@ -1,4 +1,5 @@
 name: DABBIR Qwen3.7 Live Benchmark
+# Isolated benchmark workflow; never promotes or mutates Production routing.
 
 on:
   workflow_dispatch:
