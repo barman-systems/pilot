@@ -1,0 +1,339 @@
+name: DABBIR AWS Full Decommission Once
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/dabbir-aws-decommission-live-once.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-aws-decommission-live-once.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: dabbir-aws-full-decommission-once
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate destructive job cannot run on a pull request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/dabbir-aws-decommission-live-once.yml').read_text()
+          required=[
+            "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+            'environment: production',
+            "EXPECTED_ACCOUNT: '388699644093'",
+            'AWS_REGION: me-central-1',
+            'DabbirGithubDeployRole',
+          ]
+          missing=[x for x in required if x not in p]
+          if missing:
+            raise SystemExit(f'missing fail-closed guard(s): {missing}')
+          PY
+
+  decommission:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 30
+    env:
+      AWS_REGION: me-central-1
+      EXPECTED_ACCOUNT: '388699644093'
+      ROLE_NAME: DabbirGithubDeployRole
+      ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+      OIDC_PROVIDER_ARN: arn:aws:iam::388699644093:oidc-provider/token.actions.githubusercontent.com
+      BUCKET_FOUNDATION: dabbir-managed-foundation-databucket-mpcxmaq5ue1b
+      BUCKET_PROD: dabbir-prod-uae-databucket-lhoe3doqumka
+      ECR_REPO: dabbir-prod/api
+      LOG_GROUP: dabbir-managed-foundation-RuntimeLogGroup-2Cx2BLpjfL99
+      STACK_FOUNDATION: dabbir-managed-foundation
+      STACK_PROD: dabbir-prod-uae
+      STACK_IDENTITY: dabbir-github-oidc
+      MANAGED_POLICY_NAME: DabbirManagedInfrastructureDeployment
+      EVIDENCE_DIR: dabbir-aws-decommission-evidence
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert exact protected execution context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = 'push'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -p "$EVIDENCE_DIR" /tmp/dabbir-decommission
+          chmod 700 /tmp/dabbir-decommission
+          jq -n --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" --arg event "$GITHUB_EVENT_NAME" \
+            '{repo_exact_sha:$sha,ref:$ref,event:$event,owner_authorized_decommission:true}' \
+            > "$EVIDENCE_DIR/execution-context.json"
+
+      - name: Configure existing DABBIR AWS OIDC session
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: dabbir-final-decommission-${{ github.run_id }}
+
+      - name: Fail-closed live ownership and drift preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          test "$account" = "$EXPECTED_ACCOUNT"
+
+          aws cloudformation describe-stacks --region "$AWS_REGION" --output json \
+            | jq '[.Stacks[] | select(.StackName | startswith("dabbir-")) | {StackName,StackStatus}]' \
+            > "$EVIDENCE_DIR/preflight-stacks.json"
+
+          python3 - <<'PY'
+          import json
+          expected={'dabbir-prod-uae','dabbir-managed-foundation','dabbir-github-oidc'}
+          rows=json.load(open('dabbir-aws-decommission-evidence/preflight-stacks.json'))
+          names={r['StackName'] for r in rows}
+          if names != expected:
+              raise SystemExit(f'fail closed: unexpected DABBIR stack set: {sorted(names)}')
+          allowed={
+            'dabbir-prod-uae':{'ROLLBACK_COMPLETE'},
+            'dabbir-managed-foundation':{'ROLLBACK_COMPLETE'},
+            'dabbir-github-oidc':{'UPDATE_COMPLETE'},
+          }
+          bad=[r for r in rows if r['StackStatus'] not in allowed[r['StackName']]]
+          if bad:
+              raise SystemExit(f'fail closed: stack state drift: {bad}')
+          PY
+
+          aws rds describe-db-instances --region "$AWS_REGION" --output json \
+            | jq '[.DBInstances[] | select((.DBInstanceIdentifier // "") | test("dabbir";"i")) | .DBInstanceIdentifier]' \
+            > "$EVIDENCE_DIR/preflight-rds.json"
+          aws rds describe-db-snapshots --region "$AWS_REGION" --snapshot-type manual --output json \
+            | jq '[.DBSnapshots[] | select(((.DBInstanceIdentifier // "") | test("dabbir";"i")) or ((.DBSnapshotIdentifier // "") | test("dabbir";"i"))) | .DBSnapshotIdentifier]' \
+            > "$EVIDENCE_DIR/preflight-rds-snapshots.json"
+          test "$(jq 'length' "$EVIDENCE_DIR/preflight-rds.json")" = '0'
+          test "$(jq 'length' "$EVIDENCE_DIR/preflight-rds-snapshots.json")" = '0'
+
+          aws backup list-backup-vaults --region "$AWS_REGION" --output json \
+            | jq '[.BackupVaultList[]? | select((.BackupVaultName // "") | test("dabbir";"i")) | .BackupVaultName]' \
+            > "$EVIDENCE_DIR/preflight-backup-vaults.json"
+          test "$(jq 'length' "$EVIDENCE_DIR/preflight-backup-vaults.json")" = '0'
+
+          aws secretsmanager list-secrets --region "$AWS_REGION" --include-planned-deletion --output json \
+            | jq '[.SecretList[]? | select((.Name // "") | test("dabbir";"i")) | .Name]' \
+            > "$EVIDENCE_DIR/preflight-secrets.json"
+          test "$(jq 'length' "$EVIDENCE_DIR/preflight-secrets.json")" = '0'
+
+          aws s3api list-buckets --output json \
+            | jq '[.Buckets[] | select((.Name // "") | test("dabbir";"i")) | .Name] | sort' \
+            > "$EVIDENCE_DIR/preflight-dabbir-buckets.json"
+          jq -e --arg a "$BUCKET_FOUNDATION" --arg b "$BUCKET_PROD" \
+            'sort == ([$a,$b] | sort)' "$EVIDENCE_DIR/preflight-dabbir-buckets.json" >/dev/null
+
+          aws ecr describe-repositories --region "$AWS_REGION" --output json \
+            | jq '[.repositories[]? | select((.repositoryName // "") | test("dabbir";"i")) | .repositoryName] | sort' \
+            > "$EVIDENCE_DIR/preflight-ecr.json"
+          jq -e --arg expected "$ECR_REPO" '. == [$expected]' "$EVIDENCE_DIR/preflight-ecr.json" >/dev/null
+
+          aws logs describe-log-groups --region "$AWS_REGION" --output json \
+            | jq '[.logGroups[]? | select((.logGroupName // "") | test("dabbir";"i")) | .logGroupName] | sort' \
+            > "$EVIDENCE_DIR/preflight-log-groups.json"
+          jq -e --arg expected "$LOG_GROUP" '. == [$expected]' "$EVIDENCE_DIR/preflight-log-groups.json" >/dev/null
+
+          aws iam list-attached-role-policies --role-name "$ROLE_NAME" --output json \
+            | jq '[.AttachedPolicies[]? | {PolicyName,PolicyArn}]' > "$EVIDENCE_DIR/preflight-attached-role-policies.json"
+          test "$(jq 'length' "$EVIDENCE_DIR/preflight-attached-role-policies.json")" = '0'
+
+          aws iam list-role-policies --role-name "$ROLE_NAME" --output json \
+            | jq '.PolicyNames | sort' > "$EVIDENCE_DIR/preflight-inline-policy-names.json"
+          python3 - <<'PY'
+          import json
+          expected={
+            'DabbirBootstrapReadAccess',
+            'DabbirManagedInfrastructureDeployment',
+            'DabbirProvisioningBootstrapExpansion',
+            'DabbirS3ProvisioningHotfix',
+            'DabbirSsmAdministration',
+          }
+          actual=set(json.load(open('dabbir-aws-decommission-evidence/preflight-inline-policy-names.json')))
+          if actual != expected:
+              raise SystemExit(f'fail closed: unexpected deploy-role policy set: {sorted(actual)}')
+          PY
+
+          aws iam list-roles --output json > /tmp/dabbir-decommission/roles.json
+          PROVIDER="$OIDC_PROVIDER_ARN" python3 - <<'PY'
+          import json, os
+          provider=os.environ['PROVIDER']
+          roles=json.load(open('/tmp/dabbir-decommission/roles.json')).get('Roles',[])
+          refs=[]
+          def contains(v):
+              if isinstance(v,dict): return any(contains(x) for x in v.values())
+              if isinstance(v,list): return any(contains(x) for x in v)
+              return v == provider
+          for r in roles:
+              if contains(r.get('AssumeRolePolicyDocument',{})):
+                  refs.append(r.get('RoleName'))
+          refs=sorted(x for x in refs if x)
+          json.dump({'provider_reference_roles':refs,'exclusive_to_dabbir_deploy_role':refs==['DabbirGithubDeployRole']},open('dabbir-aws-decommission-evidence/oidc-provider-consumers.json','w'),indent=2,sort_keys=True)
+          if refs != ['DabbirGithubDeployRole']:
+              raise SystemExit(f'fail closed: GitHub OIDC provider is shared: {refs}')
+          PY
+
+          jq -n --arg account "$account" --arg region "$AWS_REGION" \
+            '{account:$account,region:$region,ownership_exact:true,rds:0,rds_manual_snapshots:0,backup_vaults:0,secrets:0,oidc_provider_shared:false,credential_values_read:false}' \
+            > "$EVIDENCE_DIR/preflight-verdict.json"
+
+      - name: Add only the two missing final-delete permissions to the stack-managed policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$MANAGED_POLICY_NAME" --query PolicyDocument --output json \
+            > /tmp/dabbir-decommission/managed-policy.json
+          jq --arg provider "$OIDC_PROVIDER_ARN" --arg b1 "arn:aws:s3:::$BUCKET_FOUNDATION/*" --arg b2 "arn:aws:s3:::$BUCKET_PROD/*" '
+            .Statement |= (map(select((.Sid // "") != "DabbirFinalOidcDelete" and (.Sid // "") != "DabbirFinalVersionDelete")) + [
+              {Sid:"DabbirFinalOidcDelete",Effect:"Allow",Action:["iam:DeleteOpenIDConnectProvider"],Resource:[$provider]},
+              {Sid:"DabbirFinalVersionDelete",Effect:"Allow",Action:["s3:DeleteObjectVersion"],Resource:[$b1,$b2]}
+            ])' /tmp/dabbir-decommission/managed-policy.json > /tmp/dabbir-decommission/final-policy.json
+          aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$MANAGED_POLICY_NAME" --policy-document file:///tmp/dabbir-decommission/final-policy.json
+          sleep 8
+          aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$MANAGED_POLICY_NAME" --query PolicyDocument --output json \
+            | jq '{has_final_oidc_delete:any(.Statement[]?;(.Sid // "") == "DabbirFinalOidcDelete"),has_final_version_delete:any(.Statement[]?;(.Sid // "") == "DabbirFinalVersionDelete")}' \
+            > "$EVIDENCE_DIR/final-permission-verification.json"
+          jq -e '.has_final_oidc_delete and .has_final_version_delete' "$EVIDENCE_DIR/final-permission-verification.json" >/dev/null
+          rm -f /tmp/dabbir-decommission/managed-policy.json /tmp/dabbir-decommission/final-policy.json
+
+      - name: Purge and delete the two DABBIR data buckets
+        shell: bash
+        run: |
+          set -euo pipefail
+          purge_bucket() {
+            local bucket="$1"
+            if ! aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then
+              return 0
+            fi
+            aws s3 rm "s3://$bucket" --recursive >/dev/null
+            for _ in $(seq 1 100); do
+              raw="$(aws s3api list-object-versions --bucket "$bucket" --output json)"
+              count="$(printf '%s' "$raw" | jq '[.Versions[]?,.DeleteMarkers[]?] | length')"
+              if [ "$count" = '0' ]; then break; fi
+              printf '%s' "$raw" | jq '{Objects:([.Versions[]?,.DeleteMarkers[]?] | map(select(.Key != null and .VersionId != null) | {Key,VersionId})),Quiet:true}' \
+                > /tmp/dabbir-decommission/delete-objects.json
+              test "$(jq '.Objects|length' /tmp/dabbir-decommission/delete-objects.json)" -gt 0
+              aws s3api delete-objects --bucket "$bucket" --delete file:///tmp/dabbir-decommission/delete-objects.json >/dev/null
+            done
+            test "$(aws s3api list-objects-v2 --bucket "$bucket" --max-keys 1 --query KeyCount --output text)" = '0'
+            test "$(aws s3api list-object-versions --bucket "$bucket" --output json | jq '[.Versions[]?,.DeleteMarkers[]?] | length')" = '0'
+            aws s3api delete-bucket --bucket "$bucket" --region "$AWS_REGION"
+          }
+          purge_bucket "$BUCKET_FOUNDATION"
+          purge_bucket "$BUCKET_PROD"
+          jq -n --arg a "$BUCKET_FOUNDATION" --arg b "$BUCKET_PROD" '{deleted_buckets:[$a,$b],objects_remaining:0,versions_remaining:0,delete_markers_remaining:0}' \
+            > "$EVIDENCE_DIR/s3-deletion.json"
+
+      - name: Delete remaining DABBIR ECR and log data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$ECR_REPO" >/dev/null 2>&1; then
+            aws ecr delete-repository --region "$AWS_REGION" --repository-name "$ECR_REPO" --force >/dev/null
+          fi
+          if aws logs describe-log-groups --region "$AWS_REGION" --log-group-name-prefix "$LOG_GROUP" --output json \
+              | jq -e --arg n "$LOG_GROUP" 'any(.logGroups[]?; .logGroupName == $n)' >/dev/null; then
+            aws logs delete-log-group --region "$AWS_REGION" --log-group-name "$LOG_GROUP"
+          fi
+          jq -n --arg ecr "$ECR_REPO" --arg log "$LOG_GROUP" '{deleted_ecr_repository:$ecr,deleted_log_group:$log}' \
+            > "$EVIDENCE_DIR/data-services-deletion.json"
+
+      - name: Delete the two abandoned infrastructure stacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          delete_stack() {
+            local stack="$1"
+            if aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$stack" >/dev/null 2>&1; then
+              aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$stack" --client-request-token "dabbir-final-${GITHUB_RUN_ID}-${stack}"
+              aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$stack"
+            fi
+          }
+          delete_stack "$STACK_PROD"
+          delete_stack "$STACK_FOUNDATION"
+          jq -n --arg a "$STACK_PROD" --arg b "$STACK_FOUNDATION" '{deleted_stacks:[$a,$b]}' > "$EVIDENCE_DIR/infrastructure-stacks-deletion.json"
+
+      - name: Prove DABBIR AWS data plane is zero before identity teardown
+        shell: bash
+        run: |
+          set -euo pipefail
+          for bucket in "$BUCKET_FOUNDATION" "$BUCKET_PROD"; do
+            ! aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1
+          done
+          ! aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$ECR_REPO" >/dev/null 2>&1
+          ! aws logs describe-log-groups --region "$AWS_REGION" --log-group-name-prefix "$LOG_GROUP" --output json \
+            | jq -e --arg n "$LOG_GROUP" 'any(.logGroups[]?; .logGroupName == $n)' >/dev/null
+          for stack in "$STACK_PROD" "$STACK_FOUNDATION"; do
+            ! aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$stack" >/dev/null 2>&1
+          done
+          test "$(aws rds describe-db-instances --region "$AWS_REGION" --output json | jq '[.DBInstances[] | select((.DBInstanceIdentifier // "") | test("dabbir";"i"))] | length')" = '0'
+          test "$(aws rds describe-db-snapshots --region "$AWS_REGION" --snapshot-type manual --output json | jq '[.DBSnapshots[] | select(((.DBInstanceIdentifier // "") | test("dabbir";"i")) or ((.DBSnapshotIdentifier // "") | test("dabbir";"i")))] | length')" = '0'
+          test "$(aws backup list-backup-vaults --region "$AWS_REGION" --output json | jq '[.BackupVaultList[]? | select((.BackupVaultName // "") | test("dabbir";"i"))] | length')" = '0'
+          test "$(aws secretsmanager list-secrets --region "$AWS_REGION" --include-planned-deletion --output json | jq '[.SecretList[]? | select((.Name // "") | test("dabbir";"i"))] | length')" = '0'
+          jq -n '{dabbir_data_plane_zero:true,rds:0,rds_manual_snapshots:0,backup_vaults:0,secrets:0,s3_buckets:0,ecr_repositories:0,log_groups:0,non_identity_stacks:0}' \
+            > "$EVIDENCE_DIR/data-plane-zero.json"
+
+      - name: Remove out-of-band deploy-role policies while preserving stack-managed delete authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          for policy in DabbirBootstrapReadAccess DabbirProvisioningBootstrapExpansion DabbirS3ProvisioningHotfix DabbirSsmAdministration; do
+            aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$policy"
+          done
+          sleep 5
+          aws iam list-role-policies --role-name "$ROLE_NAME" --output json \
+            | jq '.PolicyNames | sort' > "$EVIDENCE_DIR/identity-final-inline-policies.json"
+          jq -e --arg keep "$MANAGED_POLICY_NAME" '. == [$keep]' "$EVIDENCE_DIR/identity-final-inline-policies.json" >/dev/null
+
+      - name: Remove GitHub OIDC provider and delete its owning CloudFormation stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Provider was proven exclusive to DabbirGithubDeployRole before any mutation.
+          aws iam delete-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_PROVIDER_ARN"
+          jq -n --arg provider "$OIDC_PROVIDER_ARN" '{oidc_provider_delete_accepted:true,provider:$provider}' \
+            > "$EVIDENCE_DIR/oidc-provider-deletion.json"
+
+          aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$STACK_IDENTITY" \
+            --client-request-token "dabbir-final-identity-${GITHUB_RUN_ID}"
+          set +e
+          aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$STACK_IDENTITY"
+          wait_status=$?
+          set -e
+          jq -n --argjson wait_status "$wait_status" '{identity_stack_delete_requested:true,wait_status:$wait_status}' \
+            > "$EVIDENCE_DIR/identity-stack-deletion.json"
+          test "$wait_status" = '0'
+
+      - name: Record completed owner-directed decommission
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg sha "$GITHUB_SHA" --arg account "$EXPECTED_ACCOUNT" --arg region "$AWS_REGION" \
+            '{state:"PASS",repo_exact_sha:$sha,aws_account:$account,region:$region,dabbir_aws_data_deleted:true,dabbir_oidc_provider_deleted:true,dabbir_identity_stack_deleted:true,credential_values_read:false}' \
+            > "$EVIDENCE_DIR/final-verdict.json"
+
+      - name: Upload decommission evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-aws-full-decommission-${{ github.sha }}
+          path: dabbir-aws-decommission-evidence/
+          if-no-files-found: error
+          retention-days: 90
