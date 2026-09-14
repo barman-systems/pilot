@@ -1,0 +1,5 @@
+{
+  "assume_role_allowed": false,
+  "mode": "EXACT_PREVIEW_ENVIRONMENT",
+  "state": "PASS"
+}

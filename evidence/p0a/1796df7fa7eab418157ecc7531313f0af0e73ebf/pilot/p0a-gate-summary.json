@@ -1,0 +1,20 @@
+{
+  "active_phase": "P0-A",
+  "checks": {
+    "aws_preview_negative": "PASS",
+    "aws_production_branch_adversarial": "PASS",
+    "secret_scan": "FAIL",
+    "vercel_env": "BLOCKED_EXTERNAL"
+  },
+  "frozen_sha": "1796df7fa7eab418157ecc7531313f0af0e73ebf",
+  "p0b_activation_allowed": false,
+  "required_artifacts": [
+    "trust-policy.json",
+    "oidc-jwt-decoded.txt",
+    "preview-negative-test.log",
+    "env-metadata.csv",
+    "classification-sheet.csv",
+    "gitleaks-report.json"
+  ],
+  "state": "FAIL"
+}

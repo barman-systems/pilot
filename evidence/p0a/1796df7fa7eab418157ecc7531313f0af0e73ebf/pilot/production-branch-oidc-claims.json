@@ -1,0 +1,13 @@
+{
+  "aud": "sts.amazonaws.com",
+  "environment": "Production",
+  "event_name": "push",
+  "exp": 1789400218,
+  "iat": 1789399918,
+  "iss": "https://token.actions.githubusercontent.com",
+  "nbf": 1789399618,
+  "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+  "repository": "barman-systems/pilot",
+  "sub": "repo:barman-systems@319497139/pilot@1346817686:environment:Production",
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-agent-runtime-security-followup.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+}

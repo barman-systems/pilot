@@ -1,0 +1,11 @@
+{
+  "assume_role_allowed": false,
+  "environment": "Production",
+  "finding": null,
+  "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+  "severity": null,
+  "state": "PASS",
+  "subject": "repo:barman-systems@319497139/pilot@1346817686:environment:Production",
+  "test": "NON_MAIN_BRANCH_WITH_PRODUCTION_ENVIRONMENT",
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-agent-runtime-security-followup.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+}

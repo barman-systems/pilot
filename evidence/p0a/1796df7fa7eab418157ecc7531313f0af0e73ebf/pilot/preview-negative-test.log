@@ -1,10 +1,10 @@
 {
   "assume_role_allowed": false,
-  "environment": null,
-  "exact_preview_environment_test": false,
-  "mode": "NON_PRODUCTION_BRANCH_TOKEN",
+  "environment": "Preview",
+  "mode": "EXACT_PREVIEW_ENVIRONMENT",
   "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
   "safe_error": "\naws: [ERROR]: An error occurred (AccessDenied) when calling the AssumeRoleWithWebIdentity operation: Not authorized to perform sts:AssumeRoleWithWebIdentity\n",
   "state": "PASS",
-  "subject": "repo:barman-systems@319497139/pilot@1346817686:ref:refs/heads/audit/p0a-agent-runtime-hardening-v1"
+  "subject": "repo:barman-systems@319497139/pilot@1346817686:environment:Preview",
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-agent-runtime-security-followup.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
 }
