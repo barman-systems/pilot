@@ -81,6 +81,26 @@ test('repeat-memory customer prose is centralized in the conversation brain resp
   assert.match(response,/Same vehicle and location/);
 });
 
+test('goal planner owns focus selection while conversation brain owns goal-question prose',()=>{
+  const planner=read('_dabbir-goal-driven-planner.js');
+  const response=read('_dabbir-conversation-brain-response.js');
+  assert.match(planner,/from '\.\/_dabbir-conversation-brain-response\.js'/);
+  assert.match(planner,/goalClarificationReply\(/);
+  assert.match(planner,/function chooseFocus/);
+  assert.match(planner,/function fieldScore/);
+  for(const phrase of [
+    'أكيد. أي خدمة تبي بالضبط؟',
+    'متى يناسبك؟ اذكر اليوم والوقت اللي تفضله.',
+    'تمام. أي سيارة نخدم لك؟',
+    'تمام. وين موقع الخدمة؟',
+    'Would you prefer the service',
+    'What time works for you?',
+  ]){
+    assert.equal(planner.includes(phrase),false,`goal planner still owns customer prose: ${phrase}`);
+    assert.equal(response.includes(phrase),true,`conversation brain response owner is missing customer prose: ${phrase}`);
+  }
+});
+
 test('legacy-visible delivery crosses one conversation-brain response boundary',()=>{
   const orchestrator=read('_dabbir-understanding-orchestrator.js');
   const core=read('_dabbir-understanding-orchestrator-core.js');
