@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import {
   REQUIRED_WORKFLOWS,
   STATUS_CONTEXT,
+  TRUST_ROOT_AUTHORITY_ACTORS,
   isProtectedTrustPath,
+  isTrustedTrustRootActor,
   validatePullRequestShape,
 } from '../scripts/barman-independent-premerge-gate.mjs';
 
@@ -17,6 +19,7 @@ function pr(overrides={}){
   return {
     number:755,
     draft:false,
+    user:{login:'barmanai'},
     base:{ref:'main',sha:shaA,repo:{full_name:'barman-systems/pilot'}},
     head:{ref:'feature/test',sha:shaB,repo:{full_name:'barman-systems/pilot'}},
     ...overrides,
@@ -55,12 +58,14 @@ test('trusted identity is same-repository main and fail-closed for drafts or for
   assert.equal(identity.headSha,shaB);
   assert.equal(identity.baseSha,shaA);
   assert.equal(identity.headRef,'feature/test');
+  assert.equal(identity.authorLogin,'barmanai');
   assert.throws(()=>validatePullRequestShape(pr({draft:true}),'barman-systems/pilot'),/PREMERGE_DRAFT_BLOCKED/);
   assert.throws(()=>validatePullRequestShape(pr({base:{ref:'dev',sha:shaA,repo:{full_name:'barman-systems/pilot'}}}),'barman-systems/pilot'),/PREMERGE_BASE_NOT_MAIN/);
   assert.throws(()=>validatePullRequestShape(pr({head:{ref:'feature/test',sha:shaB,repo:{full_name:'someone/fork'}}}),'barman-systems/pilot'),/PREMERGE_FORK_DENIED/);
+  assert.throws(()=>validatePullRequestShape(pr({user:{login:''}}),'barman-systems/pilot'),/PREMERGE_IDENTITY_INCOMPLETE/);
 });
 
-test('trust-root files cannot be self-modified by an ordinary candidate',()=>{
+test('trust-root changes use trusted actor authority without a separate owner-approval stop',()=>{
   for(const path of [
     '.github/workflows/ci.yml',
     '.github/workflows/barman-independent-premerge-gate.yml',
@@ -72,7 +77,14 @@ test('trust-root files cannot be self-modified by an ordinary candidate',()=>{
   ]) assert.equal(isProtectedTrustPath(path),true,path);
   assert.equal(isProtectedTrustPath('api/ai-business-operator.js'),false);
   assert.equal(isProtectedTrustPath('test/customer-journey.test.mjs'),false);
-  assert.match(script,/PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER/);
+  assert.deepEqual([...TRUST_ROOT_AUTHORITY_ACTORS],['barmanai']);
+  assert.equal(isTrustedTrustRootActor('barmanai'),true);
+  assert.equal(isTrustedTrustRootActor(' BARMANAI '),true);
+  assert.equal(isTrustedTrustRootActor('dependabot[bot]'),false);
+  assert.equal(isTrustedTrustRootActor(''),false);
+  assert.doesNotMatch(script,/PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER/);
+  assert.match(script,/PREMERGE_TRUST_ROOT_ACTOR_DENIED/);
+  assert.match(script,/BARMAN_PREMERGE_TRUST_ROOT_AUTHORITY/);
 });
 
 test('gate binds current base, requires head to contain it, and invalidates receipts when main moves',()=>{
@@ -81,6 +93,7 @@ test('gate binds current base, requires head to contain it, and invalidates rece
   assert.match(script,/PREMERGE_HEAD_BEHIND_BASE/);
   assert.match(script,/PREMERGE_HEAD_CHANGED_DURING_VERIFY/);
   assert.match(script,/PREMERGE_BASE_CHANGED_DURING_VERIFY/);
+  assert.match(script,/PREMERGE_AUTHOR_CHANGED_DURING_VERIFY/);
   assert.match(script,/main changed; update branch and re-run independent gate/);
   assert.match(script,/BARMAN_PREMERGE_INVALIDATED_OPEN_PRS/);
 });
