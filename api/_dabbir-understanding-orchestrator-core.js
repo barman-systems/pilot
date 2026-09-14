@@ -131,7 +131,7 @@ function constrainedContinuation(messages,previous){
   }
   return false;
 }
-function recoveryGreetingDecision(state,c,at){
+function recoveryGreetingDecision(state,c,at,responseText){
   // A greeting never confirms an interrupted operation or an old slot.
   delete state.entities.slot;
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:c.business.timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(at).map(p=>[p.type,p.value]));
@@ -142,27 +142,20 @@ function recoveryGreetingDecision(state,c,at){
   state.pending_action='CLARIFY';state.clarification_entity='intent_confirmation';state.intent_confirmed=false;
   state.missing_fields=['intent_confirmation'];state.operational_confidence=0;
   return {action:'CLARIFY',intent:state.intent,confidence:state.semantic_confidence||0,riskLevel:'LOW',missingFields:state.missing_fields,
-    reasonCode:'INTERRUPTED_REQUEST_RESUME',reply:state.language==='ar'?'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟':'Hello. Your previous request is unfinished. Would you like to continue it?'};
+    reasonCode:'INTERRUPTED_REQUEST_RESUME',reply:responseText({kind:'RECOVERY_GREETING',language:state.language})};
 }
-function greetingDecision(state,sessionReset){
+function greetingDecision(state,sessionReset,responseText){
   state.sub_intent='GREETING';state.missing_fields=[];state.unresolved_references=[];
   state.overall_confidence=1;state.semantic_confidence=1;
   state.operational_confidence=Math.min(1,state.transcription_confidence==null?1:Number(state.transcription_confidence)||0);
   if(sessionReset){state.session_reset=true;state.goal='UNKNOWN';state.intent='SUPPORT';}
-  const ar=state.language==='ar';
-  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply:ar?'وعليكم السلام، حياك. كيف أقدر أساعدك؟':'Hello. How can I help you?'};
+  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:sessionReset?'NEW_SESSION_GREETING':'GREETING',reply:responseText({kind:'GREETING',language:state.language})};
 }
-function staleChoiceDecision(state){
+function staleChoiceDecision(state,responseText){
   delete state.entities?.time;delete state.entities?.slot;
   state.goal='UNKNOWN';state.intent='SUPPORT';state.sub_intent='STALE_OPTION_REFERENCE';state.pending_action=null;
   state.missing_fields=[];state.unresolved_references=[];state.overall_confidence=1;state.semantic_confidence=1;state.operational_confidence=1;state.session_reset=true;
-  const ar=state.language==='ar';
-  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:ar?'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.':'The previous list has expired. Tell me what you need or ask for the services again.'};
-}
-function plannerRecoveryDecision(state,code){
-  state.model_calls=1;state.planner_failure_code=code;state.pending_action='CLARIFY';state.clarification_entity='request';
-  state.overall_confidence=.35;state.semantic_confidence=.35;state.operational_confidence=Math.min(.35,state.transcription_confidence??1);
-  return {action:'CLARIFY',intent:state.intent,confidence:.35,riskLevel:'LOW',missingFields:[],reasonCode:'PLANNER_RECOVERY_CLARIFICATION',reply:state.language==='ar'?'تقصد الاستفسار عن الخدمات والأسعار، أو تبا تحجز؟':'Are you asking about services and prices, or would you like to book?'};
+  return {action:'REPLY',intent:'SUPPORT',confidence:1,riskLevel:'LOW',missingFields:[],reasonCode:'STALE_OPTION_REFERENCE',reply:responseText({kind:'STALE_CHOICE',language:state.language})};
 }
 function safePlannerHistory(c){
   return arr(c?.history).map(item=>{
@@ -197,7 +190,8 @@ function proposalOverrideBase(state,previous,proposal){
 
 // One bounded orchestrator owns Understanding -> Semantic AI -> Policy -> Tool -> Verification.
 // The model interprets natural language; only database-grounded facts and existing mutation gates can execute.
-export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,planner,now=()=>new Date(),cognitiveMode='active'}) {
+export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMenu,resolveProduct,finish,handoff,bookingText,slotsText,responseText,planner,now=()=>new Date(),cognitiveMode='active'}) {
+  if(typeof responseText!=='function')throw Object.assign(new Error('CONVERSATION_BRAIN_RESPONSE_OWNER_REQUIRED'),{code:'CONVERSATION_BRAIN_RESPONSE_OWNER_REQUIRED'});
   const started=Date.now();let steps=0,providerTrace=null;
   function budget(){if(++steps>BUDGET.maxSteps||Date.now()-started>BUDGET.timeoutMs)throw Object.assign(new Error('SEMANTIC_BUDGET_EXCEEDED'),{code:'SEMANTIC_BUDGET_EXCEEDED'});}
   const load=await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
@@ -241,7 +235,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   // Every other handoff/security decision still prevents interpretation.
   const provisionalLoop=cognitive&&decision.action==='HANDOFF'&&decision.reasonCode==='REPEATED_REQUIREMENT_EXTRACTION_FAILURE';
   const shortcutAllowed=(!['HANDOFF','SUPERSEDED'].includes(decision.action)||provisionalLoop)&&!state.unresolved_references.includes('voice_transcript');
-  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting&&!(cognitive&&activeJourney(state)))decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);
+  if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state,responseText);else if(shortcutAllowed&&isGreeting&&!(cognitive&&activeJourney(state)))decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow,responseText):greetingDecision(state,session.reset||newScope,responseText);
   const deterministic={state:structuredClone(state),decision:{...decision}};
   const pendingResolved=cognitive&&resolvesPending(semanticPrevious,state);
   let observedProposal=null;
@@ -298,7 +292,7 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
   budget();
   if(cognitive)assertBrainDecision(state,decision,c);
   const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:state,p_metrics:safeMetrics(state,decision)});
-  if(committed.replay){state=committed.state;decision=cognitive&&state.cognition?.decision?state.cognition.decision:{...decision,action:state.pending_action||decision.action};if(!cognitive){if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow):greetingDecision(state,session.reset||newScope);}}
+  if(committed.replay){state=committed.state;decision=cognitive&&state.cognition?.decision?state.cognition.decision:{...decision,action:state.pending_action||decision.action};if(!cognitive){if(shortcutAllowed&&orphanChoice)decision=staleChoiceDecision(state,responseText);else if(shortcutAllowed&&isGreeting)decision=state.recovery_required===true?recoveryGreetingDecision(state,c,turnNow,responseText):greetingDecision(state,session.reset||newScope,responseText);}}
   let version=committed.version;const lang=state.language;let executionReceipt=null;
   const assertCurrent=()=>rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
   const setPending=(action,payload)=>rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action,p_payload:payload});
@@ -314,8 +308,9 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
     budget();const result=await rpc('dabbir_semantic_execute_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:decision.action});
     if(result?.verified!==true||!result?.appointment_id)throw Object.assign(new Error('SEMANTIC_OUTCOME_NOT_VERIFIED'),{code:'SEMANTIC_OUTCOME_NOT_VERIFIED'});
     executionReceipt={action:decision.action,verified:true};
-    const text=decision.action==='CANCEL_BOOKING'?(lang==='ar'?'تم إلغاء الموعد ✅.':'Your appointment has been cancelled ✅.'):decision.action==='RESCHEDULE_BOOKING'?(lang==='ar'?`تم تعديل الموعد ✅ إلى ${result.starts_at}.`:`Your appointment was rescheduled ✅ to ${result.starts_at}.`):bookingText(result,lang);
-    await send(text+(cognitive?queuedGoalPrompt(state,c,turnNow,understandLegacyConversation):''),decision.action.toLowerCase());await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,verified:true,provider_verified:false};
+    const queued=cognitive?queuedGoalPrompt(state,c,turnNow,understandLegacyConversation):'';
+    const text=responseText({kind:'VERIFIED_MUTATION',action:decision.action,result,language:lang,bookingText,queuedGoalPrompt:queued});
+    await send(text,decision.action.toLowerCase());await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,verified:true,provider_verified:false};
   }
   if(decision.action==='CHECK_AVAILABILITY'){
     budget();await assertCurrent();const appt=arr(c.upcoming_appointments).find(x=>x.id===val(state,'appointment'));
@@ -329,20 +324,29 @@ export async function runUnderstandingTurn({claim,context,rpc,deliver,deliverMen
       budget();const next=await rpc('dabbir_semantic_check_availability_v1',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});
       slots=verifiedAvailability(next,c,state);
     }
-    if(!slots.length){await send(lang==='ar'?'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟':'No nearby time is available. What other time works for you?','no-slots','time');}
+    if(!slots.length){await send(responseText({kind:'NO_AVAILABILITY',language:lang}),'no-slots','time');}
     else{const payload={activity_contract_version:state.activity_contract_version,mode:state.intent==='RESCHEDULE_BOOKING'?'reschedule':'booking',...(appt?{appointment_id:appt.id}:{}),slots,presented:false};await setPending('choose_slot',payload);const sent=await send(slotsText(slots,lang),'availability','slot');if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_slot',{...payload,presented:true,provider_message_id:sent.providerMessageId});}
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CHECK_AVAILABILITY',slots:slots.length};
   }
   if(decision.action==='CLARIFY'&&(state.missing_fields.includes('appointment')||state.unresolved_references.includes('appointment'))){
-    const appointments=arr(c.upcoming_appointments).filter(a=>(!a.customer_id||a.customer_id===c.customer.id)&&(!a.business_id||a.business_id===c.business.id)&&(!a.branch_id||a.branch_id===c.conversation.branch_id)).slice(0,3);if(appointments.length){c.appointmentPresentation={appointments:appointments.map(a=>({id:a.id,starts_at:a.starts_at})),mode:state.intent,presented:false};await setPending('choose_appointment',c.appointmentPresentation);const lines=appointments.map((a,i)=>`${i+1}) ${new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:c.business.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(a.starts_at))}`);decision.reply+='\n'+lines.join('\n');}
+    const appointments=arr(c.upcoming_appointments).filter(a=>(!a.customer_id||a.customer_id===c.customer.id)&&(!a.business_id||a.business_id===c.business.id)&&(!a.branch_id||a.branch_id===c.conversation.branch_id)).slice(0,3);
+    if(appointments.length){
+      c.appointmentPresentation={appointments:appointments.map(a=>({id:a.id,starts_at:a.starts_at})),mode:state.intent,presented:false};
+      await setPending('choose_appointment',c.appointmentPresentation);
+      decision.reply=responseText({kind:'APPOINTMENT_OPTIONS',reply:decision.reply||'',appointments:c.appointmentPresentation.appointments,language:lang,timezone:c.business.timezone});
+    }
   }
   if(decision.action==='PRICING'||decision.action==='SERVICE_MENU'){
     if(decision.action==='SERVICE_MENU'&&deliverMenu&&decision.reasonCode!=='SIDE_QUESTION_RESUME'){budget();await assertCurrent();const menu=await deliverMenu({...claim,semantic_version:version},c,lang);if(menu?.providerMessageId){await recordDelivery(menu,'service');await setPending('none',{});await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'CATALOG_MENU',semantic_version:version};}}
     const target=decision.queryServiceId||val(state,'service');
-    const services=scopedServices(c).filter(x=>decision.action==='SERVICE_MENU'||!target||x.id===target).slice(0,10);if(services.length&&decision.action==='SERVICE_MENU'&&decision.reasonCode!=='SIDE_QUESTION_RESUME'){c.servicePresentation={services:services.map(x=>({id:x.id,label:serviceLabel(x)})),presented:false};await setPending('choose_service',c.servicePresentation);}decision.reply=services.map((x,i)=>`${i+1}) ${serviceLabel(x)} — ${x.price!=null&&Number.isFinite(Number(x.price))?Number(x.price):lang==='ar'?'السعر غير متحقق':'price unverified'} ${c.business.currency_code||''}`).join('\n')||(lang==='ar'?'لا توجد خدمات مفعّلة حاليًا.':'There are no active services right now.');
-    if(decision.resumeReply)decision.reply+='\n'+decision.resumeReply;
+    const services=scopedServices(c).filter(x=>decision.action==='SERVICE_MENU'||!target||x.id===target).slice(0,10);
+    if(services.length&&decision.action==='SERVICE_MENU'&&decision.reasonCode!=='SIDE_QUESTION_RESUME'){
+      c.servicePresentation={services:services.map(x=>({id:x.id,label:serviceLabel(x)})),presented:false};
+      await setPending('choose_service',c.servicePresentation);
+    }
+    decision.reply=responseText({kind:'SERVICE_LIST',services,language:lang,currencyCode:c.business.currency_code||'',serviceLabel,resumeReply:decision.resumeReply});
   }
-  const sent=await send(decision.reply||(lang==='ar'?'أي خدمة تحتاج؟':'Which service do you need?'),decision.action==='CLARIFY'?'clarify':'reply');
+  const sent=await send(decision.reply||responseText({kind:'DEFAULT_SERVICE',language:lang}),decision.action==='CLARIFY'?'clarify':'reply');
   if(c.appointmentPresentation&&sent?.providerMessageId)await setPending('choose_appointment',{...c.appointmentPresentation,presented:true,provider_message_id:sent.providerMessageId});
   if(c.servicePresentation){if(!sent?.providerMessageId)throw Object.assign(new Error('SEMANTIC_PRESENTATION_UNVERIFIED'),{code:'SEMANTIC_PRESENTATION_UNVERIFIED'});await setPending('choose_service',{...c.servicePresentation,presented:true,provider_message_id:sent.providerMessageId});}
   await finish(claim,'PROCESSED');return {state:'PROCESSED',action:decision.action,semantic_version:version};
