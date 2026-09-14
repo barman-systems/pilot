@@ -112,13 +112,16 @@ test('operational delivery is rebuilt from committed state and verified receipts
   assert.match(orchestrator,/args\?\.p_state&&args\?\.p_metrics/);
   assert.match(orchestrator,/result\?\.verified===true&&result\?\.appointment_id/);
   assert.match(orchestrator,/rpc:brainRpc/);
+  assert.match(orchestrator,/responseText:conversationBrainCompatibilityReply/);
   assert.doesNotMatch(orchestrator,/\bdabbir_semantic_execute_v2\b|\bdabbir_semantic_commit_v2\b|\bprocess\.env\b/);
   assert.match(response,/CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN'/);
+  assert.match(response,/export function conversationBrainCompatibilityReply/);
   assert.match(response,/export function renderOperationalResponse/);
   assert.match(response,/appointmentPresentation/);
   assert.match(response,/decision\?\.action==='PRICING'/);
   assert.match(response,/executionResult\?\.verified===true/);
   assert.match(core,/export async function runUnderstandingTurn/);
+  assert.match(core,/CONVERSATION_BRAIN_RESPONSE_OWNER_REQUIRED/);
 
   for(const forbidden of [
     'dabbir_semantic_execute_v2',
@@ -126,6 +129,33 @@ test('operational delivery is rebuilt from committed state and verified receipts
     'dabbir_whatsapp_ai_check_availability',
     'process.env',
   ])assert.equal(response.includes(forbidden),false,`conversation brain response renderer gained execution authority: ${forbidden}`);
+});
+
+test('compatibility core contains no customer-facing response copy',()=>{
+  const core=read('_dabbir-understanding-orchestrator-core.js');
+  const response=read('_dabbir-conversation-brain-response.js');
+  assert.match(core,/responseText\(\{kind:'RECOVERY_GREETING'/);
+  assert.match(core,/responseText\(\{kind:'VERIFIED_MUTATION'/);
+  assert.match(core,/responseText\(\{kind:'SERVICE_LIST'/);
+  assert.match(core,/responseText\(\{kind:'DEFAULT_SERVICE'/);
+  for(const phrase of [
+    'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟',
+    'وعليكم السلام، حياك. كيف أقدر أساعدك؟',
+    'انتهت القائمة السابقة. اكتب طلبك أو أرسل «شو خدماتكم» لعرض الخدمات من جديد.',
+    'تم إلغاء الموعد ✅.',
+    'Your appointment was rescheduled ✅ to',
+    'ما حصلت وقتًا متاحًا قريبًا. أي وقت آخر يناسبك؟',
+    'No nearby time is available. What other time works for you?',
+    'السعر غير متحقق',
+    'price unverified',
+    'لا توجد خدمات مفعّلة حاليًا.',
+    'There are no active services right now.',
+    'أي خدمة تحتاج؟',
+    'Which service do you need?',
+  ]){
+    assert.equal(core.includes(phrase),false,`compatibility core still owns customer prose: ${phrase}`);
+    assert.equal(response.includes(phrase),true,`conversation brain response owner is missing customer prose: ${phrase}`);
+  }
 });
 
 test('conversation brain remains a compatibility seam, not execution authority',()=>{
