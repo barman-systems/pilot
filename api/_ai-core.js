@@ -17,6 +17,7 @@ const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7'];
 const DIRECT_PROVIDER_TIMEOUT_MS = 5000;
 const PROVIDER_CHAIN_TOTAL_TIMEOUT_MS = 12000;
+const SEMANTIC_PROVIDER_CHAIN_TOTAL_TIMEOUT_MS = 18000;
 const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
 const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
@@ -269,7 +270,8 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
 
 async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl, semantic = false, env, reliability }) {
   const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
-  const localDeadline = Math.min(Number(reliability.deadline),Date.now()+GATEWAY_TOTAL_TIMEOUT_MS);
+  const gatewayDeadline=Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
+  const localDeadline = Math.min(Number(reliability.deadline),gatewayDeadline);
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
 
   for (let index = 0; index < models.length; index += 1) {
@@ -459,13 +461,16 @@ async function generateDABBIRAiReplyInternal({ project, message, language = 'aut
 export async function generateDABBIRAiReply(args={}){
   const env=args.env||process.env;
   const startedAt=Date.now();
+  const chainBudgetMs=args.semantic?SEMANTIC_PROVIDER_CHAIN_TOTAL_TIMEOUT_MS:PROVIDER_CHAIN_TOTAL_TIMEOUT_MS;
   const reliability={
     startedAt,
-    deadline:startedAt+PROVIDER_CHAIN_TOTAL_TIMEOUT_MS,
+    deadline:startedAt+chainBudgetMs,
     trace:[],
     healthStore:args.providerHealthStore===undefined?createSupabaseProviderHealthStore({env}):args.providerHealthStore,
   };
   const {providerHealthStore:_ignored,...coreArgs}=args;
   const result=await generateDABBIRAiReplyInternal({...coreArgs,env},reliability);
-  return {...result,telemetry:{...(result?.telemetry||{}),provider_reliability:summarizeProviderReliability(reliability.trace,startedAt)}};
+  const providerReliability=summarizeProviderReliability(reliability.trace,startedAt);
+  console.info('dabbir_ai_provider_chain',{state:result?.state||'UNKNOWN',final_provider:result?.provider||null,network_attempts:providerReliability.network_attempts,skipped_attempts:providerReliability.skipped_attempts,provider_attempts_saved:providerReliability.provider_attempts_saved,chain_latency_ms:providerReliability.chain_latency_ms});
+  return {...result,telemetry:{...(result?.telemetry||{}),provider_reliability:providerReliability}};
 }
