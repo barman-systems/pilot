@@ -24,6 +24,7 @@ export function authorityViolations(registry,sources){
   if(/\.[cm]?js$/.test(file)&&entry?.designOwner!==file&&/\.[\w-]+[^{}\n]*\{[^{}]*(?:background|font-size|padding|border)\s*:/.test(source))errors.push(`${file}: behavior module defines component CSS`);
   const css=file.endsWith('.css')?source:[...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n');
   if(css&&!entry&&file!=='public/dabbir-design-tokens.css')errors.push(`${file}: unregistered design owner`);
+  if(css&&entry&&entry.classification!=='GENERATED_OUTPUT'&&entry.designOwner!==file)errors.push(`${file}: CSS is defined outside its registered design owner ${entry.designOwner}`);
   if(entry?.classification==='COMPATIBILITY_ONLY'&&(/<style\b|\.cssText\s*=|\.textContent\s*=\s*['"][.#]|style=/.test(source)||/\.[\w-]+[^{}\n]*\{[^{}]*(?:background|font-size|padding|border)\s*:/.test(source)))errors.push(`${file}: compatibility module retains design power`);
   if(css&&entry?.classification!=='GENERATED_OUTPUT'){
    for(const m of css.matchAll(/(?:^|[{}])\s*([^{}@]+)\{[^{}]*\}/g)){

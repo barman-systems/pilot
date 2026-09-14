@@ -46,7 +46,7 @@ async function serve(directory){
 const servers={before:await serve(beforeDir),after:await serve(root)};
 const report={base,head:process.env.UI_AUTHORITY_HEAD||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),scope:'REAL_SERVED_UI_SYNTHETIC_DATA_NO_PRODUCTION_WRITES',comparisons:[],booking:[],errors:[]};
 async function contextFor(browser,url,language,width,mode='workspace',gps='denied'){
- const context=await browser.newContext({viewport:{width,height:1024},locale:language==='ar'?'ar-AE':'en-AE',timezoneId:'Asia/Dubai',serviceWorkers:'block'});
+ const context=await browser.newContext({viewport:{width,height:1024},isMobile:width<=768,hasTouch:width<=768,locale:language==='ar'?'ar-AE':'en-AE',timezoneId:'Asia/Dubai',serviceWorkers:'block'});
  await context.route('**/*',route=>new URL(route.request().url()).origin===url?route.continue():route.abort());
  await context.addInitScript(({fixture,language,mode,gps})=>{
   localStorage.setItem('dabbir_lang',language);window.__uiTestPosts=[];
@@ -95,6 +95,8 @@ try{
       assert.equal(await page.locator('style').count(),0,'no feature can inject a second stylesheet');
       const stable=await finalCascade(page);
       await page.evaluate(()=>{for(const link of [...document.querySelectorAll('link[rel="stylesheet"]')].reverse())document.head.append(link)});
+      // Moving link nodes can detach/reload their sheets. Compare the final cascade, not the transient unstyled frame.
+      await page.waitForFunction(()=>[...document.querySelectorAll('link[rel="stylesheet"]')].every(link=>link.sheet&&link.sheet.cssRules.length>0));
       assert.deepEqual(await finalCascade(page),stable,'resolved styles do not depend on stylesheet link ordering');
       const attack=await page.addStyleTag({content:'#screen-dashboard .card{background-color:rgb(1,2,3)!important}'});
       assert.notDeepEqual(await finalCascade(page),stable,'computed-style oracle detects a competing runtime authority');
