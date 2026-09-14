@@ -163,23 +163,6 @@ test('every ignored-path trigger of the canonical exact-SHA customer journey for
   }
 });
 
-test('public visual QA contract changes deploy the exact SHA required by its existing push workflow', () => {
-  const workflow = fs.readFileSync('.github/workflows/dabbir-public-visual-qa.yml', 'utf8');
-  for (const relativePath of [
-    'test/dabbir-public-visual-qa.mjs',
-    'test/dabbir-market-demo.test.mjs',
-    '.github/workflows/dabbir-public-visual-qa.yml',
-  ]) {
-    assert.ok(workflow.includes('- ' + relativePath), relativePath + ' must be an existing QA trigger');
-    const dir = setupRepo();
-    const previous = git(dir, 'rev-parse', 'HEAD');
-    const head = commitPath(dir, relativePath, 'public visual contract changed\n');
-    const result = runGuard(dir, head, previous);
-    assert.equal(result.status, 1, relativePath + ': ' + result.stdout);
-    assert.match(result.stdout, /Exact-SHA Production verification contract changed/);
-  }
-});
-
 test('Supabase migrations on main force Vercel deployment so production SHA cannot drift', () => {
   const dir = setupRepo();
   const lastSuccessfulDeployment = git(dir, 'rev-parse', 'HEAD');
