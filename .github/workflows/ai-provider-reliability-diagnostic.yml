@@ -29,15 +29,13 @@ jobs:
         run: node scripts/check-ai-provider-authority.mjs
       - name: bypass mutation detection
         run: node --test test/dabbir-ai-provider-authority-guard.test.mjs
-      - name: meter - direct success telemetry
-        run: node --test --test-name-pattern='synthetic provider telemetry' test/dabbir-ai-customer-metering.test.mjs
-      - name: meter - shared 429 cooldown
-        run: node --test --test-name-pattern='shared 429 cooldown' test/dabbir-ai-customer-metering.test.mjs
-      - name: meter - billing and static contracts
-        run: node --test --test-name-pattern='gateway cost|numeric zero|WhatsApp AI routes|meter preserves|authoritative ledger' test/dabbir-ai-customer-metering.test.mjs
-      - name: meter - failed diagnostics privacy
-        run: node --test --test-name-pattern='failed provider diagnostics' test/dabbir-ai-customer-metering.test.mjs
+      - name: meter regressions
+        run: node --test test/dabbir-ai-customer-metering.test.mjs
       - name: tool agent regression
         run: node --test test/barman-tool-agent-structured-output.test.mjs
-      - name: existing ai core regressions
-        run: node --test test/dabbir-gemini-ai.test.mjs test/dabbir-cloudflare-ai.test.mjs test/dabbir-v3-live-provider-fallback.test.mjs
+      - name: legacy core - Gemini
+        run: node --test test/dabbir-gemini-ai.test.mjs
+      - name: legacy core - Cloudflare
+        run: node --test test/dabbir-cloudflare-ai.test.mjs
+      - name: legacy core - V3 fallback
+        run: node --test test/dabbir-v3-live-provider-fallback.test.mjs
