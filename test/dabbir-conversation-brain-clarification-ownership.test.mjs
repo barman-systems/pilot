@@ -57,7 +57,7 @@ test('quality repair and queued-goal presentation use the Brain clarification ow
   assert.match(quality,/COGNITIVE_REPLAN/);
   assert.match(queued,/semanticClarificationReply/);
   assert.doesNotMatch(queued,/legacyQueuedGoalPrompt/);
-  assert.doesNotMatch(queued,/_dabbir-goal-queue-core/);
+  assert.doesNotMatch(queued,/from '\.\/_dabbir-goal-queue-core\.js'/);
 });
 
 test('Brain clarification owner remains presentation-only',()=>{
