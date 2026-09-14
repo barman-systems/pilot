@@ -8,23 +8,37 @@ const review = fs.readFileSync('.github/agents/dabbir-review.agent.md', 'utf8');
 const codeowners = fs.readFileSync('.github/CODEOWNERS', 'utf8');
 const premerge = fs.readFileSync('scripts/barman-independent-premerge-gate.mjs', 'utf8');
 
+function parseProtectionPolicy(source) {
+  const match = source.match(/^\s*body='([^'\n]+)'\s*$/mu);
+  assert.ok(match, 'native branch-protection JSON body must remain explicit and parseable');
+  return JSON.parse(match[1]);
+}
+
+const protectionPolicy = parseProtectionPolicy(protection);
+
 test('native main protection fails closed and requires the independent exact-SHA pre-merge gate', () => {
   assert.match(protection, /if \[ -z "\$\{GH_ADMIN_TOKEN:-\}" \]; then/);
   assert.match(protection, /exit 1/);
   assert.doesNotMatch(protection, /available=false/);
-  assert.match(protection, /contexts":\["test","BARMAN Independent Pre-Merge Gate"\]/);
+  assert.equal(protectionPolicy.required_status_checks?.strict, true);
+  const contexts = protectionPolicy.required_status_checks?.contexts;
+  assert.ok(Array.isArray(contexts));
+  assert.ok(contexts.includes('test'));
+  assert.ok(contexts.includes('BARMAN Independent Pre-Merge Gate'));
   assert.match(protection, /required\.strict !== true/);
   assert.match(protection, /contexts\.includes\('BARMAN Independent Pre-Merge Gate'\)/);
-  assert.match(protection, /enforce_admins":true/);
-  assert.match(protection, /required_linear_history":true/);
-  assert.match(protection, /allow_force_pushes":false/);
-  assert.match(protection, /allow_deletions":false/);
+  assert.equal(protectionPolicy.enforce_admins, true);
+  assert.equal(protectionPolicy.required_linear_history, true);
+  assert.equal(protectionPolicy.allow_force_pushes, false);
+  assert.equal(protectionPolicy.allow_deletions, false);
 });
 
 test('native protection does not resurrect a human owner approval gate', () => {
-  assert.match(protection, /require_code_owner_reviews":false/);
-  assert.match(protection, /required_approving_review_count":0/);
-  assert.match(protection, /require_last_push_approval":false/);
+  const reviews = protectionPolicy.required_pull_request_reviews;
+  assert.ok(reviews);
+  assert.equal(reviews.require_code_owner_reviews, false);
+  assert.equal(reviews.required_approving_review_count, 0);
+  assert.equal(reviews.require_last_push_approval, false);
   assert.match(protection, /Owner\/code-owner approval gate must remain disabled/);
   assert.match(protection, /Human approval count must remain zero/);
 });
