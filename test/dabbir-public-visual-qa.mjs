@@ -53,8 +53,9 @@ for(const [name,width,height] of devices){
     assert.equal(await page.locator('#demoForm, #demoFirstCta').count(),0);
    }
    const retired=await page.request.post(origin+'/api/dabbir-market-demo',{data:{message:'Hello',operation_id:'retired_demo_check_123'}});
-   assert.equal(retired.status(),410);
-   assert.equal((await retired.json()).error,'DEMO_RETIRED');
+   // c6c04af4 removed the retired handler; the canonical contract is now no route.
+   // Keep this exact (200/410/500 must fail), rather than accepting any error status.
+   assert.equal(retired.status(),404);
    result.checks.push('login tab and password semantics, demo absent, old links return to login in the selected language, demo API retired');
    result.status='PASS';
   }catch(error){failed=true;result.status='FAIL';result.error=String(error);await page.screenshot({path:`public-visual-evidence/${name}-${lang}-failure.png`,fullPage:true}).catch(()=>{});}
