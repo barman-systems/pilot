@@ -3,16 +3,16 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const PROVIDER_HOSTS=[
+const MODEL_ENDPOINT_HINTS=[
   'generativelanguage.googleapis.com',
   'api.groq.com',
-  'api.cloudflare.com',
-  'ai-gateway.vercel.sh',
+  '/ai/v1/chat/completions',
+  '/ai/run/',
+  'ai-gateway.vercel.sh/v1/chat/completions',
 ];
-const DIRECT_CALL_PATTERNS=[
-  /\b(?:fetch|fetchImpl|fetchBounded)\s*\(\s*(?:GATEWAY_ENDPOINT|GEMINI_ENDPOINT|GROQ_ENDPOINT|provider\.endpoint|config\.endpoint|endpoint)\b/,
-  /\b(?:fetch|fetchImpl|fetchBounded)\s*\(\s*[`'\"]https:\/\/(?:generativelanguage\.googleapis\.com|api\.groq\.com|api\.cloudflare\.com|ai-gateway\.vercel\.sh)/,
-];
+const DIRECT_NAMED_PROVIDER_CALL=/\b(?:fetch|fetchImpl|fetchBounded)\s*\(\s*(?:GATEWAY_ENDPOINT|GEMINI_ENDPOINT|GROQ_ENDPOINT|provider\.endpoint|config\.endpoint)\b/;
+const DIRECT_GENERIC_ENDPOINT_CALL=/\b(?:fetch|fetchImpl|fetchBounded)\s*\(\s*endpoint\b/;
+const DIRECT_LITERAL_PROVIDER_CALL=/\b(?:fetch|fetchImpl|fetchBounded)\s*\(\s*[`'\"]https:\/\/(?:generativelanguage\.googleapis\.com\/(?:v1beta\/openai\/chat\/completions|v1beta\/models\/[^`'\"]+:(?:generateContent|embedContent))|api\.groq\.com\/openai\/v1\/chat\/completions|api\.cloudflare\.com\/client\/v4\/accounts\/[^`'\"]+\/ai\/(?:v1\/chat\/completions|run\/[^`'\"]+)|ai-gateway\.vercel\.sh\/v1\/chat\/completions)/;
 const normalize=value=>String(value).split(path.sep).join('/');
 
 function walk(dir){
@@ -28,8 +28,8 @@ function walk(dir){
 
 export function detectDirectProviderTransport(source=''){
   const text=String(source);
-  if(!PROVIDER_HOSTS.some(host=>text.includes(host)))return false;
-  return DIRECT_CALL_PATTERNS.some(pattern=>pattern.test(text));
+  if(DIRECT_NAMED_PROVIDER_CALL.test(text)||DIRECT_LITERAL_PROVIDER_CALL.test(text))return true;
+  return MODEL_ENDPOINT_HINTS.some(hint=>text.includes(hint))&&DIRECT_GENERIC_ENDPOINT_CALL.test(text);
 }
 
 function importSpecifiers(source,target){
