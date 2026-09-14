@@ -12,8 +12,9 @@ import {
 export {SEMANTIC_SESSION_IDLE_MS,safeProviderTrace};
 
 // Public compatibility boundary. Authority/execution stays in the legacy core.
-// The facade observes only data the core already committed or verified and gives
-// the Conversation Brain final ownership of customer prose before transport.
+// This facade never identifies execution RPCs by name. It passively observes only
+// the canonical commit/result shapes already crossing the existing RPC boundary,
+// then gives the Conversation Brain final ownership of customer prose.
 export function runUnderstandingTurn(options){
   const {deliver,slotsText,bookingText,rpc}=options;
   let committedState=null;
@@ -21,8 +22,18 @@ export function runUnderstandingTurn(options){
 
   const brainRpc=async(name,args)=>{
     const result=await rpc(name,args);
-    if(name==='dabbir_semantic_commit_v2'&&args?.p_state)committedState=structuredClone(args.p_state);
-    if(name==='dabbir_semantic_execute_v2'&&result?.verified===true)executionResult=structuredClone(result);
+    // A semantic commit is the only existing call carrying both canonical state
+    // and bounded metrics. Prefer replayed canonical state when the database
+    // returns it; otherwise retain exactly the state submitted by the core.
+    if(args?.p_state&&args?.p_metrics&&result?.version!=null){
+      committedState=structuredClone(result?.state||args.p_state);
+    }
+    // Mutation receipts are observed only after the core has already obtained a
+    // provider/database-verified appointment result. The facade cannot execute,
+    // authorize, retry, or manufacture a receipt.
+    if(result?.verified===true&&result?.appointment_id){
+      executionResult=structuredClone(result);
+    }
     return result;
   };
 
