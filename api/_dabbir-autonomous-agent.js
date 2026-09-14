@@ -160,7 +160,8 @@ export function operatorModelCandidates(env=process.env,options={}){
     const cheapFallbacks=configuredFallbacks.filter(id=>id!==saver&&!/(?:claude|opus|sonnet)/i.test(id));
     const modelId=pressure==='NORMAL'?configuredPaid:saver;
     const fallbacks=pressure==='NORMAL'?configuredFallbacks:pressure==='CONSERVE'?[...new Set(cheapFallbacks)].slice(0,2):[];
-    candidates.push({name:'vercel-gateway',modelId,model:modelId,costTier:pressure==='NORMAL'?'PREMIUM_ALLOWED':'BUDGET_SAVER',budgetPressure:pressure,providerOptions:{gateway:{disallowPromptTraining:true,models:fallbacks}}});
+    const gatewayPolicy=pressure==='NORMAL'&&!env.DABBIR_AI_GATEWAY_FALLBACK_MODELS?{disallowPromptTraining:true,models:GATEWAY_FALLBACK_MODELS}:{disallowPromptTraining:true,models:fallbacks};
+    candidates.push({name:'vercel-gateway',modelId,model:modelId,costTier:pressure==='NORMAL'?'PREMIUM_ALLOWED':'BUDGET_SAVER',budgetPressure:pressure,providerOptions:{gateway:gatewayPolicy}});
   }
   return candidates;
 }
