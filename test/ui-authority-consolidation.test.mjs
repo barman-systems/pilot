@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 import { stripTypeScriptTypes } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { buildTokens, tokenOutputs } from '../scripts/build-design-tokens.mjs';
@@ -10,7 +11,14 @@ import { checkDesignDrift, measure, violations } from '../scripts/check-ui-desig
 const read=file=>fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const tokens=JSON.parse(read('design/tokens.json'));
 const base='0bf3bbe50e76f0ea52c5c4d5a970950463c2a7fd';
-const old=file=>execFileSync('git',['show',base+':'+file],{encoding:'utf8',maxBuffer:2_000_000});
+const historicalText=read('test/fixtures/ui-authority-v1-baseline.json');
+const historical=JSON.parse(historicalText);
+const old=file=>historical.sources[file].excerpt;
+test('historical design comparison inputs retain their verified pre-V1 fingerprint',()=>{
+  assert.equal(historical.base,base);
+  assert.equal(createHash('sha256').update(historicalText).digest('hex'),'080e617d3bf12745f3725502b4c9d43d19682c5eb8ffeba161cdc91293908584');
+  for(const entry of Object.values(historical.sources))assert.match(entry.gitBlob,/^[a-f0-9]{40}$/);
+});
 
 test('design adapters are deterministic and exactly match the canonical token source',()=>{
   assert.doesNotThrow(()=>buildTokens({check:true}));

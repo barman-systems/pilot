@@ -103,7 +103,9 @@ Freeze timestamp and clean branch evidence: [freeze.json](freeze.json).
 - الاختبار الشامل المحلي: 3135/3135 بعد تحديث عقد owner المرئي؛ نتيجة الرأس المنشور تسجل في PR/CI.
 - اختبارات المصدر المعدلة تقرأ التصريحات المنقولة؛ لا تغيّر حدود الأحجام أو touch targets أو متطلبات اللغة/الهوية.
 - `test/ui-authority-browser.mjs` يقارن V1 مع V2 باستخدام مسار تحميل التطبيق الحقيقي، critical/deferred، computed styles ولقطات الشاشة، auth/modal/toast/chat/navigation، AR/EN، Chromium/WebKit، 390/768/1280. يختبر أيضًا عكس ترتيب روابط CSS وحقن conflict متعمد لكشف قدرة oracle على اكتشافه.
-- **حالة المتصفح والمعاينة: لم تكتمل بعد عند كتابة التقرير؛ لا يعد هذا التقرير إثبات نجاح بصري. النتائج النهائية على الرأس نفسه مطلوبة في PR.**
+- مقارنة المتصفح على `6c3175d2457c546647154a805d17d6799a0aafed`: نجحت 12/12 مقارنة AR/EN و12/12 حجز. فحص WebKit المستقل نجح في 111 حالة. النتائج المعادة على رأس PR النهائي وروابط الأدلة تسجل في PR #821.
+- كشف بناء Vercel المختصر اعتماد اختبارين من V1 على تاريخ Git غير المتاح. نُقلت مدخلات المقارنة نفسها حرفيًا من `0bf3bbe50e76f0ea52c5c4d5a970950463c2a7fd` إلى `test/fixtures/ui-authority-v1-baseline.json` مع git blob لكل مصدر وSHA-256 للمحتوى. assertions المقارنة بقيت كما هي؛ لا اختبار متجاوز ولا fallback يمرر النتيجة.
+- حالة المعاينة النهائية والبوابات بعد هذا الإصلاح تسجل على رأس PR نفسه؛ لا تكفي معاينة رأس سابق.
 - native RTL/LTR وbooking GPS/manual وchat regression ضمن المجموعة المحلية. ملفات native وlogo وtokens لم تتغير في V2.
 - لا عمل على providers/routing/billing/quotas/fallback. أي فشل provider في رحلة خارج نطاق UI يوثق منفصلًا، ولا يحوّل إلى نجاح.
 
