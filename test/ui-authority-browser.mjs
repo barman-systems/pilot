@@ -109,8 +109,16 @@ try{
      await page.locator('#manualCoordinates').fill('91, 54');assert.equal(await page.locator('#submitBtn').isEnabled(),false);
      await page.locator('#manualCoordinates').fill('24.4539, 54.3773');
     }
+    // Geolocation/UI events may complete after click resolves (notably in WebKit).
+    // Wait for the same required state, and preserve diagnostics if it never arrives.
+    try{await page.waitForFunction(()=>!document.querySelector('#submitBtn').disabled,null,{timeout:5000})}
+    catch(error){
+     report.errors.push({engine,language,gps,state:await page.evaluate(()=>({location:document.querySelector('#locationStatus').textContent,map:document.querySelector('#mapLink').getAttribute('href'),vehicle:document.querySelector('[data-vehicle].selected')?.dataset.vehicle,offer:document.querySelector('[data-offer].selected')?.dataset.offer,slot:document.querySelector('[data-slot].selected')?.dataset.slot,name:document.querySelector('#customerName').value,phone:document.querySelector('#customerPhone').value}))});
+     await page.screenshot({path:path.join(out,`${engine}-${language}-${gps}-booking-failure.png`),fullPage:true});throw error;
+    }
     assert.equal(await page.locator('#submitBtn').isEnabled(),true);await page.locator('#submitBtn').click();await page.locator('#success:not(.hidden)').waitFor();
     const posts=await page.evaluate(()=>window.__uiTestPosts);assert.equal(posts.length,1);assert.equal(posts[0].location_lat,24.4539);assert.equal(posts[0].location_lng,54.3773);
+    await page.screenshot({path:path.join(out,`${engine}-${language}-${gps}-booking.png`),fullPage:true});
     report.booking.push({engine,language,gps,status:'PASS',coordinates:'synthetic fixture exact match'});await context.close();
    }
   }finally{await browser.close()}
