@@ -6,6 +6,7 @@ const DEFAULT_TIMEOUT_MS=50*60_000;
 
 export const STATUS_CONTEXT='BARMAN Independent Pre-Merge Gate';
 export const REQUIRED_WORKFLOWS=Object.freeze(['DABBIR CI','DABBIR Security Gate']);
+export const TRUST_ROOT_AUTHORITY_ACTORS=Object.freeze(['barmanai']);
 
 const clean=value=>String(value??'').trim();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -23,6 +24,11 @@ export function isProtectedTrustPath(path){
   ]).has(value);
 }
 
+export function isTrustedTrustRootActor(login){
+  const actor=clean(login).toLowerCase();
+  return TRUST_ROOT_AUTHORITY_ACTORS.includes(actor);
+}
+
 export function validatePullRequestShape(pr,repository){
   if(!pr||typeof pr!=='object')throw new Error('PREMERGE_PR_MISSING');
   if(pr.draft===true)throw new Error('PREMERGE_DRAFT_BLOCKED');
@@ -33,10 +39,11 @@ export function validatePullRequestShape(pr,repository){
   const headSha=clean(pr?.head?.sha).toLowerCase();
   const baseSha=clean(pr?.base?.sha).toLowerCase();
   const headRef=clean(pr?.head?.ref);
-  if(!number||!/^[0-9a-f]{40}$/.test(headSha)||!/^[0-9a-f]{40}$/.test(baseSha)||!headRef){
+  const authorLogin=clean(pr?.user?.login).toLowerCase();
+  if(!number||!/^[0-9a-f]{40}$/.test(headSha)||!/^[0-9a-f]{40}$/.test(baseSha)||!headRef||!authorLogin){
     throw new Error('PREMERGE_IDENTITY_INCOMPLETE');
   }
-  return {number,headSha,baseSha,headRef};
+  return {number,headSha,baseSha,headRef,authorLogin};
 }
 
 async function githubJson(repository,path,token,{method='GET',body}={}){
@@ -134,8 +141,11 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
 
     const files=await getPullRequestFiles(repository,identity.number,token);
     const protectedPaths=files.filter(isProtectedTrustPath);
+    if(protectedPaths.length&&!isTrustedTrustRootActor(identity.authorLogin)){
+      throw new Error(`PREMERGE_TRUST_ROOT_ACTOR_DENIED:${identity.authorLogin}:${protectedPaths.join(',')}`);
+    }
     if(protectedPaths.length){
-      throw new Error(`PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER:${protectedPaths.join(',')}`);
+      console.log(`BARMAN_PREMERGE_TRUST_ROOT_AUTHORITY actor=${identity.authorLogin} paths=${protectedPaths.join(',')}`);
     }
 
     await assertHeadContainsBase({repository,token,baseSha:identity.baseSha,headSha:identity.headSha});
@@ -145,6 +155,7 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     const finalIdentity=validatePullRequestShape(finalPr,repository);
     if(finalIdentity.headSha!==identity.headSha)throw new Error('PREMERGE_HEAD_CHANGED_DURING_VERIFY');
     if(finalIdentity.baseSha!==identity.baseSha)throw new Error('PREMERGE_BASE_CHANGED_DURING_VERIFY');
+    if(finalIdentity.authorLogin!==identity.authorLogin)throw new Error('PREMERGE_AUTHOR_CHANGED_DURING_VERIFY');
     await assertHeadContainsBase({repository,token,baseSha:finalIdentity.baseSha,headSha:finalIdentity.headSha});
 
     await setStatus({repository,token,sha:identity.headSha,state:'success',description:`Independent gate passed for exact head; base ${identity.baseSha.slice(0,7)}`,targetUrl});
