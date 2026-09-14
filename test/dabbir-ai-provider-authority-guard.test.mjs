@@ -6,7 +6,7 @@ test('current repository has one provider reliability authority with no unregist
   const result=checkProviderAuthority();
   assert.equal(result.ok,true,result.errors.join('\n'));
   assert.ok(result.scanned_api_files>0);
-  assert.equal(result.registry_version,'DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V1');
+  assert.equal(result.registry_version,'DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V2');
 });
 
 test('mutation guard rejects a new direct model transport even when the endpoint is hidden behind a constant',()=>{
