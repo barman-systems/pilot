@@ -30,12 +30,12 @@ test('public booking page implements the required four-step customer flow',()=>{
 });
 
 test('public booking delivery adds mobile readability and reduced-motion hardening',()=>{
-  const source=read('api/car-wash-booking.js');
-  assert.match(source,/dabbir-public-booking-hardening-v1/);
+  const source=read('booking.html');
+  assert.doesNotMatch(read('api/car-wash-booking.js'),/<style/);
   assert.match(source,/input,textarea\{font-size:16px!important\}/);
   assert.match(source,/\.slots\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)!important\}/);
   assert.match(source,/prefers-reduced-motion:reduce/);
-  assert.match(source,/BOOKING_HTML\.replace\('<\/head>'/);
+  assert.match(read('api/car-wash-booking.js'),/BOOKING_HTML=readFileSync/);
 });
 
 test('car wash owner UI limits the catalog to six offers and manages slot settings',()=>{

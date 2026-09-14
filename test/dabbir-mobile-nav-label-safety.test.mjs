@@ -1,9 +1,10 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const root = new URL('../', import.meta.url);
-const source = fs.readFileSync(new URL('api/activity-profile-ui.js', root), 'utf8');
+const source = fs.readFileSync(new URL('api/activity-profile-ui.js', root), 'utf8') + '\n' + presentationFor('api/activity-profile-ui.js');
 
 test('activity profile updates only navigation label nodes', () => {
   assert.match(
@@ -26,7 +27,7 @@ test('legacy sidebar icon is hidden once owner-first icon system is active', () 
   );
 });
 
-const ownerUiSource = fs.readFileSync(new URL('api/dabbir-owner-first-ui.js', root), 'utf8');
+const ownerUiSource = fs.readFileSync(new URL('api/dabbir-owner-first-ui.js', root), 'utf8') + '\n' + presentationFor('api/dabbir-owner-first-ui.js');
 
 test('owner-first mobile navigation forces a visible, touch-sized menu button', () => {
   assert.match(ownerUiSource, /\.mobileMenu\{display:inline-flex!important;align-items:center!important;justify-content:center!important;visibility:visible!important;width:44px!important;height:44px!important;min-height:44px!important/);

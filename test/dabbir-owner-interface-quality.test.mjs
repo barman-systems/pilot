@@ -1,9 +1,10 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const owner=fs.readFileSync(new URL('../api/dabbir-owner-first-ui.js',import.meta.url),'utf8');
-const action=fs.readFileSync(new URL('../api/owner-action-center-core-ui.js',import.meta.url),'utf8');
+const owner=fs.readFileSync(new URL('../api/dabbir-owner-first-ui.js',import.meta.url),'utf8') + '\n' + presentationFor('api/dabbir-owner-first-ui.js');
+const action=fs.readFileSync(new URL('../api/owner-action-center-core-ui.js',import.meta.url),'utf8') + '\n' + presentationFor('api/owner-action-center-core-ui.js');
 
 test('owner interface removes micro typography from daily mobile surfaces',()=>{
   assert.match(owner,/\.bottomNav>button,\.bottomNav>a\{[^}]*font-size:11px/);

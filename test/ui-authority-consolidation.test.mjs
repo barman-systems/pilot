@@ -49,7 +49,7 @@ test('UI debt guard rejects new colors, dimensions, injection sites and styleshe
 });
 
 test('message appearance and sender decoration lose their competing authorities',()=>{
-  const chat=read('api/chat-human-ui.js'),owner=read('api/dabbir-owner-first-ui.js'),css=read('public/dabbir-chat.css');
+  const chat=read('api/chat-human-ui.js'),owner=read('api/dabbir-owner-first-ui.js'),css=read('public/dabbir-web.css');
   assert.doesNotMatch(chat,/createElement\(['"]style['"]\)/);
   assert.doesNotMatch(owner,/function decorateAiMessages/);
   assert.doesNotMatch(read('index.html'),/\.ai \.bubble,\.human \.bubble\{/);

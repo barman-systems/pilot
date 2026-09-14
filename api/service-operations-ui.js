@@ -1,14 +1,7 @@
-const css=String.raw`
-.svcHero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.svcHero h1{margin:0 0 5px;font-size:25px}.svcHero p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}.svcTruth{border:1px solid #314132;background:#152019;border-radius:13px;padding:10px 12px;margin-bottom:10px;color:#bfe8c7;font-size:12px;line-height:1.55}.svcMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:11px}.svcMetric{border:1px solid var(--line);background:#111315;border-radius:14px;padding:12px}.svcMetric span{display:block;color:var(--muted);font-size:12px;line-height:1.45}.svcMetric strong{display:block;font-size:22px;margin-top:5px}.svcTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}.svcRow{display:grid;grid-template-columns:minmax(150px,1fr) .58fr .55fr .55fr minmax(126px,auto);gap:9px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:12px;line-height:1.45}.svcRow:last-child{border-bottom:0}.svcRow.head{background:#15181b;color:var(--muted);font-size:11px;font-weight:800}.svcName b{display:block;font-size:13px}.svcName small{color:var(--muted);font-size:11px;line-height:1.4}.svcPrice{font-weight:900;white-space:nowrap}.svcStatus{display:inline-flex;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900;line-height:1.3}.svcStatus.on{background:#14331e;color:var(--green)}.svcStatus.off{background:#2b2d31;color:#aab0b7}.svcActions{display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap}.svcAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:44px;font-size:12px;font-weight:800}.svcAction.danger{border-color:#5c3034;background:#281719;color:#ffb4ba}.svcEmpty{padding:22px;text-align:center;color:var(--muted);font-size:12px;line-height:1.55}@media(max-width:700px){.svcHero{align-items:center}.svcHero h1{font-size:20px}.svcRow{grid-template-columns:minmax(105px,1fr) .62fr .62fr minmax(112px,auto);gap:7px;font-size:12px}.svcRow .svcStateCol{display:none}.svcName b{font-size:13px}.svcAction{min-height:44px;font-size:12px;padding:8px}.svcActions{gap:4px}}
-`;
-
 const client=String.raw`
 (()=>{
   if(window.__dabbirServiceOperations)return;
-  const style=document.createElement('style');
-  style.dataset.dabbirServices='v1';
-  style.textContent=${JSON.stringify(css)};
-  document.head.append(style);
+
 
   const q=s=>document.querySelector(s);
   const ar=()=>document.documentElement.lang!=='en';

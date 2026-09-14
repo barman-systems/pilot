@@ -1,16 +1,8 @@
-const css=String.raw`
-.dabbir-action-center{margin-bottom:12px;border-color:#343a31;background:linear-gradient(180deg,#171b17,#101311)}
-.dabbir-action-center [hidden]{display:none!important}
-.dac-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.dac-head strong{font-size:16px}.dac-status{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}.dac-brief{margin:12px 0;color:#dfe4e7;font-size:13px;line-height:1.7}.dac-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.dac-metric{border:1px solid #2b3031;background:#121518;border-radius:13px;padding:10px}.dac-metric strong{display:block;font-size:21px}.dac-metric span{font-size:12px;color:var(--muted);line-height:1.4}.dac-metric.critical strong{color:var(--red)}.dac-metric.warning strong{color:var(--yellow)}.dac-metric.handled strong{color:var(--green)}.dac-items{display:flex;flex-direction:column;gap:7px;margin-top:10px}.dac-item{display:flex;align-items:center;gap:9px;border:1px solid #292e31;background:#15181a;border-radius:13px;padding:10px}.dac-item.critical{border-inline-start:3px solid var(--red)}.dac-item.warning{border-inline-start:3px solid var(--yellow)}.dac-item.info{border-inline-start:3px solid var(--blue)}.dac-item-body{flex:1;min-width:0}.dac-item-body b{display:block;font-size:13px;line-height:1.45}.dac-item-body span{display:block;color:#b6bcc3;font-size:12px;line-height:1.55;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dac-item-body small{display:block;color:#8f99a5;font-size:12px;line-height:1.4;margin-top:4px}.dac-open{min-width:62px;min-height:44px;padding:8px 10px;font-size:12px}.dac-empty{padding:16px;text-align:center;color:var(--green);font-size:13px;border:1px dashed #314034;border-radius:12px;line-height:1.55}.dac-more-wrap{display:flex;justify-content:center;margin-top:9px}.dac-more{min-height:44px;padding:8px 12px;font-size:12px;color:var(--muted)}@media(max-width:700px){.dac-metrics{gap:6px}.dac-metric{padding:9px}.dac-item{align-items:flex-start;gap:8px}.dac-item-body span{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.dac-open{min-height:44px}.dac-more{min-height:44px}}
-`;
-
 const client=String.raw`
 (()=>{
-  if(document.querySelector('style[data-dabbir-action-center]'))return;
-  const style=document.createElement('style');
-  style.dataset.dabbirActionCenter='v3';
-  style.textContent=${JSON.stringify(css)};
-  document.head.append(style);
+  if(window.__dabbirActionCenterCoreInstalled)return;
+  window.__dabbirActionCenterCoreInstalled=true;
+
 
   const CACHE_MS=20000;
   const DEFAULT_VISIBLE=3;

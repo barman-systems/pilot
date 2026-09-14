@@ -8,39 +8,9 @@ const SECURITY_HEADERS = {
   'content-security-policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https://*.facebook.com https://*.fbcdn.net; font-src 'self' data:; connect-src 'self' https://graph.facebook.com https://www.facebook.com https://web.facebook.com; frame-src https://www.facebook.com https://web.facebook.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://connect.facebook.net",
 };
 
-// Legacy logical authority order retained for source-level regression contracts.
-// Runtime bundle composition is generated independently from config/dabbir-ui-bundles.json.
-const UI_MODULE_ORDER = [
-  '/api/brand-ui',
-  '/api/dabbir-whatsapp-embedded-ui',
-  '/api/dabbir-whatsapp-connect-guard-ui',
-  '/api/timezone-ui',
-  '/api/auth/recovery-ui',
-  '/api/chat-human-ui',
-  '/api/translation-ui',
-  '/api/owner-operations-ui',
-  '/api/service-operations-ui',
-  '/api/activity-profile-ui',
-  '/api/owner-action-center-ui',
-  '/api/dabbir-owner-away-ui',
-  '/api/dabbir-owner-decision-memory-ui',
-  '/api/business-profile-ui',
-  '/api/dabbir-customer-number-ui',
-  '/api/dabbir-billing-ui',
-  '/api/platform-customers-ui',
-  '/api/platform-customer-support-ui',
-  '/api/platform-recovery-reconciliation-ui',
-  '/api/dabbir-owner-first-ui',
-  '/api/verified-metrics-ui',
-  '/api/customer-activation-ui',
-  '/api/owner-copilot-ui',
-  '/api/dabbir-contextual-navigation-ui',
-  '/api/auth-session-stability-ui',
-];
-
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260914-ui-authority-v1';
+const UI_BUNDLE_VERSION = '20260914-ui-authority-v2';
 
 // One shell-level lifecycle authority owns final render/navigation/language/chat render entry points.
 // Legacy modules may still wrap them during migration; reconcile() reasserts the
@@ -317,32 +287,6 @@ const BOOKING_TIME_GUARD = `<script>
 
 // Shell-level usability invariants only. Feature layout remains owned by its existing
 // UI authority; this layer prevents unreadable text/tap targets and iOS zoom regressions.
-const INTERFACE_HARDENING = `<style id="dabbir-interface-hardening-v1">
-button,[role="button"],.navBtn,#bottomNav button,#bottomNav a{touch-action:manipulation}
-.side>.brand small,.workspace span,.statusChip,.hero p,.metric span,.truth,.integration p,.chatContact span,.authMsg,.authCard p{font-size:12px!important;line-height:1.5!important}
-.dac-brief{font-size:13px!important;line-height:1.65!important}
-@media(max-width:700px){
-  input:not([type="checkbox"]):not([type="radio"]),select,textarea{font-size:16px!important}
-  button,[role="button"],.navBtn,#bottomNav button,#bottomNav a,.lang button{min-height:44px!important}
-  .content,.screen,.card,.integration,.chatGrid,.grid2,.cards{min-width:0;max-width:100%}
-  .table{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .bottomNav,#bottomNav{padding-bottom:calc(8px + env(safe-area-inset-bottom))!important}
-  body.dabbir-settings-approved .dsa-open-state small,
-  body.dabbir-settings-approved .dk-hours-help,
-  body.dabbir-settings-approved .dk-payments-help,
-  body.dabbir-settings-approved .dk-msg,
-  body.dabbir-settings-approved #bottomNav>button,
-  body.dabbir-settings-approved #bottomNav>a{font-size:12px!important;line-height:1.45!important}
-  body.dabbir-settings-approved .dk-hours-tools button{min-height:44px!important;font-size:12px!important}
-  body.dabbir-settings-approved .dk-day-toggle{min-height:44px!important;font-size:13px!important}
-  body.dabbir-settings-approved .dk-time input{min-height:44px!important;height:44px!important;font-size:16px!important}
-  body.dabbir-settings-approved .dk-payment-option{min-height:48px!important;font-size:13px!important}
-  body.dabbir-settings-approved .dk-actions .primary{min-height:48px!important}
-}
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
-}
-</style>`;
 
 function forwardHeaders(res, headers) {
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(key, value);
@@ -375,7 +319,7 @@ export default function handler(req, res) {
       res.setHeader('x-dabbir-owner-experience', 'verified-copilot-v1.3-workspace-compat');
       res.statusCode = statusCode;
       const html = typeof body === 'string'
-        ? body.replace('</body>', UI_LIFECYCLE_BOOTSTRAP + `\n<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + OWNER_FIRST_UI_BOOTSTRAP + '\n' + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n' + INTERFACE_HARDENING + '\n</body>')
+        ? body.replace('</body>', UI_LIFECYCLE_BOOTSTRAP + `\n<script src="/dabbir-ui-critical.js?v=${UI_BUNDLE_VERSION}"></script>\n` + OWNER_FIRST_UI_BOOTSTRAP + '\n' + UI_BUNDLE_LOADER + '\n' + BOOKING_TIME_GUARD + '\n</body>')
         : body;
       return res.end(html);
     },

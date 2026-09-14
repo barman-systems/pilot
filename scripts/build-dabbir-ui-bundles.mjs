@@ -62,6 +62,13 @@ async function build(name, modules) {
 }
 
 const all = [...manifest.critical, ...manifest.deferred];
+// Public deployment copies are generated from the canonical root pages.
+for(const name of ['privacy','terms','support']){
+  const source=await fs.readFile(path.join(root,`${name}.html`),'utf8');
+  const target=path.join(root,'public',`${name}.html`);
+  if(check){if(await fs.readFile(target,'utf8')!==source)throw Error(`PUBLIC_PAGE_DRIFT: ${name}`)}
+  else await fs.writeFile(target,source);
+}
 if (new Set(all).size !== all.length) throw new Error('Duplicate UI module in bundle manifest');
 await build('critical', manifest.critical);
 await build('deferred', manifest.deferred);

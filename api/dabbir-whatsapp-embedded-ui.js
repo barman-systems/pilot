@@ -14,17 +14,7 @@ const script = String.raw`(()=>{
     'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
   ]);
 
-  const css=document.createElement('style');
-  css.textContent=[
-    '.dabbirWhatsAppActions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}',
-    '.dabbirWhatsAppActions button{min-height:40px;border-radius:10px;padding:8px 11px;font-size:10px;font-weight:850}',
-    '.dabbirWhatsAppConnect{border:0;background:#25D366;color:#07140c}',
-    '.dabbirWhatsAppChange{border:1px solid #2a2e33;background:#181b1f;color:#fff}',
-    '.dabbirWhatsAppDisconnect{border:1px solid #5a2525;background:#2d1717;color:#ffb1b1}',
-    '.dabbirWhatsAppHint{display:block;flex-basis:100%;margin-top:7px;color:#979da5;font-size:9px;line-height:1.55}',
-    '.dabbirWhatsAppBusy{opacity:.65;pointer-events:none}'
-  ].join('');
-  document.head.appendChild(css);
+
 
   let sdkPromise=null;
   let sdkPreparePromise=null;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import handler from '../api/dabbir-contextual-navigation-ui.js';
 
 function browserHarness({businessId='business-a'}={}){
@@ -73,7 +74,8 @@ test('WhatsApp issue has one native action; other notices retain their own purpo
   const h=browserHarness(),button=h.action(h.whatsapp);
   assert.ok(button,'A WhatsApp issue must offer a direct path to its settings');
   assert.equal(button.tagName,'BUTTON');assert.equal(button.type,'button');
-  assert.equal(button.textContent,'إعداد واتساب');assert.equal(button.style.minHeight,'44px');
+  assert.equal(button.textContent,'إعداد واتساب');assert.ok(button.classList.contains('contextualServiceAction'));
+  assert.match(fs.readFileSync(new URL('../public/dabbir-web.css',import.meta.url),'utf8'),/\.contextualServiceAction\{[^}]*min-height:44px/);
   assert.equal(h.action(h.handoff),null);assert.equal(h.action(h.appointment),null);assert.equal(h.action(h.otherChannel),null);
   h.window.__dabbirContextualNavigation.refresh();h.window.__dabbirContextualNavigation.refresh();h.flush();
   assert.equal(h.action(h.whatsapp),button);assert.equal(h.whatsapp.querySelector('.grow').children.length,3);

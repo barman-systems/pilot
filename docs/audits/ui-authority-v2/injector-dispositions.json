@@ -1,0 +1,331 @@
+[
+  {
+    "source": "api/_booking-lifecycle.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/activity-mobile-polish-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/activity-profile-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/activity-task-navigation-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/ai-business-operator-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/app-safari-recovery.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed declarations do not need runtime execution; measured viewport geometry remains behavior via CSS variables."
+  },
+  {
+    "source": "api/appointment-management-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/auth-session-stability-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/auth/recovery-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/branch-context-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/brand-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/business-activity-profile-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/business-brand-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/business-profile-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/business-workspaces-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/calendar-live-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/car-wash-booking-edit-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/car-wash-booking-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/car-wash-manual-booking-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/car-wash-operations-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/clinic-mode-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/customer-activation-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/customer-activation-ui.js",
+    "siteOrdinal": 2,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/customer-crm-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/customer-name-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/customer-support-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-contextual-navigation-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-logo-placement-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-mobile-shell-v3.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-navigation-event-bridge-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-owner-away-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-owner-decision-memory-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-owner-first-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-settings-approved-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-ui-refinement.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-whatsapp-connect-guard-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/dabbir-whatsapp-embedded-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/home-service-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/owner-action-center-core-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/owner-copilot-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "deleted with proven unused module",
+    "destination": null,
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/owner-operations-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/platform-customer-support-thread-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/platform-customer-support-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/platform-customers-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/platform-pnl-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/salon-mode-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  },
+  {
+    "source": "api/service-operations-ui.js",
+    "siteOrdinal": 1,
+    "disposition": "static CSS moved to canonical owner",
+    "destination": "public/dabbir-web.css",
+    "reason": "Fixed presentation; no runtime data required to define these rules."
+  }
+]

@@ -7,7 +7,7 @@ const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 const recovery=read('api/app-recovery.js');
 const human=read('api/chat-human-ui.js');
 const tokenValues=Object.fromEntries([...read('public/dabbir-design-tokens.css').matchAll(/--([\w-]+):([^;}]+)/g)].map(m=>[m[1],m[2]]));
-const chatCss=read('public/dabbir-chat.css').replace(/var\(--([\w-]+)\)/g,(all,key)=>tokenValues[key]||all);
+const chatCss=read('public/dabbir-web.css').replace(/var\(--([\w-]+)\)/g,(all,key)=>tokenValues[key]||all);
 
 test('central lifecycle owns independent chat and message render events',()=>{
   assert.match(recovery,/function wrapChats\(\)/);

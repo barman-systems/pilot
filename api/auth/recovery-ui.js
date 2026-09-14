@@ -2,9 +2,7 @@ const script = String.raw`(()=>{
   if(window.__dabbirRecoveryUiLoaded) return;
   window.__dabbirRecoveryUiLoaded=true;
 
-  const style=document.createElement('style');
-  style.textContent='.dabbirForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.dabbirRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.dabbirRecoveryOverlay.dabbirHidden{display:none!important}.dabbirRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.dabbirRecoveryCard h2{font-size:24px;margin:18px 0 6px}.dabbirRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.dabbirRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.dabbirRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.dabbirRecoveryCard .dabbirPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.dabbirRecoveryCard .dabbirSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.dabbirRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.dabbirRecoveryOk{color:#8ce6a1}.dabbirRecoveryBrand{display:flex;gap:11px;align-items:center}.dabbirRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}.dabbirPasswordShell{position:relative}.dabbirPasswordShell input{padding-inline-end:76px!important}.dabbirPasswordToggle{position:absolute;inset-inline-end:6px;top:5px;min-height:36px!important;border:0;background:transparent;color:#b9c0c8;padding:4px 7px;font-size:10px;font-weight:800}.dabbirPasswordAssist{margin-top:7px}.dabbirPasswordTrack{height:5px;border-radius:999px;background:#252a30;overflow:hidden}.dabbirPasswordTrack i{display:block;height:100%;width:0;background:#ffaaa9;transition:width .18s ease,background .18s ease}.dabbirPasswordAssist p{margin:5px 0 0!important;font-size:9px!important;line-height:1.5!important}.dabbirFieldError{min-height:18px;margin-top:5px;color:#ffaaa9;font-size:9px}.dabbirResendVerification{display:none;width:100%;margin-top:7px;border:1px solid #34415f;background:#151d2f;color:#e9eef8;border-radius:11px;padding:8px 11px;font-size:10px;font-weight:850}.dabbirResendVerification.show{display:block}@media(prefers-reduced-motion:reduce){.dabbirPasswordTrack i{transition:none}}';
-  document.head.appendChild(style);
+
 
   const forgot=document.createElement('button');
   forgot.type='button';
@@ -80,7 +78,7 @@ const script = String.raw`(()=>{
     if(!authSignupMode()){bar.style.width='0';q('#dabbirAuthFieldError').textContent='';return}
     const score=passwordScore(input.value);
     bar.style.width=(score*25)+'%';
-    bar.style.background=score>=4?'#8ce6a1':score>=2?'#ffd87a':'#ffaaa9';
+    bar.dataset.strength=score>=4?'strong':score>=2?'medium':'weak';
     help.textContent=!input.value?t.passwordHelp:score>=4?t.passwordStrong:score>=2?t.passwordGood:t.passwordWeak;
   }
   function setFieldError(message,field='password'){

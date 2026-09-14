@@ -1,14 +1,9 @@
-const css=String.raw`
-.dbBranchScope{margin-top:8px}.dbBranchScope label{display:block;color:#8f969e;font-size:8px;margin:0 0 4px}.dbBranchScope select{width:100%;min-height:40px;border:1px solid #30363d;background:#15181b;color:#fff;border-radius:10px;padding:7px 9px;font-size:10px}.dbBranchScope small{display:block;margin-top:4px;color:#767d85;font-size:7px}.dbBranchScope[data-state="error"] small{color:#ffb4ba}
-@media(max-width:700px){.dbBranchScope select{min-height:44px;font-size:12px}}
-`;
-
 const script=String.raw`(()=>{
   if(window.__dabbirBranchContextUi)return;
   window.__dabbirBranchContextUi='v5-all-scope-multichannel-runtime';
   const PREFIX='dabbir_active_branch_scope:';
   let activeBusiness=null,context=null,loading=null,apiPatched=false,fetchPatched=false;
-  const style=document.createElement('style');style.textContent=${JSON.stringify(css)};style.dataset.dabbirBranchContext='v5';document.head.append(style);
+
 
   function businessId(){try{return String(workspace?.business?.id||'').trim()}catch{return''}}
   function key(id){return PREFIX+String(id||'')}

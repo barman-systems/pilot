@@ -37,18 +37,7 @@ const script = String.raw`(()=>{
     return true;
   }
 
-  const style=document.createElement('style');
-  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v5';
-  style.textContent=[
-    '.bottomNav.hidden{display:none!important}',
-    '#appShell.hidden{display:none!important}',
-    '#authGate:not(.hidden),#onboardingGate:not(.hidden){position:fixed!important;inset:0!important;z-index:90!important;overflow:auto!important;min-height:100dvh!important;overscroll-behavior:contain!important}',
-    '#authGate:not(.hidden)~#bottomNav,#onboardingGate:not(.hidden)~#bottomNav{display:none!important}',
-    '#mfaContinuation.hidden{display:none!important}',
-    '#mfaContinuation .mfaHint{margin-top:10px;color:var(--muted);font-size:11px;line-height:1.7}',
-    '#mfaContinuation .mfaActions{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:14px}',
-  ].join('');
-  document.head.appendChild(style);
+
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 

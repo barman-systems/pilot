@@ -1,3 +1,5 @@
+import { deliverySource } from './ui-delivery-source.mjs';
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -6,11 +8,11 @@ const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
 const activityApi = await read('api/activity-tasks.js');
-const activityUi = await read('api/activity-profile-ui.js');
-const ownerUi = await read('api/dabbir-owner-first-ui.js');
-const brandUi = await read('api/brand-ui.js');
-const indexHtml = await read('index.html');
-const appRecovery = await read('api/app-recovery.js');
+const activityUi = await read('api/activity-profile-ui.js') + '\n' + presentationFor('api/activity-profile-ui.js');
+const ownerUi = await read('api/dabbir-owner-first-ui.js') + '\n' + presentationFor('api/dabbir-owner-first-ui.js');
+const brandUi = await read('api/brand-ui.js') + '\n' + presentationFor('api/brand-ui.js');
+const indexHtml = await read('index.html') + '\n' + presentationFor('index.html');
+const appRecovery = await read('api/app-recovery.js') + '\n' + presentationFor('api/app-recovery.js') + '\n' + deliverySource();
 const appointmentGuard = await read('db/dabbir_activity_type_appointment_guard_v1.sql');
 
 const activityTypes = ['clinic','store','salon','real_estate','creator','services','other'];
@@ -61,13 +63,9 @@ test('mobile header uses the approved DABBIR icon and no floating duplicate bran
   assert.match(ownerUi, /\.dabbirMobileBrand\{display:none!important\}/);
 });
 
-test('owner-first UI is the only mobile presentation authority loaded after activity and action center', () => {
-  const profileIndex = appRecovery.indexOf('/api/activity-profile-ui');
-  const actionIndex = appRecovery.indexOf('/api/owner-action-center-ui');
-  const ownerUiIndex = appRecovery.indexOf('/api/dabbir-owner-first-ui');
-  assert.ok(profileIndex >= 0 && actionIndex >= 0 && ownerUiIndex >= 0);
-  assert.ok(ownerUiIndex > profileIndex);
-  assert.ok(ownerUiIndex > actionIndex);
+test('mobile presentation is statically owned and retired layers cannot load', () => {
+  assert.match(indexHtml,/href="\/dabbir-web\.css/);
+  assert.doesNotMatch(ownerUi.split('/*')[0],/createElement\(['"]style['"]\)/);
   assert.equal(appRecovery.includes('/api/activity-mobile-polish-ui'), false);
   assert.equal(appRecovery.includes('/api/dabbir-ui-refinement'), false);
   assert.equal(appRecovery.includes('/api/dabbir-mobile-shell-v3'), false);

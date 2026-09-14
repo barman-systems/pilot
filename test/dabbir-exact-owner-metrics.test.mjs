@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ const recoveryPath='api/app-recovery.js';
 const ownerUiPath='api/dabbir-owner-first-ui.js';
 const runtime=fs.readFileSync(runtimePath,'utf8');
 const ui=fs.readFileSync(uiPath,'utf8');
-const recovery=fs.readFileSync(recoveryPath,'utf8');
+const recovery=fs.readFileSync(recoveryPath,'utf8')+'\n'+deliverySource();
 const ownerUi=fs.readFileSync(ownerUiPath,'utf8');
 
 test('Dubai today range is exact across the UTC date boundary',()=>{

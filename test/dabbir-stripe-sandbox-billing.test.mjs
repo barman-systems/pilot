@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
@@ -19,7 +20,7 @@ const [core, checkout, portal, edgeCheckout, edgeWebhook, ui, shell, migration] 
   read('supabase/functions/barman-stripe-checkout/index.ts'),
   read('supabase/functions/barman-stripe-webhook/index.ts'),
   read('api/dabbir-billing-ui.js'),
-  read('api/app-recovery.js'),
+  read('api/app-recovery.js').then(source=>source+'\n'+deliverySource()),
   read('supabase/migrations/20260827181057_dabbir_stripe_sandbox_billing_v1.sql'),
 ]);
 

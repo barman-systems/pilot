@@ -1,0 +1,21 @@
+{
+  "v1": {
+    "runtimeStyleInjections": 47,
+    "styleBlocks": 18,
+    "directColors": 1426,
+    "debtSources": 73,
+    "duplicateAuthoritySources": 17,
+    "headOrderAuthorities": 2
+  },
+  "v2": {
+    "runtimeStyleInjections": 0,
+    "styleBlocks": 13,
+    "directColors": 1176,
+    "debtSources": 20,
+    "duplicateAuthorities": 0,
+    "unknownAuthorities": 0,
+    "headOrderAuthorities": 0,
+    "compatibilityDesignAuthorities": 0
+  },
+  "method": "Same V1 lexical inventory, generated token adapters/bundles excluded; public page copies retained in lexical count for comparability. Ownership counts additionally enforced by registry and guard."
+}

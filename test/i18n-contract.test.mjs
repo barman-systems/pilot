@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+import { existsSync } from 'node:fs';
 
 async function readJson(path) {
   return JSON.parse(await readFile(new URL(`../${path}`, import.meta.url), 'utf8'));
@@ -19,16 +21,27 @@ test('DABBIR product contract requires Arabic and English everywhere', async () 
   assert.equal(contract.conversation_translation.preserve_original, true);
 });
 
-test('Arabic and English locale catalogs have identical non-empty keys', async () => {
-  const ar = await readJson('locales/ar.json');
-  const en = await readJson('locales/en.json');
-  assert.deepEqual(Object.keys(ar).sort(), Object.keys(en).sort());
-  for (const key of Object.keys(ar)) {
-    assert.equal(typeof ar[key], 'string', `Arabic value for ${key} must be a string`);
-    assert.equal(typeof en[key], 'string', `English value for ${key} must be a string`);
-    assert.ok(ar[key].trim(), `Arabic value for ${key} must not be empty`);
-    assert.ok(en[key].trim(), `English value for ${key} must not be empty`);
+test('live shell Arabic and English dictionaries have identical non-empty keys', async () => {
+  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
+  const source=html.slice(html.indexOf('const D=')+8,html.indexOf('\nlet lang='));
+  const {ar,en}=vm.runInNewContext('('+source.replace(/;\s*$/, '')+')');
+  for(const file of ['locales/ar.json','locales/en.json'])assert.equal(existsSync(new URL('../'+file,import.meta.url)),false,'unused catalog must not be revived');
+  function equivalent(ar,en,prefix=''){
+    assert.deepEqual(Object.keys(ar).sort(),Object.keys(en).sort(),prefix);
+    for(const key of Object.keys(ar)){
+      const name=prefix+key;
+      if(ar[key]&&typeof ar[key]==='object'){
+        assert.equal(typeof en[key],'object',name);
+        equivalent(ar[key],en[key],name+'.');
+      }else{
+        assert.equal(typeof ar[key],'string',`Arabic value for ${name} must be a string`);
+        assert.equal(typeof en[key],'string',`English value for ${name} must be a string`);
+        assert.ok(ar[key].trim(),`Arabic value for ${name} must not be empty`);
+        assert.ok(en[key].trim(),`English value for ${name} must not be empty`);
+      }
+    }
   }
+  equivalent(ar,en);
 });
 
 test('translation preview exposes Arabic/English switching and preserves original text', async () => {

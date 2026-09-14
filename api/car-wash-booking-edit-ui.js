@@ -40,14 +40,8 @@ const script=String.raw`(()=>{
   function appointment(id){return (workspaceNow()?.appointments||[]).find(row=>row?.id===id)||null}
   function isHistorical(row){const time=new Date(row?.starts_at||0).getTime();return Number.isFinite(time)&&time<Date.now()}
 
-  function ensureStyle(){
-    if(q('#dabbirCarWashPastEditStyle'))return;
-    const style=document.createElement('style');style.id='dabbirCarWashPastEditStyle';
-    style.textContent='#dabbirCarWashPastEditModal{position:fixed;inset:0;z-index:140;background:#000c;display:none;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;overflow-y:auto}#dabbirCarWashPastEditModal.open{display:flex}.dabbirCarWashPastEditBox{box-sizing:border-box;width:min(430px,100%);max-width:100%;min-width:0;max-height:calc(100vh - 36px);max-height:calc(100dvh - 36px);overflow-y:auto;background:#131922;border:1px solid #34445b;border-radius:18px;padding:16px;color:#fff}.dabbirCarWashPastEditBox h3{margin:0 0 12px;font-size:18px}.dabbirCarWashPastEditField{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:6px;margin-top:10px}.dabbirCarWashPastEditField label{font-size:12px;color:#9eacc0}.dabbirCarWashPastEditField input,.dabbirCarWashPastEditField select{box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:46px;border:1px solid #34445b;border-radius:11px;background:#182233;color:#fff;padding:10px;font:inherit;font-size:16px}#dabbirCarWashPastEditTime{direction:ltr;text-align:start}#dabbirCarWashPastEditTime::-webkit-date-and-time-value{min-width:0;text-align:start}.dabbirCarWashPastEditActions{display:flex;gap:8px;margin-top:14px}.dabbirCarWashPastEditActions button{flex:1;min-height:44px;border-radius:11px;font-weight:800}.dabbirCarWashPastEditCancel{border:1px solid #34445b;background:#182233;color:#fff}.dabbirCarWashPastEditSave{border:0;background:#4f7cff;color:#fff}.dabbirCarWashPastEditSave:disabled{opacity:.5}';
-    document.head.append(style);
-  }
-  function ensureModal(){
-    ensureStyle();let modal=q('#dabbirCarWashPastEditModal');if(modal)return modal;
+function ensureModal(){
+    let modal=q('#dabbirCarWashPastEditModal');if(modal)return modal;
     modal=document.createElement('div');modal.id='dabbirCarWashPastEditModal';document.body.append(modal);return modal;
   }
   function close(){q('#dabbirCarWashPastEditModal')?.classList.remove('open')}

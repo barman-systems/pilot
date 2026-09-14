@@ -1,3 +1,4 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,7 @@ const wrapper=read('test/run-ai-full-customer-journey-en.mjs');
 const canonicalWorkflow=read('.github/workflows/dabbir-ai-customer-journey.yml');
 const broker=read('supabase/functions/barman-qa-suite-runner/index.ts');
 const deploymentClassifier=read('vercel-ignore-if-unaffected.sh');
-const shell=read('index.html');
+const shell=read('index.html') + '\n' + presentationFor('index.html');
 
 test('iPad WebKit journey runs inside the already-authorized canonical customer journey identity',()=>{
   assert.equal(fs.existsSync(pathUrl('.github/workflows/dabbir-ipad-webkit-production.yml')),false,'standalone privileged iPad workflow must be retired');

@@ -2,7 +2,7 @@ import './_sentry-runtime.js';
 import appRecoveryHandler from './app-recovery.js';
 import ownerFirstUiHandler from './dabbir-owner-first-ui.js';
 
-const UI_CACHE_BUST = '20260914-ui-authority-v1';
+const UI_CACHE_BUST = '20260914-ui-authority-v2';
 const SAFARI_AUTH_FAIL_OPEN = `/api/dabbir-safari-auth-fail-open-ui?v=${UI_CACHE_BUST}`;
 const SENTRY_BROWSER_MONITOR = `/api/ui-sentry?v=${UI_CACHE_BUST}`;
 const LEGACY_STORE_SLOT_HIDE = `document.querySelectorAll('[data-screen="appointments"]').forEach(el=>{el.style.display=isStore?'none':''});`;
@@ -14,7 +14,6 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
   window.__dabbirDesignAuthorityHeadV2=true;
   const tabletSidebarAnchorVersion='ipad-visual-viewport-anchor-v2';
   let frame=0;
-  let observer=null;
   function syncTabletSidebarVisualViewport(){
     if(!document.documentElement)return false;
     const viewport=window.visualViewport;
@@ -28,36 +27,15 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
     window.__dabbirTabletSidebarViewport={version:tabletSidebarAnchorVersion,width:viewportWidth,left:viewportLeft,sidebarWidth,sidebarLeft,rtl};
     return true;
   }
-  function ensureTabletSidebarAnchor(){
-    if(!document.head)return false;
-    let anchor=document.querySelector('style[data-dabbir-tablet-sidebar-anchor="ipad-visual-viewport-anchor-v2"]');
-    if(!anchor){
-      anchor=document.createElement('style');
-      anchor.dataset.dabbirTabletSidebarAnchor=tabletSidebarAnchorVersion;
-      anchor.textContent='@media(max-width:920px){html body .shell>#side{position:fixed!important;inset-inline-start:auto!important;inset-inline-end:auto!important;inset-block-start:0!important;inset-block-end:0!important;top:0!important;right:auto!important;bottom:0!important;left:var(--dabbir-sidebar-visual-left,0px)!important;margin:0!important;width:var(--dabbir-sidebar-visual-width,min(82vw,286px))!important;max-width:calc(100vw - 16px)!important}html body .shell>#side.open{transform:translate3d(0,0,0)!important}}';
-      document.head.appendChild(anchor);
-    }
-    syncTabletSidebarVisualViewport();
-    return true;
-  }
-  function reassertAuthority(){
+  function syncViewport(){
     frame=0;
-    ensureTabletSidebarAnchor();
-    const style=document.querySelector('style[data-dabbir-design-system="executive-calm-v1"]');
-    if(!style||!document.head)return false;
-    if(style.parentNode!==document.head||style!==document.head.lastElementChild)document.head.appendChild(style);
-    if(document.body)document.body.dataset.dabbirDesign='executive-calm-v1';
-    return true;
+    return syncTabletSidebarVisualViewport();
   }
   function schedule(){
     if(frame)return;
-    if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(reassertAuthority);
-    else frame=setTimeout(reassertAuthority,0);
+    if(typeof requestAnimationFrame==='function')frame=requestAnimationFrame(syncViewport);
+    else frame=setTimeout(syncViewport,0);
   }
-  try{
-    observer=new MutationObserver(schedule);
-    if(document.head)observer.observe(document.head,{childList:true});
-  }catch(_error){}
   try{
     window.__dabbirUiLifecycle?.on?.('afterRender','executive-calm-authority',schedule);
     window.__dabbirUiLifecycle?.on?.('afterNavigate','executive-calm-authority',schedule);
@@ -70,11 +48,11 @@ const DESIGN_AUTHORITY_SCRIPT = String.raw`(()=>{
     window.visualViewport?.addEventListener?.('scroll',schedule,{passive:true});
   }catch(_error){}
   window.addEventListener('load',schedule,{once:true});
-  ensureTabletSidebarAnchor();
+  syncTabletSidebarVisualViewport();
   schedule();
   setTimeout(schedule,250);
   setTimeout(schedule,1400);
-  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'head-tail-reassert',pollingLoops:0,presentationObservers:1,bodyObservers:0,tabletSidebarAnchor:tabletSidebarAnchorVersion,visualViewportAnchoring:true};
+  window.__dabbirDesignAuthority={version:'executive-calm-v1',mode:'static-stylesheet',pollingLoops:0,presentationObservers:0,bodyObservers:0,tabletSidebarAnchor:tabletSidebarAnchorVersion,visualViewportAnchoring:true};
 })();`;
 
 function bustUiAssetVersion(body) {

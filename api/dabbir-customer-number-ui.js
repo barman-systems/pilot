@@ -42,7 +42,7 @@ const script=String.raw`(()=>{
     const c=copy();
     let row=list.querySelector('[data-dabbir-customer-number]');
     if(!row){
-      list.insertAdjacentHTML('afterbegin','<div class="item" data-dabbir-customer-number="v1"><div class="grow"><b data-dabbir-customer-number-label></b><small data-dabbir-customer-number-value dir="ltr" style="font-size:12px;font-weight:900;letter-spacing:.04em;color:var(--text)"></small><small data-dabbir-customer-number-help style="display:block;margin-top:3px"></small></div><button type="button" class="secondary" data-copy-dabbir-number style="min-height:38px;padding:7px 10px"></button></div>');
+      list.insertAdjacentHTML('afterbegin','<div class="item" data-dabbir-customer-number="v1"><div class="grow"><b data-dabbir-customer-number-label></b><small data-dabbir-customer-number-value dir="ltr" data-ui-part="dabbir-customer-number-ui-detail-1"></small><small data-dabbir-customer-number-help data-ui-part="dabbir-customer-number-ui-detail-2"></small></div><button type="button" class="secondary" data-copy-dabbir-number data-ui-part="dabbir-customer-number-ui-detail-3"></button></div>');
       row=list.querySelector('[data-dabbir-customer-number]');
     }
     if(!row)return;

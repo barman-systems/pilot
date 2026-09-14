@@ -1,9 +1,10 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const recovery=fs.readFileSync('api/app-recovery.js','utf8');
+const recovery=fs.readFileSync('api/app-recovery.js','utf8') + '\n' + deliverySource();
 const guardUi=fs.readFileSync('api/dabbir-whatsapp-connect-guard-ui.js','utf8');
 
 test('no-Facebook onboarding stays inside the existing WhatsApp guard module',()=>{

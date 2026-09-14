@@ -25,27 +25,7 @@ const script=String.raw`(()=>{
     draft:'Draft',reservedStatus:'Reserved',confirmed:'Confirmed',cancelled:'Cancelled',completed:'Completed',loading:'Loading operations...'
   };
 
-  const style=document.createElement('style');
-  style.textContent=[
-    '.opsMetrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}',
-    '.opsMetric{border:1px solid var(--line);background:linear-gradient(180deg,#15181b,#101214);border-radius:16px;padding:14px}',
-    '.opsMetric span{display:block;color:var(--muted);font-size:12px;line-height:1.45}.opsMetric strong{display:block;font-size:22px;margin-top:6px}',
-    '.opsGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}',
-    '.opsTable{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#111315}',
-    '.opsRow{display:grid;grid-template-columns:minmax(130px,1.5fr) .8fr .7fr minmax(128px,auto);gap:8px;align-items:center;padding:11px;border-bottom:1px solid #24282d;font-size:12px;line-height:1.45}',
-    '.opsRow:last-child{border-bottom:0}.opsRow.head{color:var(--muted);background:#15181b;font-size:11px;font-weight:800}',
-    '.opsOrderRow{grid-template-columns:minmax(120px,1.2fr) .9fr .8fr .8fr}',
-    '.opsName b{display:block;font-size:13px}',
-    '.opsName small{color:var(--muted);font-size:11px;line-height:1.4}',
-    '.opsLow{border:1px solid #5b4b20;background:#2b2516;border-radius:14px;padding:11px;margin-bottom:12px;color:#f4d991;font-size:12px;line-height:1.55}',
-    '.opsActions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}',
-    '.opsAction{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:44px;font-size:12px;font-weight:800}',
-    '.opsAction.danger{border-color:#5c3034;background:#281719;color:#ffb4ba}',
-    '.opsOrderSelect{width:100%;min-height:44px;border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:9px;padding:7px;font-size:12px}',
-    '.opsSection{margin-top:12px}.opsSection h2{font-size:14px;margin:0 0 9px}',
-    '@media(max-width:800px){.opsMetrics{grid-template-columns:repeat(2,1fr)}.opsGrid{grid-template-columns:1fr}.opsRow{grid-template-columns:minmax(105px,1.3fr) .7fr .6fr minmax(112px,auto);gap:6px}.opsOrderRow{grid-template-columns:minmax(105px,1.1fr) .8fr .8fr}.opsOrderRow .opsDate{display:none}.opsAction,.opsOrderSelect{min-height:44px;font-size:12px;padding:8px}.opsActions{gap:4px}}'
-  ].join('');
-  document.head.appendChild(style);
+
 
   let data=null;
   let loading=false;
@@ -201,13 +181,13 @@ const script=String.raw`(()=>{
       [t.products,products.length],[t.stock,inventoryUnits],[t.low,low.length],[t.sales,money(data.metrics?.recognized_sales_aed||0)]
     ].map(([label,value])=>'<div class=\"opsMetric\"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong></div>').join('');
 
-    const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div style=\"margin-top:5px\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
+    const lowHtml='<div class=\"opsLow\"><b>'+escapeHtml(t.lowTitle)+'</b><div data-ui-part=\"owner-operations-ui-detail-1\">'+(low.length?low.slice(0,8).map(product=>escapeHtml(product.name)+' · '+escapeHtml(product.available)+' '+escapeHtml(t.available)).join('<br>'):escapeHtml(t.lowNone))+'</div></div>';
 
     const productRows=products.length?products.map(product=>'<div class=\"opsRow\" data-ops-product-row=\"'+escapeHtml(product.id)+'\"><div class=\"opsName\"><b>'+escapeHtml(product.name)+'</b></div><span>'+escapeHtml(money(product.price_aed))+'</span><span>'+escapeHtml(product.quantity)+'</span>'+(data.can_manage?'<div class=\"opsActions\"><button class=\"opsAction\" type=\"button\" data-ops-edit=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.edit)+'</button><button class=\"opsAction danger\" type=\"button\" data-ops-delete=\"'+escapeHtml(product.id)+'\">'+escapeHtml(t.delete)+'</button></div>':'<span></span>')+'</div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noProducts)+'</div>';
     const productsHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.products)+'</h2><div class=\"opsTable\"><div class=\"opsRow head\"><span>'+escapeHtml(t.name)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.qty)+'</span><span></span></div>'+productRows+'</div></div>';
 
     const orderRows=realOrders.length?realOrders.map(order=>'<div class=\"opsRow opsOrderRow\" data-ops-order-row=\"'+escapeHtml(order.id)+'\"><div class=\"opsName\"><b>'+escapeHtml(order.customer_name||t.customer)+'</b></div><span>'+escapeHtml(money(order.total_aed))+'</span>'+(data.can_manage?'<select class=\"opsOrderSelect\" data-ops-order=\"'+escapeHtml(order.id)+'\">'+statusOptions(String(order.status||'draft'))+'</select>':'<span>'+escapeHtml(order.status)+'</span>')+'<span class=\"opsDate\">'+escapeHtml(date(order.created_at))+'</span></div>').join(''):'<div class=\"empty\">'+escapeHtml(t.noOrders)+'</div>';
-    const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" style=\"margin-top:9px\">'+escapeHtml(t.simulated)+'</div></div>';
+    const ordersHtml='<div class=\"opsSection\"><h2>'+escapeHtml(t.orders)+'</h2><div class=\"opsTable\"><div class=\"opsRow opsOrderRow head\"><span>'+escapeHtml(t.customer)+'</span><span>'+escapeHtml(t.price)+'</span><span>'+escapeHtml(t.status)+'</span><span class=\"opsDate\">'+escapeHtml(t.date)+'</span></div>'+orderRows+'</div><div class=\"truth\" data-ui-part=\"owner-operations-ui-detail-2\">'+escapeHtml(t.simulated)+'</div></div>';
 
     body.innerHTML='<div class=\"opsMetrics\">'+metrics+'</div>'+lowHtml+'<div class=\"opsGrid\"><div>'+productsHtml+'</div><div>'+ordersHtml+'</div></div>';
     qa('[data-ops-edit]').forEach(button=>button.onclick=()=>openEditProduct(products.find(product=>product.id===button.dataset.opsEdit)));

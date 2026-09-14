@@ -1,14 +1,15 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
 const root = new URL('../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
-const index = read('index.html');
-const shell = read('api/app-recovery.js');
-const recovery = read('api/auth/recovery-ui.js');
+const index = read('index.html') + '\n' + presentationFor('index.html');
+const shell = read('api/app-recovery.js') + '\n' + presentationFor('api/app-recovery.js');
+const recovery = read('api/auth/recovery-ui.js') + '\n' + presentationFor('api/auth/recovery-ui.js');
 const resend = read('api/auth/resend-verification.js');
-const activation = read('api/customer-activation-ui.js');
+const activation = read('api/customer-activation-ui.js') + '\n' + presentationFor('api/customer-activation-ui.js');
 const chat = read('api/chat-human-ui.js');
 const preferences = read('api/user-preferences.js');
 const feedback = read('api/feedback.js');

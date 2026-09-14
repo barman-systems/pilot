@@ -1,7 +1,3 @@
-const css=String.raw`
-.dhsPanel{margin:0 0 12px;border:1px solid #314033;background:linear-gradient(180deg,#151b17,#101311);border-radius:16px;padding:13px}.dhsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.dhsHead h2{margin:0;font-size:13px}.dhsHead p{margin:4px 0 0;color:var(--muted);font-size:9px;line-height:1.6}.dhsActions{display:flex;gap:6px;flex-wrap:wrap}.dhsMetrics{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.dhsMetric{border:1px solid #29312b;background:#121614;border-radius:11px;padding:8px}.dhsMetric span{display:block;color:var(--muted);font-size:8px}.dhsMetric strong{display:block;font-size:17px;margin-top:3px}.dhsList{display:flex;flex-direction:column;gap:7px;margin-top:10px}.dhsRow{display:grid;grid-template-columns:minmax(150px,1.3fr) .9fr .75fr auto;gap:8px;align-items:center;border:1px solid #29302c;background:#141816;border-radius:12px;padding:9px;font-size:9px}.dhsRow b{font-size:10px;display:block}.dhsRow small{display:block;color:var(--muted);margin-top:2px}.dhsBadge{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:850;background:#202a22;color:#bfe8c7}.dhsBadge.warn{background:#3a3014;color:var(--yellow)}.dhsEmpty{border:1px dashed #303a32;border-radius:12px;padding:14px;text-align:center;color:var(--muted);font-size:9px;margin-top:9px}.dhsSettingsGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dhsCheck{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:10px}.dhsCheck input{width:18px;height:18px;min-height:18px}.dhsVisitHint{color:var(--muted);font-size:8px;line-height:1.5;margin-top:8px}@media(max-width:700px){.dhsHead{display:block}.dhsActions{margin-top:8px}.dhsMetrics{grid-template-columns:repeat(2,1fr)}.dhsRow{grid-template-columns:minmax(120px,1fr) .8fr auto}.dhsRow .dhsWorker{display:none}.dhsSettingsGrid{grid-template-columns:1fr}}
-`;
-
 const client=String.raw`
 (()=>{
   if(window.__dabbirHomeServiceUi)return;
@@ -22,7 +18,7 @@ const client=String.raw`
   const fmt=v=>{try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(v))}catch{return String(v||'')}};
   const money=v=>Number(v||0).toLocaleString(ar()?'ar-AE':'en-AE',{minimumFractionDigits:0,maximumFractionDigits:2});
 
-  const style=document.createElement('style');style.dataset.dabbirHomeService='v1';style.textContent=${JSON.stringify(css)};document.head.append(style);
+
 
   function ensureModals(){
     if(!q('#dhsSettingsModal')){

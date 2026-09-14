@@ -15,13 +15,7 @@ const client=String.raw`
   let profileCache=new Map();
 
   function escapeAttr(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-  function ensureStyle(){
-    if(q('style[data-dabbir-customer-name="v1"]'))return;
-    const style=document.createElement('style');style.dataset.dabbirCustomerName='v1';
-    style.textContent='.dabbirCustomerEdit{margin-inline-start:8px;border:1px solid var(--line);background:#181b1f;color:inherit;border-radius:9px;padding:5px 8px;min-height:34px;font-size:11px;font-weight:800;cursor:pointer}.dabbirCustomerEdit:disabled{opacity:.5;cursor:not-allowed}.dabbirCustomerNameLine{display:flex;align-items:center;gap:6px;min-width:0}.dabbirCustomerNameLine b{min-width:0;overflow:hidden;text-overflow:ellipsis}.dabbirCustomerProvider{display:block;color:var(--muted);font-size:11px;line-height:1.55;margin-top:6px}.dabbirCustomerHint{display:block;color:var(--muted);font-size:11px;line-height:1.55;margin-top:8px}@media(max-width:700px){.dabbirCustomerEdit{min-height:38px;padding:6px 9px}}';
-    document.head.append(style);
-  }
-  function ensureModal(){
+function ensureModal(){
     if(q('#dabbirCustomerNameModal'))return;
     const modal=document.createElement('div');modal.id='dabbirCustomerNameModal';modal.className='modal';
     modal.innerHTML='<form id="dabbirCustomerNameForm" class="modalBox"><h3 id="dabbirCustomerNameTitle"></h3><div class="field"><label id="dabbirCustomerNameLabel" for="dabbirCustomerNameInput"></label><input id="dabbirCustomerNameInput" maxlength="120" autocomplete="off" required></div><small id="dabbirCustomerProvider" class="dabbirCustomerProvider"></small><small id="dabbirCustomerHint" class="dabbirCustomerHint"></small><div class="modalActions"><button id="dabbirCustomerNameCancel" class="secondary" type="button"></button><button id="dabbirCustomerNameSave" class="primary" type="submit"></button></div></form>';
@@ -31,7 +25,7 @@ const client=String.raw`
     q('#dabbirCustomerNameForm').onsubmit=save;
   }
   function applyCopy(){
-    ensureStyle();ensureModal();const t=copy();
+    ensureModal();const t=copy();
     q('#dabbirCustomerNameTitle').textContent=t.title;q('#dabbirCustomerNameLabel').textContent=t.name;q('#dabbirCustomerNameCancel').textContent=t.cancel;q('#dabbirCustomerNameSave').textContent=t.save;q('#dabbirCustomerHint').textContent=t.ownerWins;
     decorate();
   }

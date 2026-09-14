@@ -44,8 +44,8 @@ const script=String.raw`(()=>{
     const select=document.createElement('select');select.id='businessCountry';select.required=true;select.autocomplete='country';
     for(const code of Object.keys(GCC)){const option=document.createElement('option');option.value=code;select.append(option)}
     const saved=String(localStorage.getItem('dabbir_country')||'AE').toUpperCase();select.value=GCC[saved]?saved:'AE';
-    const derived=document.createElement('div');derived.id='businessCurrencyDerived';derived.className='muted';derived.style.cssText='font-size:12px;margin-top:7px;font-weight:800';
-    const hint=document.createElement('div');hint.id='businessCurrencyHint';hint.className='muted';hint.style.cssText='font-size:11px;line-height:1.5;margin-top:3px';
+    const derived=document.createElement('div');derived.id='businessCurrencyDerived';derived.className='muted';
+    const hint=document.createElement('div');hint.id='businessCurrencyHint';hint.className='muted';
     field.append(label,select,derived,hint);
     if(submit)form.insertBefore(field,submit);else form.append(field);
     select.addEventListener('change',()=>{localStorage.setItem('dabbir_country',selectedCountry());refreshCountryField()});

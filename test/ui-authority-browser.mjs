@@ -12,7 +12,7 @@ import { chromium, webkit } from 'playwright';
 const root=path.resolve(import.meta.dirname,'..');
 const out=path.join(root,'ui-authority-evidence');await fs.mkdir(out,{recursive:true});
 const beforeDir=await fs.mkdtemp(path.join(os.tmpdir(),'dabbir-ui-before-'));
-const base='0bf3bbe50e76f0ea52c5c4d5a970950463c2a7fd';
+const base='00ffb68ab0dee7b184c97aa8c38c410720c23ab6';
 execFileSync('git',['worktree','add','--detach',beforeDir,base],{cwd:root,stdio:'pipe'});
 await fs.symlink(path.join(root,'node_modules'),path.join(beforeDir,'node_modules'),'dir');
 // Compare the Vercel build output, not stale committed generated copies.
@@ -67,6 +67,11 @@ async function contextFor(browser,url,language,width,mode='workspace',gps='denie
  return context;
 }
 const palette=page=>page.evaluate(()=>Object.fromEntries(['--bg','--accent','--panel','--line','--muted','--ds-brand'].map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])));
+const finalCascade=page=>page.evaluate(()=>{
+ const selectors=['body','.side','.top','#nav .navBtn.active','#bottomNav button.active','#screen-dashboard .card','#authEmail','#authSubmit','.authCard','.modalBox','#toast','.table'];
+ const properties=['background-color','color','border-top-color','border-top-width','border-radius','font-family','font-size','font-weight','line-height','padding-top','padding-right','padding-bottom','padding-left','min-height','text-align','direction'];
+ return {themeColor:document.querySelector('meta[name="theme-color"]')?.content,...Object.fromEntries(selectors.map(selector=>{const el=document.querySelector(selector);if(!el)return [selector,null];const style=getComputedStyle(el);return [selector,Object.fromEntries(properties.map(key=>[key,style.getPropertyValue(key)]))]}))};
+});
 try{
  for(const [engine,driver] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await driver.launch();
@@ -80,6 +85,22 @@ try{
      await page.locator('#appShell:not(.hidden)').waitFor();
      await page.waitForFunction(()=>window.__dabbirUiLifecycle&&window.__dabbirContextualNavigation);
      observed[version]={palette:await palette(page),card:await page.locator('#screen-dashboard .card').first().evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,border:s.borderColor,radius:s.borderRadius,padding:s.padding}})};
+     observed[version].cascade=await finalCascade(page);
+     await page.evaluate(()=>{openModal('#appointmentModal','#apptCustomer');toast(document.documentElement.lang==='ar'?'اختبار الواجهة':'UI verification')});
+     await page.locator('#appointmentModal.open').waitFor({state:'visible'});
+     await page.locator('#toast.show').waitFor({state:'visible'});
+     observed[version].modalCascade=await finalCascade(page);
+     await page.evaluate(()=>{closeModal(document.querySelector('#appointmentModal'));document.querySelector('#toast').classList.remove('show')});
+     if(version==='after'){
+      assert.equal(await page.locator('style').count(),0,'no feature can inject a second stylesheet');
+      const stable=await finalCascade(page);
+      await page.evaluate(()=>{for(const link of [...document.querySelectorAll('link[rel="stylesheet"]')].reverse())document.head.append(link)});
+      assert.deepEqual(await finalCascade(page),stable,'resolved styles do not depend on stylesheet link ordering');
+      const attack=await page.addStyleTag({content:'#screen-dashboard .card{background-color:rgb(1,2,3)!important}'});
+      assert.notDeepEqual(await finalCascade(page),stable,'computed-style oracle detects a competing runtime authority');
+      await attack.evaluate(el=>el.remove());
+      assert.deepEqual(await finalCascade(page),stable,'removing attacker restores the canonical result');
+     }
      if(await page.locator('#menuBtn').isVisible())await page.locator('#menuBtn').click();
      await page.locator('#nav [data-screen="conversations"]').click();
      await page.locator('#chatList [data-cid]').first().click();
@@ -97,6 +118,21 @@ try{
     }
     assert.deepEqual(observed.after.palette,observed.before.palette,'web palette is preserved');
     assert.deepEqual(observed.after.card,observed.before.card,'dashboard card appearance is preserved');
+    assert.deepEqual(observed.after.cascade,observed.before.cascade,'navigation, cards, forms, auth, modal/toast and typography preserve the final cascade');
+    assert.deepEqual(observed.after.modalCascade,observed.before.modalCascade,'opened modal and visible toast retain their computed styles');
+    const auth={};
+    for(const version of ['before','after']){
+     const context=await contextFor(browser,servers[version].url,language,width,'auth');
+     const page=await context.newPage();await page.goto(servers[version].url,{waitUntil:'domcontentloaded'});
+     await page.locator('#authGate:not(.hidden)').waitFor({state:'visible'});
+     await page.waitForFunction(()=>window.__dabbirAuthSessionStabilityV5);
+     await page.locator('#signupTab').click();await page.locator('#loginTab').click();
+     assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
+     auth[version]=await finalCascade(page);
+     await page.screenshot({path:path.join(out,`${engine}-${width}-${language}-${version}-auth.png`),fullPage:true});
+     await context.close();
+    }
+    assert.deepEqual(auth.after,auth.before,'real signed-out auth flow remains visually equivalent');
     report.comparisons.push({engine,width,language,status:'PASS',...observed});
    }
    for(const gps of ['success','denied','unsupported'])for(const language of ['ar','en']){

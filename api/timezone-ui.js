@@ -107,7 +107,7 @@ const script=String.raw`(()=>{
     const wrap=document.createElement('div');wrap.id='adaptiveApptFields';
     const optional=document.createElement('details');optional.id='adaptiveApptDetails';optional.className='field';
     const summary=document.createElement('summary');summary.textContent=isArabic()?'تفاصيل الموعد (اختياري)':'Appointment details (optional)';
-    summary.style.cssText='cursor:pointer;min-height:44px;padding-block:12px;font-size:14px';
+    summary.className='appointmentOptionalSummary';
     optional.append(summary);
     const fields=appointmentFields[businessType()]||appointmentFields.other;
     const geo=businessGeo();
@@ -152,7 +152,7 @@ const script=String.raw`(()=>{
     button.dataset.dabbirSearchIcon='v1';
     button.setAttribute('aria-label',isArabic()?'بحث':'Search');
     button.setAttribute('title',isArabic()?'بحث':'Search');
-    button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" style="width:21px;height:21px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>';
+    button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" data-ui-part="timezone-ui-detail-1"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>';
   }
 
   function ensureSettingsInMore(){

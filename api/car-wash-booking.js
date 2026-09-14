@@ -1,23 +1,8 @@
 import { readFileSync } from 'node:fs';
 
 const BOOKING_HTML=readFileSync(new URL('../booking.html', import.meta.url), 'utf8');
-const BOOKING_INTERFACE_HARDENING=`<style id="dabbir-public-booking-hardening-v1">
-.eyebrow,.vehicle span,.offer p,.offer .duration,.day,.empty,.field label,.locationBox p,.summary span,.summary strong,.msg,.mapLink,.footer{font-size:12px!important;line-height:1.55}
-.vehicle strong,.offer strong{font-size:15px!important}
-.section>p,.hero p{font-size:13px!important}
-.slot{min-height:44px!important;font-size:13px!important}
-.lang button{min-height:44px!important}
-button{touch-action:manipulation}
-@media(max-width:650px){
-  input,textarea{font-size:16px!important}
-  .vehicle,.offer,.secondary,.primary{min-height:48px!important}
-  .slots{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-  .wrap{padding-bottom:calc(40px + env(safe-area-inset-bottom))!important}
-}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-</style>`;
 const GCC_PUBLIC_BOOKING_SCRIPT='<script src="/api/gcc-public-booking-ui" defer></script>';
-const BOOKING_PAGE=BOOKING_HTML.replace('</head>',`${BOOKING_INTERFACE_HARDENING}</head>`).replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`);
+const BOOKING_PAGE=BOOKING_HTML.replace('</body>',`${GCC_PUBLIC_BOOKING_SCRIPT}</body>`);
 const HEADERS={
   'content-type':'text/html; charset=utf-8',
   'cache-control':'no-store',

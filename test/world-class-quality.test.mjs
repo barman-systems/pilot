@@ -1,3 +1,4 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('operational workspace is bilingual and switches RTL/LTR without single-language screens', async () => {
-  const html = await read('index.html');
+  const html = await read('index.html') + '\n' + presentationFor('index.html');
   assert.match(html, /const D=\{ar:\{/);
   assert.match(html, /,en:\{/);
   assert.match(html, /document\.documentElement\.dir=lang==='ar'\?'rtl':'ltr'/);
@@ -26,7 +27,7 @@ test('UI cannot promote external channels into verified state', async () => {
 });
 
 test('operational interface has mobile touch, focus, reduced-motion and modal accessibility baselines', async () => {
-  const html = await read('index.html');
+  const html = await read('index.html') + '\n' + presentationFor('index.html');
   assert.match(html, /button:focus-visible/);
   assert.match(html, /min-height:48px/);
   assert.match(html, /prefers-reduced-motion:reduce/);

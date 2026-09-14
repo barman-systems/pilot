@@ -1,0 +1,182 @@
+[
+  {
+    "file": "api/_dabbir-activity-intelligence-ui.js",
+    "part": "dabbir-activity-intelligence-ui-detail-1",
+    "declarations": "display:flex;gap:8px;align-items:center;min-height:44px"
+  },
+  {
+    "file": "api/_dabbir-activity-intelligence-ui.js",
+    "part": "dabbir-activity-intelligence-ui-detail-2",
+    "declarations": "border:0;padding:0"
+  },
+  {
+    "file": "api/_dabbir-activity-intelligence-ui.js",
+    "part": "dabbir-activity-intelligence-ui-detail-3",
+    "declarations": "min-height:44px"
+  },
+  {
+    "file": "api/_dabbir-activity-intelligence-ui.js",
+    "part": "dabbir-activity-intelligence-ui-detail-4",
+    "declarations": "min-height:44px"
+  },
+  {
+    "file": "api/_dabbir-activity-intelligence-ui.js",
+    "part": "dabbir-activity-intelligence-ui-detail-5",
+    "declarations": "min-height:44px"
+  },
+  {
+    "file": "api/activity-profile-ui.js",
+    "part": "activity-profile-ui-detail-1",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/calendar-live-ui.js",
+    "part": "calendar-live-ui-detail-1",
+    "declarations": "font-size:8px;color:var(--muted)"
+  },
+  {
+    "file": "api/customer-crm-ui.js",
+    "part": "customer-crm-ui-detail-1",
+    "declarations": "display:block;margin-top:3px"
+  },
+  {
+    "file": "api/customer-support-ui.js",
+    "part": "customer-support-ui-detail-1",
+    "declarations": "margin-top:10px"
+  },
+  {
+    "file": "api/customer-support-ui.js",
+    "part": "customer-support-ui-detail-2",
+    "declarations": "display:block;margin-top:3px"
+  },
+  {
+    "file": "api/customer-support-ui.js",
+    "part": "customer-support-ui-detail-3",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/customer-support-ui.js",
+    "part": "customer-support-ui-detail-4",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/dabbir-customer-number-ui.js",
+    "part": "dabbir-customer-number-ui-detail-1",
+    "declarations": "font-size:12px;font-weight:900;letter-spacing:.04em;color:var(--text)"
+  },
+  {
+    "file": "api/dabbir-customer-number-ui.js",
+    "part": "dabbir-customer-number-ui-detail-2",
+    "declarations": "display:block;margin-top:3px"
+  },
+  {
+    "file": "api/dabbir-customer-number-ui.js",
+    "part": "dabbir-customer-number-ui-detail-3",
+    "declarations": "min-height:38px;padding:7px 10px"
+  },
+  {
+    "file": "api/owner-operations-ui.js",
+    "part": "owner-operations-ui-detail-1",
+    "declarations": "margin-top:5px"
+  },
+  {
+    "file": "api/owner-operations-ui.js",
+    "part": "owner-operations-ui-detail-2",
+    "declarations": "margin-top:9px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-1",
+    "declarations": "display:block;margin-top:9px;font-size:9px;color:var(--muted)"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-2",
+    "declarations": "margin-top:8px;font-size:9px;color:var(--muted)"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-3",
+    "declarations": "margin-top:10px;margin-bottom:0"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-4",
+    "declarations": "display:block;margin-top:6px;color:var(--red)"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-5",
+    "declarations": "display:block;margin-top:6px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-6",
+    "declarations": "display:block;margin-top:6px;color:var(--red)"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-7",
+    "declarations": "width:100%;margin-top:7px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-8",
+    "declarations": "margin-top:7px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-9",
+    "declarations": "display:block;color:var(--red);margin-top:6px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-10",
+    "declarations": "display:block;color:var(--muted);margin-top:4px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-11",
+    "declarations": "margin-top:10px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-12",
+    "declarations": "margin:5px 0"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-13",
+    "declarations": "margin-top:10px"
+  },
+  {
+    "file": "api/platform-customers-ui.js",
+    "part": "platform-customers-ui-detail-14",
+    "declarations": "margin-top:12px"
+  },
+  {
+    "file": "api/salon-mode-ui.js",
+    "part": "salon-mode-ui-detail-1",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/salon-mode-ui.js",
+    "part": "salon-mode-ui-detail-2",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/salon-mode-ui.js",
+    "part": "salon-mode-ui-detail-3",
+    "declarations": "margin-top:8px"
+  },
+  {
+    "file": "api/salon-mode-ui.js",
+    "part": "salon-mode-ui-detail-4",
+    "declarations": "margin-top:10px"
+  },
+  {
+    "file": "api/timezone-ui.js",
+    "part": "timezone-ui-detail-1",
+    "declarations": "width:21px;height:21px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"
+  }
+]

@@ -13,6 +13,8 @@ on:
       - 'team.html'
       - 'mobile/**'
       - 'config/ui-design-debt.json'
+      - 'config/ui-authority-registry.json'
+      - 'scripts/check-ui-authority.mjs'
       - 'scripts/*design*.mjs'
       - 'test/ui-authority*.mjs'
       - 'test/booking-location-behavior.test.mjs'
@@ -34,7 +36,7 @@ jobs:
           node-version: '24'
       - run: npm ci --no-audit --no-fund
       - run: node scripts/check-ui-design-drift.mjs
-      - run: node --test test/ui-authority-consolidation.test.mjs test/booking-location-behavior.test.mjs
+      - run: node --test test/ui-authority-consolidation.test.mjs test/ui-authority-v2.test.mjs test/booking-location-behavior.test.mjs test/i18n-contract.test.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium webkit
       - name: Compare real served CSS and verify booking and sender identities

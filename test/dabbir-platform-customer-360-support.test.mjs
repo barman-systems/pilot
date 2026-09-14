@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -9,7 +10,7 @@ const [migration,denyMigration,indexMigration,api,ui,shell]=await Promise.all([
   read('supabase/migrations/20260827162538_dabbir_platform_customer_360_support_indexes_v3.sql'),
   read('api/platform-customer-support.js'),
   read('api/platform-customer-support-ui.js'),
-  read('api/app-recovery.js'),
+  read('api/app-recovery.js').then(source=>source+'\n'+deliverySource()),
 ]);
 
 test('support cases and notes are private, RLS hardened and explicitly client denied',()=>{
