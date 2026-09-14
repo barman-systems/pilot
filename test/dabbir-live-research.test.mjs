@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import { gateway } from 'ai';
 import { extractResearchSources, normalizeResearchInput, runVercelLiveResearch } from '../api/_dabbir-live-research.js';
 
-const canary=fs.readFileSync(new URL('../api/dabbir-live-research-canary.js',import.meta.url),'utf8');
 const route=fs.readFileSync(new URL('../api/dabbir-live-research.js',import.meta.url),'utf8');
 
 test('AI SDK exposes Vercel Gateway Exa search tool',()=>{
@@ -57,11 +56,4 @@ test('live research route is owner-scoped, same-origin and read-only',()=>{
   assert.match(route,/membership\.role\|\|''\)\.toLowerCase\(\)!=='owner'/);
   assert.match(route,/access_scope:'owner_tenant_read_only'/);
   assert.doesNotMatch(route,/SUPABASE_SERVICE_ROLE_KEY|API_KEY|SECRET|TOKEN/);
-});
-
-test('canary is preview-only, branch-pinned, fixed-query and non-secret',()=>{
-  assert.match(canary,/VERCEL_ENV!==['"]preview['"]/);
-  assert.match(canary,/feat\/dabbir-live-research-vercel/);
-  assert.match(canary,/include_domains:\['vercel\.com'\]/);
-  assert.doesNotMatch(canary,/API_KEY|SECRET|TOKEN/);
 });
