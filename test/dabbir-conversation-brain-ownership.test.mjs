@@ -31,13 +31,14 @@ test('cognitive quality repair is owned by the conversation brain boundary',()=>
   const facade=read('_dabbir-cognitive-dialogue.js');
   const finalizer=read('_dabbir-conversation-brain-quality.js');
   const orchestrator=read('_dabbir-understanding-orchestrator.js');
+  const orchestratorCore=read('_dabbir-understanding-orchestrator-core.js');
 
   assert.match(facade,/finalizeConversationBrainQuality as qualityGate/);
   assert.match(facade,/from '\.\/_dabbir-cognitive-dialogue-core\.js'/);
   assert.match(finalizer,/CONVERSATION_BRAIN_QUALITY_OWNER='DABBIR_CONVERSATION_BRAIN'/);
   assert.match(finalizer,/legacyQualityGate\(\{state,decision,previous,context\}\)/);
   assert.doesNotMatch(orchestrator,/_dabbir-cognitive-dialogue-core/);
-  assert.match(orchestrator,/from '\.\/_dabbir-cognitive-dialogue\.js'/);
+  assert.match(orchestratorCore,/from '\.\/_dabbir-cognitive-dialogue\.js'/);
 
   for(const forbidden of [
     'dabbir_semantic_execute_v2',
@@ -66,6 +67,25 @@ test('queued-goal customer prose is owned by the conversation brain boundary',()
     'deliver(',
     'handoff(',
   ])assert.equal(renderer.includes(forbidden),false,`conversation brain queued-goal renderer gained execution authority: ${forbidden}`);
+});
+
+test('legacy-visible delivery crosses one conversation-brain response boundary',()=>{
+  const orchestrator=read('_dabbir-understanding-orchestrator.js');
+  const core=read('_dabbir-understanding-orchestrator-core.js');
+  const response=read('_dabbir-conversation-brain-response.js');
+
+  assert.match(orchestrator,/from '\.\/_dabbir-understanding-orchestrator-core\.js'/);
+  assert.match(orchestrator,/from '\.\/_dabbir-conversation-brain-response\.js'/);
+  assert.match(orchestrator,/finalizeCustomerResponse\(\{text,purpose\}\)/);
+  assert.match(response,/CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN'/);
+  assert.match(core,/export async function runUnderstandingTurn/);
+
+  for(const forbidden of [
+    'dabbir_semantic_execute_v2',
+    'dabbir_semantic_commit_v2',
+    'dabbir_whatsapp_ai_check_availability',
+    'process.env',
+  ])assert.equal(response.includes(forbidden),false,`conversation brain response renderer gained execution authority: ${forbidden}`);
 });
 
 test('conversation brain remains a compatibility seam, not execution authority',()=>{
