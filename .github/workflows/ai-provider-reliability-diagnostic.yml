@@ -25,11 +25,13 @@ jobs:
         run: node --test test/dabbir-ai-provider-reliability.test.mjs
       - name: postgres distributed authority
         run: node --test test/dabbir-ai-provider-reliability-db.test.mjs
-      - name: bypass guard
+      - name: repository bypass scan
+        run: node scripts/check-ai-provider-authority.mjs
+      - name: bypass mutation detection
         run: node --test test/dabbir-ai-provider-authority-guard.test.mjs
       - name: whatsapp meter regression
         run: node --test test/dabbir-ai-customer-metering.test.mjs
       - name: tool agent regression
         run: node --test test/barman-tool-agent-structured-output.test.mjs
       - name: existing ai core regressions
-        run: node --test test/dabbir-gemini-ai.test.mjs test/dabbir-cloudflare-workers-ai.test.mjs test/dabbir-ai-gateway-fallback.test.mjs
+        run: node --test test/dabbir-gemini-ai.test.mjs test/dabbir-cloudflare-ai.test.mjs test/dabbir-v3-live-provider-fallback.test.mjs
