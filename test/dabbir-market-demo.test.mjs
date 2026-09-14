@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
-import handler from '../api/dabbir-market-demo.js';
 import preview from '../api/dabbir-market-preview.js';
 
 function response() {
@@ -11,18 +11,11 @@ function response() {
   };
 }
 
-test('retired demo rejects all methods before accessing a request body', () => {
-  for (const method of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
-    const res = response();
-    const req = { method, get body() { assert.fail('retired demo must not read customer input'); } };
-    handler(req, res);
-    assert.equal(res.statusCode, 410);
-    assert.equal(res.headers['cache-control'], 'no-store');
-    assert.equal(res.body, method === 'HEAD' ? '' : JSON.stringify({ ok: false, error: 'DEMO_RETIRED' }));
-  }
+test('retired executable demo endpoint is removed from the repository', () => {
+  assert.equal(fs.existsSync(new URL('../api/dabbir-market-demo.js', import.meta.url)), false);
 });
 
-test('old demo page redirects safely to login and rejects writes', () => {
+test('old demo page still redirects safely to login and rejects writes', () => {
   for (const method of ['GET', 'HEAD', 'POST']) {
     const res = response();
     preview({ method, url: '/try?next=https://attacker.invalid' }, res);
