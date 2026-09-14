@@ -6,6 +6,7 @@ import {
 import {
   availabilitySlotsReply,
   bookingConfirmationReply,
+  conversationBrainCompatibilityReply,
   renderOperationalResponse,
 } from './_dabbir-conversation-brain-response.js';
 
@@ -65,5 +66,6 @@ export function runUnderstandingTurn(options){
     deliver:brainDeliver,
     slotsText:brainSlotsText,
     bookingText:brainBookingText,
+    responseText:conversationBrainCompatibilityReply,
   });
 }

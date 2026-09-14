@@ -127,6 +127,21 @@ export function serviceListReply({services,language,currencyCode,serviceLabel,re
   return reply;
 }
 
+// Compatibility core requests presentation by semantic kind only. All customer
+// wording and formatting stays here; this function is pure and has no authority.
+export function conversationBrainCompatibilityReply({kind,language='ar',action,result,bookingText,queuedGoalPrompt='',reply,appointments=[],timezone,services=[],currencyCode='',serviceLabel,resumeReply}={}){
+  if(kind==='RECOVERY_GREETING')return recoveryGreetingReply(language);
+  if(kind==='GREETING')return greetingReply(language);
+  if(kind==='STALE_CHOICE')return staleChoiceReply(language);
+  if(kind==='PLANNER_RECOVERY')return plannerRecoveryReply(language);
+  if(kind==='VERIFIED_MUTATION')return verifiedMutationReply({action,result,language,bookingText,queuedGoalPrompt});
+  if(kind==='NO_AVAILABILITY')return noAvailabilityReply(language);
+  if(kind==='APPOINTMENT_OPTIONS')return appointmentOptionsReply({reply,appointments,language,timezone});
+  if(kind==='SERVICE_LIST')return serviceListReply({services,language,currencyCode,serviceLabel,resumeReply});
+  if(kind==='DEFAULT_SERVICE')return defaultServicePrompt(language);
+  throw Object.assign(new Error('CONVERSATION_BRAIN_RESPONSE_KIND_UNSUPPORTED'),{code:'CONVERSATION_BRAIN_RESPONSE_KIND_UNSUPPORTED'});
+}
+
 function scopedServices(context){
   return arr(context?.services).filter(service=>(!service?.business_id||service.business_id===context?.business?.id)&&(!service?.branch_id||service.branch_id===context?.conversation?.branch_id));
 }
@@ -138,9 +153,9 @@ function mutationActionFromPurpose(purpose){
   return null;
 }
 
-// Compatibility bridge: the execution core can still produce its legacy draft,
-// but the authoritative customer reply is rebuilt here from committed Brain state,
-// verified execution receipts and presentation data. No regex/fuzzy parsing is used.
+// Compatibility bridge: the execution core supplies only already-authorized state,
+// verified receipts and presentation facts. Authoritative customer prose is rebuilt
+// here without regex/fuzzy parsing or execution authority.
 export function renderOperationalResponse({text,purpose,context,state,executionResult,bookingText}){
   const fallback=()=>finalizeCustomerResponse({text});
   const language=state?.language||'ar';
@@ -150,8 +165,8 @@ export function renderOperationalResponse({text,purpose,context,state,executionR
   if(mutationAction&&executionResult?.verified===true&&executionResult?.appointment_id&&typeof bookingText==='function'){
     const primary=verifiedMutationReply({action:mutationAction,result:executionResult,language,bookingText});
     const legacy=typeof text==='string'?text:String(text??'');
-    // Queued-goal prose is already Brain-owned. Preserve it only when the legacy
-    // draft starts with the exact primary response derived from the verified receipt.
+    // Queued-goal prose is already Brain-owned. Preserve it only when the draft
+    // starts with the exact primary response derived from the verified receipt.
     if(legacy.startsWith(primary))return primary+legacy.slice(primary.length);
     return fallback();
   }
