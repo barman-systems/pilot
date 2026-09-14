@@ -68,6 +68,9 @@ fi
 
 while IFS= read -r path; do
   case "$path" in
+    test/dabbir-public-visual-qa.mjs|\
+    test/dabbir-market-demo.test.mjs|\
+    .github/workflows/dabbir-public-visual-qa.yml|\
     test/dabbir-protected-live-smoke.mjs|\
     .github/workflows/dabbir-protected-live-smoke.yml|\
     .github/workflows/dabbir-ai-customer-journey.yml|\
