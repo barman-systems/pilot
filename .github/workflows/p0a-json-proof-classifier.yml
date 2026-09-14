@@ -24,12 +24,14 @@ jobs:
           const file='docs/architecture/legacy-removal-proof.json';
           const lines=fs.readFileSync(file,'utf8').split(/\r?\n/);
           const targets=[35,63,87];
+          const keyAt=line=>line.match(/^\s*"([^"]+)"\s*:/)?.[1]||null;
           const shape=v=>({type:Array.isArray(v)?'array':v===null?'null':typeof v,string_length:typeof v==='string'?v.length:null,url_shape:typeof v==='string'&&/^https?:\/\//i.test(v),uuid_shape:typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v),hex_shape:typeof v==='string'&&/^[0-9a-f]{32,}$/i.test(v),known_secret_prefix:typeof v==='string'&&/^(?:sk-|ghp_|github_pat_|sb_secret_|xox[baprs]-|AKIA|AIza)/.test(v)});
           for(const lineNo of targets){
             const raw=lines[lineNo-1]||'';
             const m=raw.match(/^\s*"([^"]+)"\s*:\s*(.+?)\s*,?\s*$/);
-            let out={file,line:lineNo,key:null,value_shape:null,keylike_name:null};
+            let out={file,line:lineNo,key:null,value_shape:null,keylike_name:null,nearby_keys:[]};
             if(m){let value=null;try{value=JSON.parse(m[2].replace(/,$/,''))}catch{};out={...out,key:m[1],value_shape:shape(value),keylike_name:/(?:secret|token|password|credential|private|api[_-]?key)/i.test(m[1])};}
+            for(let i=Math.max(0,lineNo-7);i<Math.min(lines.length,lineNo+6);i++){const key=keyAt(lines[i]);if(key&&i!==lineNo-1)out.nearby_keys.push({offset:i-(lineNo-1),key});}
             console.log('P0A_LEGACY_PROOF_JSON_SAFE='+JSON.stringify(out));
           }
           NODE
