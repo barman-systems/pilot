@@ -1,0 +1,234 @@
+name: P0-A AWS OIDC Trust Audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-a-aws-oidc-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  deployments: read
+
+jobs:
+  production-trust-evidence:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 12
+    steps:
+      - name: Capture safe GitHub OIDC claims
+        id: claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-a-aws-evidence
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(printf '%s' "$response" | jq -r '.value')"
+          TOKEN="$token" python3 - <<'PY'
+          import os, json, base64
+          token=os.environ['TOKEN']
+          payload=token.split('.')[1]
+          payload += '=' * (-len(payload) % 4)
+          c=json.loads(base64.urlsafe_b64decode(payload))
+          safe={k:c.get(k) for k in [
+            'iss','aud','sub','repository','repository_owner','environment','ref','sha',
+            'workflow_ref','job_workflow_ref','event_name','iat','exp','nbf','jti'
+          ]}
+          with open('p0-a-aws-evidence/oidc-jwt-decoded.json','w') as f:
+            json.dump(safe,f,sort_keys=True,indent=2)
+          PY
+          unset token response
+
+          python3 - <<'PY'
+          import json, sys
+          c=json.load(open('p0-a-aws-evidence/oidc-jwt-decoded.json'))
+          aud=c.get('aud')
+          aud_ok=(aud=='sts.amazonaws.com') or (aud==['sts.amazonaws.com'])
+          ttl=(c.get('exp') or 0)-(c.get('iat') or 0)
+          checks={
+            'issuer_exact': c.get('iss')=='https://token.actions.githubusercontent.com',
+            'audience_exact': aud_ok,
+            'subject_exact': c.get('sub')=='repo:barman-systems/pilot:environment:production',
+            'repository_exact': c.get('repository')=='barman-systems/pilot',
+            'environment_exact': c.get('environment')=='production',
+            'ttl_short': 0 < ttl <= 600,
+            'nbf_valid': c.get('nbf') is None or c.get('nbf') <= (c.get('iat') or 0),
+          }
+          json.dump({'checks':checks,'pass':all(checks.values()),'ttl_seconds':ttl},open('p0-a-aws-evidence/oidc-claims-evaluation.json','w'),indent=2,sort_keys=True)
+          if not all(checks.values()): sys.exit(1)
+          PY
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+          aws-region: me-central-1
+          role-session-name: p0a-trust-audit-${{ github.run_id }}
+
+      - name: Read live IAM role trust policy without credentials
+        id: trust
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p p0-a-aws-evidence /tmp/p0-a-aws
+          chmod 700 /tmp/p0-a-aws
+          status=0
+          aws iam get-role --role-name DabbirGithubDeployRole --output json > /tmp/p0-a-aws/role.json 2>/tmp/p0-a-aws/get-role.err || status=$?
+          if [ "$status" = '0' ]; then
+            jq '{Role:{RoleName:.Role.RoleName,Arn:.Role.Arn,AssumeRolePolicyDocument:.Role.AssumeRolePolicyDocument,MaxSessionDuration:.Role.MaxSessionDuration,PermissionsBoundary:(.Role.PermissionsBoundary // null)}}' \
+              /tmp/p0-a-aws/role.json > p0-a-aws-evidence/trust-policy.json
+          else
+            jq -n --argjson exit_code "$status" '{state:"FAIL",operation:"iam:GetRole",exit_code:$exit_code}' > p0-a-aws-evidence/trust-policy-status.json
+          fi
+          rm -rf /tmp/p0-a-aws
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Read GitHub production environment protection metadata
+        id: envmeta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/p0-a-gh p0-a-aws-evidence
+          code="$(curl --silent --show-error --output /tmp/p0-a-gh/environment.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/barman-systems/pilot/environments/production')"
+          if [ "$code" = '200' ]; then
+            jq '{name,protection_rules,deployment_branch_policy}' /tmp/p0-a-gh/environment.json > p0-a-aws-evidence/production-environment-policy.json
+          else
+            jq -n --argjson http_status "$code" '{state:"BLOCKED_EXTERNAL",operation:"read production environment metadata",http_status:$http_status}' > p0-a-aws-evidence/production-environment-policy-status.json
+          fi
+          rm -rf /tmp/p0-a-gh
+          echo "http_status=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate live trust restrictions
+        id: evaluate
+        if: always()
+        shell: bash
+        env:
+          TRUST_STATUS: ${{ steps.trust.outputs.status }}
+          ENV_HTTP_STATUS: ${{ steps.envmeta.outputs.http_status }}
+        run: |
+          set -euo pipefail
+          if [ "${TRUST_STATUS:-1}" != '0' ] || [ ! -f p0-a-aws-evidence/trust-policy.json ]; then
+            jq -n '{pass:false,reason:"LIVE_TRUST_POLICY_UNAVAILABLE"}' > p0-a-aws-evidence/trust-evaluation.json
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json, fnmatch, sys
+          role=json.load(open('p0-a-aws-evidence/trust-policy.json'))['Role']
+          policy=role['AssumeRolePolicyDocument']
+          stmts=policy.get('Statement',[])
+          if isinstance(stmts,dict): stmts=[stmts]
+          expected_sub='repo:barman-systems/pilot:environment:production'
+          provider_suffix='oidc-provider/token.actions.githubusercontent.com'
+          principal_ok=aud_ok=sub_ok=False
+          wildcard_sub=False
+          for s in stmts:
+            p=(s.get('Principal') or {}).get('Federated')
+            principals=p if isinstance(p,list) else [p] if p else []
+            if any(str(x).endswith(provider_suffix) for x in principals): principal_ok=True
+            cond=s.get('Condition') or {}
+            values={}
+            for op in ('StringEquals','StringLike'):
+              for k,v in (cond.get(op) or {}).items(): values.setdefault(k,[]).extend(v if isinstance(v,list) else [v])
+            auds=values.get('token.actions.githubusercontent.com:aud',[])
+            subs=values.get('token.actions.githubusercontent.com:sub',[])
+            if auds==['sts.amazonaws.com'] or (len(auds)==1 and auds[0]=='sts.amazonaws.com'): aud_ok=True
+            if expected_sub in subs: sub_ok=True
+            if any(any(ch in str(v) for ch in '*?[') for v in subs): wildcard_sub=True
+          max_session=role.get('MaxSessionDuration')
+          result={
+            'principal_github_oidc_exact':principal_ok,
+            'audience_sts_exact':aud_ok,
+            'subject_production_exact':sub_ok,
+            'subject_has_wildcard':wildcard_sub,
+            'max_session_duration':max_session,
+            'max_session_reasonable':isinstance(max_session,int) and max_session<=3600,
+            'permissions_boundary_present':role.get('PermissionsBoundary') is not None,
+          }
+          result['pass']=principal_ok and aud_ok and sub_ok and not wildcard_sub and result['max_session_reasonable']
+          json.dump(result,open('p0-a-aws-evidence/trust-evaluation.json','w'),indent=2,sort_keys=True)
+          if not result['pass']: sys.exit(1)
+          PY
+
+          test "${ENV_HTTP_STATUS:-0}" = '200'
+
+      - name: Upload positive-path evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-a-aws-trust-${{ github.sha }}
+          path: p0-a-aws-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  preview-negative-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Request preview-equivalent PR token and prove AWS denial
+        id: negative
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-a-negative-evidence /tmp/p0-a-negative
+          chmod 700 /tmp/p0-a-negative
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(printf '%s' "$response" | jq -r '.value')"
+
+          TOKEN="$token" python3 - <<'PY'
+          import os, json, base64
+          token=os.environ['TOKEN']
+          payload=token.split('.')[1]
+          payload += '=' * (-len(payload) % 4)
+          c=json.loads(base64.urlsafe_b64decode(payload))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','environment','ref','workflow_ref','event_name','iat','exp','nbf']}
+          safe['test_context']='pull_request_preview_equivalent'
+          json.dump(safe,open('p0-a-negative-evidence/preview-oidc-jwt-decoded.json','w'),indent=2,sort_keys=True)
+          PY
+
+          status=0
+          aws sts assume-role-with-web-identity \
+            --role-arn arn:aws:iam::388699644093:role/DabbirGithubDeployRole \
+            --role-session-name p0a-preview-negative-${GITHUB_RUN_ID} \
+            --web-identity-token "$token" \
+            --duration-seconds 900 \
+            --region me-central-1 \
+            --output json > /tmp/p0-a-negative/assume.json 2>/tmp/p0-a-negative/assume.err \
+            || status=$?
+
+          unset token response
+          rm -f /tmp/p0-a-negative/assume.json /tmp/p0-a-negative/assume.err
+          if [ "$status" = '0' ]; then
+            printf 'UNEXPECTED_ALLOWED\n' > p0-a-negative-evidence/preview-negative-test.log
+            jq -n '{result:"FAIL",preview_assume_role:"ALLOWED",credential_values_persisted:false}' > p0-a-negative-evidence/preview-negative-test.json
+          else
+            printf 'DENIED exit_code=%s\n' "$status" > p0-a-negative-evidence/preview-negative-test.log
+            jq -n --argjson exit_code "$status" '{result:"PASS",preview_assume_role:"DENIED",exit_code:$exit_code,credential_values_persisted:false}' > p0-a-negative-evidence/preview-negative-test.json
+          fi
+          rm -rf /tmp/p0-a-negative
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Upload negative-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-a-aws-negative-${{ github.sha }}
+          path: p0-a-negative-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail if preview-equivalent identity can assume Production role
+        if: always()
+        shell: bash
+        env:
+          STATUS: ${{ steps.negative.outputs.status }}
+        run: |
+          set -euo pipefail
+          test "${STATUS:-0}" != '0'
