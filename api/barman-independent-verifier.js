@@ -76,6 +76,13 @@ export default async function handler(req,res){
       return json(res,200,{ok:true,snapshot});
     }
 
+    if(phase==='snapshot_receipt'){
+      const receiptId=uuid(body.snapshot_receipt_id);
+      if(!receiptId)return json(res,400,{ok:false,error:'SNAPSHOT_RECEIPT_ID_INVALID'});
+      const receipt=await adminRpc(key,'barman_executive_read_snapshot_receipt_v1',{p_snapshot_receipt_id:receiptId});
+      return json(res,200,{ok:true,receipt});
+    }
+
     if(phase==='verify'){
       const commandId=uuid(body.command_id);
       if(!commandId)return json(res,400,{ok:false,error:'COMMAND_ID_INVALID'});
