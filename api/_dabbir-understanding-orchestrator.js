@@ -6,6 +6,7 @@ import {
 import {
   finalizeCustomerResponse,
   availabilitySlotsReply,
+  bookingConfirmationReply,
 } from './_dabbir-conversation-brain-response.js';
 
 export {SEMANTIC_SESSION_IDLE_MS,safeProviderTrace};
@@ -14,7 +15,7 @@ export {SEMANTIC_SESSION_IDLE_MS,safeProviderTrace};
 // compatibility core, while every customer-facing delivery is finalized by the
 // canonical Conversation Brain response owner before transport.
 export function runUnderstandingTurn(options){
-  const {deliver,slotsText}=options;
+  const {deliver,slotsText,bookingText}=options;
   const brainDeliver=async(claim,context,text,purpose)=>deliver(
     claim,
     context,
@@ -24,5 +25,8 @@ export function runUnderstandingTurn(options){
   const brainSlotsText=typeof slotsText==='function'
     ?(slots,language)=>availabilitySlotsReply({slots,language,slotsText})
     :slotsText;
-  return runUnderstandingTurnCore({...options,deliver:brainDeliver,slotsText:brainSlotsText});
+  const brainBookingText=typeof bookingText==='function'
+    ?(result,language)=>bookingConfirmationReply({result,language,bookingText})
+    :bookingText;
+  return runUnderstandingTurnCore({...options,deliver:brainDeliver,slotsText:brainSlotsText,bookingText:brainBookingText});
 }

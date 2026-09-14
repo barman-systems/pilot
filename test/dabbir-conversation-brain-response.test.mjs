@@ -10,6 +10,8 @@ import {
   greetingReply,
   staleChoiceReply,
   plannerRecoveryReply,
+  repeatMemoryConfirmationReply,
+  bookingConfirmationReply,
   verifiedMutationReply,
   noAvailabilityReply,
   availabilitySlotsReply,
@@ -23,7 +25,6 @@ const source=fs.readFileSync(path.join(root,'api/_dabbir-conversation-brain-resp
 
 test('response renderer is explicitly conversation-brain owned and pure',()=>{
   assert.equal(CONVERSATION_BRAIN_RESPONSE_OWNER,'DABBIR_CONVERSATION_BRAIN');
-  assert.equal(finalizeCustomerResponse({text:'نفس الرد',purpose:'reply'}),'نفس الرد');
   for(const forbidden of [
     'dabbir_semantic_execute_v2',
     'dabbir_semantic_commit_v2',
@@ -32,6 +33,26 @@ test('response renderer is explicitly conversation-brain owned and pure',()=>{
     'handoff(',
     'process.env',
   ])assert.equal(source.includes(forbidden),false,`response renderer gained authority: ${forbidden}`);
+});
+
+test('known deterministic legacy drafts are canonicalized by exact match only',()=>{
+  const known=[
+    [recoveryGreetingReply,'ar'],[recoveryGreetingReply,'en'],
+    [greetingReply,'ar'],[greetingReply,'en'],
+    [staleChoiceReply,'ar'],[staleChoiceReply,'en'],
+    [plannerRecoveryReply,'ar'],[plannerRecoveryReply,'en'],
+    [repeatMemoryConfirmationReply,'ar'],[repeatMemoryConfirmationReply,'en'],
+    [noAvailabilityReply,'ar'],[noAvailabilityReply,'en'],
+    [defaultServicePrompt,'ar'],[defaultServicePrompt,'en'],
+  ];
+  for(const [render,language] of known){
+    const text=render(language);
+    assert.equal(finalizeCustomerResponse({text,purpose:'reply'}),text);
+  }
+  assert.equal(finalizeCustomerResponse({text:'تم إلغاء الموعد ✅.',purpose:'cancel_booking'}),'تم إلغاء الموعد ✅.');
+  assert.equal(finalizeCustomerResponse({text:'Your appointment has been cancelled ✅.',purpose:'cancel_booking'}),'Your appointment has been cancelled ✅.');
+  assert.equal(finalizeCustomerResponse({text:'رد خاص من Brain',purpose:'reply'}),'رد خاص من Brain');
+  assert.equal(finalizeCustomerResponse({text:'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟!',purpose:'reply'}),'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟!');
 });
 
 test('deterministic shortcut wording remains byte-for-byte compatible',()=>{
@@ -43,10 +64,13 @@ test('deterministic shortcut wording remains byte-for-byte compatible',()=>{
   assert.equal(staleChoiceReply('en'),'The previous list has expired. Tell me what you need or ask for the services again.');
   assert.equal(plannerRecoveryReply('ar'),'تقصد الاستفسار عن الخدمات والأسعار، أو تبا تحجز؟');
   assert.equal(plannerRecoveryReply('en'),'Are you asking about services and prices, or would you like to book?');
+  assert.equal(repeatMemoryConfirmationReply('ar'),'نفس السيارة والموقع ولا بتغير؟');
+  assert.equal(repeatMemoryConfirmationReply('en'),'Same vehicle and location, or would you like to change them?');
 });
 
 test('verified execution wording remains compatible and only consumes verified result data',()=>{
   const bookingText=(result,lang)=>`${lang}:${result.appointment_id}`;
+  assert.equal(bookingConfirmationReply({result:{appointment_id:'a1'},language:'ar',bookingText}),'ar:a1');
   assert.equal(verifiedMutationReply({action:'CANCEL_BOOKING',result:{},language:'ar',bookingText}),'تم إلغاء الموعد ✅.');
   assert.equal(verifiedMutationReply({action:'CANCEL_BOOKING',result:{},language:'en',bookingText}),'Your appointment has been cancelled ✅.');
   assert.equal(verifiedMutationReply({action:'RESCHEDULE_BOOKING',result:{starts_at:'2026-09-15T10:00:00+04:00'},language:'ar',bookingText}),'تم تعديل الموعد ✅ إلى 2026-09-15T10:00:00+04:00.');
