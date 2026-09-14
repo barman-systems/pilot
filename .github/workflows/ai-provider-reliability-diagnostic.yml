@@ -26,7 +26,16 @@ jobs:
       - name: postgres distributed authority
         run: node --test test/dabbir-ai-provider-reliability-db.test.mjs
       - name: bypass scan - direct provider transport
-        run: node -e "import('./scripts/check-ai-provider-authority.mjs').then(({checkProviderAuthority})=>{const e=checkProviderAuthority().errors.filter(x=>x.includes('direct AI provider transport'));if(e.length)process.exit(1)})"
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {checkProviderAuthority} from './scripts/check-ai-provider-authority.mjs';
+          const errors=checkProviderAuthority().errors.filter(x=>x.includes('direct AI provider transport'));
+          if(errors.length){
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`## Direct provider bypasses\n\n${errors.map(x=>`- ${x}`).join('\n')}\n`);
+            process.exit(1);
+          }
+          NODE
       - name: bypass scan - raw provider core imports
         run: node -e "import('./scripts/check-ai-provider-authority.mjs').then(({checkProviderAuthority})=>{const e=checkProviderAuthority().errors.filter(x=>x.includes('imports raw'));if(e.length)process.exit(1)})"
       - name: bypass scan - required authority markers
