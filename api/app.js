@@ -86,13 +86,6 @@ button,a,[data-screen],[data-cid]{touch-action:manipulation}
 </script>`;
 
 const conversationPerformanceUi = String.raw`
-<style>
-#sendBtn:disabled{opacity:.6;cursor:wait}
-.msgrow[data-dabbir-pending="true"] .bubble{opacity:.72}
-.msgrow[data-dabbir-typing="true"] .bubble{min-width:52px;text-align:center;animation:dabbirPulse 1s ease-in-out infinite}
-@keyframes dabbirPulse{0%,100%{opacity:.45}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.msgrow[data-dabbir-typing="true"] .bubble{animation:none}}
-</style>
 <script>
 (()=>{
   let dabbirSending=false;

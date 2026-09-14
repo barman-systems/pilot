@@ -1,3 +1,5 @@
+import { layoutFor, type Language } from './ui-language';
+import { designTokens as tokens } from './design-tokens';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useIAP, type Purchase } from 'expo-iap';
@@ -102,19 +104,22 @@ function appleIntroText(intro: StoreKitIntro | null, arabic: boolean): string | 
   return null;
 }
 
-function androidIntroText(product: any): string | null {
+function androidIntroText(product: any, arabic: boolean): string | null {
   const phases = androidPricingPhases(product);
   if (phases.length < 2) return null;
   const intro = phases[0];
   const priceMicros = Number(intro?.priceAmountMicros ?? intro?.priceAmountMicrosAndroid ?? NaN);
   const formatted = String(intro?.formattedPrice || '').trim();
-  const period = periodText(periodFromIso8601(intro?.billingPeriod), true);
-  if (priceMicros === 0) return `عرض Google Play التمهيدي: تجربة مجانية${period ? `، ${period}` : ''}. تطبق Google الأهلية حسب حساب Play.`;
-  if (formatted) return `عرض Google Play التمهيدي: ${formatted}${period ? `، ${period}` : ''}.`;
+  const period = periodText(periodFromIso8601(intro?.billingPeriod), arabic);
+  if (priceMicros === 0) return arabic ? `عرض Google Play التمهيدي: تجربة مجانية${period ? `، ${period}` : ''}. تطبق Google الأهلية حسب حساب Play.` : `Google Play introductory offer: free trial${period ? `, ${period}` : ''}. Google determines eligibility for your Play account.`;
+  if (formatted) return arabic ? `عرض Google Play التمهيدي: ${formatted}${period ? `، ${period}` : ''}.` : `Google Play introductory offer: ${formatted}${period ? `, ${period}` : ''}.`;
   return null;
 }
 
-export function SubscriptionCard({ accessToken, accountToken }: { accessToken: string; accountToken?: string | null }) {
+export function SubscriptionCard({ accessToken, accountToken, language }: { accessToken: string; accountToken?: string | null; language: Language }) {
+  const arabic = language === 'ar';
+  const t = (ar: string, en: string) => arabic ? ar : en;
+  const styles = useMemo(() => createSubscriptionStyles(language), [language]);
   const storePlatform: StorePlatform = Platform.OS === 'android' ? 'android' : 'ios';
   const android = storePlatform === 'android';
   const enabled = android
@@ -140,9 +145,9 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
       if (!finish) throw new Error('STORE_FINISH_UNAVAILABLE');
       await finish({ purchase, isConsumable: false });
       setVerified(true);
-      Alert.alert('تم', `تم التحقق من اشتراك ${storeName} وتفعيله.`);
+      Alert.alert(t('تم', 'Done'), t(`تم التحقق من اشتراك ${storeName} وتفعيله.`, `Your ${storeName} subscription has been verified and activated.`));
     } catch {
-      Alert.alert('تعذر التحقق', `لم يتم تفعيل الاشتراك لأن التحقق الخادمي لم يثبت وجود صلاحية ${storeName} نشطة. لن تُمنح صلاحية مدفوعة دون تحقق.`);
+      Alert.alert(t('تعذر التحقق', 'Verification failed'), t(`لم يتم تفعيل الاشتراك لأن التحقق الخادمي لم يثبت وجود صلاحية ${storeName} نشطة. لن تُمنح صلاحية مدفوعة دون تحقق.`, `The subscription was not activated because server verification did not confirm an active ${storeName} entitlement. Paid access requires verification.`));
     } finally {
       setBusy(false);
     }
@@ -174,21 +179,21 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
 
   const product = useMemo(() => subscriptions.find(item => item.id === productId) || null, [productId, subscriptions]);
   const billingPeriod = useMemo(() => android ? androidPeriodFromProduct(product) : applePeriodFromProduct(product), [android, product]);
-  const billingText = periodText(billingPeriod, true);
-  const offerText = useMemo(() => android ? androidIntroText(product) : appleIntroText(appleIntroFromProduct(product), true), [android, product]);
+  const billingText = periodText(billingPeriod, arabic);
+  const offerText = useMemo(() => android ? androidIntroText(product, arabic) : appleIntroText(appleIntroFromProduct(product), arabic), [android, product, arabic]);
 
   if (!enabled) return null;
 
   const buy = async () => {
-    if (!productId || !connected || !product) return Alert.alert('غير متاح', `${storeName} أو منتج الاشتراك غير جاهز على هذا البناء.`);
-    if (!legalReady) return Alert.alert('إعداد الإصدار غير مكتمل', `يجب ربط سياسة الخصوصية وشروط الاستخدام العامة قبل إتاحة اشتراك ${storeName}.`);
-    if (!accountToken) return Alert.alert('غير متاح', 'تعذر ربط عملية الشراء بهوية حساب دبّر الحالية.');
+    if (!productId || !connected || !product) return Alert.alert(t('غير متاح', 'Unavailable'), t(`${storeName} أو منتج الاشتراك غير جاهز على هذا البناء.`, `${storeName} or the subscription product is not ready in this build.`));
+    if (!legalReady) return Alert.alert(t('إعداد الإصدار غير مكتمل', 'Release setup incomplete'), t(`يجب ربط سياسة الخصوصية وشروط الاستخدام العامة قبل إتاحة اشتراك ${storeName}.`, `Public privacy and terms links must be configured before enabling ${storeName} subscriptions.`));
+    if (!accountToken) return Alert.alert(t('غير متاح', 'Unavailable'), t('تعذر ربط عملية الشراء بهوية حساب دبّر الحالية.', 'Could not link the purchase to the current DABBIR account.'));
     const androidOffers = (Array.isArray((product as any)?.subscriptionOfferDetailsAndroid)
       ? (product as any).subscriptionOfferDetailsAndroid
       : [])
       .filter((offer: any) => typeof offer?.offerToken === 'string' && offer.offerToken)
       .map((offer: any) => ({ sku: productId, offerToken: offer.offerToken }));
-    if (android && androidOffers.length === 0) return Alert.alert('غير متاح', 'لا توجد خطة اشتراك Google Play صالحة لهذا المنتج.');
+    if (android && androidOffers.length === 0) return Alert.alert(t('غير متاح', 'Unavailable'), t('لا توجد خطة اشتراك Google Play صالحة لهذا المنتج.', 'No valid Google Play subscription plan is available for this product.'));
     setBusy(true);
     try {
       await requestPurchase({
@@ -207,7 +212,7 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
     setBusy(true);
     try {
       await restorePurchases();
-      Alert.alert('استعادة المشتريات', `تمت مطالبة ${storeName} باستعادة المشتريات، وسيتم تفعيل الصلاحية فقط بعد التحقق الخادمي من المعاملة المستعادة.`);
+      Alert.alert(t('استعادة المشتريات', 'Restore purchases'), t(`تمت مطالبة ${storeName} باستعادة المشتريات، وسيتم تفعيل الصلاحية فقط بعد التحقق الخادمي من المعاملة المستعادة.`, `${storeName} was asked to restore purchases. Access activates only after server verification of the restored transaction.`));
     } finally {
       setBusy(false);
     }
@@ -215,45 +220,49 @@ export function SubscriptionCard({ accessToken, accountToken }: { accessToken: s
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{android ? 'اشتراك دبّر عبر Google Play' : 'اشتراك دبّر عبر Apple'}</Text>
+      <Text style={styles.title}>{android ? t('اشتراك دبّر عبر Google Play', 'DABBIR subscription through Google Play') : t('اشتراك دبّر عبر Apple', 'DABBIR subscription through Apple')}</Text>
       <Text style={styles.body}>
         {verified
-          ? 'الاشتراك موثّق ونشط.'
+          ? t('الاشتراك موثّق ونشط.', 'Subscription verified and active.')
           : product
             ? `${product.displayName || 'DABBIR Owner'} — ${product.displayPrice || ''}${billingText ? `، ${billingText}` : ''}`
-            : `جارٍ قراءة منتج الاشتراك من ${storeName}.`}
+            : t(`جارٍ قراءة منتج الاشتراك من ${storeName}.`, `Loading the subscription product from ${storeName}.`)}
       </Text>
       {offerText ? <Text style={styles.offer}>{offerText}</Text> : null}
-      {!legalReady ? <Text style={styles.warning}>هذا البناء غير جاهز للبيع حتى تُضبط روابط سياسة الخصوصية وشروط الاستخدام العامة.</Text> : null}
+      {!legalReady ? <Text style={styles.warning}>{t('هذا البناء غير جاهز للبيع حتى تُضبط روابط سياسة الخصوصية وشروط الاستخدام العامة.', 'This build is not ready for sale until public privacy and terms links are configured.')}</Text> : null}
       <Pressable style={[styles.button, (busy || !legalReady || !product) && styles.disabled]} disabled={busy || verified || !legalReady || !product} onPress={buy}>
-        <Text style={styles.buttonText}>{verified ? 'الاشتراك نشط' : android ? 'اشترك عبر Google Play' : 'اشترك عبر Apple'}</Text>
+        <Text style={styles.buttonText}>{verified ? t('الاشتراك نشط', 'Subscription active') : android ? t('اشترك عبر Google Play', 'Subscribe with Google Play') : t('اشترك عبر Apple', 'Subscribe with Apple')}</Text>
       </Pressable>
-      <Pressable disabled={busy} onPress={restore}><Text style={styles.link}>استعادة المشتريات</Text></Pressable>
+      <Pressable disabled={busy} onPress={restore}><Text style={styles.link}>{t('استعادة المشتريات', 'Restore purchases')}</Text></Pressable>
       <View style={styles.legalRow}>
-        <Pressable disabled={!privacyUrl} onPress={() => { if (privacyUrl) void Linking.openURL(privacyUrl); }}><Text style={[styles.legalLink, !privacyUrl && styles.disabledText]}>سياسة الخصوصية</Text></Pressable>
+        <Pressable disabled={!privacyUrl} onPress={() => { if (privacyUrl) void Linking.openURL(privacyUrl); }}><Text style={[styles.legalLink, !privacyUrl && styles.disabledText]}>{t('سياسة الخصوصية', 'Privacy policy')}</Text></Pressable>
         <Text style={styles.separator}>•</Text>
-        <Pressable disabled={!termsUrl} onPress={() => { if (termsUrl) void Linking.openURL(termsUrl); }}><Text style={[styles.legalLink, !termsUrl && styles.disabledText]}>شروط الاستخدام</Text></Pressable>
+        <Pressable disabled={!termsUrl} onPress={() => { if (termsUrl) void Linking.openURL(termsUrl); }}><Text style={[styles.legalLink, !termsUrl && styles.disabledText]}>{t('شروط الاستخدام', 'Terms of use')}</Text></Pressable>
       </View>
       <Text style={styles.disclosure}>{android
-        ? 'يُدار الدفع والتجديد والإلغاء عبر Google Play. السعر وفترة الفوترة والعروض أعلاه تأتي من Google Play Billing ولا ينشئها دبّر محليًا.'
-        : 'يُدار الدفع والتجديد والإلغاء عبر Apple ID وApp Store. السعر وفترة الاشتراك والعروض أعلاه تُقرأ من StoreKit ولا ينشئها دبّر محليًا.'}</Text>
+        ? t('يُدار الدفع والتجديد والإلغاء عبر Google Play. السعر وفترة الفوترة والعروض أعلاه تأتي من Google Play Billing ولا ينشئها دبّر محليًا.', 'Payment, renewal and cancellation are managed through Google Play. Prices, billing periods and offers above come from Google Play Billing.')
+        : t('يُدار الدفع والتجديد والإلغاء عبر Apple ID وApp Store. السعر وفترة الاشتراك والعروض أعلاه تُقرأ من StoreKit ولا ينشئها دبّر محليًا.', 'Payment, renewal and cancellation are managed through Apple ID and the App Store. Prices, subscription periods and offers above come from StoreKit.')}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#D8D8DE', gap: 10 },
-  title: { fontSize: 17, fontWeight: '700', textAlign: 'right' },
-  body: { fontSize: 14, lineHeight: 22, textAlign: 'right' },
-  offer: { fontSize: 13, lineHeight: 20, textAlign: 'right', fontWeight: '600' },
-  warning: { fontSize: 13, lineHeight: 20, textAlign: 'right', color: '#B42318' },
-  button: { backgroundColor: '#17171B', padding: 14, borderRadius: 12 },
+export function createSubscriptionStyles(language: Language) {
+  const layout = layoutFor(language);
+  return StyleSheet.create({
+  card: { direction: layout.direction, padding: tokens.spacing.s16, borderRadius: tokens.radius.r18, borderWidth: 1, borderColor: tokens.colors.subscriptionBorder, gap: tokens.spacing.s10 },
+  title: { fontSize: tokens.typography.sizes.f17, fontWeight: '700', textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  body: { fontSize: tokens.typography.sizes.f14, lineHeight: 22, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  offer: { fontSize: tokens.typography.sizes.f13, lineHeight: 20, textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontWeight: '600' },
+  warning: { fontSize: tokens.typography.sizes.f13, lineHeight: 20, textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.danger },
+  button: { backgroundColor: tokens.colors.subscriptionAction, padding: tokens.spacing.s14, borderRadius: tokens.radius.r12 },
   disabled: { opacity: 0.5 },
-  buttonText: { color: '#FFF', textAlign: 'center', fontWeight: '700' },
-  link: { textAlign: 'center', textDecorationLine: 'underline', padding: 6 },
-  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  legalLink: { textDecorationLine: 'underline', fontSize: 13 },
+  buttonText: { color: tokens.colors.onAction, textAlign: 'center', fontWeight: '700' },
+  link: { textAlign: 'center', textDecorationLine: 'underline', padding: tokens.spacing.s6 },
+  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: tokens.spacing.s8, flexWrap: 'wrap' },
+  legalLink: { textDecorationLine: 'underline', fontSize: tokens.typography.sizes.f13 },
   disabledText: { opacity: 0.45 },
   separator: { opacity: 0.5 },
-  disclosure: { fontSize: 12, lineHeight: 18, textAlign: 'right', opacity: 0.7 },
+  disclosure: { fontSize: tokens.typography.sizes.f12, lineHeight: 18, textAlign: layout.textAlign, writingDirection: layout.writingDirection, opacity: 0.7 },
 });
+
+}

@@ -26,7 +26,7 @@ test('iPad WebKit journey runs inside the already-authorized canonical customer 
 });
 
 test('iPad test follows the real 701-920px shell contract and proves each menu handler transition before navigation',()=>{
-  assert.match(shell,/@media\(max-width:920px\)\{[^}]*\.shell\{grid-template-columns:1fr\}\.side\{position:fixed;/);
+  assert.match(shell,/@media\(max-width:920px\)\{[^}]*\.shell\{grid-template-columns:1fr\}\s*\.side\{position:fixed;/);
   assert.match(shell,/\.side\.open\{transform:translateX\(0\)!important\}/);
   assert.match(shell,/\.mobileMenu\{display:block;/);
   assert.match(shell,/@media\(max-width:700px\)[\s\S]*?\.bottomNav\{position:fixed;display:grid;/);

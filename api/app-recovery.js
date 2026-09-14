@@ -40,7 +40,7 @@ const UI_MODULE_ORDER = [
 
 // Change this token whenever shell or generated-bundle behavior changes so Safari
 // cannot reuse a previous presentation layer after deployment.
-const UI_BUNDLE_VERSION = '20260908-owner-policy-read-v6';
+const UI_BUNDLE_VERSION = '20260914-ui-authority-v1';
 
 // One shell-level lifecycle authority owns final render/navigation/language/chat render entry points.
 // Legacy modules may still wrap them during migration; reconcile() reasserts the
@@ -319,7 +319,7 @@ const BOOKING_TIME_GUARD = `<script>
 // UI authority; this layer prevents unreadable text/tap targets and iOS zoom regressions.
 const INTERFACE_HARDENING = `<style id="dabbir-interface-hardening-v1">
 button,[role="button"],.navBtn,#bottomNav button,#bottomNav a{touch-action:manipulation}
-.side>.brand small,.workspace span,.statusChip,.hero p,.metric span,.truth,.integration p,.chatContact span,.d4-sender,.authMsg,.authCard p{font-size:12px!important;line-height:1.5!important}
+.side>.brand small,.workspace span,.statusChip,.hero p,.metric span,.truth,.integration p,.chatContact span,.authMsg,.authCard p{font-size:12px!important;line-height:1.5!important}
 .dac-brief{font-size:13px!important;line-height:1.65!important}
 @media(max-width:700px){
   input:not([type="checkbox"]):not([type="radio"]),select,textarea{font-size:16px!important}

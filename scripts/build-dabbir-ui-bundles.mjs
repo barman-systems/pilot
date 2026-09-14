@@ -1,3 +1,6 @@
+import { buildTokens } from './build-design-tokens.mjs';
+const check=process.argv.includes('--check');
+buildTokens({check});
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -52,7 +55,9 @@ async function build(name, modules) {
     '',
   ].join('\n');
   const outputPath = path.join(root, `public/dabbir-ui-${name}.js`);
-  await fs.writeFile(outputPath, output);
+  if(check){
+    if(await fs.readFile(outputPath,'utf8')!==output)throw new Error(`UI_BUNDLE_DRIFT: ${outputPath}`);
+  }else await fs.writeFile(outputPath, output);
   console.log(`${outputPath}: ${Buffer.byteLength(output)} bytes from ${modules.length} modules`);
 }
 

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { designTokens as tokens } from './src/design-tokens';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -12,7 +13,7 @@ import { clearSession, loadSession, saveSession, sessionNeedsRefresh, type Dabbi
 import * as api from './src/api';
 import { SubscriptionCard } from './src/SubscriptionCard';
 
-type Language = 'ar' | 'en';
+import { UiLanguage, layoutFor, type Language } from './src/ui-language';
 type Tab = 'dashboard' | 'operations' | 'assistant' | 'account';
 type Copy = (ar: string, en: string) => string;
 type SaleDraftItem = { product: any; quantity: number };
@@ -45,18 +46,22 @@ const paymentMethods = [
 ];
 
 function ActionButton({ title, onPress, secondary = false, disabled = false }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
+  const styles = useStyles();
   return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} hitSlop={8} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.buttonSecondary, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{title}</Text></Pressable>;
 }
 
 function LanguageToggle({ language, onChange }: { language: Language; onChange: (language: Language) => void }) {
+  const styles = useStyles();
   return <View accessibilityRole="tablist" style={styles.languageToggle}><Pressable accessibilityRole="tab" accessibilityLabel="العربية" accessibilityState={{ selected: language === 'ar' }} hitSlop={6} onPress={() => onChange('ar')} style={[styles.languageChoice, language === 'ar' && styles.languageChoiceActive]}><Text style={language === 'ar' ? styles.languageActiveText : styles.languageText}>عربي</Text></Pressable><Pressable accessibilityRole="tab" accessibilityLabel="English" accessibilityState={{ selected: language === 'en' }} hitSlop={6} onPress={() => onChange('en')} style={[styles.languageChoice, language === 'en' && styles.languageChoiceActive]}><Text style={language === 'en' ? styles.languageActiveText : styles.languageText}>EN</Text></Pressable></View>;
 }
 
 function BrandLockup({ compact = false }: { compact?: boolean }) {
+  const styles = useStyles();
   return <View style={styles.brandLockup}><Image source={logoMark} style={[styles.brandMark, compact && styles.brandMarkCompact]} /><View style={styles.brandWords}><Text style={[styles.brandLatin, compact && styles.brandLatinCompact]}>DABBIR</Text><Text style={[styles.brandArabic, compact && styles.brandArabicCompact]}>دبّر</Text></View></View>;
 }
 
 function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthenticated: (session: DabbirSession) => Promise<void>; language: Language; onLanguageChange: (language: Language) => void }) {
+  const styles = useStyles();
   const t = useMemo(() => copyFor(language), [language]);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -144,8 +149,8 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
     <Text style={styles.hero}>{t('مديرك الذكي لإدارة المتجر', 'Your smart store manager')}</Text>
     <Text style={styles.authSubtitle}>{t('المبيعات والمخزون والمصروفات في مكان واحد.', 'Sales, inventory, and expenses in one place.')}</Text>
     <View style={styles.authTabs}><Pressable onPress={() => setMode('login')} style={[styles.authTab, mode === 'login' && styles.authTabActive]}><Text style={mode === 'login' ? styles.authTabTextActive : styles.authTabText}>{t('تسجيل الدخول', 'Sign in')}</Text></Pressable><Pressable onPress={() => setMode('signup')} style={[styles.authTab, mode === 'signup' && styles.authTabActive]}><Text style={mode === 'signup' ? styles.authTabTextActive : styles.authTabText}>{t('إنشاء حساب', 'Create account')}</Text></Pressable></View>
-    <TextInput accessibilityLabel={t('البريد الإلكتروني', 'Email')} autoCapitalize="none" keyboardType="email-address" returnKeyType="next" value={email} onChangeText={setEmail} placeholder={t('البريد الإلكتروني', 'Email')} placeholderTextColor="#8A8D98" style={styles.input} />
-    <TextInput accessibilityLabel={t('كلمة المرور', 'Password')} secureTextEntry returnKeyType="done" value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} placeholder={t('كلمة المرور', 'Password')} placeholderTextColor="#8A8D98" style={styles.input} />
+    <TextInput accessibilityLabel={t('البريد الإلكتروني', 'Email')} autoCapitalize="none" keyboardType="email-address" returnKeyType="next" value={email} onChangeText={setEmail} placeholder={t('البريد الإلكتروني', 'Email')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} />
+    <TextInput accessibilityLabel={t('كلمة المرور', 'Password')} secureTextEntry returnKeyType="done" value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} placeholder={t('كلمة المرور', 'Password')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} />
     <ActionButton disabled={busy || recovering || socialBusy !== null || !email || !password} title={busy ? t('جارٍ التنفيذ…', 'Working…') : mode === 'login' ? t('دخول إلى متجري', 'Enter my store') : t('إنشاء حساب المتجر', 'Create store account')} onPress={() => void submit()} />
     {mode === 'login' ? <View style={styles.socialActions}>
       <Pressable accessibilityRole="button" accessibilityLabel={t('الدخول عبر Apple', 'Continue with Apple')} disabled={busy || recovering || socialBusy !== null} onPress={() => void signInWithApple()} style={({ pressed }) => [styles.socialButton, styles.appleButton, pressed && styles.pressed, socialBusy === 'apple' && styles.disabled]}><Text style={styles.appleButtonText}>{socialBusy === 'apple' ? t('جارٍ الدخول…', 'Signing in…') : t(' الدخول عبر Apple', ' Continue with Apple')}</Text></Pressable>
@@ -157,6 +162,7 @@ function AuthScreen({ onAuthenticated, language, onLanguageChange }: { onAuthent
 }
 
 function StoreOnboarding({ session, language, onLanguageChange, onReady }: { session: DabbirSession; language: Language; onLanguageChange: (language: Language) => void; onReady: () => Promise<void> }) {
+  const styles = useStyles();
   const t = useMemo(() => copyFor(language), [language]);
   const [name, setName] = useState('');
   const [businessType, setBusinessType] = useState<api.DabbirBusinessType>('store');
@@ -183,7 +189,7 @@ function StoreOnboarding({ session, language, onLanguageChange, onReady }: { ses
     <View style={styles.setupBadge}><Text style={styles.setupBadgeText}>{t('دبّر للمتاجر الصغيرة', 'DABBIR for small stores')}</Text></View>
     <Text style={styles.hero}>{t('لنجهّز متجرك في دقيقة.', "Let's set up your store in a minute.")}</Text>
     <Text style={styles.authSubtitle}>{t('ابدأ باسم المتجر فقط. ستضيف المنتجات أو تسجل أول بيع بعد الدخول، دون إعدادات طويلة.', 'Start with your store name only. Add products or record your first sale after entering, without lengthy setup.')}</Text>
-    <TextInput accessibilityLabel={t('اسم النشاط', 'Business name')} value={name} onChangeText={setName} placeholder={businessType === 'store' ? t('مثل: تموينات النخبة', 'Example: Elite Groceries') : businessType === 'laundry' ? t('مثل: مغسلة النخبة', 'Example: Elite Laundry') : t('مثل: مغسلة اللمعة', 'Example: Al Lamah Car Wash')} placeholderTextColor="#8A8D98" style={styles.input} maxLength={120} />
+    <TextInput accessibilityLabel={t('اسم النشاط', 'Business name')} value={name} onChangeText={setName} placeholder={businessType === 'store' ? t('مثل: تموينات النخبة', 'Example: Elite Groceries') : businessType === 'laundry' ? t('مثل: مغسلة النخبة', 'Example: Elite Laundry') : t('مثل: مغسلة اللمعة', 'Example: Al Lamah Car Wash')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} maxLength={120} />
     <Text style={styles.fieldLabel}>{t('نوع النشاط', 'Business type')}</Text>
     <View style={styles.businessTypeGrid}>
       {([
@@ -198,14 +204,17 @@ function StoreOnboarding({ session, language, onLanguageChange, onReady }: { ses
 }
 
 function Metric({ label, value, accent = false }: { label: string; value: number | string; accent?: boolean }) {
+  const styles = useStyles();
   return <View style={[styles.metric, accent && styles.metricAccent]}><Text style={[styles.metricValue, accent && styles.metricValueAccent]}>{String(value)}</Text><Text style={[styles.metricLabel, accent && styles.metricLabelAccent]}>{label}</Text></View>;
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  const styles = useStyles();
   return <View style={styles.card}><Text style={styles.cardTitle}>{title}</Text>{children}</View>;
 }
 
 function StatusPill({ status, t }: { status: string; t: Copy }) {
+  const styles = useStyles();
   const labels: Record<string, [string, string]> = {
     draft: ['مسودة', 'Draft'], reserved: ['محجوز', 'Reserved'], confirmed: ['مؤكد', 'Confirmed'], completed: ['مكتمل', 'Completed'], cancelled: ['ملغى', 'Cancelled'], pending: ['معلق', 'Pending'],
   };
@@ -214,6 +223,7 @@ function StatusPill({ status, t }: { status: string; t: Copy }) {
 }
 
 function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }: { session: DabbirSession; onLogout: () => Promise<void>; onDeleted: () => Promise<void>; language: Language; onLanguageChange: (language: Language) => void }) {
+  const styles = useStyles();
   const t = useMemo(() => copyFor(language), [language]);
   const [tab, setTab] = useState<Tab>('dashboard');
   const [runtime, setRuntime] = useState<any>(null);
@@ -481,23 +491,23 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
       <ActionButton disabled={saving || !operations?.can_operate || !saleItems.length} title={saving ? t('جارٍ تسجيل البيع…', 'Recording sale…') : t(`إتمام البيع · ${amount(saleTotal)}`, `Complete sale · ${amount(saleTotal)}`)} onPress={completeSale} />
     </Card>
     <Card title={t('إضافة منتج', 'Add product')}>
-      <TextInput value={productForm.name} onChangeText={value => setProductForm(current => ({ ...current, name: value }))} placeholder={t('اسم المنتج', 'Product name')} placeholderTextColor="#8A8D98" style={styles.input} />
-      <TextInput value={productForm.sku} onChangeText={value => setProductForm(current => ({ ...current, sku: value }))} placeholder={t('رمز المنتج SKU', 'SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="characters" />
-      <View style={styles.formRow}><TextInput value={productForm.price} onChangeText={value => setProductForm(current => ({ ...current, price: value }))} placeholder={t('السعر', 'Price')} placeholderTextColor="#8A8D98" keyboardType="decimal-pad" style={[styles.input, styles.halfInput]} /><TextInput value={productForm.quantity} onChangeText={value => setProductForm(current => ({ ...current, quantity: value }))} placeholder={t('الكمية', 'Quantity')} placeholderTextColor="#8A8D98" keyboardType="number-pad" style={[styles.input, styles.halfInput]} /></View>
+      <TextInput value={productForm.name} onChangeText={value => setProductForm(current => ({ ...current, name: value }))} placeholder={t('اسم المنتج', 'Product name')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} />
+      <TextInput value={productForm.sku} onChangeText={value => setProductForm(current => ({ ...current, sku: value }))} placeholder={t('رمز المنتج SKU', 'SKU')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} autoCapitalize="characters" />
+      <View style={styles.formRow}><TextInput value={productForm.price} onChangeText={value => setProductForm(current => ({ ...current, price: value }))} placeholder={t('السعر', 'Price')} placeholderTextColor={tokens.colors.placeholder} keyboardType="decimal-pad" style={[styles.input, styles.halfInput]} /><TextInput value={productForm.quantity} onChangeText={value => setProductForm(current => ({ ...current, quantity: value }))} placeholder={t('الكمية', 'Quantity')} placeholderTextColor={tokens.colors.placeholder} keyboardType="number-pad" style={[styles.input, styles.halfInput]} /></View>
       <ActionButton disabled={saving || !operations?.can_manage} title={saving ? t('جارٍ الحفظ…', 'Saving…') : t('إضافة للمخزون', 'Add to inventory')} onPress={createProduct} />
       {!operations?.can_manage && <Text style={styles.muted}>{t('تحتاج صلاحية المالك أو المدير لإدارة المنتجات.', 'Owner or admin permission is required to manage products.')}</Text>}
     </Card>
     <Card title={t(`المنتجات والمخزون (${products.length})`, `Products & inventory (${products.length})`)}>
-      <TextInput value={productQuery} onChangeText={setProductQuery} placeholder={t('ابحث بالاسم أو رمز المنتج', 'Search by name or SKU')} placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
+      <TextInput value={productQuery} onChangeText={setProductQuery} placeholder={t('ابحث بالاسم أو رمز المنتج', 'Search by name or SKU')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} autoCapitalize="none" />
       {visibleProducts.slice(0, 30).map((item: any, index: number) => <View key={item.id || index} style={styles.productRow}><View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>{item.sku} · {amount(item.price_aed)}</Text><Text style={item.low_stock ? styles.warningText : styles.stockText}>{t(`${item.available} متاح`, `${item.available} available`)}</Text></View><View style={styles.productActions}><Pressable accessibilityRole="button" disabled={saving || !operations?.can_operate || Number(item.available || 0) < 1} onPress={() => addToSale(item)} style={styles.smallAction}><Text style={styles.smallActionText}>{t('+ بيع', '+ Sale')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => adjustInventory(item)}><Text style={styles.linkSmall}>{t('جرد', 'Count')}</Text></Pressable><Pressable accessibilityRole="button" disabled={saving || !operations?.can_manage} onPress={() => receiveStock(item)}><Text style={styles.linkSmall}>{t('استلام', 'Receive')}</Text></Pressable></View></View>)}
       {!products.length && <Text style={styles.muted}>{t('أضف أول منتج لتبدأ إدارة مخزونك.', 'Add your first product to start managing inventory.')}</Text>}
       {products.length > 0 && !visibleProducts.length && <Text style={styles.muted}>{t('لا يوجد منتج مطابق للبحث.', 'No product matches your search.')}</Text>}
     </Card>
     <Card title={t('تسجيل مصروف', 'Record expense')}>
-      <TextInput value={expenseForm.amount} onChangeText={value => setExpenseForm(current => ({ ...current, amount: value }))} placeholder={t('المبلغ بالدرهم', 'Amount in AED')} placeholderTextColor="#8A8D98" keyboardType="decimal-pad" style={styles.input} />
+      <TextInput value={expenseForm.amount} onChangeText={value => setExpenseForm(current => ({ ...current, amount: value }))} placeholder={t('المبلغ بالدرهم', 'Amount in AED')} placeholderTextColor={tokens.colors.placeholder} keyboardType="decimal-pad" style={styles.input} />
       <View style={styles.categoryWrap}>{expenseCategories.map(item => <Pressable key={item.value} disabled={saving} onPress={() => setExpenseForm(current => ({ ...current, category: item.value }))} style={[styles.categoryChip, expenseForm.category === item.value && styles.categoryChipActive, saving && styles.tabButtonDisabled]}><Text style={expenseForm.category === item.value ? styles.categoryTextActive : styles.categoryText}>{language === 'ar' ? item.ar : item.en}</Text></Pressable>)}</View>
-      <TextInput value={expenseForm.note} onChangeText={value => setExpenseForm(current => ({ ...current, note: value }))} placeholder={t('ملاحظة اختيارية', 'Optional note')} placeholderTextColor="#8A8D98" style={styles.input} />
-      <TextInput value={expenseForm.occurred_on} onChangeText={value => setExpenseForm(current => ({ ...current, occurred_on: value }))} placeholder="YYYY-MM-DD" placeholderTextColor="#8A8D98" style={styles.input} autoCapitalize="none" />
+      <TextInput value={expenseForm.note} onChangeText={value => setExpenseForm(current => ({ ...current, note: value }))} placeholder={t('ملاحظة اختيارية', 'Optional note')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} />
+      <TextInput value={expenseForm.occurred_on} onChangeText={value => setExpenseForm(current => ({ ...current, occurred_on: value }))} placeholder="YYYY-MM-DD" placeholderTextColor={tokens.colors.placeholder} style={styles.input} autoCapitalize="none" />
       <ActionButton disabled={saving || !operations?.can_manage} title={saving ? t('جارٍ الحفظ…', 'Saving…') : t('حفظ المصروف', 'Save expense')} onPress={createExpense} />
     </Card>
     <Card title={t('آخر حركات المخزون', 'Latest inventory movements')}>
@@ -518,12 +528,12 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
     <Text style={styles.assistantIntro}>{t('اسأل بلغة طبيعية. الإجابات مبنية على بيانات متجرك الموثقة، ولن يدّعي المساعد تنفيذ إجراء لم يتم تنفيذه.', 'Ask in natural language. Answers use your verified store data, and the assistant will not claim an action it did not perform.')}</Text>
     <View style={styles.categoryWrap}><Pressable accessibilityRole="button" disabled={assistantBusy || !businessId} onPress={() => void askAssistant(t('ما ملخص اليوم؟', 'What is today’s summary?'))} style={styles.categoryChip}><Text style={styles.categoryText}>{t('ملخص اليوم', 'Today summary')}</Text></Pressable><Pressable accessibilityRole="button" disabled={assistantBusy || !businessId} onPress={() => void askAssistant(t('ما المنتجات منخفضة المخزون؟', 'Which products are low in stock?'))} style={styles.categoryChip}><Text style={styles.categoryText}>{t('مخزون منخفض', 'Low stock')}</Text></Pressable></View>
     <View style={styles.messageList}>{assistantMessages.map((item, index) => <View key={`${item.role}-${index}`} style={[styles.messageBubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}><Text style={item.role === 'user' ? styles.userMessage : styles.assistantMessage}>{item.text}</Text></View>)}</View>
-    <TextInput value={assistantInput} onChangeText={setAssistantInput} onSubmitEditing={() => void askAssistant()} returnKeyType="send" placeholder={t('مثال: ما مبيعات اليوم وما المنتجات المنخفضة؟', 'Example: what are today’s sales and low-stock products?')} placeholderTextColor="#8A8D98" style={styles.input} />
+    <TextInput value={assistantInput} onChangeText={setAssistantInput} onSubmitEditing={() => void askAssistant()} returnKeyType="send" placeholder={t('مثال: ما مبيعات اليوم وما المنتجات المنخفضة؟', 'Example: what are today’s sales and low-stock products?')} placeholderTextColor={tokens.colors.placeholder} style={styles.input} />
     <ActionButton disabled={assistantBusy || !assistantInput.trim() || !businessId} title={assistantBusy ? t('يفكر…', 'Thinking…') : t('اسأل دبّر', 'Ask DABBIR')} onPress={() => void askAssistant()} />
   </Card>;
 
   const renderAccount = () => <>
-    <Card title={t('الاشتراك', 'Subscription')}><SubscriptionCard accessToken={session.access_token} accountToken={runtime?.user?.id || null} /></Card>
+    <Card title={t('الاشتراك', 'Subscription')}><SubscriptionCard language={language} accessToken={session.access_token} accountToken={runtime?.user?.id || null} /></Card>
     <Card title={t('اللغة', 'Language')}><Text style={styles.body}>{t('يمكنك تغيير لغة التطبيق في أي وقت.', 'You can change the app language at any time.')}</Text><LanguageToggle language={language} onChange={onLanguageChange} /></Card>
     <Card title={t('الخصوصية والحساب', 'Privacy & account')}><Text style={styles.body}>{t('يمكنك حذف حساب دبّر من داخل التطبيق. قد تبقى سجلات مالية أو تدقيقية ملزمة.', 'You can delete your DABBIR account in the app. Legally required financial or audit records may remain.')}</Text><ActionButton secondary disabled={deleting} title={deleting ? t('جارٍ الحذف…', 'Deleting…') : t('حذف حساب دبّر', 'Delete DABBIR account')} onPress={deleteAccount} /></Card>
   </>;
@@ -545,6 +555,7 @@ function Workspace({ session, onLogout, onDeleted, language, onLanguageChange }:
 export default function App() {
   const [session, setSession] = useState<DabbirSession | null>(null);
   const [language, setLanguage] = useState<Language>(defaultLanguage);
+  const styles = useMemo(() => createStyles(language), [language]);
   const [booted, setBooted] = useState(false);
 
   useEffect(() => { void (async () => {
@@ -566,132 +577,140 @@ export default function App() {
   const content = useMemo(() => {
     if (!booted) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text>DABBIR | دبّر</Text></View></SafeAreaView>;
     return session ? <Workspace session={session} onLogout={signOut} onDeleted={accountDeleted} language={language} onLanguageChange={setLanguage} /> : <AuthScreen onAuthenticated={authenticated} language={language} onLanguageChange={setLanguage} />;
-  }, [booted, language, session]);
+  }, [booted, language, session, styles]);
 
-  return <SafeAreaProvider><StatusBar style="light" />{content}</SafeAreaProvider>;
+  return <SafeAreaProvider><UiLanguage.Provider value={language}><StatusBar style="light" />{content}</UiLanguage.Provider></SafeAreaProvider>;
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F4F6FA' },
+function useStyles() {
+  const language = useContext(UiLanguage);
+  return useMemo(() => createStyles(language), [language]);
+}
+
+export function createStyles(language: Language) {
+  const layout = layoutFor(language);
+  return StyleSheet.create({
+  safe: { direction: layout.direction, flex: 1, backgroundColor: tokens.colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  authWrap: { flex: 1, justifyContent: 'center', padding: 24, gap: 14 },
-  errorWrap: { flex: 1, justifyContent: 'center', padding: 24, gap: 16 },
-  errorTitle: { fontSize: 24, fontWeight: '900', color: '#111827', textAlign: 'right' },
+  authWrap: { flex: 1, justifyContent: 'center', padding: tokens.spacing.s24, gap: tokens.spacing.s14 },
+  errorWrap: { flex: 1, justifyContent: 'center', padding: tokens.spacing.s24, gap: tokens.spacing.s16 },
+  errorTitle: { fontSize: tokens.typography.sizes.f24, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
   authTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  authTabs: { flexDirection: 'row', backgroundColor: '#E9ECF3', borderRadius: 14, padding: 4, gap: 4 },
-  authTab: { flex: 1, padding: 11, borderRadius: 11 },
-  authTabActive: { backgroundColor: '#111827' },
-  authTabText: { color: '#596174', textAlign: 'center', fontWeight: '700' },
-  authTabTextActive: { color: '#FFF', textAlign: 'center', fontWeight: '800' },
-  brand: { fontSize: 25, fontWeight: '900', color: '#111827' },
-  brandSmall: { fontSize: 13, fontWeight: '900', color: '#556070' },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  brandMark: { width: 46, height: 46, borderRadius: 14 },
-  brandMarkCompact: { width: 32, height: 32, borderRadius: 10 },
+  authTabs: { flexDirection: 'row', backgroundColor: tokens.colors.surfaceMuted, borderRadius: tokens.radius.r14, padding: tokens.spacing.s4, gap: tokens.spacing.s4 },
+  authTab: { flex: 1, padding: tokens.spacing.s11, borderRadius: tokens.radius.r11 },
+  authTabActive: { backgroundColor: tokens.colors.text },
+  authTabText: { writingDirection: layout.writingDirection, color: tokens.colors.tabText, textAlign: 'center', fontWeight: '700' },
+  authTabTextActive: { writingDirection: layout.writingDirection, color: tokens.colors.onAction, textAlign: 'center', fontWeight: '800' },
+  brand: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f25, fontWeight: '900', color: tokens.colors.text },
+  brandSmall: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f13, fontWeight: '900', color: tokens.colors.brandMuted },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.s9 },
+  brandMark: { width: 46, height: 46, borderRadius: tokens.radius.r14 },
+  brandMarkCompact: { width: 32, height: 32, borderRadius: tokens.radius.r10 },
   brandWords: { justifyContent: 'center' },
-  brandLatin: { color: '#111827', fontSize: 13, fontWeight: '900', letterSpacing: 1.1 },
-  brandLatinCompact: { fontSize: 10, letterSpacing: 0.9 },
-  brandArabic: { color: '#2563EB', fontSize: 19, fontWeight: '900', lineHeight: 23 },
-  brandArabicCompact: { fontSize: 14, lineHeight: 17 },
-  hero: { fontSize: 27, fontWeight: '900', color: '#111827', textAlign: 'right', marginTop: 20 },
-  authSubtitle: { fontSize: 15, lineHeight: 22, color: '#697386', textAlign: 'right', marginBottom: 8 },
-  setupBadge: { alignSelf: 'flex-start', backgroundColor: '#E7F0FF', borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7, marginTop: 14 },
-  setupBadgeText: { color: '#1D4ED8', fontSize: 12, fontWeight: '900' },
-  page: { padding: 18, gap: 14, paddingBottom: 48 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  brandLatin: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.text, fontSize: tokens.typography.sizes.f13, fontWeight: '900', letterSpacing: 1.1 },
+  brandLatinCompact: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f10, letterSpacing: 0.9 },
+  brandArabic: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primary, fontSize: tokens.typography.sizes.f19, fontWeight: '900', lineHeight: 23 },
+  brandArabicCompact: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f14, lineHeight: 17 },
+  hero: { fontSize: tokens.typography.sizes.f27, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection, marginTop: tokens.spacing.s20 },
+  authSubtitle: { fontSize: tokens.typography.sizes.f15, lineHeight: 22, color: tokens.colors.muted, textAlign: layout.textAlign, writingDirection: layout.writingDirection, marginBottom: tokens.spacing.s8 },
+  setupBadge: { alignSelf: 'flex-start', backgroundColor: tokens.colors.surfaceAction, borderRadius: tokens.radius.r99, paddingHorizontal: tokens.spacing.s12, paddingVertical: tokens.spacing.s7, marginTop: tokens.spacing.s14 },
+  setupBadgeText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primaryText, fontSize: tokens.typography.sizes.f12, fontWeight: '900' },
+  page: { padding: tokens.spacing.s18, gap: tokens.spacing.s14, paddingBottom: tokens.spacing.s48 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing.s12 },
   headerIdentity: { flex: 1 },
-  headerActions: { alignItems: 'flex-end', gap: 7 },
-  business: { fontSize: 22, fontWeight: '900', color: '#111827', textAlign: 'right', marginTop: 3 },
-  languageToggle: { flexDirection: 'row', backgroundColor: '#E9ECF3', padding: 3, borderRadius: 10, alignSelf: 'flex-start' },
-  languageChoice: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7 },
-  languageChoiceActive: { backgroundColor: '#111827' },
-  languageText: { color: '#697386', fontSize: 12, fontWeight: '700' },
-  languageActiveText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
-  tabBar: { flexDirection: 'row', backgroundColor: '#E9ECF3', padding: 4, borderRadius: 15, gap: 4 },
-  tabButton: { flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center' },
-  tabButtonActive: { backgroundColor: '#111827' },
+  headerActions: { alignItems: 'flex-end', gap: tokens.spacing.s7 },
+  business: { fontSize: tokens.typography.sizes.f22, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection, marginTop: tokens.spacing.s3 },
+  languageToggle: { flexDirection: 'row', backgroundColor: tokens.colors.surfaceMuted, padding: tokens.spacing.s3, borderRadius: tokens.radius.r10, alignSelf: 'flex-start' },
+  languageChoice: { paddingHorizontal: tokens.spacing.s9, paddingVertical: tokens.spacing.s5, borderRadius: 7 },
+  languageChoiceActive: { backgroundColor: tokens.colors.text },
+  languageText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.muted, fontSize: tokens.typography.sizes.f12, fontWeight: '700' },
+  languageActiveText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.onAction, fontSize: tokens.typography.sizes.f12, fontWeight: '800' },
+  tabBar: { flexDirection: 'row', backgroundColor: tokens.colors.surfaceMuted, padding: tokens.spacing.s4, borderRadius: tokens.radius.r15, gap: tokens.spacing.s4 },
+  tabButton: { flex: 1, paddingVertical: tokens.spacing.s10, borderRadius: tokens.radius.r11, alignItems: 'center' },
+  tabButtonActive: { backgroundColor: tokens.colors.text },
   tabButtonDisabled: { opacity: 0.64 },
-  tabButtonText: { color: '#697386', fontSize: 12, fontWeight: '700' },
-  tabButtonTextActive: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  tabButtonText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.muted, fontSize: tokens.typography.sizes.f12, fontWeight: '700' },
+  tabButtonTextActive: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.onAction, fontSize: tokens.typography.sizes.f12, fontWeight: '800' },
   sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 24, fontWeight: '900', color: '#111827', textAlign: 'right' },
-  updatedText: { color: '#7B8494', fontSize: 12 },
-  welcomeCard: { backgroundColor: '#111827', borderRadius: 24, padding: 20, overflow: 'hidden' },
-  welcomeOrb: { position: 'absolute', top: 16, left: 16, width: 54, height: 54, borderRadius: 17, backgroundColor: '#2D3853', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  sectionTitle: { fontSize: tokens.typography.sizes.f24, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  updatedText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.mutedSecondary, fontSize: tokens.typography.sizes.f12 },
+  welcomeCard: { backgroundColor: tokens.colors.text, borderRadius: tokens.radius.r24, padding: tokens.spacing.s20, overflow: 'hidden' },
+  welcomeOrb: { position: 'absolute', top: 16, left: 16, width: 54, height: 54, borderRadius: 17, backgroundColor: tokens.colors.welcomeBorder, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   welcomeLogo: { width: 54, height: 54 },
-  welcomeOrbText: { color: '#93C5FD', fontSize: 34 },
-  welcomeEyebrow: { color: '#93C5FD', textAlign: 'right', fontSize: 13, fontWeight: '800' },
-  welcomeTitle: { color: '#FFF', textAlign: 'right', fontSize: 27, fontWeight: '900', marginTop: 5 },
-  welcomeBody: { color: '#C8D1E2', textAlign: 'right', fontSize: 14, marginTop: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metric: { width: '48%', minHeight: 104, backgroundColor: '#FFF', borderRadius: 18, padding: 16, justifyContent: 'space-between', borderWidth: 1, borderColor: '#E7EAF0' },
-  metricAccent: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  metricValue: { fontSize: 21, fontWeight: '900', color: '#111827', textAlign: 'right' },
-  metricValueAccent: { color: '#FFF' },
-  metricLabel: { fontSize: 13, color: '#697386', textAlign: 'right', fontWeight: '700' },
-  metricLabelAccent: { color: '#DCE9FF' },
-  financialNote: { color: '#697386', fontSize: 12, lineHeight: 18, textAlign: 'right', paddingHorizontal: 3 },
-  card: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, gap: 11, borderWidth: 1, borderColor: '#E7EAF0' },
-  cardTitle: { fontSize: 17, fontWeight: '900', color: '#111827', textAlign: 'right' },
-  body: { fontSize: 14, lineHeight: 22, color: '#384152', textAlign: 'right' },
-  muted: { color: '#7B8494', fontSize: 13, textAlign: 'right', lineHeight: 20 },
-  row: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7EAF0', paddingTop: 10, gap: 4 },
-  listRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7EAF0', paddingTop: 11, gap: 10 },
-  rowTitle: { fontWeight: '800', color: '#202633', textAlign: 'right' },
+  welcomeOrbText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.welcomeAccent, fontSize: tokens.typography.sizes.f34 },
+  welcomeEyebrow: { color: tokens.colors.welcomeAccent, textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f13, fontWeight: '800' },
+  welcomeTitle: { color: tokens.colors.onAction, textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f27, fontWeight: '900', marginTop: tokens.spacing.s5 },
+  welcomeBody: { color: tokens.colors.welcomeText, textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f14, marginTop: tokens.spacing.s4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.s10 },
+  metric: { width: '48%', minHeight: 104, backgroundColor: tokens.colors.surface, borderRadius: tokens.radius.r18, padding: tokens.spacing.s16, justifyContent: 'space-between', borderWidth: 1, borderColor: tokens.colors.borderSubtle },
+  metricAccent: { backgroundColor: tokens.colors.primary, borderColor: tokens.colors.primary },
+  metricValue: { fontSize: tokens.typography.sizes.f21, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  metricValueAccent: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.onAction },
+  metricLabel: { fontSize: tokens.typography.sizes.f13, color: tokens.colors.muted, textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontWeight: '700' },
+  metricLabelAccent: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.welcomeMuted },
+  financialNote: { color: tokens.colors.muted, fontSize: tokens.typography.sizes.f12, lineHeight: 18, textAlign: layout.textAlign, writingDirection: layout.writingDirection, paddingHorizontal: tokens.spacing.s3 },
+  card: { backgroundColor: tokens.colors.surface, borderRadius: tokens.radius.r20, padding: tokens.spacing.s16, gap: tokens.spacing.s11, borderWidth: 1, borderColor: tokens.colors.borderSubtle },
+  cardTitle: { fontSize: tokens.typography.sizes.f17, fontWeight: '900', color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  body: { fontSize: tokens.typography.sizes.f14, lineHeight: 22, color: tokens.colors.textSecondary, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  muted: { color: tokens.colors.mutedSecondary, fontSize: tokens.typography.sizes.f13, textAlign: layout.textAlign, writingDirection: layout.writingDirection, lineHeight: 20 },
+  row: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.colors.borderSubtle, paddingTop: tokens.spacing.s10, gap: tokens.spacing.s4 },
+  listRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.colors.borderSubtle, paddingTop: tokens.spacing.s11, gap: tokens.spacing.s10 },
+  rowTitle: { fontWeight: '800', color: tokens.colors.textBody, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
   flex: { flex: 1 },
-  attentionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  attentionDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#AAB3C1' },
-  attentionDotHot: { backgroundColor: '#F59E0B' },
-  attentionNumber: { fontSize: 23, fontWeight: '900', color: '#111827' },
-  warningText: { color: '#B45309', fontWeight: '800', textAlign: 'right', fontSize: 13 },
-  stockText: { color: '#047857', fontWeight: '800', textAlign: 'right', fontSize: 13 },
-  stockAction: { alignItems: 'flex-end', gap: 4 },
-  orderAction: { alignItems: 'flex-end', gap: 5 },
-  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  quantityText: { color: '#111827', fontWeight: '900', minWidth: 18, textAlign: 'center' },
-  saleTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#EEF4FF', padding: 12, borderRadius: 12 },
-  saleTotal: { color: '#1D4ED8', fontSize: 18, fontWeight: '900' },
-  productRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7EAF0', paddingTop: 11, gap: 10 },
-  productActions: { alignItems: 'flex-end', gap: 9 },
-  smallAction: { backgroundColor: '#E7F0FF', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 9 },
-  smallActionText: { color: '#1D4ED8', fontWeight: '900', fontSize: 12 },
-  pill: { borderRadius: 99, backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4 },
-  pillText: { color: '#4F46E5', fontSize: 11, fontWeight: '800' },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#DCE2EB', borderRadius: 13, paddingHorizontal: 13, paddingVertical: 12, fontSize: 15, color: '#111827', textAlign: 'right' },
-  fieldLabel: { color: '#384152', fontSize: 13, fontWeight: '800', textAlign: 'right', marginTop: 2 },
-  businessTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  businessTypeOption: { flexGrow: 1, minWidth: '30%', borderWidth: 1, borderColor: '#DCE2EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 12, backgroundColor: '#FFF' },
-  businessTypeOptionActive: { borderColor: '#2563EB', backgroundColor: '#EEF4FF' },
-  businessTypeTitle: { color: '#697386', fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  businessTypeTitleActive: { color: '#1D4ED8' },
-  formRow: { flexDirection: 'row', gap: 10 },
+  attentionRow: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.s10 },
+  attentionDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: tokens.colors.disabledText },
+  attentionDotHot: { backgroundColor: tokens.colors.warningIndicator },
+  attentionNumber: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: 23, fontWeight: '900', color: tokens.colors.text },
+  warningText: { color: tokens.colors.warning, fontWeight: '800', textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f13 },
+  stockText: { color: tokens.colors.success, fontWeight: '800', textAlign: layout.textAlign, writingDirection: layout.writingDirection, fontSize: tokens.typography.sizes.f13 },
+  stockAction: { alignItems: 'flex-end', gap: tokens.spacing.s4 },
+  orderAction: { alignItems: 'flex-end', gap: tokens.spacing.s5 },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.s11 },
+  quantityText: { writingDirection: layout.writingDirection, color: tokens.colors.text, fontWeight: '900', minWidth: 18, textAlign: 'center' },
+  saleTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: tokens.colors.surfaceSelected, padding: tokens.spacing.s12, borderRadius: tokens.radius.r12 },
+  saleTotal: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primaryText, fontSize: tokens.typography.sizes.f18, fontWeight: '900' },
+  productRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.colors.borderSubtle, paddingTop: tokens.spacing.s11, gap: tokens.spacing.s10 },
+  productActions: { alignItems: 'flex-end', gap: tokens.spacing.s9 },
+  smallAction: { backgroundColor: tokens.colors.surfaceAction, paddingHorizontal: tokens.spacing.s10, paddingVertical: tokens.spacing.s7, borderRadius: tokens.radius.r9 },
+  smallActionText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primaryText, fontWeight: '900', fontSize: tokens.typography.sizes.f12 },
+  pill: { borderRadius: tokens.radius.r99, backgroundColor: tokens.colors.surfaceInfo, paddingHorizontal: tokens.spacing.s8, paddingVertical: tokens.spacing.s4 },
+  pillText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.info, fontSize: tokens.typography.sizes.f11, fontWeight: '800' },
+  input: { backgroundColor: tokens.colors.surfaceSubtle, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: tokens.radius.r13, paddingHorizontal: tokens.spacing.s13, paddingVertical: tokens.spacing.s12, fontSize: tokens.typography.sizes.f15, color: tokens.colors.text, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  fieldLabel: { color: tokens.colors.textSecondary, fontSize: tokens.typography.sizes.f13, fontWeight: '800', textAlign: layout.textAlign, writingDirection: layout.writingDirection, marginTop: tokens.spacing.s2 },
+  businessTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.s8 },
+  businessTypeOption: { flexGrow: 1, minWidth: '30%', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: tokens.radius.r12, paddingHorizontal: tokens.spacing.s10, paddingVertical: tokens.spacing.s12, backgroundColor: tokens.colors.surface },
+  businessTypeOptionActive: { borderColor: tokens.colors.primary, backgroundColor: tokens.colors.surfaceSelected },
+  businessTypeTitle: { writingDirection: layout.writingDirection, color: tokens.colors.muted, fontSize: tokens.typography.sizes.f12, fontWeight: '800', textAlign: 'center' },
+  businessTypeTitleActive: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primaryText },
+  formRow: { flexDirection: 'row', gap: tokens.spacing.s10 },
   halfInput: { flex: 1 },
-  button: { backgroundColor: '#2563EB', borderRadius: 13, padding: 14, minHeight: 48, justifyContent: 'center' },
-  buttonSecondary: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#B42318' },
-  buttonText: { color: '#FFF', textAlign: 'center', fontWeight: '900' },
-  buttonTextSecondary: { color: '#B42318' },
-  socialActions: { gap: 9, marginTop: 2 },
-  socialButton: { minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: '#DCE2EB', backgroundColor: '#FFF', justifyContent: 'center', paddingHorizontal: 14 },
-  appleButton: { backgroundColor: '#111827', borderColor: '#111827' },
-  appleButtonText: { color: '#FFF', textAlign: 'center', fontWeight: '900' },
-  googleButtonText: { color: '#202633', textAlign: 'center', fontWeight: '900' },
+  button: { backgroundColor: tokens.colors.primary, borderRadius: tokens.radius.r13, padding: tokens.spacing.s14, minHeight: tokens.touch.comfortable, justifyContent: 'center' },
+  buttonSecondary: { backgroundColor: tokens.colors.surface, borderWidth: 1, borderColor: tokens.colors.danger },
+  buttonText: { writingDirection: layout.writingDirection, color: tokens.colors.onAction, textAlign: 'center', fontWeight: '900' },
+  buttonTextSecondary: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.danger },
+  socialActions: { gap: tokens.spacing.s9, marginTop: tokens.spacing.s2 },
+  socialButton: { minHeight: tokens.touch.comfortable, borderRadius: tokens.radius.r13, borderWidth: 1, borderColor: tokens.colors.border, backgroundColor: tokens.colors.surface, justifyContent: 'center', paddingHorizontal: tokens.spacing.s14 },
+  appleButton: { backgroundColor: tokens.colors.text, borderColor: tokens.colors.text },
+  appleButtonText: { writingDirection: layout.writingDirection, color: tokens.colors.onAction, textAlign: 'center', fontWeight: '900' },
+  googleButtonText: { writingDirection: layout.writingDirection, color: tokens.colors.textBody, textAlign: 'center', fontWeight: '900' },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.78 },
-  link: { textAlign: 'center', textDecorationLine: 'underline', paddingVertical: 7, color: '#2563EB', fontWeight: '700' },
+  link: { writingDirection: layout.writingDirection, textAlign: 'center', textDecorationLine: 'underline', paddingVertical: tokens.spacing.s7, color: tokens.colors.primary, fontWeight: '700' },
   disabledText: { opacity: 0.45 },
-  linkSmall: { color: '#2563EB', fontWeight: '900', textDecorationLine: 'underline', fontSize: 13 },
-  secureNote: { color: '#8A93A3', textAlign: 'center', fontSize: 12, marginTop: 8 },
-  categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  categoryChip: { borderRadius: 99, borderWidth: 1, borderColor: '#DCE2EB', paddingHorizontal: 10, paddingVertical: 8 },
-  categoryChipActive: { backgroundColor: '#E7F0FF', borderColor: '#2563EB' },
-  categoryText: { color: '#697386', fontSize: 12, fontWeight: '700' },
-  categoryTextActive: { color: '#1D4ED8', fontSize: 12, fontWeight: '900' },
-  expenseAmount: { color: '#B42318', fontWeight: '900' },
-  assistantIntro: { color: '#697386', lineHeight: 21, fontSize: 13, textAlign: 'right' },
-  messageList: { gap: 9 },
-  messageBubble: { borderRadius: 16, padding: 12, maxWidth: '92%' },
-  userBubble: { backgroundColor: '#2563EB', alignSelf: 'flex-start' },
-  assistantBubble: { backgroundColor: '#F0F4FA', alignSelf: 'flex-end' },
-  userMessage: { color: '#FFF', lineHeight: 21, textAlign: 'right' },
-  assistantMessage: { color: '#263247', lineHeight: 21, textAlign: 'right' },
+  linkSmall: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primary, fontWeight: '900', textDecorationLine: 'underline', fontSize: tokens.typography.sizes.f13 },
+  secureNote: { writingDirection: layout.writingDirection, color: tokens.colors.mutedQuiet, textAlign: 'center', fontSize: tokens.typography.sizes.f12, marginTop: tokens.spacing.s8 },
+  categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.spacing.s7 },
+  categoryChip: { borderRadius: tokens.radius.r99, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: tokens.spacing.s10, paddingVertical: tokens.spacing.s8 },
+  categoryChipActive: { backgroundColor: tokens.colors.surfaceAction, borderColor: tokens.colors.primary },
+  categoryText: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.muted, fontSize: tokens.typography.sizes.f12, fontWeight: '700' },
+  categoryTextActive: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.primaryText, fontSize: tokens.typography.sizes.f12, fontWeight: '900' },
+  expenseAmount: { textAlign: layout.textAlign, writingDirection: layout.writingDirection, color: tokens.colors.danger, fontWeight: '900' },
+  assistantIntro: { color: tokens.colors.muted, lineHeight: 21, fontSize: tokens.typography.sizes.f13, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  messageList: { gap: tokens.spacing.s9 },
+  messageBubble: { borderRadius: tokens.radius.r16, padding: tokens.spacing.s12, maxWidth: '92%' },
+  userBubble: { backgroundColor: tokens.colors.primary, alignSelf: 'flex-start' },
+  assistantBubble: { backgroundColor: tokens.colors.surfaceAi, alignSelf: 'flex-end' },
+  userMessage: { color: tokens.colors.onAction, lineHeight: 21, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
+  assistantMessage: { color: tokens.colors.ai, lineHeight: 21, textAlign: layout.textAlign, writingDirection: layout.writingDirection },
 });
+}
