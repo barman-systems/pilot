@@ -3,16 +3,13 @@ import { sanitizeSemanticText, sanitizeSemanticContext } from './_dabbir-semanti
 import { validSemanticContract, semanticRequestSpans } from './_dabbir-semantic-contract.js';
 import { applyDeterministicSemanticIntentPolicy } from './_dabbir-semantic-intent-policy.js';
 import { understandConversation } from './_dabbir-semantic-engine.js';
-import { QWEN37_CANARY_MODEL, qwen37CanaryDecision, qwen37CanaryEnvironment, qwen37CanaryFetch } from './_dabbir-qwen37-canary.js';
+import { QWEN37_CANARY_MODEL, loadQwen37CanaryControl, qwen37CanaryDecision, qwen37CanaryEnvironment, qwen37CanaryFetch } from './_dabbir-qwen37-canary.js';
 import registry from './_dabbir-activity-registry.json' with {type:'json'};
 
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const GATEWAY_GEMINI_SEMANTIC_MAX_TOKENS=2400;
 
 function groundedServiceName(x,message,context) {
-  // Catalog membership proves existence, never customer selection. Missing
-  // evidence drops the proposal; existing verified state/memory stays in the
-  // semantic engine. Owner aliases are also resolved there, before AI.
   const norm=v=>String(v||'').normalize('NFKC').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/[\u064b-\u065f\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
   const name=typeof x.service_name==='string'?x.service_name.trim():'';
   const names=(Array.isArray(context?.services)?context.services:[]).map(s=>s?.name).filter(n=>typeof n==='string');
@@ -25,11 +22,6 @@ function groundedServiceName(x,message,context) {
   return name;
 }
 
-// Preserve the useful part of agent-style chat loops: the interpreter sees a
-// bounded, role-correct dialogue instead of forcing it to rediscover the whole
-// conversation from an opaque JSON blob. Human operator replies are assistant-
-// side from the customer's point of view. The semantic state still owns truth,
-// authority and long-lived memory; this history is interpretation evidence only.
 function semanticRoleHistory(context) {
   const recent=Array.isArray(context?.recent_conversation)?context.recent_conversation:[];
   return recent.slice(-8).flatMap(item=>{
@@ -42,9 +34,6 @@ function semanticRoleHistory(context) {
 
 function providerSemanticContext(context,referenceTime) {
   const source=context&&typeof context==='object'&&!Array.isArray(context)?context:{};
-  // recent_conversation is sent through the provider's native role history.
-  // Removing the duplicate copy lowers tokens and prevents two conflicting
-  // representations of the same turn from competing for attention.
   const {recent_conversation:_recentConversation,...rest}=source;
   return sanitizeSemanticContext({...rest,reference_time:referenceTime});
 }
@@ -54,11 +43,6 @@ function gatewaySemanticOptions(url,options={}) {
   try{
     const body=JSON.parse(String(options.body));
     const model=String(body?.model||'');
-    // Vercel AI Gateway counts Gemini reasoning tokens against max output.
-    // Semantic extraction is a bounded structured task, so use low reasoning
-    // and leave enough output headroom for the JSON contract. This avoids a
-    // transport-200 response ending as TRUNCATED after spending nearly the
-    // entire output budget on hidden reasoning.
     if(body?.response_format?.type==='json_object' && model.startsWith('google/gemini-')){
       body.max_tokens=Math.max(Number(body.max_tokens)||0,GATEWAY_GEMINI_SEMANTIC_MAX_TOKENS);
       body.reasoning={effort:'low'};
@@ -74,8 +58,6 @@ function makeSemanticFetch({activeEnv,fetchImpl,budgetMs=18000,maxAttempts=4}){
   return async(url,options={})=>{
     const remaining=deadline-Date.now();
     if(attempts>=maxAttempts || remaining<=0) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
-    // Direct-provider schema repair shares the request budget. Reserve one
-    // request and the existing gateway primary deadline for the final fallback.
     const reserve=activeEnv.VERCEL_ENV&&String(url)!==GATEWAY_ENDPOINT?6000:0;
     if(reserve&&(attempts>=maxAttempts-1||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
     attempts++;
@@ -100,8 +82,14 @@ function acceptedQwen37CanaryResult(result){
     && String(result.model||'')===QWEN37_CANARY_MODEL);
 }
 
-export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env }) {
-  const canary=qwen37CanaryDecision({env,meteringContext,context});
+export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env, canaryControlLoader=loadQwen37CanaryControl }) {
+  let control;
+  try{
+    control=await canaryControlLoader({env});
+  }catch{
+    control={enabled:false,percent:0,source:'CAPABILITY_CONTROL_LOADER_FAILED'};
+  }
+  const canary=qwen37CanaryDecision({control,meteringContext,context});
   let result;
   let canaryFallback=false;
   let canaryFailure=null;
@@ -137,21 +125,12 @@ export async function interpretSemanticMessage({ message, context, referenceTime
     serviceQuestion,contextReference:x.context_reference||null,
     missingFields:[],reasonCode:'SEMANTIC_INTERPRETATION'};
   if(serviceQuestion){providerProposal.intent=serviceQuestion.field==='price'?'PRICING':'SERVICE_DISCOVERY';providerProposal.action=serviceQuestion.field==='price'?'PRICING':'SERVICE_MENU';}
-  // Provider output proposes semantics; application policy owns deterministic
-  // operational intent. Explicit availability + grounded temporal evidence is
-  // a booking-journey signal even if a stochastic provider says SERVICE_MENU.
   const proposal=applyDeterministicSemanticIntentPolicy({message,proposal:providerProposal});
-  const telemetry={...(result.telemetry||{}),qwen37_canary:{eligible:canary.enabled,selected:canary.selected,bucket:canary.bucket,percent:canary.percent,fallback:canaryFallback,failure:canaryFailure}};
+  const telemetry={...(result.telemetry||{}),qwen37_canary:{eligible:canary.enabled,selected:canary.selected,bucket:canary.bucket,percent:canary.percent,source:canary.source,fallback:canaryFallback,failure:canaryFailure}};
   return {proposal,provider:result.provider,model:result.model,telemetry};
 }
 
-// Fixed, authenticated synthetic case exercises the SAME interpreter used by
-// WhatsApp. It loads no customer data and has no tools or outbound side effects.
 export function evaluateSemanticProbe(p) {
-  // In-memory synthetic fixture only. No database reads/writes or execution
-  // tools are reachable here. Verify the actual reducer's decision, not an
-  // arbitrary provider risk label: MEDIUM can safely yield CLARIFY, HIGH must
-  // still fail this availability case by producing HANDOFF.
   const businessId='10000000-0000-4000-8000-000000000001',branchId='20000000-0000-4000-8000-000000000001';
   const serviceId='30000000-0000-4000-8000-000000000001';
   const schema=registry.activities.car_wash;
