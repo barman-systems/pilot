@@ -1,5 +1,8 @@
-import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
+import { requireSameOrigin } from './_auth-core.js';
 import { runQwen37Benchmark } from './_dabbir-qwen37-benchmark.js';
+
+const BENCHMARK_SCOPE='qwen37-live-v1';
+const BENCHMARK_BRANCH='feat/qwen37-bonsai-intelligence-benchmark-20260914';
 
 function json(res, status, body) {
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
@@ -7,10 +10,10 @@ function json(res, status, body) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-  if (process.env.VERCEL_ENV === 'production') return json(res, 403, { ok: false, error: 'PRODUCTION_BENCHMARK_FORBIDDEN' });
+  if (process.env.VERCEL_ENV !== 'preview') return json(res, 403, { ok: false, error: 'PREVIEW_BENCHMARK_ONLY' });
+  if (String(process.env.VERCEL_GIT_COMMIT_REF||'') !== BENCHMARK_BRANCH) return json(res, 403, { ok:false, error:'BENCHMARK_BRANCH_MISMATCH' });
   if (!requireSameOrigin(req)) return json(res, 403, { ok: false, error: 'ORIGIN_REQUIRED' });
-  const user = await getVerifiedUser(accessTokenFromRequest(req));
-  if (!user) return json(res, 401, { ok: false, error: 'AUTH_REQUIRED' });
+  if (String(req.headers?.['x-dabbir-benchmark-scope']||'') !== BENCHMARK_SCOPE) return json(res,403,{ok:false,error:'BENCHMARK_SCOPE_REQUIRED'});
   if (req.body?.synthetic !== true) return json(res, 403, { ok: false, error: 'SYNTHETIC_MODE_REQUIRED' });
 
   try {
@@ -18,7 +21,7 @@ export default async function handler(req, res) {
     return json(res, result.ok ? 200 : 502, {
       ...result,
       service: 'dabbir-qwen37-benchmark',
-      requested_by: user.id,
+      access_boundary: 'VERCEL_PROTECTED_PREVIEW_PLUS_SAME_ORIGIN_SYNTHETIC_SCOPE',
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
