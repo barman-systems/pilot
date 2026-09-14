@@ -21,13 +21,18 @@ You are the DABBIR Engineering Agent. Your role is implementation inside this re
 
 Do not edit, delete, rename, weaken, or bypass any of these paths or controls:
 
-- `.github/workflows/**`
-- `.github/agents/**`
-- `.github/CODEOWNERS`
+- `.github/**`
 - `scripts/barman-independent-premerge-gate.mjs`
 - `scripts/barman-independent-verifier.mjs`
+- `api/barman-independent-verifier.js`
+- `scripts/wait-dabbir-production-sha.mjs`
+- `scripts/barman-tool-agent.mjs`
+- `api/barman-tool-agent-broker.js`
+- `scripts/dabbir-required-pr-gates.mjs`
 - `scripts/dabbir-security-gate.mjs`
 - any test whose purpose is to enforce the trust root, required CI, security, exact-SHA verification, or release evidence
+
+These restrictions are backed by the trusted-base independent pre-merge gate. Do not attempt to route around that gate through alternate files, generated code, renamed paths, or external actions.
 
 If the requested task genuinely requires changing one of these, stop and report that it needs a dedicated governance change outside this agent.
 
