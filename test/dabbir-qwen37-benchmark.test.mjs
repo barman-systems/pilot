@@ -41,7 +41,15 @@ test('benchmark can never run under the Production Vercel environment',async()=>
   await assert.rejects(()=>runQwen37Benchmark({env:{VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'}}),/PRODUCTION_FORBIDDEN/);
 });
 
-test('preview benchmark API requires auth, synthetic mode and forbids Production',()=>{
+test('benchmark endpoint is preview-only, branch-pinned, same-origin, synthetic and scope-gated',()=>{
   const source=fs.readFileSync(new URL('../api/dabbir-qwen37-benchmark.js',import.meta.url),'utf8');
-  for(const token of ['PRODUCTION_BENCHMARK_FORBIDDEN','requireSameOrigin','getVerifiedUser','SYNTHETIC_MODE_REQUIRED'])assert.match(source,new RegExp(token));
+  for(const token of ['PREVIEW_BENCHMARK_ONLY','BENCHMARK_BRANCH_MISMATCH','requireSameOrigin','BENCHMARK_SCOPE_REQUIRED','SYNTHETIC_MODE_REQUIRED'])assert.match(source,new RegExp(token));
+  assert.doesNotMatch(source,/getVerifiedUser|accessTokenFromRequest|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test('live benchmark runner never bootstraps or mutates Production QA identities',()=>{
+  const source=fs.readFileSync(new URL('./dabbir-qwen37-live-benchmark.mjs',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/barman-qa-suite-runner|dabbir_ai_qa_bootstrap|dabbir_ai_qa_cleanup|SUPABASE/);
+  assert.match(source,/PRODUCTION_MUTATIONS=0/);
+  assert.match(source,/x-dabbir-benchmark-scope/);
 });
