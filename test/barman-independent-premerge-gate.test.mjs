@@ -69,7 +69,11 @@ test('trust-root changes use trusted actor authority without a separate owner-ap
   for(const path of [
     '.github/workflows/ci.yml',
     '.github/workflows/barman-independent-premerge-gate.yml',
+    '.github/agents/dabbir-engineering.agent.md',
     'scripts/barman-independent-premerge-gate.mjs',
+    'scripts/barman-independent-verifier.mjs',
+    'api/barman-independent-verifier.js',
+    'scripts/wait-dabbir-production-sha.mjs',
     'scripts/barman-tool-agent.mjs',
     'api/barman-tool-agent-broker.js',
     'scripts/dabbir-required-pr-gates.mjs',
@@ -80,6 +84,7 @@ test('trust-root changes use trusted actor authority without a separate owner-ap
   assert.deepEqual([...TRUST_ROOT_AUTHORITY_ACTORS],['barmanai']);
   assert.equal(isTrustedTrustRootActor('barmanai'),true);
   assert.equal(isTrustedTrustRootActor(' BARMANAI '),true);
+  assert.equal(isTrustedTrustRootActor('copilot-swe-agent[bot]'),false);
   assert.equal(isTrustedTrustRootActor('dependabot[bot]'),false);
   assert.equal(isTrustedTrustRootActor(''),false);
   assert.doesNotMatch(script,/PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER/);
