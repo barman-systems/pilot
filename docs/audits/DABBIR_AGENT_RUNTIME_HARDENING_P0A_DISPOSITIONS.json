@@ -1,6 +1,6 @@
 {
   "schema": "dabbir.agent_runtime_hardening.p0a_dispositions.v1",
-  "generated_at": "2026-09-14T14:00:00Z",
+  "generated_at": "2026-09-14T14:04:00Z",
   "values_included": false,
   "repository": "barman-systems/pilot",
   "frozen_main_sha": "00ffb68ab0dee7b184c97aa8c38c410720c23ab6",
@@ -49,61 +49,99 @@
       "reason": "fixed deterministic WhatsApp Flow tokens inside tests; not production credentials"
     }
   ],
-  "historical_reviewed_groups": [
-    {
-      "file": "api/_auth-core.js",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
-      "reason": "Supabase publishable key explicitly documented and used as a public/client identifier; no service-role key"
-    },
-    {
-      "file": "api/public-car-wash.js",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
-      "reason": "Supabase publishable fallback, not privileged service credentials"
-    },
-    {
-      "file": "api/public-order-status.js",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
-      "reason": "source explicitly identifies the value as a Supabase publishable key and not a privileged credential"
-    },
-    {
-      "file": "status.html",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER",
-      "reason": "browser-delivered Supabase publishable key"
-    },
-    {
-      "file": "scripts/dabbir-privacy-wire-e2e-dr-v2.mjs",
-      "disposition": "PUBLIC_ANON_CREDENTIAL",
-      "reason": "Supabase anon JWT used for a DR wire test; anon/client credential, not a service-role secret"
-    },
-    {
-      "file": ".github/workflows/dabbir-qwen37-canary-activation.yml",
-      "disposition": "FALSE_POSITIVE_CONFIG_METADATA",
-      "reason": "findings correspond to plain canary environment keys/values and metadata; Vercel authorization is referenced through GitHub secrets rather than embedded"
-    },
-    {
-      "file": "scripts/dabbir-qwen37-canary-control.sh",
-      "disposition": "FALSE_POSITIVE_CONFIG_METADATA",
-      "reason": "findings correspond to plain canary environment keys/values and metadata"
-    },
-    {
-      "file": ".github/workflows/dabbir-retired-supabase-cleanup-once.yml",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER_RETIRED",
-      "reason": "retired Supabase URL and publishable key used only to remove old public fallbacks"
-    },
-    {
-      "file": ".github/workflows/dabbir-mumbai-migration.yml",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE",
-      "reason": "literal is a Supabase publishable key; VERCEL_TOKEN is a GitHub secret reference, not embedded"
-    },
-    {
-      "file": ".github/workflows/dabbir-mumbai-promote-retry.yml",
-      "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE",
-      "reason": "literal is a Supabase publishable key; VERCEL_TOKEN is a GitHub secret reference, not embedded"
-    }
-  ],
-  "historical_pending": {
-    "state": "REVIEW_REQUIRED",
-    "policy": "tests/docs may be closed only after source inspection; runtime/workflow findings require explicit public/synthetic/retired proof or rotation/revocation evidence"
+  "historical_reviewed": {
+    "state": "REVIEWED_CLOSED",
+    "unresolved_real_secret": false,
+    "groups": [
+      {
+        "file": "api/auth/owner-otp.js",
+        "disposition": "FALSE_POSITIVE_PROTOCOL_METADATA"
+      },
+      {
+        "file": "api/_auth-core.js",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+        "reason": "Supabase publishable key explicitly documented as safe for public/client use"
+      },
+      {
+        "file": "api/public-car-wash.js",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+        "reason": "Supabase publishable fallback, not service-role authority"
+      },
+      {
+        "file": "api/public-order-status.js",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+        "reason": "source explicitly states publishable key is public client metadata"
+      },
+      {
+        "file": "status.html",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER",
+        "reason": "browser-delivered Supabase publishable key"
+      },
+      {
+        "file": "scripts/dabbir-privacy-wire-e2e-dr-v2.mjs",
+        "disposition": "PUBLIC_ANON_CREDENTIAL",
+        "reason": "Supabase anon JWT for DR wire testing; no service-role secret"
+      },
+      {
+        "file": ".github/workflows/dabbir-qwen37-canary-activation.yml",
+        "disposition": "FALSE_POSITIVE_CONFIG_METADATA",
+        "reason": "plain canary env names/values; Vercel authorization is referenced via GitHub secret"
+      },
+      {
+        "file": "scripts/dabbir-qwen37-canary-control.sh",
+        "disposition": "FALSE_POSITIVE_CONFIG_METADATA"
+      },
+      {
+        "file": ".github/workflows/dabbir-retired-supabase-cleanup-once.yml",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER_RETIRED",
+        "reason": "retired Supabase publishable key used only to remove old public fallbacks"
+      },
+      {
+        "file": ".github/workflows/dabbir-mumbai-migration.yml",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE",
+        "reason": "literal is publishable key; VERCEL_TOKEN is a secret reference, not embedded"
+      },
+      {
+        "file": ".github/workflows/dabbir-mumbai-promote-retry.yml",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER_AND_SECRET_REFERENCE"
+      },
+      {
+        "file": "test/dabbir-whatsapp-booking-flows.test.mjs",
+        "disposition": "TEST_FIXTURE"
+      },
+      {
+        "file": "test/calendar-security-bootstrap.test.mjs",
+        "disposition": "TEST_FIXTURE"
+      },
+      {
+        "file": "test/dabbir-ai-budget-observability.test.mjs",
+        "disposition": "TEST_FIXTURE"
+      },
+      {
+        "file": "test/dabbir-ai-observability.test.mjs",
+        "disposition": "TEST_FIXTURE"
+      },
+      {
+        "file": "test/dabbir-no-retired-supabase-origin.test.mjs",
+        "disposition": "PUBLIC_IDENTIFIER_REGRESSION_FIXTURE",
+        "reason": "test intentionally carries retired publishable identifier to prove removal"
+      },
+      {
+        "file": "test/dabbir-security-gate.test.mjs",
+        "disposition": "SECRET_DETECTION_FIXTURE",
+        "reason": "synthetic Stripe/Supabase/private-key patterns intentionally verify committed-secret detection"
+      },
+      {
+        "file": "test/full-customer-e2e.remote.mjs",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER_TEST",
+        "reason": "synthetic remote test uses Supabase publishable key"
+      },
+      {
+        "file": "test/full-customer-e2e-v3.remote.mjs",
+        "disposition": "PUBLIC_CLIENT_IDENTIFIER_TEST",
+        "reason": "same remote-test public publishable credential class"
+      }
+    ]
   },
   "vercel_metadata": {
     "state": "BLOCKED_EXTERNAL_CREDENTIAL_SCOPE",
@@ -115,6 +153,6 @@
   },
   "gate": {
     "p0_b_authorized": false,
-    "reason": "P0-A remains blocked until historical review and Vercel metadata-read closure are complete"
+    "reason": "repository/history secret review is closed with no real secret identified; P0-A remains blocked by Vercel metadata-read authorization and final exact-SHA/OIDC refresh"
   }
 }
