@@ -14,7 +14,7 @@ if(!/^https:\/\/[^/]+$/i.test(ORIGIN))throw new Error('QWEN37_BENCHMARK_ORIGIN_R
 if(!/^[a-f0-9]{40}$/.test(EXPECTED_SHA))throw new Error('EXPECTED_BENCHMARK_SHA_REQUIRED');
 if(!BYPASS&&!TRUSTED_OIDC)throw new Error('VERCEL_PROTECTED_ACCESS_REQUIRED');
 
-const report={run_id:RUN_ID,model:'alibaba/qwen3.7-flash',origin:ORIGIN,expected_sha:EXPECTED_SHA,verified_sha:null,started_at:new Date().toISOString(),completed_at:null,verdict:'RUNNING',scenarios:[],aggregate:{scenario_passed:0,scenario_total:SCENARIOS.length,provider_calls:0,input_tokens:0,output_tokens:0,reasoning_tokens:0,total_latency_ms:0,avg_provider_latency_ms:0},production_mutations:0};
+const report={run_id:RUN_ID,model:'alibaba/qwen3.7-flash',origin:ORIGIN,expected_sha:EXPECTED_SHA,verified_sha:null,started_at:new Date().toISOString(),completed_at:null,verdict:'RUNNING',scenarios:[],aggregate:{scenario_passed:0,scenario_total:SCENARIOS.length,provider_calls:0,input_tokens:0,output_tokens:0,reasoning_tokens:0,total_latency_ms:0,avg_provider_latency_ms:0,actual_cost_usd:0},production_mutations:0};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const small=(value,max=240)=>String(value??'').replace(/eyJ[A-Za-z0-9._-]{30,}/g,'[JWT]').slice(0,max);
 
@@ -59,6 +59,7 @@ function aggregateScenario(row){
   report.aggregate.input_tokens+=Number(usage.inputTokens??usage.input_tokens)||0;
   report.aggregate.output_tokens+=Number(usage.outputTokens??usage.output_tokens)||0;
   report.aggregate.reasoning_tokens+=Number(usage.reasoningTokens??usage.reasoning_tokens)||0;
+  report.aggregate.actual_cost_usd+=Number(call.telemetry?.actual_cost_usd)||0;
  }
 }
 
@@ -70,6 +71,7 @@ async function run(){
   report.scenarios.push(row);aggregateScenario(row);
  }
  report.aggregate.avg_provider_latency_ms=report.aggregate.provider_calls?Math.round(report.aggregate.total_latency_ms/report.aggregate.provider_calls):0;
+ report.aggregate.actual_cost_usd=Number(report.aggregate.actual_cost_usd.toFixed(8));
  report.verdict=report.aggregate.scenario_passed===report.aggregate.scenario_total?'PASS':'FAIL';
 }
 
@@ -81,6 +83,7 @@ finally{
  console.log(`SCENARIOS=${report.aggregate.scenario_passed}/${report.aggregate.scenario_total}`);
  console.log(`PROVIDER_CALLS=${report.aggregate.provider_calls}`);
  console.log(`TOKENS=${report.aggregate.input_tokens}/${report.aggregate.output_tokens}/${report.aggregate.reasoning_tokens}`);
+ console.log(`ACTUAL_COST_USD=${report.aggregate.actual_cost_usd}`);
  console.log('PRODUCTION_MUTATIONS=0');
 }
 if(report.verdict!=='PASS')process.exitCode=1;
