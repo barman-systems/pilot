@@ -6,6 +6,7 @@ const protection = fs.readFileSync('.github/workflows/dabbir-native-github-prote
 const engineering = fs.readFileSync('.github/agents/dabbir-engineering.agent.md', 'utf8');
 const review = fs.readFileSync('.github/agents/dabbir-review.agent.md', 'utf8');
 const codeowners = fs.readFileSync('.github/CODEOWNERS', 'utf8');
+const premerge = fs.readFileSync('scripts/barman-independent-premerge-gate.mjs', 'utf8');
 
 test('native main protection fails closed and requires the independent exact-SHA pre-merge gate', () => {
   assert.match(protection, /if \[ -z "\$\{GH_ADMIN_TOKEN:-\}" \]; then/);
@@ -37,10 +38,35 @@ test('engineering agent is bounded to repository implementation and cannot absor
   assert.doesNotMatch(engineering, /^mcp-servers:/m);
   assert.doesNotMatch(engineering, /^tools:.*\bweb\b/m);
   assert.match(engineering, /Do not edit, delete, rename, weaken, or bypass any of these paths or controls/);
-  assert.match(engineering, /`\.github\/workflows\/\*\*`/);
-  assert.match(engineering, /`scripts\/barman-independent-premerge-gate\.mjs`/);
+  for (const path of [
+    '.github/**',
+    'scripts/barman-independent-premerge-gate.mjs',
+    'scripts/barman-independent-verifier.mjs',
+    'api/barman-independent-verifier.js',
+    'scripts/wait-dabbir-production-sha.mjs',
+    'scripts/barman-tool-agent.mjs',
+    'api/barman-tool-agent-broker.js',
+    'scripts/dabbir-required-pr-gates.mjs',
+    'scripts/dabbir-security-gate.mjs',
+  ]) assert.ok(engineering.includes(`- \`${path}\``), path);
+  assert.match(engineering, /These restrictions are backed by the trusted-base independent pre-merge gate/);
   assert.match(engineering, /Do not add MCP servers or MCP tools/);
   assert.match(engineering, /Never merge your own work, never deploy it/);
+});
+
+test('trusted-base gate deterministically protects agent and verifier trust surfaces', () => {
+  for (const token of [
+    "value.startsWith('.github/')",
+    "'scripts/barman-independent-premerge-gate.mjs'",
+    "'scripts/barman-independent-verifier.mjs'",
+    "'api/barman-independent-verifier.js'",
+    "'scripts/wait-dabbir-production-sha.mjs'",
+    "'scripts/barman-tool-agent.mjs'",
+    "'api/barman-tool-agent-broker.js'",
+    "'scripts/dabbir-required-pr-gates.mjs'",
+    "'scripts/dabbir-security-gate.mjs'",
+    'PREMERGE_TRUST_ROOT_ACTOR_DENIED',
+  ]) assert.ok(premerge.includes(token), token);
 });
 
 test('review agent remains read-only and cannot become an approval authority', () => {
