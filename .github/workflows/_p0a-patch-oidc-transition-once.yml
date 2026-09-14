@@ -28,8 +28,7 @@ jobs:
           from pathlib import Path
           p=Path('infra/aws-uae/github-oidc-bootstrap.yml')
           s=p.read_text()
-          old="""                token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:environment:production
-"""
+          old='                token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:environment:production\n'
           subjects=[
           'repo:barman-systems@319497139/pilot@1346817686:environment:production',
           'repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main',
@@ -47,13 +46,8 @@ jobs:
               raise SystemExit(f'expected one canonical old trust subject, found {s.count(old)}')
           repl='                token.actions.githubusercontent.com:sub:\n'+''.join(f'                  - {x}\n' for x in subjects)
           s=s.replace(old,repl)
-          old_output="""  AllowedGitHubSubject:
-    Value: repo:barman-systems@319497139/pilot@1346817686:environment:production
-"""
-          new_output="""  OidcTrustStage:
-    Description: Transitional trust accepts the legacy environment-only subject plus exact main/workflow subjects until custom subject migration is verified.
-    Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS
-"""
+          old_output='  AllowedGitHubSubject:\n    Value: repo:barman-systems@319497139/pilot@1346817686:environment:production\n'
+          new_output='  OidcTrustStage:\n    Description: Transitional trust accepts the legacy environment-only subject plus exact main/workflow subjects until custom subject migration is verified.\n    Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS\n'
           if s.count(old_output)!=1:
               raise SystemExit('canonical AllowedGitHubSubject output not found exactly once')
           s=s.replace(old_output,new_output)
@@ -61,7 +55,6 @@ jobs:
           PY
 
           git diff --check
-          git diff -- infra/aws-uae/github-oidc-bootstrap.yml
           grep -F 'TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS' infra/aws-uae/github-oidc-bootstrap.yml >/dev/null
           test "$(grep -c 'workflow_ref:barman-systems/pilot/.github/workflows/' infra/aws-uae/github-oidc-bootstrap.yml)" -eq 10
 
