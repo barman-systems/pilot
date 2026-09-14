@@ -21,6 +21,7 @@
     { "path": "/api/calendar-outbox-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/dabbir-whatsapp-ai-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/barman-executive-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/dabbir-ai-provider-recovery-cron", "schedule": "*/2 * * * *" },
     { "path": "/api/dabbir-daily-operator-cron", "schedule": "15 5 * * *" },
     { "path": "/api/dabbir-ai-billing-reconcile-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/dabbir-intelligence-maintenance-cron", "schedule": "17 * * * *" }
@@ -31,6 +32,7 @@
     "api/dabbir-whatsapp-ai-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
     "api/dabbir-whatsapp-ai-worker.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
     "api/barman-executive-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
+    "api/dabbir-ai-provider-recovery-cron.js": { "maxDuration": 30, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
     "api/dabbir-daily-operator-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
     "api/dabbir-ai-billing-reconcile-cron.js": { "maxDuration": 60, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
     "api/dabbir-composio-readiness-cron.js": { "maxDuration": 30, "includeFiles": "{api/_sentry-preload.js,api/_sentry-runtime.js,api/_sentry-core.js}" },
