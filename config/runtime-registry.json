@@ -1,19 +1,32 @@
 {
-  "version": 2,
+  "version": 3,
   "authority": "DABBIR",
   "runtime": "api/dabbir-runtime.js",
   "environment": "PRODUCTION_DABBIR",
   "operational_mode": "AUTHENTICATED_WEB_RUNTIME",
   "ai": {
     "state": "OPERATIONAL_IN_AUTHENTICATED_RUNTIME",
-    "cost_mode": "FREE_TIER_ONLY",
-    "grounding": "BUSINESS_RLS_CONTEXT"
+    "cost_mode": "FREE_FIRST_WITH_METERED_GATEWAY_FALLBACK",
+    "grounding": "BUSINESS_RLS_CONTEXT",
+    "live_research": {
+      "state": "E2E_VERIFIED_READ",
+      "provider": "VERCEL_AI_GATEWAY_EXA",
+      "truth_class": "EXTERNAL_LIVE_EVIDENCE",
+      "automatic_operator_tool": false
+    }
   },
   "channels": {
     "web": "OPERATIONAL",
     "whatsapp": "NOT_OPERATIONAL_META_AUTHORIZATION_PENDING",
     "instagram": "UNVERIFIED",
     "calendar": "UNVERIFIED"
+  },
+  "integrations": {
+    "live_research": "E2E_VERIFIED_READ",
+    "composio": "DISABLED_BY_DEFAULT",
+    "stripe": "SANDBOX_ONLY",
+    "google_maps": "UNCONFIRMED",
+    "tiktok": "IMPLEMENTED_UNVERIFIED_LIVE_CONNECTION"
   },
   "projects": {
     "dabbir_clinics": {
