@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getVercelOidcToken } from '@vercel/oidc';
 import { SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
+import { createAiProviderAuthorityFetch } from './_ai-provider-authority-fetch.js';
 
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='minimax/minimax-m3-free';
@@ -63,7 +64,7 @@ function outputJson(payload){
   try{return JSON.parse(value)}catch{return null}
 }
 
-export async function decideExecutiveMessage({text,memory=[],commands=[],env=process.env}){
+export async function decideExecutiveMessage({text,memory=[],commands=[],env=process.env,fetchImpl=fetch,providerHealthStore}={}){
   const fallback=deterministicDecision(text);
   const credential=await gatewayCredential(env);
   if(!credential)return {...fallback,brain_state:'DETERMINISTIC_FALLBACK',brain_error:'GATEWAY_CREDENTIAL_MISSING'};
@@ -78,7 +79,8 @@ export async function decideExecutiveMessage({text,memory=[],commands=[],env=pro
     'P0 is only an active critical incident. Financial/legal/KYC/OTP remain owner-only.',
   ].join('\n');
   try{
-    const response=await fetch(GATEWAY_ENDPOINT,{
+    const authorityFetch=createAiProviderAuthorityFetch({env,fetchImpl,healthStore:providerHealthStore});
+    const response=await authorityFetch(GATEWAY_ENDPOINT,{
       method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
       body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:JSON.stringify({message:clean(text),memory:Array.isArray(memory)?memory.slice(-16):[],commands:Array.isArray(commands)?commands.slice(0,8):[]})}],temperature:0.1,max_tokens:600,stream:false}),
       signal:AbortSignal.timeout(12000),
@@ -94,7 +96,7 @@ export async function decideExecutiveMessage({text,memory=[],commands=[],env=pro
       priority:/^P[0-3]$/.test(String(decision.priority||'').toUpperCase())?String(decision.priority).toUpperCase():fallback.priority,
       brain_state:'AI_GATEWAY',model,
     };
-  }catch(error){return {...fallback,brain_state:'DETERMINISTIC_FALLBACK',brain_error:clean(error?.message||error,160),model}}
+  }catch(error){return {...fallback,brain_state:'DETERMINISTIC_FALLBACK',brain_error:clean(error?.code||error?.message||error,160),model}}
 }
 
 async function probe(url){
