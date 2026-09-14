@@ -1,0 +1,216 @@
+name: DABBIR P0-A OIDC Subject Migration Once
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  AWS_REGION: me-central-1
+  AWS_ROLE_NAME: DabbirGithubDeployRole
+  AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+  EVIDENCE_BRANCH: audit/p0a-agent-runtime-hardening-v1
+  EVIDENCE_ROOT: evidence/p0a/1796df7fa7eab418157ecc7531313f0af0e73ebf/pilot
+
+jobs:
+  migrate-subject:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    env:
+      GH_ADMIN_TOKEN: ${{ secrets.DABBIR_GITHUB_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS under legacy transition subject
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: dabbir-p0a-oidc-migrate-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify live AWS trust is transitional before GitHub mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-evidence"
+          aws iam get-role --role-name "$AWS_ROLE_NAME" --query 'Role.{MaxSessionDuration:MaxSessionDuration,PermissionsBoundary:PermissionsBoundary,AssumeRolePolicyDocument:AssumeRolePolicyDocument}' --output json \
+            > "$RUNNER_TEMP/p0a-evidence/trust-policy-before-customization.json"
+
+          FILE="$RUNNER_TEMP/p0a-evidence/trust-policy-before-customization.json" python3 - <<'PY'
+          import json,os,pathlib
+          d=json.loads(pathlib.Path(os.environ['FILE']).read_text())
+          statements=(d.get('AssumeRolePolicyDocument') or {}).get('Statement') or []
+          subs=[]; auds=[]
+          for st in statements:
+              if st.get('Effect')!='Allow' or st.get('Action')!='sts:AssumeRoleWithWebIdentity': continue
+              eq=(st.get('Condition') or {}).get('StringEquals') or {}
+              sub=eq.get('token.actions.githubusercontent.com:sub')
+              if isinstance(sub,str): subs.append(sub)
+              elif isinstance(sub,list): subs.extend(sub)
+              aud=eq.get('token.actions.githubusercontent.com:aud')
+              if isinstance(aud,str): auds.append(aud)
+              elif isinstance(aud,list): auds.extend(aud)
+          repo='barman-systems@319497139/pilot@1346817686'
+          legacy=f'repo:{repo}:environment:production'
+          workflows=[
+            'dabbir-aws-uae-foundation.yml','dabbir-aws-diagnose.yml','dabbir-uae-ec2-check.yml',
+            'dabbir-aws-stack-diagnose.yml','dabbir-aws-uae-foundation-bootstrap.yml','dabbir-uae-deploy-now.yml',
+            'dabbir-aws-s3-permission-hotfix.yml','dabbir-uae-provision-direct.yml','dabbir-uae-bootstrap-supabase.yml',
+            'dabbir-aws-oidc-smoke.yml']
+          expected=[legacy]+[f'repo:{repo}:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/{w}@refs/heads/main' for w in workflows]
+          ok=(sorted(subs)==sorted(expected) and auds==['sts.amazonaws.com'])
+          summary={'state':'PASS' if ok else 'FAIL','expected_subject_count':len(expected),'actual_subject_count':len(subs),'legacy_subject_present':legacy in subs,'audience_exact':auds==['sts.amazonaws.com'],'workflow_bound_subject_count':sum(':workflow_ref:' in x for x in subs),'mutation_performed':False}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'p0a-evidence','transition-trust-precondition.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          if not ok: raise SystemExit('live AWS trust is not the exact transitional allowlist; refusing GitHub OIDC mutation')
+          PY
+
+      - name: Verify GitHub OIDC is still default and admin credential is usable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_ADMIN_TOKEN:-}"
+          echo "::add-mask::$GH_ADMIN_TOKEN"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/oidc/customization/sub"
+          current="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          CURRENT="$current" python3 - <<'PY'
+          import json,os,pathlib
+          d=json.loads(os.environ['CURRENT'])
+          ok=(d.get('use_default') is True and d.get('use_immutable_subject') is True)
+          safe={'state':'PASS' if ok else 'FAIL','use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject')}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'p0a-evidence','github-oidc-before.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          if not ok: raise SystemExit('repository OIDC template is not the expected immutable default; refusing mutation')
+          PY
+
+      - name: Set exact repository OIDC subject template
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/oidc/customization/sub"
+          http="$(curl -sS -o "$RUNNER_TEMP/oidc-put.txt" -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            -H 'Content-Type: application/json' \
+            -d '{"use_default":false,"include_claim_keys":["repo","context","ref","workflow_ref"],"use_immutable_subject":true}' \
+            "$api")"
+          rm -f "$RUNNER_TEMP/oidc-put.txt"
+          test "$http" = 201
+
+          current="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          CURRENT="$current" python3 - <<'PY'
+          import json,os,pathlib
+          d=json.loads(os.environ['CURRENT']); expected=['repo','context','ref','workflow_ref']
+          ok=(d.get('use_default') is False and d.get('include_claim_keys')==expected and d.get('use_immutable_subject') is True)
+          safe={'state':'PASS' if ok else 'FAIL','use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject'),'mutation_performed':True}
+          pathlib.Path(os.environ['RUNNER_TEMP'],'p0a-evidence','github-oidc-after.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          if not ok: raise SystemExit('OIDC customization readback does not match requested template')
+          PY
+
+      - name: Prove current migration workflow is denied by workflow-bound AWS trust after customization
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          t=os.environ['TOKEN']; payload=t.split('.')[1]; payload += '='*(-len(payload)%4)
+          c=json.loads(base64.urlsafe_b64decode(payload))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','repository_id','repository_owner_id','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          safe['lifetime_seconds']=(safe['exp']-safe['iat']) if isinstance(safe.get('exp'),int) and isinstance(safe.get('iat'),int) else None
+          expected='repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-oidc-subject-migrate-once.yml@refs/heads/main'
+          safe['subject_exact_expected']=safe.get('sub')==expected
+          pathlib.Path(os.environ['RUNNER_TEMP'],'p0a-evidence','oidc-jwt-customized-safe.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          if not safe['subject_exact_expected']: raise SystemExit('customized sub is not the exact predicted immutable subject')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "p0a-migration-negative-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 --output json \
+            > "$RUNNER_TEMP/unexpected-creds.json" 2> "$RUNNER_TEMP/assume-error.txt"
+          status=$?
+          set -e
+          unset token response
+          rm -f "$RUNNER_TEMP/unexpected-creds.json"
+          export ASSUME_STATUS="$status"
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); allowed=int(os.environ['ASSUME_STATUS'])==0
+          err=(root/'assume-error.txt').read_text(errors='ignore')[-1500:] if (root/'assume-error.txt').exists() else ''
+          out={'state':'FAIL' if allowed else 'PASS','test':'MIGRATION_WORKFLOW_NOT_IN_AWS_ALLOWLIST','assume_role_allowed':allowed,'safe_error':None if allowed else err}
+          (root/'p0a-evidence'/'workflow-binding-negative.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          if allowed: raise SystemExit('workflow binding failed: migration workflow unexpectedly assumed Production role')
+          PY
+          rm -f "$RUNNER_TEMP/assume-error.txt"
+
+      - name: Write migration evidence summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-evidence"
+          EVIDENCE="$RUNNER_TEMP/p0a-evidence" python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['EVIDENCE'])
+          required=['transition-trust-precondition.json','github-oidc-before.json','github-oidc-after.json','oidc-jwt-customized-safe.json','workflow-binding-negative.json']
+          states={}
+          for name in required:
+              f=p/name
+              if not f.exists(): states[name]='MISSING'; continue
+              try: states[name]=json.loads(f.read_text()).get('state','PASS' if name=='oidc-jwt-customized-safe.json' else 'UNKNOWN')
+              except Exception: states[name]='INVALID'
+          ok=(all(v=='PASS' for k,v in states.items() if k!='oidc-jwt-customized-safe.json') and states.get('oidc-jwt-customized-safe.json') not in ('MISSING','INVALID'))
+          summary={'state':'PASS' if ok else 'FAIL','states':states,'next_required_proof':'dispatch dabbir-aws-oidc-smoke.yml on main; then remove legacy AWS subject','legacy_aws_subject_still_present':True,'secrets_exposed':False}
+          (p/'oidc-subject-migration-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - name: Upload sanitized migration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-oidc-subject-migration
+          path: ${{ runner.temp }}/p0a-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  persist-evidence:
+    needs: migrate-subject
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EVIDENCE_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pilot-p0a-oidc-subject-migration
+          path: ${{ runner.temp }}/p0a-evidence
+      - name: Persist sanitized evidence on audit branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          cp -f "$RUNNER_TEMP/p0a-evidence/"* "$EVIDENCE_ROOT/"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$EVIDENCE_ROOT"
+          if ! git diff --cached --quiet; then
+            git commit -m 'evidence(p0a): persist OIDC subject migration proof [skip ci]'
+            git push origin "HEAD:$EVIDENCE_BRANCH"
+          fi
