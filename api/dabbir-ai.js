@@ -68,7 +68,7 @@ export default async function handler(req, res) {
   });
 
   const status = result.ok ? 200
-    : result.state === 'UNCONFIGURED' ? 503
+    : result.state === 'UNCONFIGURED' || result.state === 'AI_PROVIDER_CAPACITY_UNAVAILABLE' ? 503
     : result.state === 'RATE_LIMITED' ? 429
     : result.state === 'REJECTED' ? 400
     : 502;
