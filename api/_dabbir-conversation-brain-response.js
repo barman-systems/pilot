@@ -2,6 +2,14 @@ export const CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN';
 
 const isArabic=language=>language==='ar';
 
+// Every legacy-visible customer reply crosses this final Brain boundary before
+// channel delivery. It intentionally preserves bytes during the compatibility
+// phase; individual legacy drafts are migrated to the renderers below in small,
+// independently verified steps.
+export function finalizeCustomerResponse({text}){
+  return typeof text==='string'?text:String(text??'');
+}
+
 export function recoveryGreetingReply(language){
   return isArabic(language)?'هلا، طلبك السابق ما اكتمل. تبا نكمل عليه؟':'Hello. Your previous request is unfinished. Would you like to continue it?';
 }
