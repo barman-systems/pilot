@@ -158,6 +158,6 @@ export function summarizeProviderReliability(trace=[],startedAt=Date.now()){
     skipped_attempts:skipped,
     provider_attempts_saved:skipped,
     chain_latency_ms:Math.max(0,Date.now()-Number(startedAt||Date.now())),
-    attempts:rows.slice(0,12).map(row=>({provider:row.provider,model:row.model,decision:row.decision,outcome:row.outcome||'SKIPPED',failure_class:row.failure_class||null,status:row.status??null,latency_ms:int(row.latency_ms),cooldown_remaining_ms:int(row.cooldown_remaining_ms),cooldown_applied_ms:int(row.cooldown_applied_ms),reason:row.reason||null,health_state:row.health_state||null})),
+    attempts:rows.slice(0,12).map(row=>({provider:row.provider,model:row.model,decision:row.decision,outcome:row.outcome||'SKIPPED',failure_class:row.failure_class||null,status:row.status??null,latency_ms:int(row.latency_ms),retry_after_ms:row.retry_after_ms==null?null:int(row.retry_after_ms),cooldown_remaining_ms:int(row.cooldown_remaining_ms),cooldown_applied_ms:int(row.cooldown_applied_ms),reason:row.reason||null,health_state:row.health_state||null})),
   };
 }
