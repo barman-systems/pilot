@@ -1,23 +1,31 @@
-# DABBIR managed UAE infrastructure
+# DABBIR AWS UAE infrastructure — RETIRED
 
-This directory contains the AWS UAE migration path for DABBIR.
+**Status: RETIRED / historical reference only.** DABBIR production remains on the Vercel + Supabase path. There is **no active AWS deployment authority** in the repository after the P0-A decommission change. The templates and migration notes below are retained only as historical/reference material and must not be treated as a Production direction or executable authority.
 
-## Authoritative production direction
+GitHub OIDC is customized to an immutable workflow-bound subject format, so the historical AWS role trust on the former environment-only subject no longer matches tokens minted by this repository. Reintroducing AWS execution requires a new, separately reviewed architecture/security decision; do not revive retired workflows or the old role path.
 
-DABBIR is moving to managed AWS services in `me-central-1` so the owner does not maintain an operating system, PostgreSQL server, Docker host, disks, or manual backups.
+---
 
-Authoritative foundation:
+# Historical DABBIR managed UAE infrastructure
+
+This directory contains the former AWS UAE migration path for DABBIR.
+
+## Historical production direction
+
+DABBIR previously evaluated moving to managed AWS services in `me-central-1` so the owner would not maintain an operating system, PostgreSQL server, Docker host, disks, or manual backups. That migration path is no longer active.
+
+Historical foundation:
 
 - `dabbir-managed-foundation.yml`
-- `.github/workflows/dabbir-aws-uae-foundation.yml`
+- former `.github/workflows/dabbir-aws-uae-foundation.yml` (retired)
 - `github-oidc-bootstrap.yml`
 - `verify-dabbir-migration.sh`
 
-The previous `dabbir-uae.yml` + `bootstrap-dabbir-supabase.sh` EC2/self-hosted design is retained only as historical rollback/reference material. Do not deploy it for the managed production path.
+The previous `dabbir-uae.yml` + `bootstrap-dabbir-supabase.sh` EC2/self-hosted design is also historical only.
 
-## Managed foundation
+## Managed foundation reference
 
-The foundation creates:
+The historical foundation described:
 
 - VPC in AWS UAE
 - two public application subnets across two Availability Zones
@@ -31,11 +39,11 @@ The foundation creates:
 - CloudWatch runtime log group
 - security groups that keep PostgreSQL private
 
-No EC2 instance, SSH key, Elastic IP, or manually maintained Linux host is part of the managed foundation.
+These are not current DABBIR Production authorities.
 
-## Current source audit baseline — 2026-09-01
+## Historical source audit baseline — 2026-09-01
 
-The migration gate currently expects at least:
+The migration work had expected at least:
 
 - 123 DABBIR runtime tables, including the hidden `account_access_state` dependency
 - 184 DABBIR functions
@@ -45,20 +53,12 @@ The migration gate currently expects at least:
 - 56 auth identities
 - 26 MFA factors
 
-The source database is PostgreSQL 17.6. The new managed foundation defaults to RDS PostgreSQL 17.11, staying on the same major version while avoiding a new deployment on an older minor release.
+The source database was PostgreSQL 17.6 and the planned managed foundation targeted RDS PostgreSQL 17.11.
 
 ## Supabase compatibility findings
 
-DABBIR does not currently use Supabase Realtime channels in the repository, so Realtime is not a day-one migration requirement.
+These findings are retained as historical engineering notes only. DABBIR production continues to use its current Vercel/Supabase contracts unless a future separately approved migration changes that architecture.
 
-Runtime database code does not depend on `pg_net` or `pgmq`. One QA-only function (`dabbir_qa_consume_protected_share`) reads Supabase Vault. The managed target must preserve the function contract while removing its Vault dependency and externalizing the secret to AWS Secrets Manager.
+## Safety
 
-The application does depend heavily on the Supabase-compatible Auth and REST contracts (`/auth/v1`, `/rest/v1`) and has a Storage helper (`/storage/v1`). The runtime migration must preserve those contracts before `SUPABASE_URL` is switched.
-
-## Deployment safety
-
-The foundation workflow is manual (`workflow_dispatch`) so infrastructure cannot start billing because of an ordinary code push.
-
-AWS access is through GitHub OIDC and the production environment role. Do not store AWS access keys in GitHub or source code.
-
-The final cutover is blocked until `verify-dabbir-migration.sh` passes against source and target databases.
+Do not deploy any AWS template from this directory as part of normal DABBIR operations. AWS workflows and OIDC execution paths were retired by P0-A. Historical cloud resources, if retained outside the repository, are not a DABBIR runtime authority and require a separate explicit owner action for destructive deletion.

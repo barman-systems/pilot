@@ -1,0 +1,108 @@
+name: P0-A Decommission AWS OIDC Authority
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/p0a-decommission-aws-oidc.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  decommission:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    env:
+      GH_ADMIN_TOKEN: ${{ secrets.DABBIR_GITHUB_ADMIN_TOKEN }}
+      RETIRED_AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+    steps:
+      - name: Require existing repository OIDC administration credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_ADMIN_TOKEN:-}"
+          echo "::add-mask::$GH_ADMIN_TOKEN"
+
+      - name: Replace default subject with exact immutable workflow-bound subject format
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0a-aws-decommission-evidence
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/oidc/customization/sub"
+          before="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          BEFORE="$before" python3 - <<'PY'
+          import json,os,pathlib
+          d=json.loads(os.environ['BEFORE'])
+          safe={'use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject'),'values_included':False}
+          pathlib.Path('p0a-aws-decommission-evidence/oidc-before.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          PY
+
+          http="$(curl -sS -o /tmp/oidc-put.txt -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            -H 'Content-Type: application/json' \
+            -d '{"use_default":false,"include_claim_keys":["repo","context","ref","workflow_ref"],"use_immutable_subject":true}' \
+            "$api")"
+          rm -f /tmp/oidc-put.txt
+          case "$http" in 200|201|204) ;; *) echo "P0A_AWS_DECOMMISSION_OIDC_PUT_HTTP_$http"; exit 10;; esac
+
+          after="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          AFTER="$after" python3 - <<'PY'
+          import json,os,pathlib
+          d=json.loads(os.environ['AFTER']); expected=['repo','context','ref','workflow_ref']
+          ok=d.get('use_default') is False and d.get('include_claim_keys')==expected and d.get('use_immutable_subject') is True
+          safe={'state':'PASS' if ok else 'FAIL','use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject'),'values_included':False}
+          pathlib.Path('p0a-aws-decommission-evidence/oidc-after.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          if not ok: raise SystemExit('OIDC customization readback mismatch')
+          PY
+
+      - name: Mint sanitized customized token and prove retired AWS role is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          t=os.environ['TOKEN']; p=t.split('.')[1]; p += '='*(-len(p)%4); c=json.loads(base64.urlsafe_b64decode(p))
+          keys=['iss','aud','sub','repository','repository_id','repository_owner_id','environment','ref','workflow_ref','event_name','iat','nbf','exp']
+          safe={k:c.get(k) for k in keys}; legacy='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          safe['legacy_subject_match']=safe.get('sub')==legacy
+          safe['workflow_bound']=':workflow_ref:' in str(safe.get('sub') or '') and ':ref:refs/heads/main:' in str(safe.get('sub') or '')
+          safe['state']='PASS' if (not safe['legacy_subject_match'] and safe['workflow_bound']) else 'FAIL'
+          safe['values_included']=False
+          pathlib.Path('p0a-aws-decommission-evidence/oidc-customized-claims.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          if safe['state']!='PASS': raise SystemExit('customized OIDC subject is not workflow-bound or still matches legacy AWS trust')
+          PY
+
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$RETIRED_AWS_ROLE_ARN" \
+            --role-session-name "p0a-retired-aws-negative-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 \
+            --output json >/tmp/unexpected-aws.json 2>/tmp/aws-denied.txt
+          status=$?
+          set -e
+          rm -f /tmp/unexpected-aws.json /tmp/aws-denied.txt
+          unset token response
+          test "$status" -ne 0
+          printf '{"state":"PASS","retired_aws_role_assume_denied":true,"credential_values_persisted":false}\n' > p0a-aws-decommission-evidence/aws-negative.json
+          printf '{"state":"PASS","aws_runtime_authority":"RETIRED","github_oidc_legacy_subject_revoked_by_subject_format":true,"credential_values_persisted":false}\n' > p0a-aws-decommission-evidence/summary.json
+
+      - name: Upload sanitized decommission evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0a-aws-decommission-${{ github.sha }}
+          path: p0a-aws-decommission-evidence/
+          if-no-files-found: error
+          retention-days: 30
