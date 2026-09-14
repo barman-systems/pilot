@@ -27,12 +27,16 @@ function requirementsFor(state,context){
 function timeWindowArabic(value){return value==='EARLY_MORNING'?'أول الصباح':value==='MORNING'?'الصباح':value==='AFTERNOON'?'بعد الظهر':value==='EVENING'?'المساء':value==='NIGHT'?'الليل':null;}
 function timeWindowEnglish(value){return value==='EARLY_MORNING'?'early morning':value==='MORNING'?'morning':value==='AFTERNOON'?'afternoon':value==='EVENING'?'evening':value==='NIGHT'?'night':null;}
 function customerFact(values,field){const f=values.get(field);return f&&CUSTOMER_SUMMARY_SOURCES.has(f.source)?f:null;}
+function factSurface(fallbackFact,max=80){return clean(fallbackFact?.surface,max)||clean(fallbackFact?.value,max)||null;}
 function summaryParts(state,context){
   const values=mapFacts(state.facts),out=[],serviceFact=customerFact(values,'service'),service=serviceFact?serviceLabel(context,serviceFact.value):null;if(service)out.push(service);
   const delivery=customerFact(values,'delivery_mode');if(delivery?.value==='MOBILE')out.push('متنقل');
   const immediacy=customerFact(values,'immediacy');if(immediacy?.value==='NOW')out.push('الحين');
   const window=customerFact(values,'time_window'),windowLabel=timeWindowArabic(window?.value);if(windowLabel)out.push(windowLabel);
-  const vehicle=customerFact(values,'vehicle')?.value;if(vehicle)out.push(vehicle==='station'?'سيارة ستيشن/SUV':vehicle==='saloon'?'سيارة صالون':`السيارة ${clean(vehicle,80)}`);return out;
+  const vehicle=customerFact(values,'vehicle')?.value;if(vehicle)out.push(vehicle==='station'?'سيارة ستيشن/SUV':vehicle==='saloon'?'سيارة صالون':`السيارة ${clean(vehicle,80)}`);
+  const date=customerFact(values,'date'),dateLabel=factSurface(date,60);if(dateLabel)out.push(dateLabel);
+  const time=customerFact(values,'time'),timeLabel=factSurface(time,60);if(timeLabel)out.push(timeLabel);
+  return out;
 }
 function tentativeByField(state,field){return arr(state.tentatives).find(x=>x.field===field)||null;}
 function tentativeVehicle(state){return tentativeByField(state,'vehicle');}
@@ -47,6 +51,8 @@ function chooseQuestion(state,missing,context){
   if(missing.includes('vehicle'))return {fields:['vehicle'],purpose:'COLLECT_VEHICLE'};
   if(missing.includes('location'))return {fields:['location'],purpose:'COLLECT_LOCATION'};
   if(missing.includes('time')&&factValue(state,'time_window'))return {fields:['time'],purpose:'COLLECT_EXACT_TIME_IN_WINDOW',time_window:factValue(state,'time_window')};
+  if(missing.length===1&&missing[0]==='time')return {fields:['time'],purpose:'COLLECT_TIME'};
+  if(missing.length===1&&missing[0]==='date')return {fields:['date'],purpose:'COLLECT_DATE'};
   if(missing.includes('date')||missing.includes('time'))return {fields:['date','time'].filter(x=>missing.includes(x)),purpose:'COLLECT_WHEN'};
   if(missing.length)return {fields:[missing[0]],purpose:'COLLECT_REQUIRED'};
   return null;
@@ -78,6 +84,8 @@ function renderArabic({state,plan,context,understanding}){
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('السيارة صالون أو ستيشن/SUV؟');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('باقي موقعك بس — أرسله من خيار الموقع في واتساب وبكمل لك.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`تمام، ${timeWindowArabic(q.time_window)||'الفترة اللي ذكرتها'}. أي ساعة تقريبًا تبي؟`);
+  else if(q?.purpose==='COLLECT_TIME')segments.push(plan.no_progress?'اليوم/التاريخ مسجل عندي. أحتاج الساعة نفسها الآن — مثلاً 8 أو 8:30.':'باقي الساعة فقط — أي ساعة تبي؟');
+  else if(q?.purpose==='COLLECT_DATE')segments.push('باقي اليوم فقط — أي يوم تبيه؟');
   else if(q?.purpose==='COLLECT_WHEN')segments.push('متى تبيه؟');
   else if(q)segments.push('أعطني المعلومة الباقية وبكمل لك.');
   else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`الخدمات المتاحة: ${menuArabic(options)}. إذا تبا تحجز، قل لي أي واحد.`:'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.');}
@@ -96,6 +104,8 @@ function renderEnglish({state,plan,context,understanding}){
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('Is the vehicle saloon/sedan or station/SUV?');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('I only need your service location — send it using WhatsApp Location.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`Okay, ${timeWindowEnglish(q.time_window)||'that time window'}. About what exact time would you like?`);
+  else if(q?.purpose==='COLLECT_TIME')segments.push(plan.no_progress?'The date is already saved. I need the exact time now — for example 8:00 or 8:30.':'I only need the time now. What time would you like?');
+  else if(q?.purpose==='COLLECT_DATE')segments.push('I only need the date now. Which day would you like?');
   else if(q?.purpose==='COLLECT_WHEN')segments.push('When would you like it?');
   else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`Available services: ${menuEnglish(options)}.`:'No active services are available to show right now.');}
   else if(state.goal==='SUPPORT')segments.push('Tell me what you need and I will help.');else if(state.goal==='BOOK_SERVICE')segments.push('I have the required booking details.');return segments.join(' ');
@@ -109,8 +119,6 @@ export function planConversationTurnV3({previousState,understanding,episode,cont
   const socialOnly=understanding.signals.social_only===true;
   state.last_operational_turn_at=socialOnly?(previous.last_operational_turn_at||previous.last_turn_at||null):understanding.turn.created_at;
   if(socialOnly){
-    // A social interruption keeps the episode and pending proposition available
-    // for an actual answer. It is neither an answer nor renewed booking consent.
     state.goal=previous.goal||'UNKNOWN';state.intent_confirmed=previous.intent_confirmed===true;
     state.pending_question=previous.pending_question?structuredClone(previous.pending_question):null;
     const required=requirementsFor(state,context),verified=mapFacts(state.facts);
@@ -123,8 +131,10 @@ export function planConversationTurnV3({previousState,understanding,episode,cont
   if(state.goal==='DISCOVER_SERVICE'&&!verified.has('service'))nextQuestion=tentativeService(state)?nextQuestion:{fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
   if(state.goal==='PRICE_SERVICE'&&!verified.has('service'))nextQuestion=tentativeService(state)?nextQuestion:{fields:['service'],purpose:'COLLECT_SERVICE',options:serviceOptions(context)};
   if(['SUPPORT','UNKNOWN'].includes(state.goal)&&['GREETING','SOCIAL'].includes(understanding.role))nextQuestion=null;
+  const priorPendingFields=arr(previous.pending_question?.fields),turnEvidence=[...arr(understanding.turn_verified),...arr(understanding.turn_tentative)],pendingProgress=priorPendingFields.some(field=>turnEvidence.some(f=>f?.field===field));
+  const noProgress=priorPendingFields.length>0&&understanding.role==='ANSWER_TO_PENDING_QUESTION'&&!pendingProgress&&answers.length===0&&missing.some(field=>priorPendingFields.includes(field));
   let proposedAction=missing.length?'CLARIFY':'READY_FOR_AUTHORITY';if(!isConversationGoal(state.goal))proposedAction=missing.length?'CLARIFY':'READY_FOR_AUTHORITY';else if(['SUPPORT','UNKNOWN','DISCOVER_SERVICE','PRICE_SERVICE'].includes(state.goal))proposedAction='REPLY';
-  const plan={version:3,goal:state.goal,intent_confirmed:state.intent_confirmed,answers,missing_fields:missing,required_fields:required,next_question:nextQuestion,surfaced_facts:summaryParts(state,context),surfaced_tentative_fields:arr(state.tentatives).map(x=>x.field),proposed_action:proposedAction,response_parts:{acknowledgement:'ACK',understanding_summary:true,answer:answers.length>0,assumption:!!tentativeVehicle(state)||!!tentativeService(state),question:nextQuestion?.purpose||null}};
+  const plan={version:3,goal:state.goal,intent_confirmed:state.intent_confirmed,answers,missing_fields:missing,required_fields:required,next_question:nextQuestion,no_progress:noProgress,surfaced_facts:summaryParts(state,context),surfaced_tentative_fields:arr(state.tentatives).map(x=>x.field),proposed_action:proposedAction,response_parts:{acknowledgement:'ACK',understanding_summary:true,answer:answers.length>0,assumption:!!tentativeVehicle(state)||!!tentativeService(state),question:nextQuestion?.purpose||null}};
   state.pending_question=nextQuestion?{fields:nextQuestion.fields,purpose:nextQuestion.purpose,...(nextQuestion.candidate_value?{candidate_value:nextQuestion.candidate_value}:{}),...(nextQuestion.time_window?{time_window:nextQuestion.time_window}:{}),...(arr(nextQuestion.options).length?{options:nextQuestion.options.map(x=>({...x}))}:{})}:null;
   const text=arabic(context)?renderArabic({state,plan,context,understanding}):renderEnglish({state,plan,context,understanding});const response=brainResponseV3({text,plan_id:`${state.episode_id}:${understanding.turn.message_id||'turn'}`,metadata:{goal:state.goal,engine:'V3'}});assertDialoguePlanV3({plan,state,response});return {state,plan,response};
 }
