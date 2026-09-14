@@ -42,7 +42,18 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: repo:barman-systems@319497139/pilot@1346817686:environment:production
+                token.actions.githubusercontent.com:sub:
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-diagnose.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-ec2-check.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-stack-diagnose.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-uae-foundation-bootstrap.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-deploy-now.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-s3-permission-hotfix.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-provision-direct.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-uae-bootstrap-supabase.yml@refs/heads/main
+                  - repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/dabbir-aws-oidc-smoke.yml@refs/heads/main
       Policies:
         - PolicyName: DabbirManagedInfrastructureDeployment
           PolicyDocument:
@@ -323,5 +334,6 @@ Outputs:
       - CreateGitHubOidcProvider
       - !Ref GitHubOidcProvider
       - !Ref ExistingGitHubOidcProviderArn
-  AllowedGitHubSubject:
-    Value: repo:barman-systems@319497139/pilot@1346817686:environment:production
+  OidcTrustStage:
+    Description: Transitional trust accepts the legacy environment-only subject plus exact main/workflow subjects until custom subject migration is verified.
+    Value: TRANSITION_OLD_PLUS_EXACT_MAIN_WORKFLOWS
