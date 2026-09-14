@@ -1,0 +1,130 @@
+name: P0-A Vercel Env Metadata Audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/p0-a-vercel-env-metadata.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  env-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+    steps:
+      - name: Collect value-free Vercel environment metadata
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-a-vercel-evidence /tmp/p0-a-vercel
+          chmod 700 /tmp/p0-a-vercel
+
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            jq -n '{state:"BLOCKED_EXTERNAL",reason:"VERCEL_TOKEN_UNAVAILABLE"}' > p0-a-vercel-evidence/access-status.json
+            exit 2
+          fi
+
+          cat > /tmp/p0-a-vercel/projects.tsv <<'EOF'
+          dabbir	prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+          barman-live-ceo	prj_C3B1kIZr6znRmZNiZVjn6YZZ80Nm
+          barman-browser-worker	prj_nSmWPQDI95EjwBWokXCeAm5X7i9k
+          ai-council-p0	prj_9BwmBED9fUgJ7VPftn7oaHQPe9Hw
+          barman-council-transport	prj_AmHQzSAUBVeORZ6gZhBEwkeOzqZ2
+          EOF
+
+          printf 'project,key,type,targets,git_branch,custom_environment_ids,is_sensitive\n' > p0-a-vercel-evidence/env-metadata.csv
+          printf 'project,key,classification,type,targets,is_sensitive,requires_exception_or_rotation\n' > p0-a-vercel-evidence/classification-sheet.csv
+          printf '[]\n' > p0-a-vercel-evidence/env-metadata.json
+          printf '[]\n' > p0-a-vercel-evidence/classification-sheet.json
+          printf '[]\n' > p0-a-vercel-evidence/access-results.json
+
+          while IFS=$'\t' read -r project project_id; do
+            raw="/tmp/p0-a-vercel/${project}.json"
+            http_code="$(curl --silent --show-error --output "$raw" --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "https://api.vercel.com/v10/projects/${project_id}/env?teamId=${VERCEL_TEAM_ID}&decrypt=false")"
+
+            jq --arg p "$project" --arg id "$project_id" --arg code "$http_code" \
+              '. + [{project:$p,project_id:$id,http_status:($code|tonumber)}]' \
+              p0-a-vercel-evidence/access-results.json > /tmp/access.json
+            mv /tmp/access.json p0-a-vercel-evidence/access-results.json
+
+            if [ "$http_code" != '200' ]; then
+              rm -f "$raw"
+              continue
+            fi
+
+            jq --arg project "$project" '[.envs[]? | {
+              project:$project,
+              key:(.key // ""),
+              type:(.type // "unknown"),
+              target:(.target // []),
+              gitBranch:(.gitBranch // null),
+              customEnvironmentIds:(.customEnvironmentIds // []),
+              is_sensitive:((.type // "") == "sensitive")
+            }]' "$raw" > "/tmp/p0-a-vercel/${project}-safe.json"
+            rm -f "$raw"
+
+            jq -s 'add' p0-a-vercel-evidence/env-metadata.json "/tmp/p0-a-vercel/${project}-safe.json" > /tmp/env-all.json
+            mv /tmp/env-all.json p0-a-vercel-evidence/env-metadata.json
+          done < /tmp/p0-a-vercel/projects.tsv
+
+          jq '[.[] | . + {
+            classification:(
+              if (.key|test("^(NEXT_PUBLIC_|VITE_|PUBLIC_)";"i")) then "PUBLIC_CONFIG"
+              elif (.key|test("TOKEN|BEARER";"i")) then "TOKEN"
+              elif (.key|test("PRIVATE_KEY|SERVICE_ROLE|PASSWORD|PASSWD|PWD|CREDENTIAL|CLIENT_SECRET|SESSION_COOKIE|COOKIE_SECRET";"i")) then "CREDENTIAL"
+              elif (.key|test("API_KEY|SECRET_KEY|ACCESS_KEY|SIGNING_KEY|ENCRYPTION_KEY|(^|_)KEY($|_)";"i")) then "KEY"
+              elif (.key|test("SECRET|WEBHOOK_SECRET|APP_SECRET";"i")) then "SECRET"
+              else "PRIVATE_CONFIG" end
+            )
+          } | . + {
+            requires_exception_or_rotation:(
+              ((.classification == "SECRET" or .classification == "CREDENTIAL" or .classification == "TOKEN" or .classification == "KEY") and (.is_sensitive|not))
+            )
+          }]' p0-a-vercel-evidence/env-metadata.json > p0-a-vercel-evidence/classification-sheet.json
+
+          jq -r '.[] | [.project,.key,.type,((.target//[])|join(";")),(.gitBranch//""),((.customEnvironmentIds//[])|join(";")),(.is_sensitive|tostring)] | @csv' \
+            p0-a-vercel-evidence/env-metadata.json >> p0-a-vercel-evidence/env-metadata.csv
+          jq -r '.[] | [.project,.key,.classification,.type,((.target//[])|join(";")),(.is_sensitive|tostring),(.requires_exception_or_rotation|tostring)] | @csv' \
+            p0-a-vercel-evidence/classification-sheet.json >> p0-a-vercel-evidence/classification-sheet.csv
+
+          inaccessible="$(jq '[.[] | select(.http_status != 200)] | length' p0-a-vercel-evidence/access-results.json)"
+          variable_count="$(jq 'length' p0-a-vercel-evidence/env-metadata.json)"
+          rotation_count="$(jq '[.[] | select(.requires_exception_or_rotation == true)] | length' p0-a-vercel-evidence/classification-sheet.json)"
+          jq -n \
+            --arg endpoint 'GET /v10/projects/{idOrName}/env?decrypt=false' \
+            --arg team "$VERCEL_TEAM_ID" \
+            --argjson inaccessible_projects "$inaccessible" \
+            --argjson variable_count "$variable_count" \
+            --argjson requires_exception_or_rotation "$rotation_count" \
+            '{endpoint:$endpoint,team_id:$team,decrypt:false,inaccessible_projects:$inaccessible_projects,variable_count:$variable_count,requires_exception_or_rotation:$requires_exception_or_rotation,credential_values_persisted:false}' \
+            > p0-a-vercel-evidence/summary.json
+
+          rm -rf /tmp/p0-a-vercel
+          echo "inaccessible=$inaccessible" >> "$GITHUB_OUTPUT"
+          echo "rotation_count=$rotation_count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload value-free evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-a-vercel-env-metadata-${{ github.sha }}
+          path: p0-a-vercel-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail closed on missing metadata access
+        if: always()
+        shell: bash
+        env:
+          INACCESSIBLE: ${{ steps.collect.outputs.inaccessible }}
+        run: |
+          set -euo pipefail
+          test "${INACCESSIBLE:-5}" = '0'
