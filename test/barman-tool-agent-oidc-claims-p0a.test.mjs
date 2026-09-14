@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { validateToolAgentClaims } from '../api/barman-tool-agent-broker.js';
 
+const workflow=fs.readFileSync(new URL('../.github/workflows/barman-tool-agent.yml',import.meta.url),'utf8');
 const baseClaims={
   iss:'https://token.actions.githubusercontent.com',
   aud:'barman-executive-tool-agent',
@@ -21,9 +23,7 @@ test('P0-A OIDC claim predicate rejects alternate issuer, repository, expired, a
   assert.equal(validateToolAgentClaims({...baseClaims,nbf:1031},1000),false);
 });
 
-test('P0-A records environment and replay binding as pre-activation requirements, not live authority',()=>{
-  // The persistent tool-agent workflow is intentionally disabled and has no id-token: write permission.
-  // Environment binding and durable one-time replay consumption must be added before any future activation.
-  // This test deliberately does not pretend those controls exist today.
-  assert.equal(validateToolAgentClaims({...baseClaims,environment:'unexpected'},1000),true);
+test('P0-A keeps persistent tool-agent authority disabled until pre-activation claim hardening is complete',()=>{
+  assert.match(workflow,/if:\s*\$\{\{\s*false\s*\}\}/);
+  assert.doesNotMatch(workflow,/id-token:\s*write/);
 });
