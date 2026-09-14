@@ -457,7 +457,7 @@
       "domain": "web shell and shared components",
       "designOwner": "public/dabbir-web.css",
       "scope": "business-web",
-      "loadCondition": "Direct API asset URL; no active bundled consumer found",
+      "loadCondition": "Production root / through vercel.json routes and rewrites; transforms api/app-recovery response before auth boot.",
       "selectors": [],
       "changesBehavior": true,
       "mayInjectStyle": false,
@@ -2345,7 +2345,7 @@
       "domain": "owner-login",
       "designOwner": "api/owner-login.js",
       "scope": "api/owner-login.js",
-      "loadCondition": "Direct API asset URL; no active bundled consumer found",
+      "loadCondition": "Production /owner route and rewrite in vercel.json. Independent owner-admin sign-in document.",
       "selectors": [
         ":root",
         "html,body",
@@ -2978,7 +2978,7 @@
       "domain": "mobile shell",
       "designOwner": "mobile/App.tsx",
       "scope": "mobile/App.tsx",
-      "loadCondition": "Direct API asset URL; no active bundled consumer found",
+      "loadCondition": "Native Expo application entry App.tsx (mobile/package.json); mounts the language style context.",
       "selectors": [
         "authWrap:",
         "errorWrap:",
@@ -3182,7 +3182,7 @@
       "domain": "subscription",
       "designOwner": "mobile/src/SubscriptionCard.tsx",
       "scope": "mobile/src/SubscriptionCard.tsx",
-      "loadCondition": "Direct API asset URL; no active bundled consumer found",
+      "loadCondition": "Imported by mobile/App.tsx and rendered on the native account Subscription card with the live language prop.",
       "selectors": [
         "card:",
         "warning:",
