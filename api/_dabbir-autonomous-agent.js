@@ -11,6 +11,8 @@ export const WRITE_TOOLS=['create_service','create_car_wash_offer','create_produ
 export const MAX_STEPS=6;
 export const PAID_OPERATOR_MODEL=process.env.DABBIR_AI_GATEWAY_MODEL||'openai/gpt-5.4';
 export const GATEWAY_FALLBACK_MODELS=(process.env.DABBIR_AI_GATEWAY_FALLBACK_MODELS||'anthropic/claude-sonnet-4.6,google/gemini-3-flash,openai/gpt-5.4-nano').split(',').map(value=>value.trim()).filter(Boolean).slice(0,3);
+export const BUDGET_SAVER_MODEL=process.env.DABBIR_AI_BUDGET_SAVER_MODEL||'google/gemini-3-flash';
+export const LEGACY_PAID_COST_MODE='PAID_MODEL_MONTHLY_HARD_CAP';
 export const MODEL_TIMEOUT_MS=Math.min(60000,Math.max(15000,Math.trunc(Number(process.env.DABBIR_AI_MODEL_TIMEOUT_MS)||45000)));
 export const DIRECT_GEMINI_MODEL=process.env.DABBIR_GEMINI_MODEL||'gemini-3.7-flash';
 export const DIRECT_GROQ_MODEL=process.env.DABBIR_GROQ_MODEL||'openai/gpt-oss-20b';
@@ -135,22 +137,32 @@ function buildTools({token,businessId,goal,trace,proposals,validateWrite}){
   return tools;
 }
 
-export function operatorModelCandidates(env=process.env){
+export function operatorModelCandidates(env=process.env,options={}){
   const candidates=[];
-  if(env.GEMINI_API_KEY){
+  const includeFree=options.includeFree!==false,includePaid=options.includePaid!==false,pressure=String(options.budgetPressure||'NORMAL').toUpperCase();
+  if(includeFree&&env.GEMINI_API_KEY){
     const provider=createOpenAICompatible({name:'dabbirGemini',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai',apiKey:env.GEMINI_API_KEY});
-    candidates.push({name:'gemini-direct',modelId:env.DABBIR_GEMINI_MODEL||DIRECT_GEMINI_MODEL,model:provider.chatModel(env.DABBIR_GEMINI_MODEL||DIRECT_GEMINI_MODEL)});
+    candidates.push({name:'gemini-direct',modelId:env.DABBIR_GEMINI_MODEL||DIRECT_GEMINI_MODEL,model:provider.chatModel(env.DABBIR_GEMINI_MODEL||DIRECT_GEMINI_MODEL),costTier:'FREE_DIRECT'});
   }
-  if(env.GROQ_API_KEY){
+  if(includeFree&&env.GROQ_API_KEY){
     const provider=createOpenAICompatible({name:'dabbirGroq',baseURL:'https://api.groq.com/openai/v1',apiKey:env.GROQ_API_KEY});
-    candidates.push({name:'groq-direct',modelId:env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL,model:provider.chatModel(env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL)});
+    candidates.push({name:'groq-direct',modelId:env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL,model:provider.chatModel(env.DABBIR_GROQ_MODEL||DIRECT_GROQ_MODEL),costTier:'FREE_DIRECT'});
   }
-  if(env.CLOUDFLARE_API_TOKEN&&env.CLOUDFLARE_ACCOUNT_ID){
+  if(includeFree&&env.CLOUDFLARE_API_TOKEN&&env.CLOUDFLARE_ACCOUNT_ID){
     const modelId=env.DABBIR_CLOUDFLARE_MODEL||DIRECT_CLOUDFLARE_MODEL;
     const provider=createOpenAICompatible({name:'dabbirCloudflareWorkersAi',baseURL:`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(String(env.CLOUDFLARE_ACCOUNT_ID))}/ai/v1`,apiKey:env.CLOUDFLARE_API_TOKEN});
-    candidates.push({name:'cloudflare-workers-ai',modelId,model:provider.chatModel(modelId)});
+    candidates.push({name:'cloudflare-workers-ai',modelId,model:provider.chatModel(modelId),costTier:'FREE_DIRECT'});
   }
-  candidates.push({name:'vercel-gateway',modelId:PAID_OPERATOR_MODEL,model:PAID_OPERATOR_MODEL,providerOptions:{gateway:{disallowPromptTraining:true,models:GATEWAY_FALLBACK_MODELS}}});
+  if(includePaid&&pressure!=='PROTECT'){
+    const configuredPaid=env.DABBIR_AI_GATEWAY_MODEL||PAID_OPERATOR_MODEL;
+    const configuredFallbacks=(env.DABBIR_AI_GATEWAY_FALLBACK_MODELS||GATEWAY_FALLBACK_MODELS.join(',')).split(',').map(value=>value.trim()).filter(Boolean).slice(0,3);
+    const saver=env.DABBIR_AI_BUDGET_SAVER_MODEL||BUDGET_SAVER_MODEL;
+    const cheapFallbacks=configuredFallbacks.filter(id=>id!==saver&&!/(?:claude|opus|sonnet)/i.test(id));
+    const modelId=pressure==='NORMAL'?configuredPaid:saver;
+    const fallbacks=pressure==='NORMAL'?configuredFallbacks:pressure==='CONSERVE'?[...new Set(cheapFallbacks)].slice(0,2):[];
+    const gatewayPolicy=pressure==='NORMAL'&&!env.DABBIR_AI_GATEWAY_FALLBACK_MODELS?{disallowPromptTraining:true,models:GATEWAY_FALLBACK_MODELS}:{disallowPromptTraining:true,models:fallbacks};
+    candidates.push({name:'vercel-gateway',modelId,model:modelId,costTier:pressure==='NORMAL'?'PREMIUM_ALLOWED':'BUDGET_SAVER',budgetPressure:pressure,providerOptions:{gateway:gatewayPolicy}});
+  }
   return candidates;
 }
 
@@ -165,8 +177,6 @@ export function describeApproval(plan,language='ar'){return plan.map((step,index
 export async function planAutonomousRun({token,userId,businessId,goal,language,validateWrite}){
   let trace=[],proposals=[];const transitions=[{state:'received',at:new Date().toISOString()},{state:'planning',at:new Date().toISOString()}];
   const budgetOperationKey=`operator.ai_planning:${randomUUID()}`;
-  const budget=await claimAiBudget({businessId,operationKey:budgetOperationKey,operationType:'operator.ai_planning',autonomous:false});
-  if(!budget.allowed){const code=budget.reason==='MONTHLY_HARD_LIMIT'?'AI_MONTHLY_BUDGET_REACHED':'AI_BUDGET_UNAVAILABLE';throw Object.assign(new Error(code),{code,status:budget.reason==='MONTHLY_HARD_LIMIT'?429:503,budget})}
   const instructions=[
       'You are DABBIR Autonomous Business Operator, an execution agent and not a chatbot.',
       'Start by inspecting the workspace. Read every relevant domain before proposing changes. Use multiple tools for multi-domain goals.',
@@ -178,20 +188,29 @@ export async function planAutonomousRun({token,userId,businessId,goal,language,v
       'User-facing text must be one short direct sentence whenever possible. Target under 40 output tokens; exceed only when necessary to preserve meaning. Do not use markdown, UUIDs, internal status names, diagnostics or process narration.',
       `At most ${MAX_STEPS} model steps. Respond in ${language==='en'?'English':'Arabic'} with a concise plan summary, not chain-of-thought.`
     ].join('\n');
-  const candidates=operatorModelCandidates(),attempts=[];let result=null,selected=null,lastError=null;
+  const attempts=[];let result=null,selected=null,lastError=null,budget=null;
   const perAttemptTimeout=MODEL_TIMEOUT_MS;
-  for(const candidate of candidates){
+  const tryCandidate=async candidate=>{
     const attemptTrace=[],attemptProposals=[];
-    const gatewayOptions=candidate.providerOptions?{gateway:{...candidate.providerOptions.gateway,user:userId,tags:['feature:ai-business-operator','env:production']}}:undefined;
+    const gatewayOptions=candidate.providerOptions?{gateway:{...candidate.providerOptions.gateway,user:userId,tags:['feature:ai-business-operator','env:production',`cost-tier:${String(candidate.costTier||'unknown').toLowerCase()}`,`budget-pressure:${String(candidate.budgetPressure||'none').toLowerCase()}`]}}:undefined;
     const agent=new ToolLoopAgent({id:'dabbir-autonomous-business-operator',model:candidate.model,maxOutputTokens:320,temperature:0,stopWhen:stepCountIs(MAX_STEPS),tools:buildTools({token,businessId,goal,trace:attemptTrace,proposals:attemptProposals,validateWrite}),...(gatewayOptions?{providerOptions:gatewayOptions}:{}),instructions,prepareStep:({stepNumber})=>stepNumber===0?{toolChoice:{type:'tool',toolName:'inspect_workspace'}}:{toolChoice:'auto'}});
-    try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(perAttemptTimeout)});selected=candidate;trace=attemptTrace;proposals=attemptProposals;attempts.push({provider:candidate.name,state:'succeeded'});break}
-    catch(error){lastError=error;attempts.push({provider:candidate.name,state:'failed',error:clean(error?.name||'Error',80)});}
+    try{result=await agent.generate({prompt:`Trusted owner goal: ${clean(goal)}`,abortSignal:AbortSignal.timeout(perAttemptTimeout)});selected=candidate;trace=attemptTrace;proposals=attemptProposals;attempts.push({provider:candidate.name,model:candidate.modelId,cost_tier:candidate.costTier,state:'succeeded'});return true}
+    catch(error){lastError=error;attempts.push({provider:candidate.name,model:candidate.modelId,cost_tier:candidate.costTier,state:'failed',error:clean(error?.name||'Error',80)});return false}
+  };
+  for(const candidate of operatorModelCandidates(process.env,{includePaid:false}))if(await tryCandidate(candidate))break;
+  if(!result){
+    budget=await claimAiBudget({businessId,operationKey:budgetOperationKey,operationType:'operator.ai_planning',autonomous:false,maxOutputTokens:320,maxSteps:MAX_STEPS});
+    if(!budget.allowed){const protectedBudget=budget.reason==='BUDGET_PROTECTION',hardLimit=budget.reason==='MONTHLY_HARD_LIMIT';const code=hardLimit?'AI_MONTHLY_BUDGET_REACHED':protectedBudget?'AI_BUDGET_PROTECTION_ACTIVE':'AI_BUDGET_UNAVAILABLE';throw Object.assign(new Error(code),{code,status:hardLimit||protectedBudget?429:503,budget,attempts})}
+    const pressure=budget.budget_pressure?.band||'NORMAL';
+    for(const candidate of operatorModelCandidates(process.env,{includeFree:false,budgetPressure:pressure}))if(await tryCandidate(candidate))break;
   }
-  if(!result){const failure=lastError||new Error('AI_PROVIDER_UNAVAILABLE');failure.operatorAttempts=attempts;await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:failure?.name==='AbortError'||failure?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model_candidates:candidates.map(x=>x.name),attempts,error:clean(failure?.message||failure,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw failure}
-  const cost=await generationCost(result);
-  const finalized=await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'VERIFIED_SUCCESS',failureClass:null,actualCostUsd:cost.total_cost_usd,metadata:{provider:selected.name,model:selected.modelId,attempts,generation:cost,state:cost.total_cost_usd==null?'RESERVATION_RETAINED':'ACTUAL_COST_VERIFIED'}}).then(()=>true).catch(()=>false);
-  const budgetEvidence={hard_limit_aed:HARD_MONTHLY_AI_BUDGET_AED,reservation_microusd:budget.reserve_microusd,gateway_spend_usd_before:budget.external_spend_usd,generation:cost,ledger_finalized:finalized};
+  if(!result){const failure=lastError||new Error('AI_PROVIDER_UNAVAILABLE');failure.operatorAttempts=attempts;if(budget)await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'FAILED',failureClass:failure?.name==='AbortError'||failure?.name==='TimeoutError'?'TIMEOUT':'AI',actualCostUsd:null,metadata:{model_candidates:attempts.map(x=>x.provider),attempts,budget_pressure:budget.budget_pressure?.band||null,error:clean(failure?.message||failure,160),state:'RESERVATION_RETAINED_FAIL_CLOSED'}}).catch(()=>null);throw failure}
+  const paid=selected.name==='vercel-gateway';
+  const cost=paid?await generationCost(result):{generation_id:null,total_cost_usd:0,cost_state:'FREE_DIRECT_PROVIDER',provider:selected.name,model:selected.modelId};
+  const finalized=budget?await finalizeAiBudget({businessId,operationKey:budgetOperationKey,outcome:'VERIFIED_SUCCESS',failureClass:null,actualCostUsd:cost.total_cost_usd,metadata:{provider:selected.name,model:selected.modelId,cost_tier:selected.costTier,budget_pressure:budget.budget_pressure?.band||null,legacy_cost_mode:LEGACY_PAID_COST_MODE,attempts,generation:cost,state:cost.total_cost_usd==null?'RESERVATION_RETAINED':'ACTUAL_COST_VERIFIED'}}).then(()=>true).catch(()=>false):true;
+  const budgetEvidence=budget?{hard_limit_aed:HARD_MONTHLY_AI_BUDGET_AED,reservation_aed:budget.reservation_aed,reservation_microusd:budget.reserve_microusd,gateway_spend_usd_before:budget.external_spend_usd,budget_pressure:budget.budget_pressure,legacy_cost_mode:LEGACY_PAID_COST_MODE,generation:cost,ledger_finalized:finalized}:{hard_limit_aed:HARD_MONTHLY_AI_BUDGET_AED,paid_budget_claimed:false,route:'FREE_DIRECT_PROVIDER',generation:cost,ledger_finalized:true};
+  const costMode=paid?`PAID_MODEL_BUDGET_ROUTER_V1_${budget?.budget_pressure?.band||'NORMAL'}`:'FREE_DIRECT_PROVIDER';
   const plan=proposals.slice(0,MAX_STEPS).map((item,index)=>({...item,step:index+1}));
-  if(!plan.length){transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:'PAID_MODEL_MONTHLY_HARD_CAP',provider:selected.name,model:selected.modelId,budget:budgetEvidence,goal,plan,trace,transitions,summary:compactUserSummary(result.text),usage:result.usage}}
-  const issued=Date.now();transitions.push({state:'awaiting_approval',at:new Date().toISOString()});return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:'PAID_MODEL_MONTHLY_HARD_CAP',provider:selected.name,model:selected.modelId,budget:budgetEvidence,goal,plan,approval:describeApproval(plan,language),approval_token:sign(token,{v:1,business_id:businessId,user_id:userId,issued_at:issued,expires_at:issued+600000,goal,language,plan}),trace,transitions,summary:compactUserSummary(result.text),usage:result.usage};
+  if(!plan.length){transitions.push({state:'completed',at:new Date().toISOString()});return {ok:true,state:'completed',executed:false,version:OPERATOR_VERSION,cost_mode:costMode,provider:selected.name,model:selected.modelId,budget:budgetEvidence,goal,plan,trace,transitions,summary:compactUserSummary(result.text),usage:result.usage}}
+  const issued=Date.now();transitions.push({state:'awaiting_approval',at:new Date().toISOString()});return {ok:true,state:'awaiting_approval',executed:false,version:OPERATOR_VERSION,cost_mode:costMode,provider:selected.name,model:selected.modelId,budget:budgetEvidence,goal,plan,approval:describeApproval(plan,language),approval_token:sign(token,{v:1,business_id:businessId,user_id:userId,issued_at:issued,expires_at:issued+600000,goal,language,plan}),trace,transitions,summary:compactUserSummary(result.text),usage:result.usage};
 }
