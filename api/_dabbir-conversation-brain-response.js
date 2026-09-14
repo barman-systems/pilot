@@ -30,6 +30,39 @@ export function defaultServicePrompt(language){
   return isArabic(language)?'أي خدمة تحتاج؟':'Which service do you need?';
 }
 
+function deliveryModeLabel(mode,language){
+  const ar={AT_BUSINESS:'في الفرع',AT_CUSTOMER:'عندك',MOBILE:'عندك',REMOTE:'عن بُعد',PICKUP:'استلام',DELIVERY:'توصيل'};
+  const en={AT_BUSINESS:'at the branch',AT_CUSTOMER:'at your location',MOBILE:'at your location',REMOTE:'remotely',PICKUP:'pickup',DELIVERY:'delivery'};
+  return (isArabic(language)?ar:en)[mode]||mode;
+}
+
+// The planner owns which blocking field is next. The Conversation Brain owns the
+// customer-facing wording for that already-chosen focus. This renderer is pure:
+// it receives presentation inputs only and cannot alter state or execution.
+export function goalClarificationReply({fields=[],language='en',activity='',deliveryModes=[]}={}){
+  const ar=isArabic(language),field=fields[0],activityKey=String(activity||'').toLowerCase();
+  if(fields.length===2&&fields.includes('date')&&fields.includes('time'))return ar?'متى يناسبك؟ اذكر اليوم والوقت اللي تفضله.':'When works for you? Send the day and time you prefer.';
+  if(field==='service')return ar?'أكيد. أي خدمة تبي بالضبط؟':'Sure. Which service would you like?';
+  if(field==='delivery_mode'){
+    const modes=Array.isArray(deliveryModes)?deliveryModes.filter(x=>x&&x!=='HYBRID'):[];
+    if(modes.length>=2){
+      const choices=modes.slice(0,3).map(mode=>deliveryModeLabel(mode,language));
+      return ar?`تفضّل الخدمة ${choices.join(' أو ')}؟`:`Would you prefer the service ${choices.join(' or ')}?`;
+    }
+    return ar?'وين تفضّل تكون الخدمة؟':'Where would you like the service?';
+  }
+  if(field==='vehicle')return ar?(activityKey.includes('car')||activityKey.includes('wash')?'تمام. أي سيارة نخدم لك؟':'تمام. أي نوع يناسب طلبك؟'):(activityKey.includes('car')||activityKey.includes('wash')?'Sure. Which vehicle is this for?':'Which option fits your request?');
+  if(field==='location')return ar?'تمام. وين موقع الخدمة؟':'Sure. What location should we use?';
+  if(field==='property_details')return ar?'تمام. عطِني تفاصيل المكان اللي نحتاجها للخدمة.':'Sure. What property details do we need for the service?';
+  if(field==='worker')return ar?'هل تفضّل موظف معيّن؟':'Do you prefer a specific staff member?';
+  if(field==='date')return ar?'أي يوم يناسبك؟':'Which day works for you?';
+  if(field==='time')return ar?'أي وقت يناسبك؟':'What time works for you?';
+  if(field==='appointment')return ar?'أي موعد تقصد؟':'Which appointment do you mean?';
+  if(field==='slot')return ar?'أي وقت من الخيارات يناسبك؟':'Which available time works for you?';
+  if(field==='intent_confirmation')return ar?'تبا نكمل الطلب؟':'Would you like to continue the request?';
+  return ar?'وش تحتاج مني أكمله لك؟':'What would you like me to complete for you?';
+}
+
 const exactStaticResponse=text=>{
   if(text===recoveryGreetingReply('ar'))return recoveryGreetingReply('ar');
   if(text===recoveryGreetingReply('en'))return recoveryGreetingReply('en');
