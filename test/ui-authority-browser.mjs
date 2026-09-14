@@ -153,7 +153,21 @@ try{
    for(const gps of ['success','denied','unsupported'])for(const language of ['ar','en']){
     const context=await contextFor(browser,servers.after.url,language,390,'workspace',gps),page=await context.newPage();page.setDefaultTimeout(15000);
     await page.goto(servers.after.url+'/book?slug=synthetic-car-wash&lang='+language);
-    await page.locator('[data-vehicle="saloon"]').click();await page.locator('[data-offer]').first().click();await page.locator('[data-slot]').first().click();
+    await page.locator('[data-vehicle="saloon"]').click();await page.locator('[data-offer]').first().click();
+    await page.locator('[data-slot]').first().waitFor();
+    // Country copy must settle instead of replacing pointer targets every animation frame.
+    const stableSlot=await page.locator('[data-slot]').first().evaluate(async button=>{
+      const frame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+      await frame();await frame();
+      const textNode=button.firstChild;let changes=0;
+      const observer=new MutationObserver(records=>{changes+=records.length});
+      observer.observe(button,{childList:true,subtree:true,characterData:true});
+      await frame();await frame();observer.disconnect();
+      return {changes,sameTextNode:button.firstChild===textNode};
+    });
+    assert.deepEqual(stableSlot,{changes:0,sameTextNode:true},'booking localization is idempotent and preserves the slot pointer target');
+    await page.locator('[data-slot]').first().click();
+    await page.locator('[data-slot].selected').waitFor();
     await page.locator('#customerName').fill('Synthetic User');await page.locator('#customerPhone').fill('+000000000001');await page.locator('#locationBtn').click();
     if(gps!=='success'){
      assert.equal(await page.locator('#submitBtn').isEnabled(),false);
