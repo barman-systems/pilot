@@ -5,6 +5,7 @@ import {
   normalizeSemanticText,
 } from './_dabbir-semantic-engine-core.js';
 import {runConversationBrain} from './_dabbir-conversation-brain.js';
+import {renderRepeatMemoryConfirmation} from './_dabbir-conversation-brain-repeat-memory.js';
 
 export {
   SEMANTIC_VERSION,
@@ -18,8 +19,6 @@ export {
 } from './_dabbir-semantic-engine-core.js';
 
 const arr=v=>Array.isArray(v)?v:[];
-const REPEAT_PROMPT_AR='نفس السيارة والموقع ولا بتغير؟';
-const REPEAT_PROMPT_EN='Same vehicle and location, or would you like to change them?';
 const VERIFIED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_CONFIRMED','OWNER_POLICY','PROVIDER_VERIFIED']);
 const memoryKind=m=>String(m?.memory_key||'').replace(/^last_verified_|^preferred_|^known_|^usual_/,'');
 const activeEntity=(s,key)=>s?.entities?.[key]?.status==='active'?s.entities[key].value:null;
@@ -119,7 +118,7 @@ export function understandLegacyConversation(args){
     result.state.repeat_vehicle_location_prompt='pending';
     result.state.clarification_entity='vehicle_location_repeat';
     result.decision.reasonCode='VERIFIED_REPEAT_BOOKING_MEMORY_CONFIRMATION';
-    result.decision.reply=result.state.language==='en'?REPEAT_PROMPT_EN:REPEAT_PROMPT_AR;
+    result.decision.reply=renderRepeatMemoryConfirmation(result.state.language);
   }
   return result;
 }
