@@ -44,6 +44,16 @@ test('controller verifies exact deployment, runtime readiness, model and one-per
   ])assert.ok(source.includes(token),token);
 });
 
+test('controller resolves Production deployment from DABBIR release evidence, not privileged alias API',()=>{
+  assert.match(source,/current_alias_id\(\)[\s\S]*\/api\/release-evidence/);
+  assert.doesNotMatch(source,/api\.vercel\.com\/v4\/aliases/);
+  assert.match(source,/VERCEL_PROJECT_ACCESS_HTTP_/);
+  const preflight=source.indexOf('preflight_vercel_access\n');
+  const firstMutation=source.indexOf('upsert_env 0 0');
+  assert.ok(preflight>=0);
+  assert.ok(firstMutation>preflight);
+});
+
 test('controller uses Vercel env upsert without printing response bodies containing values',()=>{
   assert.match(source,/\/v10\/projects\/\$\{VERCEL_PROJECT_ID\}\/env\?upsert=true/);
   assert.match(source,/decrypt=false/);
