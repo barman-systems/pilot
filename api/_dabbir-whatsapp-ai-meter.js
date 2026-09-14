@@ -91,6 +91,7 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
 export async function generateDABBIRAiReply(args={}){
   const identity=contextIdentity(args.meteringContext||args.businessContext);
   const attempts=[];
+  const localSkippedAttempts=[];
   let successfulPayload=null;
   let successfulResponse=null;
   const upstreamFetch=args.fetchImpl||fetch;
@@ -113,7 +114,10 @@ export async function generateDABBIRAiReply(args={}){
     const started=Date.now();
     let response;
     try{response=await upstreamFetch(url,nextOptions);}catch(error){
-      if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED'].includes(error?.code))throw error;
+      if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED'].includes(error?.code)){
+        localSkippedAttempts.push({provider,model:requestedModel,reason:error.code});
+        throw error;
+      }
       attempts.push({endpoint:provider,model:requestedModel,status:0,duration_ms:Date.now()-started,outcome:error?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR'});
       throw error;
     }
@@ -132,7 +136,8 @@ export async function generateDABBIRAiReply(args={}){
   const startedAt=Date.now();
   const coreResult=await generateCoreReply({...args,fetchImpl:meteredFetch});
   const reliability=coreResult?.telemetry?.provider_reliability||null;
-  const skippedAttempts=(reliability?.attempts||[]).filter(item=>item?.outcome==='SKIPPED'||item?.decision==='SKIP').map(item=>({provider:item.provider,model:item.model||null,reason:item.reason||'PROVIDER_COOLDOWN',failure_class:item.failure_class||null,retry_after_ms:item.cooldown_remaining_ms||0}));
+  const sharedSkippedAttempts=(reliability?.attempts||[]).filter(item=>item?.outcome==='SKIPPED'||item?.decision==='SKIP').map(item=>({provider:item.provider,model:item.model||null,reason:item.reason||'PROVIDER_COOLDOWN',failure_class:item.failure_class||null,retry_after_ms:item.cooldown_remaining_ms||0}));
+  const skippedAttempts=[...localSkippedAttempts,...sharedSkippedAttempts].slice(0,12);
   const reportedUsage=successfulPayload?.usage;
   const hasUsage=reportedUsage&&[reportedUsage.prompt_tokens??reportedUsage.input_tokens,reportedUsage.completion_tokens??reportedUsage.output_tokens].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0);
   const actualCostUsd=coreResult?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
