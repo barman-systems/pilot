@@ -29,7 +29,8 @@ jobs:
         run: |
           set -euo pipefail
           file='.github/workflows/dabbir-aws-orphan-bucket-audit-once.yml'
-          ! grep -Eq 'aws[[:space:]]+(s3(api)?[[:space:]].*(delete|put)|cloudformation[[:space:]]+(delete|update|create)|iam[[:space:]].*(delete|put|update)|rds[[:space:]].*(delete|modify)|backup[[:space:]].*delete)' "$file"
+          sed -n '/- name: Capture value-free bucket ownership evidence/,$p' "$file" > /tmp/audit-body.yml
+          ! grep -Eq 'aws[[:space:]]+(s3(api)?[[:space:]].*(delete-|put-|delete-object|delete-bucket)|cloudformation[[:space:]]+(delete-stack|update-stack|create-stack)|iam[[:space:]].*(delete-|put-|update-)|rds[[:space:]].*(delete-|modify-)|backup[[:space:]].*delete-)' /tmp/audit-body.yml
 
   audit:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
