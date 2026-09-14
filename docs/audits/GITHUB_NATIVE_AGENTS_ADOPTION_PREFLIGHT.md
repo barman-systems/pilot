@@ -13,6 +13,8 @@ At the baseline SHA, GitHub reported `main` as protected but the visible require
 
 The bootstrap also treated a missing `DABBIR_GITHUB_ADMIN_TOKEN` as a skipped configuration instead of a failed protection run. That allowed the desired protection state to remain unapplied without a hard failure.
 
+A second trust-boundary gap was found during implementation: the trusted-base pre-merge gate protected `.github/**`, the pre-merge gate itself, the BARMAN tool-agent surfaces, required-gate logic, and the security gate, but it did not classify the post-merge independent verifier worker, verifier API, or Production-SHA waiter as protected trust-root code.
+
 ## Root fix in this change
 
 The native protection bootstrap now:
@@ -23,6 +25,20 @@ The native protection bootstrap now:
 - keeps admin enforcement, linear history, no force pushes, no branch deletion, and conversation resolution;
 - deliberately keeps human/code-owner approval counts at zero so the removed owner-approval gate is not reintroduced;
 - verifies the applied state after the protection API call.
+
+The existing trusted-base pre-merge gate remains the hard policy boundary for protected repository trust-root changes. It now protects:
+
+- all `.github/**` definitions, including agent profiles and workflows;
+- `scripts/barman-independent-premerge-gate.mjs`;
+- `scripts/barman-independent-verifier.mjs`;
+- `api/barman-independent-verifier.js`;
+- `scripts/wait-dabbir-production-sha.mjs`;
+- `scripts/barman-tool-agent.mjs`;
+- `api/barman-tool-agent-broker.js`;
+- `scripts/dabbir-required-pr-gates.mjs`;
+- `scripts/dabbir-security-gate.mjs`.
+
+A PR author outside `TRUST_ROOT_AUTHORITY_ACTORS` is rejected when the PR touches any of those paths. This backs the agent prompt policy with deterministic trusted-base enforcement; an agent cannot gain trust-root authority simply by ignoring its instructions.
 
 ## Agent authority
 
@@ -35,10 +51,10 @@ Allowed:
 - execute local syntax/tests/build diagnostics;
 - produce reviewable branch/PR work.
 
-Denied by policy:
+Denied by policy and, for trust-root paths, by deterministic pre-merge enforcement:
 
-- trust-root workflow/agent/CODEOWNERS edits;
-- edits to independent verifier, independent pre-merge gate, or security-gate authority;
+- `.github/**` edits, including agent/workflow/CODEOWNERS changes;
+- edits to independent verifier, independent pre-merge gate, security-gate, required-gate, or BARMAN tool-agent authority;
 - production credentials or production mutations;
 - deployments;
 - MCP servers/tools;
@@ -77,7 +93,7 @@ If the bootstrap fails because the admin credential is unavailable, the result i
 
 ## Regression contract
 
-`test/dabbir-github-native-agents-governance.test.mjs` pins the following invariants:
+`test/dabbir-github-native-agents-governance.test.mjs` and `test/barman-independent-premerge-gate.test.mjs` pin the following invariants:
 
 - independent pre-merge status is in native protection configuration;
 - missing admin credential fails the bootstrap;
@@ -85,7 +101,9 @@ If the bootstrap fails because the admin credential is unavailable, the result i
 - engineering agent has bounded tools and explicit trust-root exclusions;
 - review agent is read-only;
 - no per-agent MCP configuration exists;
-- agent/protection files remain explicit trust-root ownership paths.
+- agent/protection files remain explicit trust-root ownership paths;
+- the trusted-base gate protects the independent verifier worker/API/waiter as well as the existing pre-merge/security/tool-agent trust root;
+- an ordinary agent identity is not treated as a trusted trust-root actor.
 
 ## Next evaluation phase
 
