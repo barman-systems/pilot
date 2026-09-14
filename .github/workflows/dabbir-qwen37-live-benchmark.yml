@@ -23,7 +23,6 @@ concurrency:
 permissions:
   contents: read
   id-token: write
-  issues: write
 
 jobs:
   qwen37-live-benchmark:
@@ -81,28 +80,6 @@ jobs:
             echo "**Reasoning tokens:** $(jq -r '.aggregate.reasoning_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
             echo "**Average provider latency ms:** $(jq -r '.aggregate.avg_provider_latency_ms' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Publish sanitized verdict to PR 791
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f "$QWEN37_BENCHMARK_REPORT_PATH" ]; then
-            verdict="$(jq -r '.verdict' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            passed="$(jq -r '.aggregate.scenario_passed' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            total="$(jq -r '.aggregate.scenario_total' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            calls="$(jq -r '.aggregate.provider_calls' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            input="$(jq -r '.aggregate.input_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            output="$(jq -r '.aggregate.output_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            reasoning="$(jq -r '.aggregate.reasoning_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            latency="$(jq -r '.aggregate.avg_provider_latency_ms' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            verified_sha="$(jq -r '.verified_sha // "UNVERIFIED"' "$QWEN37_BENCHMARK_REPORT_PATH")"
-            body="QWEN37_BENCHMARK_RESULT\n- head: ${EXPECTED_BENCHMARK_SHA}\n- verified_preview_sha: ${verified_sha}\n- verdict: ${verdict}\n- scenarios: ${passed}/${total}\n- provider_calls: ${calls}\n- input_tokens: ${input}\n- output_tokens: ${output}\n- reasoning_tokens: ${reasoning}\n- avg_provider_latency_ms: ${latency}\n- production_routing_changed: false"
-          else
-            body="QWEN37_BENCHMARK_RESULT\n- head: ${EXPECTED_BENCHMARK_SHA}\n- verdict: NO_REPORT\n- production_routing_changed: false"
-          fi
-          gh api "repos/${GITHUB_REPOSITORY}/issues/791/comments" -f body="$body" >/dev/null
       - name: Upload Qwen3.7 benchmark evidence
         if: always()
         uses: actions/upload-artifact@v6
