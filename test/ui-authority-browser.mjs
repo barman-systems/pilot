@@ -67,6 +67,12 @@ async function contextFor(browser,url,language,width,mode='workspace',gps='denie
  return context;
 }
 const palette=page=>page.evaluate(()=>Object.fromEntries(['--bg','--accent','--panel','--line','--muted','--ds-brand'].map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])));
+const settlePresentation=page=>page.evaluate(async()=>{
+ // Resolve finite transitions after layout; do not mask CSS conflicts or disable product motion.
+ getComputedStyle(document.body).color;
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ await Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));
+});
 const finalCascade=page=>page.evaluate(()=>{
  const selectors=['body','.side','.top','#nav .navBtn.active','#bottomNav button.active','#screen-dashboard .card','#authEmail','#authSubmit','.authCard','.modalBox','#toast','.table'];
  const properties=['background-color','color','border-top-color','border-top-width','border-radius','font-family','font-size','font-weight','line-height','padding-top','padding-right','padding-bottom','padding-left','min-height','text-align','direction'];
@@ -84,23 +90,29 @@ try{
      await page.goto(servers[version].url,{waitUntil:'domcontentloaded'});
      await page.locator('#appShell:not(.hidden)').waitFor();
      await page.waitForFunction(()=>window.__dabbirUiLifecycle&&window.__dabbirContextualNavigation);
+     await settlePresentation(page);
      observed[version]={palette:await palette(page),card:await page.locator('#screen-dashboard .card').first().evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,border:s.borderColor,radius:s.borderRadius,padding:s.padding}})};
      observed[version].cascade=await finalCascade(page);
      await page.evaluate(()=>{openModal('#appointmentModal','#apptCustomer');toast(document.documentElement.lang==='ar'?'اختبار الواجهة':'UI verification')});
      await page.locator('#appointmentModal.open').waitFor({state:'visible'});
      await page.locator('#toast.show').waitFor({state:'visible'});
+     await settlePresentation(page);
      observed[version].modalCascade=await finalCascade(page);
      await page.evaluate(()=>{closeModal(document.querySelector('#appointmentModal'));document.querySelector('#toast').classList.remove('show')});
      if(version==='after'){
       assert.equal(await page.locator('style').count(),0,'no feature can inject a second stylesheet');
+      await settlePresentation(page);
       const stable=await finalCascade(page);
       await page.evaluate(()=>{for(const link of [...document.querySelectorAll('link[rel="stylesheet"]')].reverse())document.head.append(link)});
       // Moving link nodes can detach/reload their sheets. Compare the final cascade, not the transient unstyled frame.
       await page.waitForFunction(()=>[...document.querySelectorAll('link[rel="stylesheet"]')].every(link=>link.sheet&&link.sheet.cssRules.length>0));
+      await settlePresentation(page);
       assert.deepEqual(await finalCascade(page),stable,'resolved styles do not depend on stylesheet link ordering');
       const attack=await page.addStyleTag({content:'#screen-dashboard .card{background-color:rgb(1,2,3)!important}'});
+      await settlePresentation(page);
       assert.notDeepEqual(await finalCascade(page),stable,'computed-style oracle detects a competing runtime authority');
       await attack.evaluate(el=>el.remove());
+      await settlePresentation(page);
       assert.deepEqual(await finalCascade(page),stable,'removing attacker restores the canonical result');
      }
      if(await page.locator('#menuBtn').isVisible())await page.locator('#menuBtn').click();
@@ -130,6 +142,7 @@ try{
      await page.waitForFunction(()=>window.__dabbirAuthSessionStabilityV5);
      await page.locator('#signupTab').click();await page.locator('#loginTab').click();
      assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
+     await settlePresentation(page);
      auth[version]=await finalCascade(page);
      await page.screenshot({path:path.join(out,`${engine}-${width}-${language}-${version}-auth.png`),fullPage:true});
      await context.close();
