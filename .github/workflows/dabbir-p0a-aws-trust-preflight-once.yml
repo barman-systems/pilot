@@ -1,0 +1,185 @@
+name: DABBIR P0-A AWS Trust Preflight Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dabbir-p0a-aws-trust-preflight-once.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: dabbir-p0a-aws-trust-preflight-once
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 10
+    env:
+      AWS_REGION: me-central-1
+      ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+      ROLE_NAME: DabbirGithubDeployRole
+      STACK_NAME: dabbir-github-oidc
+    steps:
+      - name: Checkout exact main execution tree
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert one-shot main push context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = 'push'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Capture safe pre-customization OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-a-aws-preflight /tmp/p0-a-aws-preflight
+          chmod 700 /tmp/p0-a-aws-preflight
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(printf '%s' "$response" | jq -r '.value')"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64
+          token=os.environ['TOKEN']
+          p=token.split('.')[1]
+          p += '=' * (-len(p) % 4)
+          c=json.loads(base64.urlsafe_b64decode(p))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','repository_owner','environment','ref','sha','workflow_ref','job_workflow_ref','event_name','iat','exp','nbf']}
+          json.dump(safe,open('p0-a-aws-preflight/oidc-jwt-decoded.json','w'),indent=2,sort_keys=True)
+          PY
+          unset token response
+
+      - name: Configure AWS credentials using current trusted Production identity
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: p0a-trust-preflight-${{ github.run_id }}
+
+      - name: Capture live role, stack, and mutation-authority metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-a-aws-preflight /tmp/p0-a-aws-preflight
+          chmod 700 /tmp/p0-a-aws-preflight
+
+          aws sts get-caller-identity \
+            --query '{Account:Account,Arn:Arn}' --output json \
+            > p0-a-aws-preflight/caller-identity.json
+
+          aws iam get-role --role-name "$ROLE_NAME" --output json \
+            | jq '{Role:{RoleName:.Role.RoleName,Arn:.Role.Arn,AssumeRolePolicyDocument:.Role.AssumeRolePolicyDocument,MaxSessionDuration:.Role.MaxSessionDuration,PermissionsBoundary:(.Role.PermissionsBoundary // null)}}' \
+            > p0-a-aws-preflight/trust-policy.json
+
+          aws iam list-role-policies --role-name "$ROLE_NAME" --output json \
+            > /tmp/p0-a-aws-preflight/inline-names.json
+          printf '[]\n' > /tmp/p0-a-aws-preflight/inline-documents.json
+          while IFS= read -r policy; do
+            test -n "$policy" || continue
+            aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$policy" --output json \
+              | jq '{PolicyName,PolicyDocument}' > /tmp/p0-a-aws-preflight/one.json
+            jq -s '.[0] + [.[1]]' /tmp/p0-a-aws-preflight/inline-documents.json /tmp/p0-a-aws-preflight/one.json \
+              > /tmp/p0-a-aws-preflight/inline-next.json
+            mv /tmp/p0-a-aws-preflight/inline-next.json /tmp/p0-a-aws-preflight/inline-documents.json
+          done < <(jq -r '.PolicyNames[]?' /tmp/p0-a-aws-preflight/inline-names.json)
+
+          aws iam list-attached-role-policies --role-name "$ROLE_NAME" --output json \
+            | jq '{AttachedPolicies:[.AttachedPolicies[]? | {PolicyName,PolicyArn}]}' \
+            > p0-a-aws-preflight/attached-policy-metadata.json
+
+          aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" --output json \
+            | jq '{Stack:{StackName:.Stacks[0].StackName,StackStatus:.Stacks[0].StackStatus,RoleARN:(.Stacks[0].RoleARN // null),Capabilities:(.Stacks[0].Capabilities // []),Parameters:[.Stacks[0].Parameters[]? | {ParameterKey,ParameterValue}]}}' \
+            > p0-a-aws-preflight/stack-metadata.json
+
+          template_status=0
+          aws cloudformation get-template --region "$AWS_REGION" --stack-name "$STACK_NAME" --output json \
+            > /tmp/p0-a-aws-preflight/stack-template.json 2>/dev/null || template_status=$?
+          if [ "$template_status" = '0' ]; then
+            jq -S '.TemplateBody' /tmp/p0-a-aws-preflight/stack-template.json \
+              | sha256sum | awk '{print $1}' \
+              > p0-a-aws-preflight/live-stack-template.sha256
+          fi
+
+          python3 - <<'PY'
+          import json
+          docs=json.load(open('/tmp/p0-a-aws-preflight/inline-documents.json'))
+          actions=[]
+          for p in docs:
+            stmts=p.get('PolicyDocument',{}).get('Statement',[])
+            if isinstance(stmts,dict): stmts=[stmts]
+            for s in stmts:
+              a=s.get('Action',[])
+              if isinstance(a,str): a=[a]
+              actions.extend(str(x).lower() for x in a)
+          def grants(target):
+            t=target.lower()
+            service=t.split(':',1)[0]
+            return t in actions or '*' in actions or f'{service}:*' in actions
+          stack=json.load(open('p0-a-aws-preflight/stack-metadata.json'))['Stack']
+          result={
+            'direct_update_assume_role_policy':grants('iam:UpdateAssumeRolePolicy'),
+            'cloudformation_update_stack':grants('cloudformation:UpdateStack'),
+            'stack_service_role_present':bool(stack.get('RoleARN')),
+            'stack_service_role_arn':stack.get('RoleARN'),
+            'inline_policy_names':[p.get('PolicyName') for p in docs],
+            'credential_values_persisted':False,
+          }
+          if result['direct_update_assume_role_policy']:
+            result['safe_mutation_path']='DIRECT_IAM_TRUST_UPDATE_AVAILABLE'
+          elif result['stack_service_role_present'] and result['cloudformation_update_stack']:
+            result['safe_mutation_path']='CLOUDFORMATION_SERVICE_ROLE_UPDATE_AVAILABLE'
+          else:
+            result['safe_mutation_path']='NO_PROVEN_TRUST_MUTATION_AUTHORITY'
+          json.dump(result,open('p0-a-aws-preflight/mutation-authority.json','w'),indent=2,sort_keys=True)
+          PY
+
+          rm -rf /tmp/p0-a-aws-preflight
+
+      - name: Validate current trust remains exact legacy pre-migration state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,sys
+          role=json.load(open('p0-a-aws-preflight/trust-policy.json'))['Role']
+          stmts=role['AssumeRolePolicyDocument'].get('Statement',[])
+          if isinstance(stmts,dict): stmts=[stmts]
+          expected='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          subjects=[]; auds=[]
+          for s in stmts:
+            cond=s.get('Condition') or {}
+            for op in ('StringEquals','StringLike'):
+              c=cond.get(op) or {}
+              v=c.get('token.actions.githubusercontent.com:sub',[])
+              if isinstance(v,str): v=[v]
+              subjects.extend(v)
+              v=c.get('token.actions.githubusercontent.com:aud',[])
+              if isinstance(v,str): v=[v]
+              auds.extend(v)
+          result={
+            'expected_legacy_subject_only':subjects==[expected],
+            'audience_exact':auds==['sts.amazonaws.com'],
+            'no_wildcard':not any(any(ch in str(s) for ch in '*?[') for s in subjects),
+            'subjects_count':len(subjects),
+          }
+          result['pass']=all([result['expected_legacy_subject_only'],result['audience_exact'],result['no_wildcard']])
+          json.dump(result,open('p0-a-aws-preflight/trust-precondition.json','w'),indent=2,sort_keys=True)
+          if not result['pass']: sys.exit(1)
+          PY
+
+      - name: Upload value-free preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0a-aws-trust-preflight-${{ github.sha }}
+          path: p0-a-aws-preflight/
+          if-no-files-found: error
+          retention-days: 30
