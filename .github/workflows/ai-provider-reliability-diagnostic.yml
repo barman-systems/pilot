@@ -37,5 +37,9 @@ jobs:
         run: node --test test/dabbir-gemini-ai.test.mjs
       - name: legacy core - Cloudflare
         run: node --test test/dabbir-cloudflare-ai.test.mjs
-      - name: legacy core - V3 fallback
-        run: node --test test/dabbir-v3-live-provider-fallback.test.mjs
+      - name: V3 - gateway structured request
+        run: node --test --test-name-pattern='V3 Gateway fallback requests' test/dabbir-v3-live-provider-fallback.test.mjs
+      - name: V3 - four attempt fallback
+        run: node --test --test-name-pattern='live provider shape reaches' test/dabbir-v3-live-provider-fallback.test.mjs
+      - name: V3 - fifth request guard
+        run: node --test --test-name-pattern='invalid HTTP-200 Gateway semantics' test/dabbir-v3-live-provider-fallback.test.mjs
