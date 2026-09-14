@@ -1,0 +1,35 @@
+name: AI Provider Reliability Diagnostic
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'test/**'
+      - 'scripts/check-ai-provider-authority.mjs'
+      - 'config/ai-provider-authority-registry.json'
+      - 'supabase/migrations/20260914194000_dabbir_ai_provider_reliability_authority_v1.sql'
+      - '.github/workflows/ai-provider-reliability-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: transport authority
+        run: node --test test/dabbir-ai-provider-reliability.test.mjs
+      - name: postgres distributed authority
+        run: node --test test/dabbir-ai-provider-reliability-db.test.mjs
+      - name: bypass guard
+        run: node --test test/dabbir-ai-provider-authority-guard.test.mjs
+      - name: whatsapp meter regression
+        run: node --test test/dabbir-ai-customer-metering.test.mjs
+      - name: tool agent regression
+        run: node --test test/barman-tool-agent-structured-output.test.mjs
+      - name: existing ai core regressions
+        run: node --test test/dabbir-gemini-ai.test.mjs test/dabbir-cloudflare-workers-ai.test.mjs test/dabbir-ai-gateway-fallback.test.mjs
