@@ -272,14 +272,15 @@ export function understandConversation({context:c,previous=null,now=new Date(),p
       if(previous?.clarification_entity==='intent_confirmation')s.intent_confirmed=true;
       const confirmedKey=previous?.clarification_entity;
       // A yes answers the question actually presented, never a hidden old
-      // inference. A delivery menu with multiple choices remains ambiguous.
+      // inference. Presentation authority is structural: provider acceptance,
+      // revision, scoped service and the exact current activity contract. It is
+      // deliberately independent of the customer-facing wording.
       if(confirmedKey==='delivery_mode' && c.cognitive_active) {
         const question=previous?.cognition?.pending_question,modes=arr(contract?.delivery_modes);
-        const presented=previous.pending_action==='CLARIFY' && question?.field==='delivery_mode' &&
-          question.presentation==='PROVIDER_ACCEPTED' && question.provider_message_id &&
+        const presented=previous.pending_action==='CLARIFY' && previous.cognition?.pending_field==='delivery_mode' &&
+          question?.field==='delivery_mode' && question.presentation==='PROVIDER_ACCEPTED' && question.provider_message_id &&
           previous.cognition.revision===previous.revision && valueOf(previous,'service')===valueOf(s,'service') &&
-          contract?.contract_version && previous.activity_contract_version===contract.contract_version &&
-          question.text===clarification(previous,c);
+          contract?.contract_version && previous.activity_contract_version===contract.contract_version;
         if(presented && modes.length===1 && modes[0]!=='HYBRID') {
           invalidate(s,'slot',stamp);
           fact(s,'delivery_mode',modes[0],'CUSTOMER_CONFIRMED',.99,stamp,{service_id:valueOf(s,'service')});
