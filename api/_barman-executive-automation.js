@@ -1,4 +1,5 @@
 import { getVercelOidcToken } from '@vercel/oidc';
+import { createAiProviderAuthorityFetch } from './_ai-provider-authority-fetch.js';
 
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='minimax/minimax-m3-free';
@@ -170,9 +171,10 @@ export async function understandExecutiveSituation(command,context={},env=proces
     'Choose the lowest-risk option that advances the affected goal and has an explicit rollback/containment path. Do not claim completion.',
   ].join('\n');
   const userContent=JSON.stringify({command:commandText,reality,goals,memory:memories});
+  const authorityFetch=createAiProviderAuthorityFetch({env,fetchImpl:fetch});
   const requestUnderstanding=async retry=>{
     const correction=retry?'\nThe previous response was not valid JSON. Return exactly one JSON object matching the supplied schema. No markdown and no prose outside JSON. Preserve evidence discipline, owner boundaries, health-domain truth, and fail-closed safety.':'';
-    const response=await fetch(GATEWAY_ENDPOINT,{
+    const response=await authorityFetch(GATEWAY_ENDPOINT,{
       method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
       body:JSON.stringify({
         model,
@@ -220,7 +222,7 @@ export async function understandExecutiveSituation(command,context={},env=proces
     if(decision.options.length<2||!decision.chosen_option||!decision.reason)return failClosedUnderstanding(commandText,reality,'EXECUTIVE_DECISION_INCOMPLETE');
     return {source:'AI_GATEWAY',model,route,situation,decision};
   }catch(error){
-    return {...failClosedUnderstanding(commandText,reality,clean(error?.message||error,240)),model};
+    return {...failClosedUnderstanding(commandText,reality,clean(error?.code||error?.message||error,240)),model};
   }
 }
 
@@ -245,7 +247,8 @@ export async function planExecutiveCommand(command,env=process.env){
     'Never include payment, money transfer, KYC, OTP, legal signature, card data, secrets, or credential collection. Those are owner-only and must not be decomposed.',
     'Do not claim work is complete. Do not invent evidence. Return JSON only.',
   ].join('\n');
-  const response=await fetch(GATEWAY_ENDPOINT,{
+  const authorityFetch=createAiProviderAuthorityFetch({env,fetchImpl:fetch});
+  const response=await authorityFetch(GATEWAY_ENDPOINT,{
     method:'POST',
     headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
     body:JSON.stringify({

@@ -2,6 +2,7 @@ import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import { getVercelOidcToken } from '@vercel/oidc';
 import { json } from './_auth-core.js';
 import { adminRpc, notifyTelegram, serviceRoleKey, telegramRoute } from './_barman-executive-core.js';
+import { createAiProviderAuthorityFetch } from './_ai-provider-authority-fetch.js';
 
 const AUDIENCE='barman-executive-tool-agent';
 const EXPECTED_REPO='barman-systems/pilot';
@@ -10,8 +11,6 @@ const EXPECTED_WORKFLOW=`${EXPECTED_REPO}/.github/workflows/barman-tool-agent.ym
 const GITHUB_ISSUER='https://token.actions.githubusercontent.com';
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='minimax/minimax-m3-free';
-const GATEWAY_MAX_ATTEMPTS=2;
-const GATEWAY_RETRYABLE=new Set([429,502,503,504]);
 const clean=(value,max=4000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
 
 const DISCOVERY_SCHEMA={
@@ -102,30 +101,26 @@ function parseJsonContent(payload){
 function structuredOutput(name,schema){
   return {type:'json_schema',json_schema:{name,description:'BARMAN machine-readable tool-agent response',schema}};
 }
-function gatewayError(status){
-  return Object.assign(new Error(`AI_GATEWAY_HTTP_${status}`),{status:502});
+function gatewayError(status,code){
+  return Object.assign(new Error(code||`AI_GATEWAY_HTTP_${status}`),{status:status===429||status===402?503:502});
 }
-async function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 async function gatewayCompletion(credential,requestBody){
-  let lastStatus=0;
-  for(let attempt=1;attempt<=GATEWAY_MAX_ATTEMPTS;attempt+=1){
-    const response=await fetch(GATEWAY_ENDPOINT,{
+  const authorityFetch=createAiProviderAuthorityFetch({env:process.env,fetchImpl:fetch});
+  let response;
+  try{
+    response=await authorityFetch(GATEWAY_ENDPOINT,{
       method:'POST',headers:{authorization:`Bearer ${credential}`,'content-type':'application/json'},
       body:JSON.stringify(requestBody),
       signal:AbortSignal.timeout(45000),
     });
-    lastStatus=response.status;
-    const text=await response.text();
-    let payload=null;
-    try{payload=text?JSON.parse(text):{}}catch{
-      if(response.ok)throw Object.assign(new Error('AI_GATEWAY_RESPONSE_INVALID_JSON'),{status:502});
-    }
-    if(response.ok)return payload||{};
-    if(!GATEWAY_RETRYABLE.has(response.status)||attempt===GATEWAY_MAX_ATTEMPTS)throw gatewayError(response.status);
-    const retryAfter=Math.max(0,Math.min(2000,Number(response.headers.get('retry-after')||0)*1000));
-    await sleep(retryAfter||300*attempt);
+  }catch(error){throw gatewayError(0,error?.code||error?.message||'AI_GATEWAY_TRANSPORT_FAILED')}
+  const text=await response.text();
+  let payload=null;
+  try{payload=text?JSON.parse(text):{}}catch{
+    if(response.ok)throw Object.assign(new Error('AI_GATEWAY_RESPONSE_INVALID_JSON'),{status:502});
   }
-  throw gatewayError(lastStatus||502);
+  if(response.ok)return payload||{};
+  throw gatewayError(response.status);
 }
 async function brain(system,user,maxTokens,{name,schema}){
   const credential=await gatewayCredential();

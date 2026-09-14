@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { json } from './_auth-core.js';
-import { runDailyOperatorBatch } from './_dabbir-daily-operator-core.js';
+import { runDailyOperatorBatch } from './_dabbir-daily-operator-reliable.js';
 
 export const DAILY_OPERATOR_SCHEDULE = '15 5 * * *';
 
@@ -15,7 +15,7 @@ export function cronAuthMode(req, env = process.env) {
   const secret = clean(env.CRON_SECRET, 4096);
   const authorization = clean(req.headers?.authorization, 8192);
   if (secret) return sameSecret(authorization, `Bearer ${secret}`) ? 'secret' : null;
-  return null; // Schedule headers are caller-controlled, never authentication.
+  return null;
 }
 
 export default async function handler(req, res) {

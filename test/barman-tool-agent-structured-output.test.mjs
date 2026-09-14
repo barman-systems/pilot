@@ -15,10 +15,10 @@ test('tool-agent requests machine-enforced JSON schema instead of trusting promp
   assert.match(broker,/required:\['summary','patch'\]/);
 });
 
-test('gateway transient failures use bounded retry and invalid transport JSON fails explicitly',()=>{
-  assert.match(broker,/const GATEWAY_MAX_ATTEMPTS=2/);
-  assert.match(broker,/new Set\(\[429,502,503,504\]\)/);
-  assert.match(broker,/attempt<=GATEWAY_MAX_ATTEMPTS/);
+test('gateway transport uses the shared provider authority and invalid transport JSON fails explicitly',()=>{
+  assert.match(broker,/createAiProviderAuthorityFetch/);
+  assert.match(broker,/authorityFetch\(GATEWAY_ENDPOINT/);
+  assert.doesNotMatch(broker,/const GATEWAY_MAX_ATTEMPTS=2|GATEWAY_RETRYABLE|attempt<=GATEWAY_MAX_ATTEMPTS/);
   assert.match(broker,/AI_GATEWAY_RESPONSE_INVALID_JSON/);
   assert.match(broker,/AI_GATEWAY_STRUCTURED_OUTPUT_INVALID/);
   assert.doesNotMatch(broker,/while\s*\(true\)/);

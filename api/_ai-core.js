@@ -1,5 +1,11 @@
 import { SEMANTIC_SYSTEM_PROMPT, SEMANTIC_JSON_SCHEMA, semanticContractViolation } from './_dabbir-semantic-contract.js';
 import {V3_SEMANTIC_SYSTEM_PROMPT,V3_SEMANTIC_JSON_SCHEMA,v3SemanticContractViolation} from './_dabbir-conversation-v3-semantic-contract.js';
+import {
+  createSupabaseProviderHealthStore,
+  isAiProviderCooldown,
+  reliableAiProviderFetch,
+  summarizeProviderReliability,
+} from './_ai-provider-reliability.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -10,6 +16,8 @@ const cloudflareEndpoint = env => `https://api.cloudflare.com/client/v4/accounts
 const DEFAULT_GATEWAY_MODEL = 'minimax/minimax-m3';
 const FALLBACK_GATEWAY_MODELS = ['minimax/minimax-m2.7'];
 const DIRECT_PROVIDER_TIMEOUT_MS = 5000;
+const PROVIDER_CHAIN_TOTAL_TIMEOUT_MS = 12000;
+const SEMANTIC_PROVIDER_CHAIN_TOTAL_TIMEOUT_MS = 18000;
 const GATEWAY_TOTAL_TIMEOUT_MS = 12000;
 const GATEWAY_PRIMARY_TIMEOUT_MS = 6000;
 const PROJECTS = new Set(['dabbir_clinics', 'dabbir_celebrities', 'dabbir_businesses']);
@@ -211,13 +219,22 @@ function finalizeReply({ reply, input, language, config, authMode, model, semant
   };
 }
 
-async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false, schemaFallback = false }) {
+function budgetRemaining(context){return Math.max(0,Number(context?.deadline||0)-Date.now());}
+function boundedTimeout(requested,context){return Math.max(1,Math.min(Number(requested)||DIRECT_PROVIDER_TIMEOUT_MS,budgetRemaining(context)||1));}
+function budgetError(){const error=new Error('AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED');error.name='AbortError';error.code='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED';return error;}
+function cooldownFailure(config,error){
+  return {ok:false,state:'AI_PROVIDER_CAPACITY_UNAVAILABLE',error:`${config.provider}_cooldown`,provider:config.provider,model:error?.model||config.model,auth_mode:config.auth_mode,cost_mode:config.cost_mode};
+}
+
+async function callOpenAiCompatible({ endpoint, credential, model, messages, fetchImpl, timeoutMs = DIRECT_PROVIDER_TIMEOUT_MS, semantic = false, schemaFallback = false, env, reliability }) {
   const spec=semanticSpec(semantic),semanticEnabled=!!spec;
   const strictSemantic=semanticEnabled && !schemaFallback && endpoint===GROQ_ENDPOINT && model==='openai/gpt-oss-20b';
+  if(budgetRemaining(reliability)<=0)throw budgetError();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), boundedTimeout(timeoutMs,reliability));
+  const provider=endpoint===GEMINI_ENDPOINT?'google-gemini':endpoint===GROQ_ENDPOINT?'groq':endpoint===GATEWAY_ENDPOINT?'vercel-ai-gateway':'cloudflare-workers-ai';
   try {
-    const response = await fetchImpl(endpoint, {
+    const response = await reliableAiProviderFetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'content-type': 'application/json', authorization: `Bearer ${credential}` },
@@ -231,7 +248,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
           : {type:'json_object'}, ...(model === 'openai/gpt-oss-20b' ? { reasoning_effort: 'low' } : {}) } : {}),
         stream: false,
       }),
-    });
+    },{provider,model,env,fetchImpl,healthStore:reliability.healthStore,trace:reliability.trace});
     const payload = await response.json().catch(() => ({}));
     const violation=semanticEnabled&&response.ok?(payload?.choices?.[0]?.finish_reason==='length'?'TRUNCATED':spec.violation(payload?.choices?.[0]?.message?.content)):null;
     if(violation)console.warn('dabbir_semantic_contract_rejected',{reason:violation,format:strictSemantic?'json_schema':'json_object',profile:spec.profile});
@@ -242,7 +259,7 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
     if(strictSemantic&&(formatRejected||(violation&&violation!=='TRUNCATED'))){
       console.warn('dabbir_semantic_format_fallback',{reason:formatRejected?'PROVIDER_SCHEMA_REJECTED':violation,profile:spec.profile});
       clearTimeout(timer);
-      return callOpenAiCompatible({endpoint,credential,model,messages,fetchImpl,timeoutMs,semantic,schemaFallback:true});
+      return callOpenAiCompatible({endpoint,credential,model,messages,fetchImpl,timeoutMs,semantic,schemaFallback:true,env,reliability});
     }
     if (violation) return { response: { ok: false, status: 502 }, payload: {} };
     return { response, payload };
@@ -251,13 +268,14 @@ async function callOpenAiCompatible({ endpoint, credential, model, messages, fet
   }
 }
 
-async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl, semantic = false }) {
+async function callGatewayBoundedFallback({ credential, primaryModel, messages, fetchImpl, semantic = false, env, reliability }) {
   const models = [primaryModel, ...FALLBACK_GATEWAY_MODELS.filter(model => model !== primaryModel)];
-  const deadline = Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
+  const gatewayDeadline=Date.now() + GATEWAY_TOTAL_TIMEOUT_MS;
+  const localDeadline = Math.min(Number(reliability.deadline),gatewayDeadline);
   let last = { error: 'gateway_provider_failed', status: 502, model: primaryModel };
 
   for (let index = 0; index < models.length; index += 1) {
-    const remaining = deadline - Date.now();
+    const remaining = Math.min(localDeadline-Date.now(),budgetRemaining(reliability));
     if (remaining <= 150) return { ok: false, error: 'gateway_timeout', status: 502, model: last.model };
 
     const model = models[index];
@@ -269,13 +287,14 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
         model,
         messages,
         fetchImpl,
-        timeoutMs, semantic,
+        timeoutMs, semantic, env, reliability,
       });
       const servedModel = String(payload?.model || model);
       if (response.ok) return { ok: true, payload, model: servedModel };
       last = { error: `gateway_http_${response.status}`, status: response.status, model: servedModel };
       if (![404, 408, 409, 429, 500, 502, 503, 504].includes(response.status)) return { ok: false, ...last };
     } catch (error) {
+      if(isAiProviderCooldown(error))return {ok:false,error:'gateway_cooldown',status:503,model:error?.model||model};
       last = {
         error: error?.name === 'AbortError' ? 'gateway_timeout' : 'gateway_network_error',
         status: 502,
@@ -287,12 +306,13 @@ async function callGatewayBoundedFallback({ credential, primaryModel, messages, 
   return { ok: false, ...last };
 }
 
-export async function generateDABBIRAiReply({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter, semantic = false } = {}) {
+async function generateDABBIRAiReplyInternal({ project, message, language = 'auto', businessContext = '', history = [], env = process.env, fetchImpl = fetch, oidcGetter, semantic = false } = {}, reliability) {
   const normalizedProject = String(project || '').toLowerCase();
   if (!PROJECTS.has(normalizedProject)) return { ok: false, state: 'REJECTED', error: 'unsupported_project' };
 
   const input = String(message || '').trim().slice(0, 2000);
   if (!input) return { ok: false, state: 'REJECTED', error: 'message_required' };
+  if(budgetRemaining(reliability)<=0)return {ok:false,state:'TIMEOUT',error:'ai_provider_chain_budget_exhausted'};
 
   const config = getDABBIRAiConfig(env);
   const geminiKey = String(env.GEMINI_API_KEY || '');
@@ -316,7 +336,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
         model: config.model,
         messages,
         fetchImpl,
-        timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic,
+        timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic, env, reliability,
       });
       if (response.ok) {
         return finalizeReply({
@@ -330,7 +350,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
       if (groqKey || cloudflareReady || env.VERCEL_ENV) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({
+        return generateDABBIRAiReplyInternal({
           project: normalizedProject,
           message: input,
           language,
@@ -339,12 +359,12 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
           env: fallbackEnv,
           fetchImpl,
           oidcGetter, semantic,
-        });
+        },reliability);
       }
 
       return {
         ok: false,
-        state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR',
+        state: response.status === 429 ? 'RATE_LIMITED' : response.status===402 ? 'AI_PROVIDER_CAPACITY_UNAVAILABLE' : 'PROVIDER_ERROR',
         error: `gemini_http_${response.status}`,
         provider: config.provider,
         model: config.model,
@@ -354,7 +374,7 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
     } catch (error) {
       if (groqKey || cloudflareReady || env.VERCEL_ENV) {
         const { GEMINI_API_KEY: _geminiKey, DABBIR_GEMINI_MODEL: _geminiModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({
+        return generateDABBIRAiReplyInternal({
           project: normalizedProject,
           message: input,
           language,
@@ -363,13 +383,14 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
           env: fallbackEnv,
           fetchImpl,
           oidcGetter, semantic,
-        });
+        },reliability);
       }
 
+      if(isAiProviderCooldown(error))return cooldownFailure(config,error);
       return {
         ok: false,
         state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR',
-        error: error?.name === 'AbortError' ? 'gemini_timeout' : 'gemini_network_error',
+        error: error?.code==='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED'?'ai_provider_chain_budget_exhausted':error?.name === 'AbortError' ? 'gemini_timeout' : 'gemini_network_error',
         provider: config.provider,
         model: config.model,
         auth_mode: config.auth_mode,
@@ -380,48 +401,50 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
 
   if (groqKey) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: GROQ_ENDPOINT, credential: groqKey, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic, env, reliability });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
       if (cloudflareReady || env.VERCEL_ENV) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
+        return generateDABBIRAiReplyInternal({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic },reliability);
       }
-      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : response.status===402 ? 'AI_PROVIDER_CAPACITY_UNAVAILABLE' : 'PROVIDER_ERROR', error: `groq_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
       if (cloudflareReady || env.VERCEL_ENV) {
         const { GROQ_API_KEY: _groqKey, DABBIR_AI_MODEL: _groqModel, DABBIR_GROQ_MODEL: _groqOperatorModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
+        return generateDABBIRAiReplyInternal({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic },reliability);
       }
-      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+      if(isAiProviderCooldown(error))return cooldownFailure(config,error);
+      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.code==='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED'?'ai_provider_chain_budget_exhausted':error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     }
   }
 
   if (cloudflareReady) {
     try {
-      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic });
+      const { response, payload } = await callOpenAiCompatible({ endpoint: cloudflareEndpoint(env), credential: cloudflareToken, model: config.model, messages, fetchImpl, timeoutMs: DIRECT_PROVIDER_TIMEOUT_MS, semantic, env, reliability });
       if (response.ok) return finalizeReply({ reply: String(payload?.choices?.[0]?.message?.content || '').trim(), input, language, config, semantic, model: String(payload?.model || config.model) });
       if (env.VERCEL_ENV) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
+        return generateDABBIRAiReplyInternal({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic },reliability);
       }
-      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_ERROR', error: `cloudflare_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+      return { ok: false, state: response.status === 429 ? 'RATE_LIMITED' : response.status===402 ? 'AI_PROVIDER_CAPACITY_UNAVAILABLE' : 'PROVIDER_ERROR', error: `cloudflare_http_${response.status}`, provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     } catch (error) {
       if (env.VERCEL_ENV) {
         const { CLOUDFLARE_API_TOKEN: _cloudflareToken, CLOUDFLARE_ACCOUNT_ID: _cloudflareAccountId, DABBIR_CLOUDFLARE_MODEL: _cloudflareModel, ...fallbackEnv } = env;
-        return generateDABBIRAiReply({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic });
+        return generateDABBIRAiReplyInternal({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic },reliability);
       }
-      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.name === 'AbortError' ? 'cloudflare_timeout' : 'cloudflare_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+      if(isAiProviderCooldown(error))return cooldownFailure(config,error);
+      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.code==='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED'?'ai_provider_chain_budget_exhausted':error?.name === 'AbortError' ? 'cloudflare_timeout' : 'cloudflare_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
     }
   }
 
   if (env.VERCEL_ENV) {
     const gatewayAuth = await resolveGatewayCredential(env, oidcGetter);
     if (!gatewayAuth?.credential) return { ok: false, state: 'UNCONFIGURED', error: 'gateway_credential_missing', provider: config.provider, model: config.model, auth_mode: 'MISSING', cost_mode: config.cost_mode };
-    const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl, semantic });
+    const result = await callGatewayBoundedFallback({ credential: gatewayAuth.credential, primaryModel: config.model, messages, fetchImpl, semantic, env, reliability });
     if (!result.ok) {
       return {
         ok: false,
-        state: result.status === 429 ? 'RATE_LIMITED' : result.error === 'gateway_timeout' ? 'TIMEOUT' : 'PROVIDER_ERROR',
+        state: result.error==='gateway_cooldown'||result.status===402 ? 'AI_PROVIDER_CAPACITY_UNAVAILABLE' : result.status === 429 ? 'RATE_LIMITED' : result.error === 'gateway_timeout' ? 'TIMEOUT' : 'PROVIDER_ERROR',
         error: result.error,
         provider: config.provider,
         model: result.model,
@@ -433,4 +456,21 @@ export async function generateDABBIRAiReply({ project, message, language = 'auto
   }
 
   return { ok: false, state: 'UNCONFIGURED', error: 'groq_api_key_missing', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+}
+
+export async function generateDABBIRAiReply(args={}){
+  const env=args.env||process.env;
+  const startedAt=Date.now();
+  const chainBudgetMs=args.semantic?SEMANTIC_PROVIDER_CHAIN_TOTAL_TIMEOUT_MS:PROVIDER_CHAIN_TOTAL_TIMEOUT_MS;
+  const reliability={
+    startedAt,
+    deadline:startedAt+chainBudgetMs,
+    trace:[],
+    healthStore:args.providerHealthStore===undefined?createSupabaseProviderHealthStore({env}):args.providerHealthStore,
+  };
+  const {providerHealthStore:_ignored,...coreArgs}=args;
+  const result=await generateDABBIRAiReplyInternal({...coreArgs,env},reliability);
+  const providerReliability=summarizeProviderReliability(reliability.trace,startedAt);
+  console.info('dabbir_ai_provider_chain',{state:result?.state||'UNKNOWN',final_provider:result?.provider||null,network_attempts:providerReliability.network_attempts,skipped_attempts:providerReliability.skipped_attempts,provider_attempts_saved:providerReliability.provider_attempts_saved,chain_latency_ms:providerReliability.chain_latency_ms});
+  return {...result,telemetry:{...(result?.telemetry||{}),provider_reliability:providerReliability}};
 }
