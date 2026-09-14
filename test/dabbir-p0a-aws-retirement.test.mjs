@@ -6,6 +6,7 @@ const awsArchiveDir = new URL('../infra/aws-uae/', import.meta.url);
 const awsReadmeUrl = new URL('../infra/aws-uae/README.md', import.meta.url);
 
 const retiredWorkflows = [
+  'dabbir-aws-decommission-inventory-once.yml',
   'dabbir-aws-diagnose.yml',
   'dabbir-aws-infra-ci.yml',
   'dabbir-aws-oidc-smoke.yml',
