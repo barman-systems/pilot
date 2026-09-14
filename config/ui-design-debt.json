@@ -1423,7 +1423,7 @@
         "literal:font-size:13px!important": 28,
         "literal:line-height:1.65!important": 2,
         "literal:font-size:16px!important": 10,
-        "literal:min-height:44px!important": 11,
+        "literal:min-height:44px!important": 12,
         "literal:padding-bottom:calc(8px + env(safe-area-inset-bottom))!important": 1,
         "literal:line-height:1.45!important": 8,
         "literal:min-height:48px!important": 4,
