@@ -69,6 +69,18 @@ test('queued-goal customer prose is owned by the conversation brain boundary',()
   ])assert.equal(renderer.includes(forbidden),false,`conversation brain queued-goal renderer gained execution authority: ${forbidden}`);
 });
 
+test('repeat-memory customer prose is centralized in the conversation brain response owner',()=>{
+  const semantic=read('_dabbir-semantic-engine.js');
+  const response=read('_dabbir-conversation-brain-response.js');
+  assert.match(semantic,/repeatMemoryConfirmationReply/);
+  assert.match(semantic,/from '\.\/_dabbir-conversation-brain-response\.js'/);
+  assert.doesNotMatch(semantic,/const REPEAT_PROMPT_AR=/);
+  assert.doesNotMatch(semantic,/const REPEAT_PROMPT_EN=/);
+  assert.match(response,/export function repeatMemoryConfirmationReply/);
+  assert.match(response,/نفس السيارة والموقع ولا بتغير/);
+  assert.match(response,/Same vehicle and location/);
+});
+
 test('legacy-visible delivery crosses one conversation-brain response boundary',()=>{
   const orchestrator=read('_dabbir-understanding-orchestrator.js');
   const core=read('_dabbir-understanding-orchestrator-core.js');
@@ -77,6 +89,7 @@ test('legacy-visible delivery crosses one conversation-brain response boundary',
   assert.match(orchestrator,/from '\.\/_dabbir-understanding-orchestrator-core\.js'/);
   assert.match(orchestrator,/from '\.\/_dabbir-conversation-brain-response\.js'/);
   assert.match(orchestrator,/finalizeCustomerResponse\(\{text,purpose\}\)/);
+  assert.match(orchestrator,/bookingConfirmationReply\(\{result,language,bookingText\}\)/);
   assert.match(response,/CONVERSATION_BRAIN_RESPONSE_OWNER='DABBIR_CONVERSATION_BRAIN'/);
   assert.match(core,/export async function runUnderstandingTurn/);
 
