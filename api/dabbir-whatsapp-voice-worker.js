@@ -1,5 +1,5 @@
 import { json, readJsonBody } from './_auth-core.js';
-import { processWhatsAppVoiceDispatchToken } from './_dabbir-whatsapp-voice.js';
+import { processWhatsAppVoiceDispatchToken } from './_dabbir-whatsapp-voice-reliable.js';
 
 const clean=(v,max=160)=>String(v??'').trim().slice(0,max);
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
