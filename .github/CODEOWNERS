@@ -1,5 +1,7 @@
 * @barmanai
 /.github/ @barmanai
+/.github/agents/ @barmanai
+/.github/workflows/dabbir-native-github-protection.yml @barmanai
 /supabase/migrations/ @barmanai
 /api/ @barmanai
 /scripts/ @barmanai
