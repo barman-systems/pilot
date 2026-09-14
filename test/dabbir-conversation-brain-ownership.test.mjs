@@ -37,6 +37,7 @@ test('cognitive quality repair is owned by the conversation brain boundary',()=>
   assert.match(facade,/from '\.\/_dabbir-cognitive-dialogue-core\.js'/);
   assert.match(finalizer,/CONVERSATION_BRAIN_QUALITY_OWNER='DABBIR_CONVERSATION_BRAIN'/);
   assert.match(finalizer,/legacyQualityGate\(\{state,decision,previous,context\}\)/);
+  assert.match(finalizer,/semanticClarificationReply/);
   assert.doesNotMatch(orchestrator,/_dabbir-cognitive-dialogue-core/);
   assert.match(orchestratorCore,/from '\.\/_dabbir-cognitive-dialogue\.js'/);
 
@@ -57,7 +58,9 @@ test('queued-goal customer prose is owned by the conversation brain boundary',()
   assert.match(facade,/renderQueuedGoalPrompt as queuedGoalPrompt/);
   assert.match(facade,/partitionGoalRequests,resumeQueuedGoal/);
   assert.match(renderer,/CONVERSATION_BRAIN_QUEUED_GOAL_OWNER='DABBIR_CONVERSATION_BRAIN'/);
-  assert.match(renderer,/legacyQueuedGoalPrompt\(state,context,now,reduce\)/);
+  assert.match(renderer,/semanticClarificationReply/);
+  assert.doesNotMatch(renderer,/legacyQueuedGoalPrompt/);
+  assert.doesNotMatch(renderer,/from '\.\/_dabbir-goal-queue-core\.js'/);
   assert.match(core,/export function queuedGoalPrompt/);
 
   for(const forbidden of [
