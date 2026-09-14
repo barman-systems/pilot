@@ -6,9 +6,13 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const allowedClasses=new Set(['CANONICAL_OWNER','FEATURE_LOCAL_LEGITIMATE','COMPATIBILITY_ONLY','DUPLICATE_AUTHORITY','DEAD_UI','GENERATED_OUTPUT']);
 export function authorityViolations(registry,sources){
  const errors=[];
+ const scopeOwners=new Map();
  for(const [domain,entry] of Object.entries(registry.domains||{})){
   if(typeof entry.owner!=='string'||!entry.owner||Array.isArray(entry.owners))errors.push(`${domain}: exactly one design owner required`);
   if(!sources[entry.owner]&&entry.owner!=='design/tokens.json')errors.push(`${domain}: missing design owner`);
+  const scopeOwner=scopeOwners.get(entry.scope);
+  if(scopeOwner&&scopeOwner!==entry.owner)errors.push(`${domain}: document scope ${entry.scope} has a second design owner`);
+  else scopeOwners.set(entry.scope,entry.owner);
  }
  for(const [file,entry] of Object.entries(registry.sources||{})){
   if(!allowedClasses.has(entry.classification)||entry.classification==='DUPLICATE_AUTHORITY')errors.push(`${file}: unresolved authority`);
@@ -25,6 +29,7 @@ export function authorityViolations(registry,sources){
   const css=file.endsWith('.css')?source:[...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n');
   if(css&&!entry&&file!=='public/dabbir-design-tokens.css')errors.push(`${file}: unregistered design owner`);
   if(css&&entry&&entry.classification!=='GENERATED_OUTPUT'&&entry.designOwner!==file)errors.push(`${file}: CSS is defined outside its registered design owner ${entry.designOwner}`);
+  if(css&&entry&&entry.classification!=='GENERATED_OUTPUT'&&scopeOwners.has(entry.scope)&&scopeOwners.get(entry.scope)!==file)errors.push(`${file}: second design owner in document scope ${entry.scope}`);
   if(entry?.classification==='COMPATIBILITY_ONLY'&&(/<style\b|\.cssText\s*=|\.textContent\s*=\s*['"][.#]|style=/.test(source)||/\.[\w-]+[^{}\n]*\{[^{}]*(?:background|font-size|padding|border)\s*:/.test(source)))errors.push(`${file}: compatibility module retains design power`);
   if(css&&entry?.classification!=='GENERATED_OUTPUT'){
    for(const m of css.matchAll(/(?:^|[{}])\s*([^{}@]+)\{[^{}]*\}/g)){

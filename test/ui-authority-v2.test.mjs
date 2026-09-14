@@ -12,6 +12,8 @@ test('A: mutation adding a second owner to a domain fails',()=>{
  assert.match(authorityViolations(r,clean).join('\n'),/exactly one design owner/);
  const linked=structuredClone(registry);linked.sources['public/alias.css']={classification:'FEATURE_LOCAL_LEGITIMATE',scope:'web',designOwner:'public/web.css'};
  assert.match(authorityViolations(linked,{...clean,'public/alias.css':'.new-card{color:var(--text)}'}).join('\n'),/outside its registered design owner/);
+ linked.sources['public/alias.css'].designOwner='public/alias.css';
+ assert.match(authorityViolations(linked,{...clean,'public/alias.css':'.new-card{color:var(--text)}'}).join('\n'),/second design owner in document scope/);
 });
 test('B: mutation adding a runtime injector fails even with token-only CSS',()=>{
  assert.match(authorityViolations(registry,{...clean,'api/bridge.js':"const x=document.createElement('style');x.textContent='.card{color:var(--text)}'"}).join('\n'),/runtime style injection/);
