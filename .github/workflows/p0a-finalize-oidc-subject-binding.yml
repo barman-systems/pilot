@@ -1,0 +1,286 @@
+name: P0-A Finalize OIDC Subject Binding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/p0a-finalize-oidc-subject-binding.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: me-central-1
+  AWS_ROLE_NAME: DabbirGithubDeployRole
+  AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+  AWS_STACK_NAME: dabbir-github-oidc
+
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 20
+    env:
+      GH_ADMIN_TOKEN: ${{ secrets.DABBIR_GITHUB_ADMIN_TOKEN }}
+      GH_ACTIONS_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS under current legacy subject
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: p0a-finalize-oidc-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify exact legacy-only live precondition
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p0a-finalize"
+          aws iam get-role --role-name "$AWS_ROLE_NAME" --output json > "$RUNNER_TEMP/role-before.json"
+          FILE="$RUNNER_TEMP/role-before.json" OUT="$RUNNER_TEMP/p0a-finalize/live-precondition.json" python3 - <<'PY'
+          import json,os
+          d=json.load(open(os.environ['FILE']))['Role']
+          st=d['AssumeRolePolicyDocument'].get('Statement',[])
+          if isinstance(st,dict): st=[st]
+          subs=[]; auds=[]
+          for s in st:
+            for op in ('StringEquals','StringLike'):
+              c=(s.get('Condition') or {}).get(op) or {}
+              q=c.get('token.actions.githubusercontent.com:sub',[])
+              a=c.get('token.actions.githubusercontent.com:aud',[])
+              subs += q if isinstance(q,list) else [q] if q else []
+              auds += a if isinstance(a,list) else [a] if a else []
+          legacy='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          out={'state':'PASS' if subs==[legacy] and auds==['sts.amazonaws.com'] else 'FAIL','subjects':subs,'audiences':auds,'legacy_only':subs==[legacy]}
+          json.dump(out,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if out['state']!='PASS': raise SystemExit('live IAM trust is no longer the exact legacy-only precondition')
+          PY
+
+      - name: Verify GitHub OIDC is immutable default before migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_ADMIN_TOKEN:-}"
+          echo "::add-mask::$GH_ADMIN_TOKEN"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/oidc/customization/sub"
+          current="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          CURRENT="$current" OUT="$RUNNER_TEMP/p0a-finalize/github-oidc-before.json" python3 - <<'PY'
+          import json,os
+          d=json.loads(os.environ['CURRENT'])
+          ok=d.get('use_default') is True and d.get('use_immutable_subject') is True
+          out={'state':'PASS' if ok else 'FAIL','use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject')}
+          json.dump(out,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if not ok: raise SystemExit('GitHub OIDC subject template is not the expected immutable default')
+          PY
+
+      - name: Deploy recoverable transitional trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          final='infra/aws-uae/github-oidc-bootstrap.yml'
+          transition="$RUNNER_TEMP/github-oidc-transition.yml"
+          FINAL="$final" TRANSITION="$transition" python3 - <<'PY'
+          import os,pathlib
+          p=pathlib.Path(os.environ['FINAL'])
+          text=p.read_text()
+          marker='                token.actions.githubusercontent.com:sub:\n'
+          if text.count(marker)!=1: raise SystemExit('subject marker must occur exactly once')
+          legacy='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          migration='repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/p0a-finalize-oidc-subject-binding.yml@refs/heads/main'
+          injected=marker+f'                  - {legacy}\n                  - {migration}\n'
+          pathlib.Path(os.environ['TRANSITION']).write_text(text.replace(marker,injected,1))
+          PY
+
+          provider="$(aws cloudformation describe-stacks --stack-name "$AWS_STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ExistingGitHubOidcProviderArn'].ParameterValue | [0]" --output text 2>/dev/null || true)"
+          args=()
+          if [ -n "$provider" ] && [ "$provider" != 'None' ]; then args+=(ExistingGitHubOidcProviderArn="$provider"); fi
+          if [ "${#args[@]}" -gt 0 ]; then
+            aws cloudformation deploy --stack-name "$AWS_STACK_NAME" --template-file "$transition" --capabilities CAPABILITY_NAMED_IAM --parameter-overrides "${args[@]}" --no-fail-on-empty-changeset
+          else
+            aws cloudformation deploy --stack-name "$AWS_STACK_NAME" --template-file "$transition" --capabilities CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset
+          fi
+
+          aws iam get-role --role-name "$AWS_ROLE_NAME" --output json > "$RUNNER_TEMP/role-transition.json"
+          ROLE="$RUNNER_TEMP/role-transition.json" SOURCE="$final" OUT="$RUNNER_TEMP/p0a-finalize/transition-trust.json" python3 - <<'PY'
+          import json,os,re
+          role=json.load(open(os.environ['ROLE']))['Role']
+          st=role['AssumeRolePolicyDocument'].get('Statement',[])
+          if isinstance(st,dict): st=[st]
+          subs=[]; auds=[]
+          for s in st:
+            c=(s.get('Condition') or {}).get('StringEquals') or {}
+            q=c.get('token.actions.githubusercontent.com:sub',[]); a=c.get('token.actions.githubusercontent.com:aud',[])
+            subs += q if isinstance(q,list) else [q] if q else []
+            auds += a if isinstance(a,list) else [a] if a else []
+          source=open(os.environ['SOURCE']).read()
+          exact=re.findall(r'^\s*- (repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:.+)$',source,re.M)
+          legacy='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          migration='repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/p0a-finalize-oidc-subject-binding.yml@refs/heads/main'
+          expected=[legacy,migration,*exact]
+          ok=set(subs)==set(expected) and len(subs)==len(expected) and auds==['sts.amazonaws.com'] and not any(any(ch in x for ch in '*?[') for x in subs)
+          out={'state':'PASS' if ok else 'FAIL','subject_count':len(subs),'expected_subject_count':len(expected),'legacy_present':legacy in subs,'migration_subject_present':migration in subs,'wildcard_present':any(any(ch in x for ch in '*?[') for x in subs),'audience_exact':auds==['sts.amazonaws.com']}
+          json.dump(out,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if not ok: raise SystemExit('recoverable transitional trust readback mismatch')
+          PY
+
+      - name: Set exact immutable GitHub OIDC subject template
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/oidc/customization/sub"
+          code="$(curl -sS -o "$RUNNER_TEMP/oidc-put.txt" -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            -H 'Content-Type: application/json' \
+            -d '{"use_default":false,"include_claim_keys":["repo","context","ref","workflow_ref"],"use_immutable_subject":true}' "$api")"
+          rm -f "$RUNNER_TEMP/oidc-put.txt"
+          test "$code" = '201'
+          current="$(curl -fsS -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "$api")"
+          CURRENT="$current" OUT="$RUNNER_TEMP/p0a-finalize/github-oidc-after.json" python3 - <<'PY'
+          import json,os
+          d=json.loads(os.environ['CURRENT']); expected=['repo','context','ref','workflow_ref']
+          ok=d.get('use_default') is False and d.get('include_claim_keys')==expected and d.get('use_immutable_subject') is True
+          out={'state':'PASS' if ok else 'FAIL','use_default':d.get('use_default'),'include_claim_keys':d.get('include_claim_keys'),'use_immutable_subject':d.get('use_immutable_subject')}
+          json.dump(out,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if not ok: raise SystemExit('custom OIDC subject template readback mismatch')
+          PY
+
+      - name: Prove customized migration subject can assume during transition
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" OUT="$RUNNER_TEMP/p0a-finalize/customized-claims.json" python3 - <<'PY'
+          import os,json,base64
+          t=os.environ['TOKEN']; payload=t.split('.')[1]; payload += '='*(-len(payload)%4); c=json.loads(base64.urlsafe_b64decode(payload))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','repository_id','repository_owner_id','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          expected='repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/p0a-finalize-oidc-subject-binding.yml@refs/heads/main'
+          safe['subject_exact_expected']=safe.get('sub')==expected
+          safe['state']='PASS' if safe['subject_exact_expected'] else 'FAIL'
+          json.dump(safe,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if safe['state']!='PASS': raise SystemExit('customized subject does not match exact migration subject')
+          PY
+          aws sts assume-role-with-web-identity --role-arn "$AWS_ROLE_ARN" --role-session-name "p0a-transition-proof-${GITHUB_RUN_ID}" --web-identity-token "$token" --duration-seconds 900 --output json > "$RUNNER_TEMP/transient-creds.json"
+          jq -e '.Credentials.AccessKeyId and .Credentials.SecretAccessKey and .Credentials.SessionToken' "$RUNNER_TEMP/transient-creds.json" >/dev/null
+          rm -f "$RUNNER_TEMP/transient-creds.json"
+          unset token response
+          printf '{"state":"PASS","customized_subject_assume_allowed":true,"credential_values_persisted":false}\n' > "$RUNNER_TEMP/p0a-finalize/customized-assume-positive.json"
+
+      - name: Deploy final exact workflow-bound trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          provider="$(aws cloudformation describe-stacks --stack-name "$AWS_STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ExistingGitHubOidcProviderArn'].ParameterValue | [0]" --output text 2>/dev/null || true)"
+          args=()
+          if [ -n "$provider" ] && [ "$provider" != 'None' ]; then args+=(ExistingGitHubOidcProviderArn="$provider"); fi
+          if [ "${#args[@]}" -gt 0 ]; then
+            aws cloudformation deploy --stack-name "$AWS_STACK_NAME" --template-file infra/aws-uae/github-oidc-bootstrap.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides "${args[@]}" --no-fail-on-empty-changeset
+          else
+            aws cloudformation deploy --stack-name "$AWS_STACK_NAME" --template-file infra/aws-uae/github-oidc-bootstrap.yml --capabilities CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset
+          fi
+          aws iam get-role --role-name "$AWS_ROLE_NAME" --output json > "$RUNNER_TEMP/role-final.json"
+          ROLE="$RUNNER_TEMP/role-final.json" SOURCE='infra/aws-uae/github-oidc-bootstrap.yml' OUT="$RUNNER_TEMP/p0a-finalize/final-trust.json" python3 - <<'PY'
+          import json,os,re
+          role=json.load(open(os.environ['ROLE']))['Role']; st=role['AssumeRolePolicyDocument'].get('Statement',[])
+          if isinstance(st,dict): st=[st]
+          subs=[]; auds=[]
+          for s in st:
+            c=(s.get('Condition') or {}).get('StringEquals') or {}
+            q=c.get('token.actions.githubusercontent.com:sub',[]); a=c.get('token.actions.githubusercontent.com:aud',[])
+            subs += q if isinstance(q,list) else [q] if q else []
+            auds += a if isinstance(a,list) else [a] if a else []
+          source=open(os.environ['SOURCE']).read()
+          expected=re.findall(r'^\s*- (repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:.+)$',source,re.M)
+          legacy='repo:barman-systems@319497139/pilot@1346817686:environment:production'
+          migration='repo:barman-systems@319497139/pilot@1346817686:environment:production:ref:refs/heads/main:workflow_ref:barman-systems/pilot/.github/workflows/p0a-finalize-oidc-subject-binding.yml@refs/heads/main'
+          wild=any(any(ch in x for ch in '*?[') for x in subs)
+          ok=set(subs)==set(expected) and len(subs)==len(expected) and auds==['sts.amazonaws.com'] and legacy not in subs and migration not in subs and not wild
+          out={'state':'PASS' if ok else 'FAIL','subject_count':len(subs),'expected_subject_count':len(expected),'legacy_present':legacy in subs,'migration_subject_present':migration in subs,'wildcard_present':wild,'audience_exact':auds==['sts.amazonaws.com'],'max_session_duration':role.get('MaxSessionDuration')}
+          json.dump(out,open(os.environ['OUT'],'w'),indent=2,sort_keys=True)
+          if not ok: raise SystemExit('final live IAM trust is not exact source-bound trust')
+          PY
+
+      - name: Prove migration workflow loses AWS authority after finalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          echo "::add-mask::$token"
+          set +e
+          aws sts assume-role-with-web-identity --role-arn "$AWS_ROLE_ARN" --role-session-name "p0a-final-negative-${GITHUB_RUN_ID}" --web-identity-token "$token" --duration-seconds 900 --output json > "$RUNNER_TEMP/unexpected.json" 2> "$RUNNER_TEMP/denied.txt"
+          status=$?
+          set -e
+          rm -f "$RUNNER_TEMP/unexpected.json" "$RUNNER_TEMP/denied.txt"
+          unset token response
+          test "$status" -ne 0
+          printf '{"state":"PASS","migration_subject_denied_after_finalization":true,"credential_values_persisted":false}\n' > "$RUNNER_TEMP/p0a-finalize/migration-negative.json"
+
+      - name: Dispatch and verify final main smoke under exact subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$GH_ACTIONS_TOKEN"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          before="$(curl -fsS -H "Authorization: Bearer ${GH_ACTIONS_TOKEN}" -H 'Accept: application/vnd.github+json' "$api/actions/workflows/dabbir-aws-oidc-smoke.yml/runs?event=workflow_dispatch&branch=main&per_page=20" | jq '[.workflow_runs[].id] | max // 0')"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer ${GH_ACTIONS_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'Content-Type: application/json' -d '{"ref":"main"}' "$api/actions/workflows/dabbir-aws-oidc-smoke.yml/dispatches")"
+          test "$code" = '204'
+          run_id=''
+          conclusion=''
+          for _ in $(seq 1 90); do
+            runs="$(curl -fsS -H "Authorization: Bearer ${GH_ACTIONS_TOKEN}" -H 'Accept: application/vnd.github+json' "$api/actions/workflows/dabbir-aws-oidc-smoke.yml/runs?event=workflow_dispatch&branch=main&per_page=20")"
+            run_id="$(jq -r --argjson before "$before" --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.id > $before and .head_sha == $sha)] | sort_by(.id) | last | .id // empty' <<<"$runs")"
+            if [ -n "$run_id" ]; then
+              state="$(jq -r --argjson id "$run_id" '.workflow_runs[] | select(.id==$id) | .status' <<<"$runs")"
+              conclusion="$(jq -r --argjson id "$run_id" '.workflow_runs[] | select(.id==$id) | .conclusion // empty' <<<"$runs")"
+              if [ "$state" = 'completed' ]; then break; fi
+            fi
+            sleep 5
+          done
+          test -n "$run_id"
+          test "$conclusion" = 'success'
+          jq -n --arg state PASS --argjson run_id "$run_id" --arg sha "$GITHUB_SHA" '{state:$state,smoke_run_id:$run_id,head_sha:$sha,conclusion:"success"}' > "$RUNNER_TEMP/p0a-finalize/final-smoke.json"
+
+      - name: Write finalization summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/p0a-finalize" python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['ROOT']); p.mkdir(parents=True,exist_ok=True)
+          required=['live-precondition.json','github-oidc-before.json','transition-trust.json','github-oidc-after.json','customized-claims.json','customized-assume-positive.json','final-trust.json','migration-negative.json','final-smoke.json']
+          states={}
+          for n in required:
+            f=p/n
+            if not f.exists(): states[n]='MISSING'; continue
+            try: states[n]=json.loads(f.read_text()).get('state','UNKNOWN')
+            except Exception: states[n]='INVALID'
+          ok=all(v=='PASS' for v in states.values())
+          out={'state':'PASS' if ok else 'FAIL','states':states,'legacy_subject_removed':states.get('final-trust.json')=='PASS','workflow_binding_proven':states.get('final-smoke.json')=='PASS','secrets_exposed':False}
+          (p/'summary.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          if not ok: raise SystemExit('P0-A OIDC finalization evidence incomplete')
+          PY
+
+      - name: Upload final sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0a-oidc-finalization-${{ github.sha }}
+          path: ${{ runner.temp }}/p0a-finalize/
+          if-no-files-found: error
+          retention-days: 30
