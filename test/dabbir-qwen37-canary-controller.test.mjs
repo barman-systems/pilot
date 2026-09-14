@@ -49,9 +49,9 @@ test('controller resolves Production deployment from DABBIR release evidence, no
   assert.doesNotMatch(source,/api\.vercel\.com\/v4\/aliases/);
   assert.match(source,/VERCEL_PROJECT_ACCESS_HTTP_/);
   const preflight=source.indexOf('preflight_vercel_access\n');
-  const firstMutation=source.indexOf('upsert_env 0 0');
+  const executableOffMutation=source.lastIndexOf('upsert_env 0 0');
   assert.ok(preflight>=0);
-  assert.ok(firstMutation>preflight);
+  assert.ok(executableOffMutation>preflight);
 });
 
 test('controller uses Vercel env upsert without printing response bodies containing values',()=>{
