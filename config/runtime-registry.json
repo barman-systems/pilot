@@ -1,13 +1,24 @@
 {
-  "version": 2,
+  "version": 3,
   "authority": "DABBIR",
   "runtime": "api/dabbir-runtime.js",
   "environment": "PRODUCTION_DABBIR",
   "operational_mode": "AUTHENTICATED_WEB_RUNTIME",
   "ai": {
-    "state": "OPERATIONAL_IN_AUTHENTICATED_RUNTIME",
-    "cost_mode": "FREE_TIER_ONLY",
-    "grounding": "BUSINESS_RLS_CONTEXT"
+    "state": "OPERATIONAL_WITH_RESILIENT_GATEWAY_RECOVERY",
+    "cost_mode": "FREE_FIRST_WITH_PAID_GATEWAY_RECOVERY",
+    "grounding": "BUSINESS_RLS_CONTEXT_PLUS_EXTERNAL_LIVE_EVIDENCE",
+    "gateway_recovery_model": "openai/gpt-5.6-sol",
+    "live_research": "E2E_VERIFIED_READ"
+  },
+  "integrations": {
+    "vercel_ai_gateway": "OPERATIONAL",
+    "exa_live_research": "E2E_VERIFIED_READ",
+    "composio": "DISABLED_FAIL_CLOSED",
+    "stripe": "SANDBOX_ONLY",
+    "google_maps": "UNCONFIRMED",
+    "instagram": "UNVERIFIED",
+    "calendar": "UNVERIFIED"
   },
   "channels": {
     "web": "OPERATIONAL",
