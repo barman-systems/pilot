@@ -66,6 +66,20 @@ export function goalClarificationReply({fields=[],language='en',activity='',deli
   return ar?'وش تحتاج مني أكمله لك؟':'What would you like me to complete for you?';
 }
 
+// Service-question logic decides only target + verification status. The Brain
+// owns how that already-verified fact (or absence of one) is said to the customer.
+export function serviceAttributeReply({status,field,label='',value=null,currency='',language='ar',resumeReply=null}={}){
+  const ar=isArabic(language);
+  if(status==='TARGET_UNRESOLVED')return ar?'أي خدمة تقصد؟':'Which service do you mean?';
+  if(!['price','duration_minutes'].includes(field))throw Object.assign(new Error('CONVERSATION_BRAIN_SERVICE_FIELD_UNSUPPORTED'),{code:'CONVERSATION_BRAIN_SERVICE_FIELD_UNSUPPORTED'});
+  let reply;
+  if(status==='UNAVAILABLE')reply=ar?`${field==='price'?'سعر':'مدة'} ${label} غير محدد في بيانات النشاط.`:`The ${field==='price'?'price':'duration'} for ${label} is not specified in the business information.`;
+  else if(status==='VERIFIED'&&field==='price')reply=ar?`${label} بـ${Number(value)} ${currency}.`:`${label} costs ${Number(value)} ${currency}.`;
+  else if(status==='VERIFIED'&&field==='duration_minutes')reply=ar?`${label} مدته ${Number(value)} دقيقة.`:`${label} takes ${Number(value)} minutes.`;
+  else throw Object.assign(new Error('CONVERSATION_BRAIN_SERVICE_STATUS_UNSUPPORTED'),{code:'CONVERSATION_BRAIN_SERVICE_STATUS_UNSUPPORTED'});
+  return resumeReply?reply+'\n'+resumeReply:reply;
+}
+
 const exactStaticResponse=text=>{
   if(text===recoveryGreetingReply('ar'))return recoveryGreetingReply('ar');
   if(text===recoveryGreetingReply('en'))return recoveryGreetingReply('en');
