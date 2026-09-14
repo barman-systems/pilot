@@ -20,6 +20,7 @@ import {
   serviceListReply,
   defaultServicePrompt,
   goalClarificationReply,
+  conversationBrainCompatibilityReply,
   renderOperationalResponse,
 } from '../api/_dabbir-conversation-brain-response.js';
 
@@ -105,6 +106,14 @@ test('availability, appointment and service presentation wording remains compati
   assert.equal(serviceListReply({services:[],language:'en',currencyCode:'AED',serviceLabel}),'There are no active services right now.');
   assert.equal(defaultServicePrompt('ar'),'أي خدمة تحتاج؟');
   assert.equal(defaultServicePrompt('en'),'Which service do you need?');
+});
+
+test('compatibility core requests Brain-owned prose by semantic kind and unknown kinds fail closed',()=>{
+  const bookingText=(result,lang)=>`${lang}:${result.appointment_id}`;
+  assert.equal(conversationBrainCompatibilityReply({kind:'GREETING',language:'ar'}),greetingReply('ar'));
+  assert.equal(conversationBrainCompatibilityReply({kind:'NO_AVAILABILITY',language:'en'}),noAvailabilityReply('en'));
+  assert.equal(conversationBrainCompatibilityReply({kind:'VERIFIED_MUTATION',action:'CREATE_BOOKING',result:{appointment_id:'a1'},language:'ar',bookingText,queuedGoalPrompt:'\nالتالي'}),'ar:a1\nالتالي');
+  assert.throws(()=>conversationBrainCompatibilityReply({kind:'UNKNOWN'}),error=>error?.code==='CONVERSATION_BRAIN_RESPONSE_KIND_UNSUPPORTED');
 });
 
 test('operational mutation reply is rebuilt only from verified receipt and preserves Brain-owned queue suffix',()=>{
