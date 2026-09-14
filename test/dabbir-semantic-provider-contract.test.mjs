@@ -147,7 +147,7 @@ test('production regression: schema repair cannot exhaust the final provider req
  assert.equal(endpoints.length,4);
  assert.equal(endpoints.some(x=>x.includes('cloudflare')),false);
  assert.equal(result.telemetry.request_count,4);
- assert.deepEqual(result.telemetry.skipped_attempts,[{provider:'cloudflare-workers-ai',reason:'SEMANTIC_PROVIDER_RESERVED'}]);
+ assert.deepEqual(result.telemetry.skipped_attempts,[{provider:'cloudflare-workers-ai',attempt_type:'CUSTOMER',reason:'SEMANTIC_PROVIDER_RESERVED'}]);
 });
 test('all configured providers remain reachable when each consumes only one attempt',async()=>{
  const endpoints=[];
@@ -224,18 +224,15 @@ test('explicit availability with grounded date/time is deterministic even when p
 });
 
 test('deterministic availability policy also covers English temporal availability language',async()=>{
-  const providerMistake={action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.55,risk_level:'LOW',service_name:null,service_evidence:null,knowledge_key:null,
-    entities:[{entity:'date',value:'2026-09-09',evidence:'tomorrow',confidence:.99,correction:false},{entity:'time',value:'09:00',evidence:'9',confidence:.99,correction:false}]};
-  const result=await interpretSemanticMessage({message:'Any availability tomorrow at 9?',context:{},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify(providerMistake))});
+  const providerMistake={action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.55,risk_level:'LOW',service_name:null,service_evidence:null,knowledge_key:null,entities:[{entity:'date',value:'2026-09-09',evidence:'tomorrow',confidence:.99,correction:false},{entity:'time',value:'09:00',evidence:'9',confidence:.99,correction:false}]};
+  const result=await interpretSemanticMessage({message:'Any availability tomorrow at 9?',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify(providerMistake))});
   assert.equal(result.proposal.intent,'BOOKING');assert.equal(result.proposal.action,'CHECK_AVAILABILITY');
   assert.equal(result.proposal.intentResolution,'DETERMINISTIC_AVAILABILITY_WITH_TEMPORAL_EVIDENCE');
 });
 
 test('service discovery without grounded temporal evidence is not promoted to booking',async()=>{
   const discovery={action:'SERVICE_MENU',intent:'SERVICE_DISCOVERY',confidence:.95,risk_level:'LOW',service_name:null,service_evidence:null,knowledge_key:null,entities:[]};
-  const result=await interpretSemanticMessage({message:'وش الخدمات المتوفرة؟',context:{},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify(discovery))});
+  const result=await interpretSemanticMessage({message:'وش الخدمات المتوفرة؟',context:{},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify(discovery))});
   assert.equal(result.proposal.intent,'SERVICE_DISCOVERY');assert.equal(result.proposal.action,'SERVICE_MENU');
   assert.equal(result.proposal.intentResolution,undefined);
 });
@@ -274,27 +271,23 @@ test('contract refuses prose envelopes and unsupported execution data',()=>{
 });
 
 test('a sole catalog service is not a customer selection without message evidence',async()=>{
-  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:'فاضين'}))});
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:'فاضين'}))});
   assert.equal(result.proposal.serviceName,null);
   assert.equal(result.proposal.intent,'BOOKING');assert.equal(result.proposal.entities[1].value,'09:00');
 });
 
 for(const evidence of [null,'غسيل كامل','بكره'])test('unsubstantiated service evidence is rejected: '+evidence,async()=>{
-  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:evidence}))});
+  const result=await interpretSemanticMessage({message:'فاضين بكره 9 الصبح',context:{services:[{name:'غسيل كامل'}]},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'غسيل كامل',service_evidence:evidence}))});
   assert.equal(result.proposal.serviceName,null);
 });
 
 test('explicit service mention in the current message can select a supplied catalog name',async()=>{
-  const result=await interpretSemanticMessage({message:'أبا VIP باجر',context:{services:[{name:'VIP Wash'}]},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
+  const result=await interpretSemanticMessage({message:'أبا VIP باجر',context:{services:[{name:'VIP Wash'}]},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
   assert.equal(result.proposal.serviceName,'VIP Wash');
 });
 
 test('a quoted service absent from the scoped catalog is rejected',async()=>{
-  const result=await interpretSemanticMessage({message:'أبا VIP',context:{services:[{name:'Haircut'}]},env:{GROQ_API_KEY:'test'},
-    fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
+  const result=await interpretSemanticMessage({message:'أبا VIP',context:{services:[{name:'Haircut'}]},env:{GROQ_API_KEY:'test'},fetchImpl:async()=>response(JSON.stringify({...proposal,service_name:'VIP Wash',service_evidence:'VIP'}))});
   assert.equal(result.proposal.serviceName,null);
 });
 
