@@ -20,6 +20,7 @@ export function qwen37BenchmarkEnvironment(env = process.env) {
   if (!vercelEnv && !apiKey && !oidc) throw new Error('QWEN37_BENCHMARK_GATEWAY_NOT_CONFIGURED');
   return {
     VERCEL_ENV: vercelEnv || 'preview',
+    DABBIR_AI_ATTEMPT_TYPE: 'BENCHMARK',
     DABBIR_AI_GATEWAY_MODEL: QWEN37_BENCHMARK_MODEL,
     ...(apiKey ? { AI_GATEWAY_API_KEY: apiKey } : {}),
     ...(oidc ? { VERCEL_OIDC_TOKEN: oidc } : {}),
@@ -34,9 +35,6 @@ export function qwen37BenchmarkFetch(fetchImpl = fetch) {
     catch { throw new Error('QWEN37_BENCHMARK_GATEWAY_BODY_INVALID'); }
     if (String(body.model || '') !== QWEN37_BENCHMARK_MODEL) throw new Error('QWEN37_BENCHMARK_MODEL_DRIFT');
 
-    // The benchmark must prove Qwen itself, not an AI Gateway provider/model
-    // fallback. `only` is the hard routing allowlist; `order` alone would leave
-    // unlisted providers eligible as fallbacks.
     body.providerOptions = {
       ...(body.providerOptions || {}),
       gateway: {
@@ -46,10 +44,6 @@ export function qwen37BenchmarkFetch(fetchImpl = fetch) {
       },
     };
 
-    // Give Qwen the same canonical generation contract that DABBIR already
-    // validates. Qwen3.7 Flash reasoning is enabled by default, while structured
-    // output is documented for non-thinking mode, so this benchmark explicitly
-    // disables reasoning instead of spending hidden output budget on thinking.
     body.response_format = {
       type: 'json_schema',
       json_schema: {
@@ -91,6 +85,7 @@ export async function runQwen37Benchmark({ scenario = 'critical', env = process.
       request_count: Number(item.telemetry.request_count) || 0,
       final_request_usage: item.telemetry.final_request_usage || null,
       actual_cost_usd: typeof item.telemetry.actual_cost_usd === 'number' ? item.telemetry.actual_cost_usd : null,
+      provider_reliability: item.telemetry.provider_reliability || null,
     } : null,
     error: item.error || null,
   }));
@@ -98,6 +93,7 @@ export async function runQwen37Benchmark({ scenario = 'critical', env = process.
     ok: Boolean(result.ok && isolatedProvider),
     state: result.ok && isolatedProvider ? 'SUCCESS' : 'FAILED',
     benchmark: 'DABBIR_QWEN37_STRICT_NONE_V3',
+    attempt_type: 'BENCHMARK',
     model: QWEN37_BENCHMARK_MODEL,
     configuration: 'ALIBABA_ONLY_STRICT_JSON_SCHEMA_NON_THINKING_2400_MAX',
     scenario,
