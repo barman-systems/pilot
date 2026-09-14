@@ -115,7 +115,7 @@ export async function generateDABBIRAiReply(args={}){
     let response;
     try{response=await upstreamFetch(url,nextOptions);}catch(error){
       if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED'].includes(error?.code)){
-        localSkippedAttempts.push({provider,model:requestedModel,reason:error.code});
+        localSkippedAttempts.push({provider,reason:error.code});
         throw error;
       }
       attempts.push({endpoint:provider,model:requestedModel,status:0,duration_ms:Date.now()-started,outcome:error?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR'});
