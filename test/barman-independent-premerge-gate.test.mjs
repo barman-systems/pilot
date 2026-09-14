@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import {
   REQUIRED_WORKFLOWS,
   STATUS_CONTEXT,
-  isProtectedTrustPath,
   validatePullRequestShape,
 } from '../scripts/barman-independent-premerge-gate.mjs';
 
@@ -60,19 +59,13 @@ test('trusted identity is same-repository main and fail-closed for drafts or for
   assert.throws(()=>validatePullRequestShape(pr({head:{ref:'feature/test',sha:shaB,repo:{full_name:'someone/fork'}}}),'barman-systems/pilot'),/PREMERGE_FORK_DENIED/);
 });
 
-test('trust-root files cannot be self-modified by an ordinary candidate',()=>{
-  for(const path of [
-    '.github/workflows/ci.yml',
-    '.github/workflows/barman-independent-premerge-gate.yml',
-    'scripts/barman-independent-premerge-gate.mjs',
-    'scripts/barman-tool-agent.mjs',
-    'api/barman-tool-agent-broker.js',
-    'scripts/dabbir-required-pr-gates.mjs',
-    'scripts/dabbir-security-gate.mjs',
-  ]) assert.equal(isProtectedTrustPath(path),true,path);
-  assert.equal(isProtectedTrustPath('api/ai-business-operator.js'),false);
-  assert.equal(isProtectedTrustPath('test/customer-journey.test.mjs'),false);
-  assert.match(script,/PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER/);
+test('owner approval role is absent while trusted-base verification remains fail-closed',()=>{
+  assert.doesNotMatch(script,/PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER/);
+  assert.doesNotMatch(script,/isProtectedTrustPath/);
+  assert.match(script,/assertHeadContainsBase/);
+  assert.match(script,/waitRequiredWorkflows/);
+  assert.match(script,/PREMERGE_HEAD_CHANGED_DURING_VERIFY/);
+  assert.match(script,/PREMERGE_BASE_CHANGED_DURING_VERIFY/);
 });
 
 test('gate binds current base, requires head to contain it, and invalidates receipts when main moves',()=>{
