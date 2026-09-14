@@ -1,0 +1,25 @@
+{
+  "RoleName": "DabbirGithubDeployRole",
+  "Arn": "arn:aws:iam::388699644093:role/DabbirGithubDeployRole",
+  "CreateDate": "2026-09-01T08:17:27+00:00",
+  "MaxSessionDuration": 3600,
+  "PermissionsBoundary": null,
+  "AssumeRolePolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "Federated": "arn:aws:iam::388699644093:oidc-provider/token.actions.githubusercontent.com"
+        },
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Condition": {
+          "StringEquals": {
+            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+            "token.actions.githubusercontent.com:sub": "repo:barman-systems@319497139/pilot@1346817686:environment:production"
+          }
+        }
+      }
+    ]
+  }
+}

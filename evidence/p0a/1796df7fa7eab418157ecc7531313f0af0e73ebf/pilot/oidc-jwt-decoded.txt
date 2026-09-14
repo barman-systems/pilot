@@ -1,0 +1,17 @@
+{
+  "aud": "sts.amazonaws.com",
+  "environment": "production",
+  "event_name": "push",
+  "exp": 1789399922,
+  "iat": 1789399622,
+  "iss": "https://token.actions.githubusercontent.com",
+  "jti": "1f766114-58d4-4012-afcc-029f924a5ab8",
+  "lifetime_seconds": 300,
+  "nbf": 1789399322,
+  "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+  "repository": "barman-systems/pilot",
+  "repository_owner": "barman-systems",
+  "sub": "repo:barman-systems@319497139/pilot@1346817686:environment:production",
+  "verification_time": 1789399622,
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-agent-runtime-security-audit.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+}

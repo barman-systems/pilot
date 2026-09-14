@@ -1,0 +1,9 @@
+{
+  "state": "PASS",
+  "http_status": 200,
+  "environments": [
+    "Preview",
+    "Production"
+  ],
+  "preview_environment_exists": true
+}

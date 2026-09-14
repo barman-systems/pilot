@@ -1,0 +1,12 @@
+{
+  "frozen_sha": "1796df7fa7eab418157ecc7531313f0af0e73ebf",
+  "iam_access_state": "PASS",
+  "oidc_claims_state": "PASS",
+  "production_mutation_performed": false,
+  "role_name": "DabbirGithubDeployRole",
+  "state": "FAIL",
+  "trust_policy_reasons": [
+    "sub_not_exact:'repo:barman-systems@319497139/pilot@1346817686:environment:production'"
+  ],
+  "trust_policy_state": "FAIL"
+}

@@ -1,0 +1,5 @@
+{
+  "assume_role_allowed": false,
+  "mode": "NON_PRODUCTION_BRANCH_TOKEN",
+  "state": "PASS"
+}

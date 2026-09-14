@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "audience": "sts.amazonaws.com",
+    "environment": "production",
+    "event_name": "push",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "lifetime_seconds": 300,
+    "nbf_present": true,
+    "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+    "repository": "barman-systems/pilot",
+    "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-agent-runtime-security-audit.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+  },
+  "state": "PASS"
+}
