@@ -1,0 +1,13 @@
+{
+  "aud": "sts.amazonaws.com",
+  "environment": "production",
+  "event_name": "push",
+  "exp": 1789400366,
+  "iat": 1789400066,
+  "iss": "https://token.actions.githubusercontent.com",
+  "nbf": 1789399766,
+  "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+  "repository": "barman-systems/pilot",
+  "sub": "repo:barman-systems@319497139/pilot@1346817686:environment:production",
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-critical-negatives.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+}

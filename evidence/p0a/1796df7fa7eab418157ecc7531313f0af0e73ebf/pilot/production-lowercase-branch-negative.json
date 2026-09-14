@@ -1,0 +1,12 @@
+{
+  "assume_role_allowed": true,
+  "environment": "production",
+  "finding": "OIDC_TRUST_ALLOWS_NON_MAIN_BRANCH_VIA_PRODUCTION_ENVIRONMENT",
+  "production_mutation_performed": false,
+  "ref": "refs/heads/audit/p0a-agent-runtime-hardening-v1",
+  "severity": "HIGH",
+  "state": "FAIL",
+  "subject": "repo:barman-systems@319497139/pilot@1346817686:environment:production",
+  "test": "NON_MAIN_BRANCH_WITH_EXACT_TRUSTED_PRODUCTION_CASING",
+  "workflow_ref": "barman-systems/pilot/.github/workflows/p0a-critical-negatives.yml@refs/heads/audit/p0a-agent-runtime-hardening-v1"
+}

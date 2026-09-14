@@ -1,0 +1,8 @@
+{
+  "error_code": "forbidden",
+  "error_message": "Not authorized: Trying to access resource under scope \"nd56cm4j5v-3619s-projects\". You must re-authenticate to this scope or use a token with access to this scope.",
+  "http_status": 403,
+  "state": "BLOCKED_EXTERNAL",
+  "token_present": true,
+  "values_exported": false
+}
