@@ -36,6 +36,10 @@ export function qwen37StrictFetch(fetchImpl=fetch){
    ...(body.providerOptions||{}),
    gateway:{...(body.providerOptions?.gateway||{}),only:['alibaba'],order:['alibaba']},
   };
+  // Qwen3.7 Flash reasoning is on by default. DABBIR semantic probes require
+  // structured output, which the provider documents for non-thinking mode.
+  // Chat Completions expresses the provider-agnostic setting as reasoning.effort.
+  if(body?.response_format)body.reasoning={effort:'none'};
   return fetchImpl(url,{...options,body:JSON.stringify(body)});
  };
 }
