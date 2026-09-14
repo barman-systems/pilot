@@ -7,6 +7,7 @@ import {
   TRUST_ROOT_AUTHORITY_ACTORS,
   isProtectedTrustPath,
   isTrustedTrustRootActor,
+  observePromotionAttestation,
   validatePullRequestShape,
 } from '../scripts/barman-independent-premerge-gate.mjs';
 
@@ -26,14 +27,14 @@ function pr(overrides={}){
   };
 }
 
-test('pre-merge gate uses trusted base events and minimal write permission',()=>{
+test('pre-merge gate uses trusted base events and minimal write permission plus OIDC shadow read',()=>{
   assert.match(workflow,/pull_request_target:/);
   assert.match(workflow,/push:\s*\n\s*branches: \[main\]/);
   assert.match(workflow,/workflow_dispatch:/);
-  for(const token of ['contents: read','actions: read','pull-requests: read','statuses: write','persist-credentials: false']){
+  for(const token of ['contents: read','actions: read','pull-requests: read','statuses: write','id-token: write','persist-credentials: false']){
     assert.match(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   }
-  for(const token of ['contents: write','actions: write','pull-requests: write','id-token: write','secrets.']){
+  for(const token of ['contents: write','actions: write','pull-requests: write','secrets.']){
     assert.doesNotMatch(workflow,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   }
   assert.match(workflow,/pull_request\.base\.sha/);
@@ -96,4 +97,19 @@ test('gate binds current base, requires head to contain it, and invalidates rece
   assert.match(script,/PREMERGE_AUTHOR_CHANGED_DURING_VERIFY/);
   assert.match(script,/main changed; update branch and re-run independent gate/);
   assert.match(script,/BARMAN_PREMERGE_INVALIDATED_OPEN_PRS/);
+});
+
+test('attestation shadow is exact-SHA, OIDC-authenticated, and never blocks merge',async()=>{
+  assert.match(script,/barman-promotion-attestation-shadow/);
+  assert.match(script,/barman-promotion-attestation-shadow';/);
+  assert.match(script,/pr_number:Number\(prNumber\),head_sha:headSha/);
+  assert.match(script,/BARMAN_ATTESTATION_SHADOW/);
+  assert.match(script,/blocks_merge:false/);
+
+  const unavailable=await observePromotionAttestation({
+    repository:'barman-systems/pilot',prNumber:755,headSha:shaB,
+    env:{},fetchImpl:async()=>{throw new Error('must not call fetch without OIDC env')},
+  });
+  assert.equal(unavailable.state,'SHADOW_UNAVAILABLE');
+  assert.equal(unavailable.blocks_merge,false);
 });
