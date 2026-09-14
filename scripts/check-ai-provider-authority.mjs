@@ -82,6 +82,9 @@ export function checkProviderAuthority(root=ROOT){
     }
   }
 
+  requireContains(errors,root,'api/_ai-provider-reliability.js',['AI_PROVIDER_ATTEMPT_TYPES','RECOVERY_PROBE_REQUIRED','attempt_type','customer_probe_network_attempts']);
+  requireContains(errors,root,'api/_ai-provider-recovery.js',['RECOVERY_PROBE','Reply exactly OK.','max_tokens:4','reliableAiProviderFetch']);
+  requireContains(errors,root,'api/dabbir-ai-provider-recovery-cron.js',["./_ai-provider-recovery.js",'CRON_AUTH_REQUIRED']);
   requireContains(errors,root,'api/_ai-core.js',['reliableAiProviderFetch','createSupabaseProviderHealthStore','provider_reliability']);
   requireContains(errors,root,'api/_dabbir-whatsapp-ai-meter.js',['provider_reliability','skipped_attempts']);
   const meter=fs.readFileSync(path.join(root,'api/_dabbir-whatsapp-ai-meter.js'),'utf8');
@@ -93,6 +96,11 @@ export function checkProviderAuthority(root=ROOT){
   requireContains(errors,root,'api/dabbir-daily-operator-cron.js',["./_dabbir-daily-operator-reliable.js"]);
   requireContains(errors,root,'api/dabbir-whatsapp-voice-worker.js',["./_dabbir-whatsapp-voice-reliable.js"]);
   requireContains(errors,root,'api/dabbir-whatsapp-ai-cron.js',["./_dabbir-whatsapp-voice-reliable.js"]);
+
+  if(registry.invariants?.customer_can_acquire_probe_lease!==false)errors.push('registry: customer probe lease must be forbidden');
+  if(registry.invariants?.customer_network_probe_allowed!==false)errors.push('registry: customer network probes must be forbidden');
+  if(registry.background_recovery?.attempt_type!=='RECOVERY_PROBE')errors.push('registry: background recovery attempt type must be RECOVERY_PROBE');
+  if(registry.background_recovery?.required_successes_to_healthy!==2)errors.push('registry: recovery hysteresis must require two successful probes');
 
   for(const [file,entry] of Object.entries(registry.diagnostic_exemptions||{})){
     const source=fs.readFileSync(path.join(root,file),'utf8');

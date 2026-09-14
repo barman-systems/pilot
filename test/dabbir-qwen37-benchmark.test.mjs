@@ -10,7 +10,7 @@ import {
 
 const gateway='https://ai-gateway.vercel.sh/v1/chat/completions';
 
-test('benchmark environment isolates Qwen from every configured direct Production provider',()=>{
+test('benchmark environment isolates Qwen from every configured direct Production provider and tags BENCHMARK before transport',()=>{
   const source={
     VERCEL_ENV:'preview',AI_GATEWAY_API_KEY:'gateway-test',
     GEMINI_API_KEY:'gemini-private',GROQ_API_KEY:'groq-private',
@@ -18,7 +18,7 @@ test('benchmark environment isolates Qwen from every configured direct Productio
     SUPABASE_SERVICE_ROLE_KEY:'db-private',DABBIR_AI_GATEWAY_MODEL:'old-model',
   };
   const selected=qwen37BenchmarkEnvironment(source);
-  assert.deepEqual(selected,{VERCEL_ENV:'preview',DABBIR_AI_GATEWAY_MODEL:'alibaba/qwen3.7-flash',AI_GATEWAY_API_KEY:'gateway-test'});
+  assert.deepEqual(selected,{VERCEL_ENV:'preview',DABBIR_AI_ATTEMPT_TYPE:'BENCHMARK',DABBIR_AI_GATEWAY_MODEL:'alibaba/qwen3.7-flash',AI_GATEWAY_API_KEY:'gateway-test'});
   assert.equal(selected.GEMINI_API_KEY,undefined);
   assert.equal(selected.GROQ_API_KEY,undefined);
   assert.equal(selected.CLOUDFLARE_API_TOKEN,undefined);

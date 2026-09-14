@@ -1,4 +1,4 @@
-import { createSupabaseProviderHealthStore, providerForAiEndpoint, reliableAiProviderFetch } from './_ai-provider-reliability.js';
+import { createSupabaseProviderHealthStore, normalizeAiProviderAttemptType, providerForAiEndpoint, reliableAiProviderFetch } from './_ai-provider-reliability.js';
 
 const clean=(value,max=160)=>String(value??'').trim().slice(0,max);
 
@@ -20,11 +20,12 @@ export function modelForAiRequest(url,options={}){
   return 'unknown';
 }
 
-export function createAiProviderAuthorityFetch({env=process.env,fetchImpl=globalThis.fetch,healthStore,trace=[]}={}){
+export function createAiProviderAuthorityFetch({env=process.env,fetchImpl=globalThis.fetch,healthStore,trace=[],attemptType='CUSTOMER'}={}){
   const sharedStore=healthStore===undefined?createSupabaseProviderHealthStore({env}):healthStore;
+  const canonicalAttemptType=normalizeAiProviderAttemptType(attemptType);
   return async function aiProviderAuthorityFetch(url,options={}){
     const provider=providerForAiEndpoint(url);
     if(!provider)return fetchImpl(url,options);
-    return reliableAiProviderFetch(url,options,{provider,model:modelForAiRequest(url,options),env,fetchImpl,healthStore:sharedStore,trace});
+    return reliableAiProviderFetch(url,options,{provider,model:modelForAiRequest(url,options),attemptType:canonicalAttemptType,env,fetchImpl,healthStore:sharedStore,trace});
   };
 }

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { generateDABBIRAiReply as generateCoreReply } from './_ai-core.js';
-import { providerForAiEndpoint, retryAfterMs } from './_ai-provider-reliability.js';
+import { normalizeAiProviderAttemptType, providerForAiEndpoint, retryAfterMs } from './_ai-provider-reliability.js';
 import { SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
@@ -90,6 +90,7 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
 
 export async function generateDABBIRAiReply(args={}){
   const identity=contextIdentity(args.meteringContext||args.businessContext);
+  const attemptType=normalizeAiProviderAttemptType(args.attemptType||args.env?.DABBIR_AI_ATTEMPT_TYPE||'CUSTOMER');
   const attempts=[];
   const localSkippedAttempts=[];
   let successfulPayload=null;
@@ -105,7 +106,7 @@ export async function generateDABBIRAiReply(args={}){
       try{
         const parsed=JSON.parse(String(options.body));
         requestedModel=clean(parsed?.model,160)||null;
-        if(endpoint===GATEWAY_ENDPOINT&&identity.businessId){
+        if(endpoint===GATEWAY_ENDPOINT&&identity.businessId&&attemptType==='CUSTOMER'){
           parsed.providerOptions={...(parsed.providerOptions||{}),gateway:{...(parsed.providerOptions?.gateway||{}),user:identity.businessId,tags:['channel:whatsapp','feature:customer-ai-reply']}};
           nextOptions={...options,body:JSON.stringify(parsed)};
         }
@@ -115,13 +116,13 @@ export async function generateDABBIRAiReply(args={}){
     let response;
     try{response=await upstreamFetch(url,nextOptions);}catch(error){
       if(['SEMANTIC_PROVIDER_BUDGET','SEMANTIC_PROVIDER_RESERVED'].includes(error?.code)){
-        localSkippedAttempts.push({provider,reason:error.code});
+        localSkippedAttempts.push({provider,attempt_type:attemptType,reason:error.code});
         throw error;
       }
-      attempts.push({endpoint:provider,model:requestedModel,status:0,duration_ms:Date.now()-started,outcome:error?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR'});
+      attempts.push({endpoint:provider,model:requestedModel,attempt_type:attemptType,status:0,duration_ms:Date.now()-started,outcome:error?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR'});
       throw error;
     }
-    const attempt={endpoint:provider,model:requestedModel,status:Number(response?.status)||0,duration_ms:Date.now()-started,retry_after_ms:retryAfterMs(response)};
+    const attempt={endpoint:provider,model:requestedModel,attempt_type:attemptType,status:Number(response?.status)||0,duration_ms:Date.now()-started,retry_after_ms:retryAfterMs(response)};
     attempts.push(attempt);
     if(response?.ok){
       try{
@@ -136,18 +137,18 @@ export async function generateDABBIRAiReply(args={}){
   const startedAt=Date.now();
   const coreResult=await generateCoreReply({...args,fetchImpl:meteredFetch});
   const reliability=coreResult?.telemetry?.provider_reliability||null;
-  const sharedSkippedAttempts=(reliability?.attempts||[]).filter(item=>item?.outcome==='SKIPPED'||item?.decision==='SKIP').map(item=>({provider:item.provider,model:item.model||null,reason:item.reason||'PROVIDER_COOLDOWN',failure_class:item.failure_class||null,retry_after_ms:item.cooldown_remaining_ms||0}));
+  const sharedSkippedAttempts=(reliability?.attempts||[]).filter(item=>item?.outcome==='SKIPPED'||item?.decision==='SKIP').map(item=>({provider:item.provider,model:item.model||null,attempt_type:item.attempt_type||attemptType,reason:item.reason||'PROVIDER_COOLDOWN',failure_class:item.failure_class||null,retry_after_ms:item.cooldown_remaining_ms||0}));
   const skippedAttempts=[...localSkippedAttempts,...sharedSkippedAttempts].slice(0,12);
   const reportedUsage=successfulPayload?.usage;
   const hasUsage=reportedUsage&&[reportedUsage.prompt_tokens??reportedUsage.input_tokens,reportedUsage.completion_tokens??reportedUsage.output_tokens].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0);
   const actualCostUsd=coreResult?.provider==='vercel-ai-gateway'?actualGatewayCost(successfulPayload||{},successfulResponse):null;
-  const result={...coreResult,telemetry:{...(coreResult?.telemetry||{}),final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
-    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,status:a.status,latency_ms:a.duration_ms,retry_after_ms:a.retry_after_ms??null})),skipped_attempts:skippedAttempts}};
+  const result={...coreResult,telemetry:{...(coreResult?.telemetry||{}),attempt_type:attemptType,final_request_usage:hasUsage?usageFromPayload(successfulPayload):null,actual_cost_usd:actualCostUsd,
+    latency_ms:Date.now()-startedAt,request_count:attempts.length,attempts:attempts.map(a=>({provider:a.endpoint,model:a.model||null,attempt_type:a.attempt_type,status:a.status,latency_ms:a.duration_ms,retry_after_ms:a.retry_after_ms??null})),skipped_attempts:skippedAttempts}};
   if(!result?.ok){
-    console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),skipped_attempts:skippedAttempts.slice(0,8),configured_attempts:attempts.length});
+    console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempt_type:attemptType,attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),skipped_attempts:skippedAttempts.slice(0,8),configured_attempts:attempts.length});
     return result;
   }
-  if(!identity.businessId)return result;
+  if(attemptType==='BENCHMARK'||!identity.businessId)return result;
 
   const usage=usageFromPayload(successfulPayload||{});
   const operationKey=`wa-ai-usage:${hash([identity.businessId,identity.conversationId,identity.messageTimestamp,clean(args.message,2000)].join('|')).slice(0,48)}`;
