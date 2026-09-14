@@ -19,10 +19,9 @@ set -u
 #    Static BAR-12 evidence snapshots under docs/evidence are different: they are
 #    bound to the authoritative runtime SHA inside the evidence and must never
 #    manufacture a new Production runtime merely by recording that proof.
-# 4) Native iOS/App Store-only files and standalone UAE infrastructure-as-code are
-#    explicitly outside the Vercel web runtime. They may reuse the last web-runtime
-#    journey only when no web/database/runtime/release-contract path changed in the
-#    same comparison range.
+# 4) Native iOS/App Store-only files are explicitly outside the Vercel web
+#    runtime. Retired AWS/FalconCloud infrastructure paths must not exist; the
+#    retired-cloud authority regression gate enforces that separately.
 # 5) Only explicitly non-runtime paths may skip. Any uncertainty fails safe to a build.
 current="${VERCEL_GIT_COMMIT_SHA:-HEAD}"
 ref="${VERCEL_GIT_COMMIT_REF:-}"
@@ -93,7 +92,7 @@ while IFS= read -r path; do
       echo "Exact-SHA Production verification contract changed; deploy exact SHA for truthful release evidence: $path"
       exit 1
       ;;
-    mobile/*|scripts/dabbir-app-store-preflight.mjs|infra/aws-uae/*)
+    mobile/*|scripts/dabbir-app-store-preflight.mjs)
       echo "Non-Vercel runtime path does not change the web runtime: $path"
       ;;
     .github/*|docs/*|test/*|README.md|.gitignore)
