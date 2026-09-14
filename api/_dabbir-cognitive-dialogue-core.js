@@ -1,4 +1,4 @@
-import {normalizeSemanticText,clarification,greetingOnly} from './_dabbir-semantic-engine-core.js';
+import {normalizeSemanticText,greetingOnly} from './_dabbir-semantic-engine-core.js';
 import {verifiedOperationalFact} from './_dabbir-activity-intelligence.js';
 import {partitionGoalRequests} from './_dabbir-goal-queue.js';
 import {answerServiceQuestion} from './_dabbir-service-question.js';
@@ -153,7 +153,7 @@ export function qualityGate({state,decision,previous,context}){
  if(decision.action==='CLARIFY'&&verifiedOperationalFact(state.entities?.[state.clarification_entity])&&!arr(state.invalid_fields).includes(state.clarification_entity)&&!arr(state.unresolved_references).includes(state.clarification_entity))violations.push('ASKED_CONFIRMED_FACT');
  if(violations.length&&activeJourney(state)&&state.missing_fields?.length){
   const field=state.missing_fields.find(k=>!verifiedOperationalFact(state.entities?.[k])||arr(state.invalid_fields).includes(k));
-  if(field){state.pending_action='CLARIFY';state.clarification_entity=field;decision={...decision,action:'CLARIFY',reasonCode:'COGNITIVE_REPLAN',reply:clarification({...state,missing_fields:[field]},context)};}
+  if(field){state.pending_action='CLARIFY';state.clarification_entity=field;decision={...decision,action:'CLARIFY',reasonCode:'COGNITIVE_REPLAN',reply:null};}
  }
  const blocked=violations.length>0&&decision.reasonCode!=='COGNITIVE_REPLAN';
  return {state,decision,violations,blocked};
