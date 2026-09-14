@@ -68,6 +68,23 @@ test('queued-goal customer prose is owned by the conversation brain boundary',()
   ])assert.equal(renderer.includes(forbidden),false,`conversation brain queued-goal renderer gained execution authority: ${forbidden}`);
 });
 
+test('repeat-memory customer prose is owned by the conversation brain boundary',()=>{
+  const semantic=read('_dabbir-semantic-engine.js');
+  const renderer=read('_dabbir-conversation-brain-repeat-memory.js');
+  assert.match(semantic,/renderRepeatMemoryConfirmation/);
+  assert.doesNotMatch(semantic,/const REPEAT_PROMPT_AR=/);
+  assert.doesNotMatch(semantic,/const REPEAT_PROMPT_EN=/);
+  assert.match(renderer,/نفس السيارة والموقع ولا بتغير/);
+  assert.match(renderer,/Same vehicle and location/);
+  for(const forbidden of [
+    'dabbir_semantic_execute_v2',
+    'dabbir_semantic_commit_v2',
+    'dabbir_whatsapp_ai_check_availability',
+    'deliver(',
+    'handoff(',
+  ])assert.equal(renderer.includes(forbidden),false,`conversation brain repeat-memory renderer gained execution authority: ${forbidden}`);
+});
+
 test('conversation brain remains a compatibility seam, not execution authority',()=>{
   const brain=read('_dabbir-conversation-brain.js');
   for(const forbidden of [
