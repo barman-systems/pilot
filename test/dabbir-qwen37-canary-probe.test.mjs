@@ -8,17 +8,18 @@ test('live Qwen3.7 canary probe is preview-only, branch-pinned, same-origin and 
   for(const token of ['PREVIEW_CANARY_PROBE_ONLY','CANARY_PROBE_BRANCH_MISMATCH','requireSameOrigin','CANARY_PROBE_SCOPE_REQUIRED','SYNTHETIC_MODE_REQUIRED']){
     assert.match(source,new RegExp(token));
   }
-  assert.match(source,/feat\/qwen37-production-canary/);
+  assert.match(source,/fix\/qwen37-canary-capability-control/);
 });
 
-test('live Qwen3.7 canary probe forces one-percent canary only inside the synthetic request',()=>{
-  assert.match(source,/DABBIR_QWEN37_CANARY_ENABLED:'1'/);
-  assert.match(source,/DABBIR_QWEN37_CANARY_PERCENT:'1'/);
+test('live Qwen3.7 canary probe forces one percent only through an in-memory synthetic loader',()=>{
+  assert.match(source,/PROBE_CONTROL=\{enabled:true,percent:1,source:'SYNTHETIC_PROBE_CONTROL'\}/);
+  assert.match(source,/canaryControlLoader:async\(\)=>PROBE_CONTROL/);
   assert.match(source,/meteringContext:\{synthetic:true\}/);
+  assert.doesNotMatch(source,/DABBIR_QWEN37_CANARY_ENABLED|DABBIR_QWEN37_CANARY_PERCENT/);
 });
 
-test('live canary probe cannot write usage/customer delivery or Production mutations',()=>{
-  assert.doesNotMatch(source,/SUPABASE_SERVICE_ROLE_KEY|dabbir_record_ai_usage_v1|sendWhatsApp|messages\.create|booking\.create/);
+test('live canary probe cannot write usage/customer delivery or Production control',()=>{
+  assert.doesNotMatch(source,/SUPABASE_SERVICE_ROLE_KEY|dabbir_record_ai_usage_v1|sendWhatsApp|messages\.create|booking\.create|dabbir_capability_registry/);
   assert.match(source,/database_metering:false/);
   assert.match(source,/customer_delivery:false/);
   assert.match(source,/production_mutations:0/);
