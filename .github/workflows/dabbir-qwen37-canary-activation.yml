@@ -1,0 +1,63 @@
+name: DABBIR Qwen3.7 Canary Activation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dabbir-qwen37-canary-activation.yml
+      - scripts/dabbir-qwen37-canary-control.sh
+      - api/dabbir-qwen37-canary-readiness.js
+      - test/dabbir-qwen37-canary-readiness.test.mjs
+      - test/dabbir-qwen37-canary-controller.test.mjs
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Enable the bounded 1% canary or disable it with a fresh OFF deployment
+        required: true
+        type: choice
+        default: disable
+        options:
+          - enable
+          - disable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dabbir-qwen37-production-control
+  cancel-in-progress: false
+
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      PRODUCTION_HOST: dabbir.bmalman.com
+      REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'enable' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Validate activation controller and readiness contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/dabbir-qwen37-canary-control.sh
+          node --test test/dabbir-qwen37-canary-readiness.test.mjs test/dabbir-qwen37-canary-controller.test.mjs
+          grep -Fq "QWEN37_CANARY_MAX_PERCENT=1" api/_dabbir-qwen37-canary.js
+          grep -Fq "alibaba/qwen3.7-flash" api/_dabbir-qwen37-canary.js
+          grep -Fq "SEMANTIC_INTERPRETER_ONLY" api/dabbir-qwen37-canary-readiness.js
+
+      - name: Apply fail-closed Production canary control
+        shell: bash
+        run: bash scripts/dabbir-qwen37-canary-control.sh
