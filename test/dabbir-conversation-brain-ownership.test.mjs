@@ -27,6 +27,27 @@ test('only canonical conversation brain composes cognitive reducer with goal dia
   assert.deepEqual(plannerImporters,['_dabbir-conversation-brain.js']);
 });
 
+test('cognitive quality repair is owned by the conversation brain boundary',()=>{
+  const facade=read('_dabbir-cognitive-dialogue.js');
+  const finalizer=read('_dabbir-conversation-brain-quality.js');
+  const orchestrator=read('_dabbir-understanding-orchestrator.js');
+
+  assert.match(facade,/finalizeConversationBrainQuality as qualityGate/);
+  assert.match(facade,/from '\.\/_dabbir-cognitive-dialogue-core\.js'/);
+  assert.match(finalizer,/CONVERSATION_BRAIN_QUALITY_OWNER='DABBIR_CONVERSATION_BRAIN'/);
+  assert.match(finalizer,/legacyQualityGate\(\{state,decision,previous,context\}\)/);
+  assert.doesNotMatch(orchestrator,/_dabbir-cognitive-dialogue-core/);
+  assert.match(orchestrator,/from '\.\/_dabbir-cognitive-dialogue\.js'/);
+
+  for(const forbidden of [
+    'dabbir_semantic_execute_v2',
+    'dabbir_semantic_commit_v2',
+    'dabbir_whatsapp_ai_check_availability',
+    'deliver(',
+    'handoff(',
+  ])assert.equal(finalizer.includes(forbidden),false,`conversation brain quality finalizer gained execution authority: ${forbidden}`);
+});
+
 test('conversation brain remains a compatibility seam, not execution authority',()=>{
   const brain=read('_dabbir-conversation-brain.js');
   for(const forbidden of [
