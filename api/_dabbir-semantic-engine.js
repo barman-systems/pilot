@@ -5,7 +5,7 @@ import {
   normalizeSemanticText,
 } from './_dabbir-semantic-engine-core.js';
 import {runConversationBrain} from './_dabbir-conversation-brain.js';
-import {repeatMemoryConfirmationReply} from './_dabbir-conversation-brain-response.js';
+import {repeatMemoryConfirmationReply,semanticRouteReply} from './_dabbir-conversation-brain-response.js';
 
 export {
   SEMANTIC_VERSION,
@@ -23,6 +23,13 @@ const VERIFIED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_CONFIRMED','OWNER_POLI
 const memoryKind=m=>String(m?.memory_key||'').replace(/^last_verified_|^preferred_|^known_|^usual_/,'');
 const activeEntity=(s,key)=>s?.entities?.[key]?.status==='active'?s.entities[key].value:null;
 const validPoint=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180;
+
+function ownSemanticRoute(result,context){
+  if(!result?.decision)return result;
+  const reply=semanticRouteReply({reason:result.decision.reasonCode,state:result.state,context});
+  if(reply!==null)result.decision.reply=reply;
+  return result;
+}
 
 function repeatMemoryPair(context,state,now){
   const serviceId=activeEntity(state,'service');
@@ -90,26 +97,26 @@ export function understandLegacyConversation(args){
       const rewritten=rewriteAffirmative(raw)||(/[\u0600-\u06ff]/.test(raw)?'نفس':'same');
       const context=replaceLatestBody(onlyMemories(args.context,[pair.vehicle,pair.location]),rewritten);
       const seeded={...previous,repeat_vehicle_location_prompt:'accepted'};
-      const result=understandCore({...args,context,previous:seeded});
+      const result=ownSemanticRoute(understandCore({...args,context,previous:seeded}),context);
       result.state.repeat_vehicle_location_prompt='accepted';
       return result;
     }
     if(changeAnswer(text)){
       const context=replaceLatestBody(args.context,sanitizeChange(raw));
       const seeded={...previous,repeat_vehicle_location_prompt:'declined'};
-      const result=understandCore({...args,context,previous:seeded});
+      const result=ownSemanticRoute(understandCore({...args,context,previous:seeded}),context);
       result.state.repeat_vehicle_location_prompt='declined';
       return result;
     }
     // Any explicit new detail consumes the binary prompt; the core then asks only
     // for whatever grounded requirement is still missing.
     const seeded={...previous,repeat_vehicle_location_prompt:'declined'};
-    const result=understandCore({...args,previous:seeded});
+    const result=ownSemanticRoute(understandCore({...args,previous:seeded}),args.context);
     result.state.repeat_vehicle_location_prompt='declined';
     return result;
   }
 
-  const result=understandCore(args);
+  const result=ownSemanticRoute(understandCore(args),args.context);
   const missing=arr(result?.state?.missing_fields);
   const canOffer=result?.decision?.action==='CLARIFY'&&result?.state?.intent==='BOOKING'&&
     missing.includes('vehicle')&&missing.includes('location')&&marker!=='accepted'&&marker!=='declined';

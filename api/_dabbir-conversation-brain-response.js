@@ -80,6 +80,29 @@ export function serviceAttributeReply({status,field,label='',value=null,currency
   return resumeReply?reply+'\n'+resumeReply:reply;
 }
 
+// The legacy semantic reducer still decides the route/reason. For the small set
+// of deterministic route responses below, the Conversation Brain owns the final
+// customer copy. Unknown reasons deliberately return null so model/knowledge
+// answers and clarification flows remain untouched by this compatibility seam.
+export function semanticRouteReply({reason,state,context}={}){
+  const language=state?.language||'ar',ar=isArabic(language);
+  if(reason==='UNTRUSTED_INSTRUCTION')return ar?'أقدر أساعدك بخدمات هذا النشاط ومواعيدك فقط.':'I can help with this business and your own appointments only.';
+  if(reason==='CUSTOMER_WITHDREW_REQUEST')return ar?'تمام، وقفت متابعة الطلب الحالي.':'Okay, I have stopped the current request.';
+  if(reason==='BOOKING_NEGATED')return ar?'ما حجزت. هل تريد اختيار وقت آخر؟':'I have not booked. Would you like to choose another time?';
+  if(reason==='REFERENCE_TARGET_MISSING')return ar?'أي واحد تقصد؟':'Which one do you mean?';
+  if(reason==='SERVICE_DURATION_UNVERIFIED')return ar?'مدة هذه الخدمة غير متحققة حاليًا.':'This service duration is not verified right now.';
+  if(reason==='NO_OPERATIONAL_AUTHORITY')return ar?'أقدر أساعدك بالخدمات والأسعار والحجز أو تعديل موعدك. شو تحتاج؟':'I can help with services, prices, bookings or changing your appointment. What do you need?';
+  if(reason==='DATABASE_SERVICE_DURATION'){
+    const serviceId=entityValue(state,'service');
+    const service=arr(context?.services).find(item=>item?.id===serviceId&&(!item?.business_id||item.business_id===context?.business?.id)&&(!item?.branch_id||item.branch_id===context?.conversation?.branch_id));
+    const minutes=Number(service?.duration_minutes),label=structuredServiceLabel(service);
+    if(!label||!Number.isFinite(minutes)||minutes<=0)throw Object.assign(new Error('CONVERSATION_BRAIN_SEMANTIC_ROUTE_FACT_UNVERIFIED'),{code:'CONVERSATION_BRAIN_SEMANTIC_ROUTE_FACT_UNVERIFIED'});
+    const n=Math.max(1,Math.trunc(minutes));
+    return ar?`${label} مدته ${n} دقيقة.`:`${label} takes ${n} minutes.`;
+  }
+  return null;
+}
+
 const exactStaticResponse=text=>{
   if(text===recoveryGreetingReply('ar'))return recoveryGreetingReply('ar');
   if(text===recoveryGreetingReply('en'))return recoveryGreetingReply('en');
