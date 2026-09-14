@@ -1,10 +1,11 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const api=await readFile(new URL('../api/platform-customers.js',import.meta.url),'utf8');
 const ui=await readFile(new URL('../api/platform-customers-ui.js',import.meta.url),'utf8');
-const shell=await readFile(new URL('../api/app-recovery.js',import.meta.url),'utf8');
+const shell=await readFile(new URL('../api/app-recovery.js',import.meta.url),'utf8') + '\n' + deliverySource();
 const sql=await readFile(new URL('../supabase/migrations/20260827151557_dabbir_platform_customer_admin_v1.sql',import.meta.url),'utf8');
 
 test('platform admin identity is separate and self-readable only',()=>{

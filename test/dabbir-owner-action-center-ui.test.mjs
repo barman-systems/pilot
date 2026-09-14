@@ -1,3 +1,4 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/owner-action-center-ui.js';
@@ -30,7 +31,7 @@ test('owner action center keeps top three priorities and surfaces verified handl
   assert.match(result.body, /عرض بقية الأولويات/);
   assert.match(result.body, /Show top 3 only/);
   assert.match(result.body, /aria-expanded/);
-  assert.match(result.body, /\.dabbir-action-center \[hidden\]\{display:none!important\}/);
+  assert.match(presentationFor('api/owner-action-center-core-ui.js'), /\.dabbir-action-center \[hidden\]\{display:none!important\}/);
   assert.match(result.body, /owner-action-center-v3/);
 });
 

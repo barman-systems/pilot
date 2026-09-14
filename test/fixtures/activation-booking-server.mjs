@@ -11,7 +11,7 @@ import ownerFirstUi from '../../api/dabbir-owner-first-ui.js';
 const root=new URL('../../',import.meta.url);
 const id={business:'51000000-0000-4000-8000-000000000001',owner:'52000000-0000-4000-8000-000000000001',branch:'55000000-0000-4000-8000-000000000001'};
 const scenarios=['success','network-failure','whatsapp-unavailable','lost-response'];
-export const activationBookingPaths=new Set(['/activation-booking','/activation-booking/','/fixture/activation-booking/activation.js','/fixture/activation-booking/timezone.js','/fixture/activation-booking/owner-first.js']);
+export const activationBookingPaths=new Set(['/dabbir-design-tokens.css','/dabbir-web.css','/activation-booking','/activation-booking/','/fixture/activation-booking/activation.js','/fixture/activation-booking/timezone.js','/fixture/activation-booking/owner-first.js']);
 
 function capture(handler){
   let body='';
@@ -138,7 +138,7 @@ applyLang();
 
 export async function buildActivationBookingPage(url=new URL('http://localhost/activation-booking')){
   const index=await readFile(new URL('index.html',root),'utf8');
-  const styles=[...index.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map(match=>match[0]).join('\n');
+  const styles=[...index.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*>/g)].map(match=>match[0]).join('\n');
   const dictionary=index.match(/const D=\{ar:\{[\s\S]*?\n\}\};/)?.[0];
   const modal=index.match(/<div class="modal" id="appointmentModal"[\s\S]*?<\/form><\/div>/)?.[0];
   const appointments=index.match(/<section class="screen" id="screen-appointments">[\s\S]*?<\/section>/)?.[0];
@@ -147,7 +147,7 @@ export async function buildActivationBookingPage(url=new URL('http://localhost/a
   if(!dictionary||!modal||!appointments||!modalHelpers||!modalBindings)throw new Error('CURRENT_INDEX_BOOKING_SURFACE_NOT_FOUND');
   const language=url.searchParams.get('lang')==='en'?'en':'ar';
   const scenario=scenarios.includes(url.searchParams.get('scenario'))?url.searchParams.get('scenario'):'success';
-  return `<!doctype html><html lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>DABBIR — Synthetic first-booking fixture</title>${styles}<style>
+  return `<!doctype html><html data-dabbir-theme="web" lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>DABBIR — Synthetic first-booking fixture</title>${styles}<style>
   .fixtureControls{padding:12px;background:#263348;border-bottom:2px solid #f4c55e;font:14px/1.7 system-ui;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.fixtureControls p{margin:0;flex-basis:100%}.fixtureControls label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.fixtureControls select,.fixtureControls button{background:#102033;color:white;border:1px solid #94a3b8;border-radius:8px;min-height:44px;padding:7px}.fixtureEvidence{padding:12px;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.fixtureMessage{padding:8px 12px;margin:0;font:14px/1.6 system-ui}.fixtureOnlyNote{border:1px dashed #94a3b8;padding:10px;color:#f4c55e}.fixtureContent{max-width:1050px;margin-inline:auto}#fixtureBack{margin-bottom:12px}
   </style></head><body>
   <section class="fixtureControls" aria-label="Local synthetic fixture controls"><p><strong>اختبار محلي — بيانات صناعية فقط.</strong> زر التفعيل ونموذج الموعد ومنطق الحفظ من المنتج الحالي. الطلبات والجدول التالي محاكاة محلية، ولا تثبت حفظًا في الإنتاج.</p>
@@ -172,6 +172,7 @@ export async function activationBookingHandler(req,res){
     if(url.pathname==='/activation-booking'||url.pathname==='/activation-booking/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await buildActivationBookingPage(url));return true;
     }
+    if(url.pathname.endsWith('.css')){res.setHeader('Content-Type','text/css');res.end(await readFile(new URL('public'+url.pathname,root)));return true;}
     const handler=url.pathname.endsWith('/activation.js')?activationUi:url.pathname.endsWith('/timezone.js')?timezoneUi:ownerFirstUi;
     res.setHeader('Content-Type','application/javascript; charset=utf-8');res.end(capture(handler));return true;
   }catch(error){res.statusCode=500;res.end('Synthetic booking fixture failed: '+String(error.message));return true}

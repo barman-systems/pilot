@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -198,7 +199,7 @@ test('WhatsApp connection persistence keeps the legacy tenant-checked RPC while 
 });
 
 test('production shell mounts Embedded Signup and CSP permits only required Meta browser origins', async () => {
-  const shell = await read('api/app-recovery.js');
+  const shell = await read('api/app-recovery.js') + '\n' + deliverySource();
   const vercel = await read('vercel.json');
   assert.match(shell, /\/api\/dabbir-whatsapp-embedded-ui/);
   assert.match(vercel, /https:\/\/connect\.facebook\.net/);

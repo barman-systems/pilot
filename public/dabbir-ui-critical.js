@@ -4,16 +4,7 @@
   window.__dabbirBrandUiLoaded=true;
 
   const icon='/dabbir-app-icon.png';
-  const style=document.createElement('style');
-  style.textContent=[
-    '.logo,.dabbirRecoveryLogo{background-image:url("/dabbir-app-icon.png")!important;background-position:center!important;background-repeat:no-repeat!important;background-size:contain!important;background-color:transparent!important;border:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important}',
-    '.brand .logo,.dabbirRecoveryLogo{box-shadow:none!important}',
-    '#loading{font-size:0!important;color:transparent!important;text-indent:-9999px!important;overflow:hidden!important;background-image:url("/dabbir-app-icon.png")!important;background-repeat:no-repeat!important;background-position:center!important;background-size:96px 96px!important}',
-    '.dabbirMobileBrand{display:none!important}',
-    '.dabbirWhatsAppIdentity{margin-top:10px;padding:9px 10px;border:1px solid #2a2e33;border-radius:11px;background:#101214;font-size:10px;line-height:1.55;color:#f7f8f9}.dabbirWhatsAppIdentity b{display:block;font-size:9px;color:#979da5;margin-bottom:2px}.dabbirWhatsAppIdentity .number{font-weight:900;font-size:12px;direction:ltr;unicode-bidi:embed}.dabbirWhatsAppIdentity .verifiedName{display:block;margin-top:2px;color:#979da5;font-size:9px}',
-    '@media(max-width:700px){html,body{width:100%!important;max-width:100%!important;overflow-x:hidden!important}#appShell,.shell,.main,.content,.screen{width:100%!important;max-width:100%!important;min-width:0!important}#appShell,.shell,.main,.content{overflow-x:hidden!important}.top,.bottomNav{width:100%!important;max-width:100vw!important}.top img{max-width:44px!important;max-height:44px!important;object-fit:contain!important}#loading{background-size:88px 88px!important}body.dabbirAppActive>.dabbirMobileBrand{display:none!important}.dabbirMobileBrand{width:0!important;height:0!important;max-width:0!important;max-height:0!important;overflow:hidden!important;pointer-events:none!important}#screen-conversations,#screen-conversations .chatGrid,#screen-conversations .chatList,#screen-conversations .chatPanel{min-width:0!important;max-width:100%!important}#screen-conversations .chatPanel{width:100%!important}}'
-  ].join('');
-  document.head.appendChild(style);
+
 
   function installMobileBrand(){
     // The owner-first shell owns the mobile header mark. Avoid a second
@@ -51,8 +42,6 @@
   link('shortcut icon',icon,'image/png');
   link('apple-touch-icon',icon,'image/png');
 
-  const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.content='#0D1426';
 
   function uiText(key,fallback){
     try{
@@ -321,8 +310,8 @@
     const select=document.createElement('select');select.id='businessCountry';select.required=true;select.autocomplete='country';
     for(const code of Object.keys(GCC)){const option=document.createElement('option');option.value=code;select.append(option)}
     const saved=String(localStorage.getItem('dabbir_country')||'AE').toUpperCase();select.value=GCC[saved]?saved:'AE';
-    const derived=document.createElement('div');derived.id='businessCurrencyDerived';derived.className='muted';derived.style.cssText='font-size:12px;margin-top:7px;font-weight:800';
-    const hint=document.createElement('div');hint.id='businessCurrencyHint';hint.className='muted';hint.style.cssText='font-size:11px;line-height:1.5;margin-top:3px';
+    const derived=document.createElement('div');derived.id='businessCurrencyDerived';derived.className='muted';
+    const hint=document.createElement('div');hint.id='businessCurrencyHint';hint.className='muted';
     field.append(label,select,derived,hint);
     if(submit)form.insertBefore(field,submit);else form.append(field);
     select.addEventListener('change',()=>{localStorage.setItem('dabbir_country',selectedCountry());refreshCountryField()});
@@ -421,9 +410,7 @@
   if(window.__dabbirRecoveryUiLoaded) return;
   window.__dabbirRecoveryUiLoaded=true;
 
-  const style=document.createElement('style');
-  style.textContent='.dabbirForgotBtn{display:block;margin:7px 0 0 auto;border:0;background:transparent;color:#b9c0c8;min-height:36px;padding:4px 2px;font-size:11px;text-decoration:underline;text-underline-offset:3px}.dabbirRecoveryOverlay{position:fixed;inset:0;z-index:100;background:#08090af7;display:grid;place-items:center;padding:22px}.dabbirRecoveryOverlay.dabbirHidden{display:none!important}.dabbirRecoveryCard{width:min(460px,100%);padding:24px;border:1px solid #2a2e33;border-radius:24px;background:#111315;box-shadow:0 22px 70px #0008;color:#f7f8f9}.dabbirRecoveryCard h2{font-size:24px;margin:18px 0 6px}.dabbirRecoveryCard p{color:#979da5;font-size:12px;line-height:1.7}.dabbirRecoveryCard label{display:block;color:#979da5;font-size:10px;margin:13px 0 6px}.dabbirRecoveryCard input{width:100%;min-height:48px;border:1px solid #2a2e33;background:#181b1f;color:#fff;border-radius:12px;padding:11px;font:inherit}.dabbirRecoveryCard .dabbirPrimary{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:#d7ff5f;color:#10130b;font-weight:900}.dabbirRecoveryCard .dabbirSecondary{width:100%;min-height:44px;margin-top:9px;border:1px solid #2a2e33;border-radius:12px;background:#181b1f;color:#fff;font-weight:800}.dabbirRecoveryMsg{min-height:34px;margin-top:12px;color:#ffd87a;font-size:11px;line-height:1.6}.dabbirRecoveryOk{color:#8ce6a1}.dabbirRecoveryBrand{display:flex;gap:11px;align-items:center}.dabbirRecoveryLogo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#20242a;border:1px solid #3a4047;font-weight:950}.dabbirPasswordShell{position:relative}.dabbirPasswordShell input{padding-inline-end:76px!important}.dabbirPasswordToggle{position:absolute;inset-inline-end:6px;top:5px;min-height:36px!important;border:0;background:transparent;color:#b9c0c8;padding:4px 7px;font-size:10px;font-weight:800}.dabbirPasswordAssist{margin-top:7px}.dabbirPasswordTrack{height:5px;border-radius:999px;background:#252a30;overflow:hidden}.dabbirPasswordTrack i{display:block;height:100%;width:0;background:#ffaaa9;transition:width .18s ease,background .18s ease}.dabbirPasswordAssist p{margin:5px 0 0!important;font-size:9px!important;line-height:1.5!important}.dabbirFieldError{min-height:18px;margin-top:5px;color:#ffaaa9;font-size:9px}.dabbirResendVerification{display:none;width:100%;margin-top:7px;border:1px solid #34415f;background:#151d2f;color:#e9eef8;border-radius:11px;padding:8px 11px;font-size:10px;font-weight:850}.dabbirResendVerification.show{display:block}@media(prefers-reduced-motion:reduce){.dabbirPasswordTrack i{transition:none}}';
-  document.head.appendChild(style);
+
 
   const forgot=document.createElement('button');
   forgot.type='button';
@@ -499,7 +486,7 @@
     if(!authSignupMode()){bar.style.width='0';q('#dabbirAuthFieldError').textContent='';return}
     const score=passwordScore(input.value);
     bar.style.width=(score*25)+'%';
-    bar.style.background=score>=4?'#8ce6a1':score>=2?'#ffd87a':'#ffaaa9';
+    bar.dataset.strength=score>=4?'strong':score>=2?'medium':'weak';
     help.textContent=!input.value?t.passwordHelp:score>=4?t.passwordStrong:score>=2?t.passwordGood:t.passwordWeak;
   }
   function setFieldError(message,field='password'){
@@ -743,18 +730,7 @@
     return true;
   }
 
-  const style=document.createElement('style');
-  style.dataset.dabbirAuthGateAuthority='ios-auth-stability-v5';
-  style.textContent=[
-    '.bottomNav.hidden{display:none!important}',
-    '#appShell.hidden{display:none!important}',
-    '#authGate:not(.hidden),#onboardingGate:not(.hidden){position:fixed!important;inset:0!important;z-index:90!important;overflow:auto!important;min-height:100dvh!important;overscroll-behavior:contain!important}',
-    '#authGate:not(.hidden)~#bottomNav,#onboardingGate:not(.hidden)~#bottomNav{display:none!important}',
-    '#mfaContinuation.hidden{display:none!important}',
-    '#mfaContinuation .mfaHint{margin-top:10px;color:var(--muted);font-size:11px;line-height:1.7}',
-    '#mfaContinuation .mfaActions{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:14px}',
-  ].join('');
-  document.head.appendChild(style);
+
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 

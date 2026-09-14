@@ -1,3 +1,5 @@
+import { deliverySource } from './ui-delivery-source.mjs';
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -5,8 +7,8 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
-const authUi = await read('api/auth-session-stability-ui.js');
-const appRecovery = await read('api/app-recovery.js');
+const authUi = await read('api/auth-session-stability-ui.js') + '\n' + presentationFor('api/auth-session-stability-ui.js');
+const appRecovery = await read('api/app-recovery.js') + '\n' + presentationFor('api/app-recovery.js') + '\n' + deliverySource();
 
 test('mobile auth gate always hides the application bottom navigation', () => {
   assert.match(authUi, /\.bottomNav\.hidden\{display:none!important\}/);
@@ -38,15 +40,11 @@ test('auth stability observes gate state but never vetoes or delays the base app
   assert.ok(wrapperIndex >= 0 && baseIndex > wrapperIndex && syncIndex > baseIndex);
 });
 
-test('auth stability authority loads last after all owner and contextual presentation layers', () => {
-  const ownerIndex = appRecovery.indexOf('/api/dabbir-owner-first-ui');
-  const copilotIndex = appRecovery.indexOf('/api/owner-copilot-ui');
-  const contextualIndex = appRecovery.indexOf('/api/dabbir-contextual-navigation-ui');
-  const authIndex = appRecovery.indexOf('/api/auth-session-stability-ui');
-  assert.ok(ownerIndex >= 0 && copilotIndex >= 0 && contextualIndex >= 0 && authIndex >= 0);
-  assert.ok(authIndex > ownerIndex);
-  assert.ok(authIndex > copilotIndex);
-  assert.ok(authIndex > contextualIndex);
+test('auth stability is the final critical observer and cannot own general CSS', async () => {
+  const bundles=JSON.parse(await read('config/dabbir-ui-bundles.json'));
+  assert.equal(bundles.critical.at(-1),'/api/auth-session-stability-ui');
+  assert.doesNotMatch(await read('api/auth-session-stability-ui.js'),/createElement\(['"]style['"]\)/);
+
 });
 
 test('auth stability handler is no-store JavaScript and rejects non-GET requests', () => {

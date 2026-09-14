@@ -1,10 +1,11 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const runtime = fs.readFileSync(new URL('../api/dabbir-runtime.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../api/app.js', import.meta.url), 'utf8');
-const recoveryShell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
+const recoveryShell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8') + '\n' + deliverySource();
 const safariRecoveryShell = fs.readFileSync(new URL('../api/app-safari-recovery.js', import.meta.url), 'utf8');
 const recoveryUi = fs.readFileSync(new URL('../api/auth/recovery-ui.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');

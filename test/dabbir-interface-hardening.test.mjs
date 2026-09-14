@@ -7,21 +7,22 @@ const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 
 test('shell booking guard is event-driven and keeps logical UI authorities visible',()=>{
   const shell=read('api/app-recovery.js');
-  assert.match(shell,/const UI_MODULE_ORDER\s*=/);
+  const bundles=JSON.parse(read('config/dabbir-ui-bundles.json'));
+  assert.equal(new Set([...bundles.critical,...bundles.deferred]).size,bundles.critical.length+bundles.deferred.length);
   assert.match(shell,/\/api\/dabbir-owner-first-ui/);
-  assert.match(shell,/\/api\/verified-metrics-ui/);
-  assert.match(shell,/\/api\/auth-session-stability-ui/);
+  assert.ok(bundles.deferred.includes('/api/verified-metrics-ui'));
+  assert.ok(bundles.critical.includes('/api/auth-session-stability-ui'));
   assert.doesNotMatch(shell,/setInterval\s*\(/,'shell booking guard must remain event-driven');
 });
 
 test('shell hardens readability, touch targets, iOS forms, and reduced motion',()=>{
-  const shell=read('api/app-recovery.js');
-  assert.match(shell,/dabbir-interface-hardening-v1/);
+  const shell=read('public/dabbir-web.css');
+  assert.doesNotMatch(read('api/app-recovery.js'),/<style/);
   assert.match(shell,/font-size:16px!important/);
   assert.match(shell,/min-height:44px!important/);
   assert.match(shell,/env\(safe-area-inset-bottom\)/);
   assert.match(shell,/prefers-reduced-motion:reduce/);
-  assert.match(shell,/INTERFACE_HARDENING \+ '\\n<\/body>'/);
+  assert.match(read('index.html'),/href="\/dabbir-web\.css/);
 });
 
 test('legacy competing settings mobile stylesheet is not injected by the shell',()=>{

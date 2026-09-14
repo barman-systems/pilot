@@ -10,10 +10,7 @@ const script=String.raw`(()=>{
   const api=async(url,options={})=>{const r=await fetch(url,{cache:'no-store',credentials:'same-origin',...options,headers:{accept:'application/json','content-type':'application/json',...(options.headers||{})}});const j=await r.json().catch(()=>({}));return{r,j}};
   let busy=false,lastNo='',lastFetch=0,data=null;
 
-  const style=document.createElement('style');
-  style.dataset.dabbirPlatformSupportThread='v1';
-  style.textContent='.pcst{border:1px solid #31405d;background:#101725;border-radius:12px;padding:10px;margin-top:9px}.pcstHead{display:flex;justify-content:space-between;gap:8px;font-size:9px;font-weight:900}.pcstRef{direction:ltr;color:var(--accent)}.pcstMsg{border-radius:10px;background:#171d27;padding:8px;margin-top:6px;font-size:9px;line-height:1.55}.pcstMsg.customer{background:#17243a}.pcstMsg b{display:block;font-size:8px}.pcstMsg small{display:block;color:var(--muted);font-size:7px;margin-top:3px}.pcstReply{display:flex;gap:6px;margin-top:8px}.pcstReply textarea{flex:1;border:1px solid var(--line);background:#0e1116;color:#fff;border-radius:9px;padding:8px;min-height:48px;resize:vertical}@media(max-width:700px){.pcstReply{flex-direction:column}}';
-  document.head.appendChild(style);
+
 
   function customerNo(){for(const n of qa('#pcBody .pcCode')){const v=String(n.textContent||'').trim().toUpperCase();if(/^DAB-[0-9]{6,}$/.test(v))return v}return null}
 

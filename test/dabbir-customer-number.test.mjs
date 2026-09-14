@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -67,7 +68,7 @@ test('customer-number endpoint returns only the authenticated active DABBIR user
 });
 
 test('customer-number UI is injected into the authoritative recovery shell', async () => {
-  const shell = await readFile(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
+  const shell = await readFile(new URL('../api/app-recovery.js', import.meta.url), 'utf8') + '\n' + deliverySource();
   const ui = await readFile(new URL('../api/dabbir-customer-number-ui.js', import.meta.url), 'utf8');
   assert.match(shell, /\/api\/dabbir-customer-number-ui/);
   assert.match(ui, /رقم العميل/);

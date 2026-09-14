@@ -12,7 +12,7 @@ import { chromium, webkit } from 'playwright';
 const root=path.resolve(import.meta.dirname,'..');
 const out=path.join(root,'ui-authority-evidence');await fs.mkdir(out,{recursive:true});
 const beforeDir=await fs.mkdtemp(path.join(os.tmpdir(),'dabbir-ui-before-'));
-const base='0bf3bbe50e76f0ea52c5c4d5a970950463c2a7fd';
+const base='00ffb68ab0dee7b184c97aa8c38c410720c23ab6';
 execFileSync('git',['worktree','add','--detach',beforeDir,base],{cwd:root,stdio:'pipe'});
 await fs.symlink(path.join(root,'node_modules'),path.join(beforeDir,'node_modules'),'dir');
 // Compare the Vercel build output, not stale committed generated copies.
@@ -46,7 +46,7 @@ async function serve(directory){
 const servers={before:await serve(beforeDir),after:await serve(root)};
 const report={base,head:process.env.UI_AUTHORITY_HEAD||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),scope:'REAL_SERVED_UI_SYNTHETIC_DATA_NO_PRODUCTION_WRITES',comparisons:[],booking:[],errors:[]};
 async function contextFor(browser,url,language,width,mode='workspace',gps='denied'){
- const context=await browser.newContext({viewport:{width,height:1024},locale:language==='ar'?'ar-AE':'en-AE',timezoneId:'Asia/Dubai',serviceWorkers:'block'});
+ const context=await browser.newContext({viewport:{width,height:1024},isMobile:width<=768,hasTouch:width<=768,locale:language==='ar'?'ar-AE':'en-AE',timezoneId:'Asia/Dubai',serviceWorkers:'block'});
  await context.route('**/*',route=>new URL(route.request().url()).origin===url?route.continue():route.abort());
  await context.addInitScript(({fixture,language,mode,gps})=>{
   localStorage.setItem('dabbir_lang',language);window.__uiTestPosts=[];
@@ -67,6 +67,17 @@ async function contextFor(browser,url,language,width,mode='workspace',gps='denie
  return context;
 }
 const palette=page=>page.evaluate(()=>Object.fromEntries(['--bg','--accent','--panel','--line','--muted','--ds-brand'].map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])));
+const settlePresentation=page=>page.evaluate(async()=>{
+ // Resolve finite transitions after layout; do not mask CSS conflicts or disable product motion.
+ getComputedStyle(document.body).color;
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ await Promise.all(document.getAnimations().filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));
+});
+const finalCascade=page=>page.evaluate(()=>{
+ const selectors=['body','.side','.top','#nav .navBtn.active','#bottomNav button.active','#screen-dashboard .card','#authEmail','#authSubmit','.authCard','.modalBox','#toast','.table'];
+ const properties=['background-color','color','border-top-color','border-top-width','border-radius','font-family','font-size','font-weight','line-height','padding-top','padding-right','padding-bottom','padding-left','min-height','text-align','direction'];
+ return {themeColor:document.querySelector('meta[name="theme-color"]')?.content,...Object.fromEntries(selectors.map(selector=>{const el=document.querySelector(selector);if(!el)return [selector,null];const style=getComputedStyle(el);return [selector,Object.fromEntries(properties.map(key=>[key,style.getPropertyValue(key)]))]}))};
+});
 try{
  for(const [engine,driver] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await driver.launch();
@@ -79,7 +90,31 @@ try{
      await page.goto(servers[version].url,{waitUntil:'domcontentloaded'});
      await page.locator('#appShell:not(.hidden)').waitFor();
      await page.waitForFunction(()=>window.__dabbirUiLifecycle&&window.__dabbirContextualNavigation);
+     await settlePresentation(page);
      observed[version]={palette:await palette(page),card:await page.locator('#screen-dashboard .card').first().evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,border:s.borderColor,radius:s.borderRadius,padding:s.padding}})};
+     observed[version].cascade=await finalCascade(page);
+     await page.evaluate(()=>{openModal('#appointmentModal','#apptCustomer');toast(document.documentElement.lang==='ar'?'اختبار الواجهة':'UI verification')});
+     await page.locator('#appointmentModal.open').waitFor({state:'visible'});
+     await page.locator('#toast.show').waitFor({state:'visible'});
+     await settlePresentation(page);
+     observed[version].modalCascade=await finalCascade(page);
+     await page.evaluate(()=>{closeModal(document.querySelector('#appointmentModal'));document.querySelector('#toast').classList.remove('show')});
+     if(version==='after'){
+      assert.equal(await page.locator('style').count(),0,'no feature can inject a second stylesheet');
+      await settlePresentation(page);
+      const stable=await finalCascade(page);
+      await page.evaluate(()=>{for(const link of [...document.querySelectorAll('link[rel="stylesheet"]')].reverse())document.head.append(link)});
+      // Moving link nodes can detach/reload their sheets. Compare the final cascade, not the transient unstyled frame.
+      await page.waitForFunction(()=>[...document.querySelectorAll('link[rel="stylesheet"]')].every(link=>link.sheet&&link.sheet.cssRules.length>0));
+      await settlePresentation(page);
+      assert.deepEqual(await finalCascade(page),stable,'resolved styles do not depend on stylesheet link ordering');
+      const attack=await page.addStyleTag({content:'#screen-dashboard .card{background-color:rgb(1,2,3)!important}'});
+      await settlePresentation(page);
+      assert.notDeepEqual(await finalCascade(page),stable,'computed-style oracle detects a competing runtime authority');
+      await attack.evaluate(el=>el.remove());
+      await settlePresentation(page);
+      assert.deepEqual(await finalCascade(page),stable,'removing attacker restores the canonical result');
+     }
      if(await page.locator('#menuBtn').isVisible())await page.locator('#menuBtn').click();
      await page.locator('#nav [data-screen="conversations"]').click();
      await page.locator('#chatList [data-cid]').first().click();
@@ -97,12 +132,42 @@ try{
     }
     assert.deepEqual(observed.after.palette,observed.before.palette,'web palette is preserved');
     assert.deepEqual(observed.after.card,observed.before.card,'dashboard card appearance is preserved');
+    assert.deepEqual(observed.after.cascade,observed.before.cascade,'navigation, cards, forms, auth, modal/toast and typography preserve the final cascade');
+    assert.deepEqual(observed.after.modalCascade,observed.before.modalCascade,'opened modal and visible toast retain their computed styles');
+    const auth={};
+    for(const version of ['before','after']){
+     const context=await contextFor(browser,servers[version].url,language,width,'auth');
+     const page=await context.newPage();await page.goto(servers[version].url,{waitUntil:'domcontentloaded'});
+     await page.locator('#authGate:not(.hidden)').waitFor({state:'visible'});
+     await page.waitForFunction(()=>window.__dabbirAuthSessionStabilityV5);
+     await page.locator('#signupTab').click();await page.locator('#loginTab').click();
+     assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
+     await settlePresentation(page);
+     auth[version]=await finalCascade(page);
+     await page.screenshot({path:path.join(out,`${engine}-${width}-${language}-${version}-auth.png`),fullPage:true});
+     await context.close();
+    }
+    assert.deepEqual(auth.after,auth.before,'real signed-out auth flow remains visually equivalent');
     report.comparisons.push({engine,width,language,status:'PASS',...observed});
    }
    for(const gps of ['success','denied','unsupported'])for(const language of ['ar','en']){
     const context=await contextFor(browser,servers.after.url,language,390,'workspace',gps),page=await context.newPage();page.setDefaultTimeout(15000);
     await page.goto(servers.after.url+'/book?slug=synthetic-car-wash&lang='+language);
-    await page.locator('[data-vehicle="saloon"]').click();await page.locator('[data-offer]').first().click();await page.locator('[data-slot]').first().click();
+    await page.locator('[data-vehicle="saloon"]').click();await page.locator('[data-offer]').first().click();
+    await page.locator('[data-slot]').first().waitFor();
+    // Country copy must settle instead of replacing pointer targets every animation frame.
+    const stableSlot=await page.locator('[data-slot]').first().evaluate(async button=>{
+      const frame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+      await frame();await frame();
+      const textNode=button.firstChild;let changes=0;
+      const observer=new MutationObserver(records=>{changes+=records.length});
+      observer.observe(button,{childList:true,subtree:true,characterData:true});
+      await frame();await frame();observer.disconnect();
+      return {changes,sameTextNode:button.firstChild===textNode};
+    });
+    assert.deepEqual(stableSlot,{changes:0,sameTextNode:true},'booking localization is idempotent and preserves the slot pointer target');
+    await page.locator('[data-slot]').first().click();
+    await page.locator('[data-slot].selected').waitFor();
     await page.locator('#customerName').fill('Synthetic User');await page.locator('#customerPhone').fill('+000000000001');await page.locator('#locationBtn').click();
     if(gps!=='success'){
      assert.equal(await page.locator('#submitBtn').isEnabled(),false);

@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -96,7 +97,7 @@ test('database migration is owner-only, force-RLS, and keeps audit evidence priv
 });
 
 test('production shell loads Away Mode after action center so escalation fetches are intercepted',async()=>{
-  const source=await readFile(new URL('../api/app-recovery.js',import.meta.url),'utf8');
+  const source=await readFile(new URL('../api/app-recovery.js',import.meta.url),'utf8') + '\n' + deliverySource();
   const action=source.indexOf('/api/owner-action-center-ui');
   const away=source.indexOf('/api/dabbir-owner-away-ui');
   assert.ok(action>=0&&away>action);

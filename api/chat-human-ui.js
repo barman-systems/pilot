@@ -2,7 +2,7 @@ const script=String.raw`(()=>{
   if(window.__dabbirHumanChatUiLoaded)return;
   window.__dabbirHumanChatUiLoaded=true;
 
-  // Presentation is statically owned by public/dabbir-chat.css.
+  // Presentation is statically owned by public/dabbir-web.css.
 
   const q=s=>document.querySelector(s);
   const isArabic=()=>document.documentElement.lang!=='en';

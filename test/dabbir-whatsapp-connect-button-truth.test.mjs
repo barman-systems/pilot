@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -40,7 +41,7 @@ test('WhatsApp guard attribute writes are idempotent to prevent a WebKit mutatio
 });
 
 test('authoritative shell mounts the WhatsApp truth guard immediately after Embedded Signup UI', async () => {
-  const shell = await read('api/app-recovery.js');
+  const shell = await read('api/app-recovery.js') + '\n' + deliverySource();
   const embedded = shell.indexOf('/api/dabbir-whatsapp-embedded-ui');
   const guard = shell.indexOf('/api/dabbir-whatsapp-connect-guard-ui');
   const timezone = shell.indexOf('/api/timezone-ui');

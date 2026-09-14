@@ -61,10 +61,7 @@ const script=String.raw`(()=>{
     });
   };
 
-  const style=document.createElement('style');
-  style.dataset.dabbirActivityTaskNavigation='v1';
-  style.textContent='.activityTask[data-dabbir-task-route]{cursor:pointer;transition:border-color .16s ease,background .16s ease,transform .16s ease}.activityTask[data-dabbir-task-route]:hover{border-color:#40515f;background:#192027}.activityTask[data-dabbir-task-route]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.activityTask[data-dabbir-task-route]:active{transform:scale(.995)}.dabbirTaskTarget{outline:2px solid var(--accent)!important;outline-offset:3px!important;transition:outline-color .2s ease}';
-  document.head.append(style);
+
 
   document.addEventListener('click',event=>{
     if(event.target?.closest?.('[data-activity-task]'))return;

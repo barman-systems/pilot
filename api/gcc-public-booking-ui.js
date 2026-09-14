@@ -79,6 +79,8 @@ const SCRIPT=String.raw`(()=>{
   }
   function vehicle(){return document.querySelector('[data-vehicle].selected')?.dataset?.vehicle||null}
 
+  function setText(node,value){if(node&&node.textContent!==value)node.textContent=value}
+
   function patchPrices(){
     const rows=offerRows();
     const type=vehicle();
@@ -88,43 +90,48 @@ const SCRIPT=String.raw`(()=>{
       if(!row||!box)return;
       const duration=box.querySelector('.duration');
       const amount=type?(type==='saloon'?row.saloon_price_aed:row.station_price_aed):null;
-      [...box.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE).forEach(node=>node.remove());
-      box.insertBefore(document.createTextNode(amount==null?'—':money(amount)),duration||null);
+      const label=amount==null?'—':money(amount);
+      const textNodes=[...box.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
+      if(textNodes.length===1)setText(textNodes[0],label);
+      else{
+        textNodes.forEach(node=>node.remove());
+        box.insertBefore(document.createTextNode(label),duration||null);
+      }
     });
     const summary=document.querySelector('#summaryOffer');
     const offer=currentOffer();
     if(summary&&offer){
       const name=arabic()?offer.name_ar:offer.name_en;
       const amount=type?(type==='saloon'?offer.saloon_price_aed:offer.station_price_aed):null;
-      summary.textContent=String(name||'')+(amount==null?'':' · '+money(amount));
+      setText(summary,String(name||'')+(amount==null?'':' · '+money(amount)));
     }
   }
 
   function patchSlots(){
     const slots=document.querySelector('#slots');
     if(!slots)return;
-    slots.querySelectorAll('[data-slot]').forEach(button=>{button.textContent=time(button.dataset.slot)});
+    slots.querySelectorAll('[data-slot]').forEach(button=>setText(button,time(button.dataset.slot)));
     slots.querySelectorAll('.day').forEach(header=>{
       let node=header.nextElementSibling;
       while(node&&!node.matches('[data-slot]'))node=node.nextElementSibling;
-      if(node?.dataset?.slot)header.textContent=day(node.dataset.slot);
+      if(node?.dataset?.slot)setText(header,day(node.dataset.slot));
     });
     const selected=slots.querySelector('[data-slot].selected')?.dataset?.slot;
     if(selected){
       const summary=document.querySelector('#summaryTime');
-      if(summary)summary.textContent=day(selected)+' · '+time(selected);
+      setText(summary,day(selected)+' · '+time(selected));
       const success=document.querySelector('#successDetails .summary div:last-child strong');
-      if(success)success.textContent=day(selected)+' · '+time(selected);
+      setText(success,day(selected)+' · '+time(selected));
     }
   }
 
   function patchCopy(){
     const desc=document.querySelector('#slotDesc');
-    if(desc)desc.textContent=arabic()
+    setText(desc,arabic()
       ? 'نعرض لك الأوقات المتاحة فقط حسب المنطقة الزمنية للنشاط ('+timezone()+').'
-      : 'Only available times are shown in the business time zone ('+timezone()+').';
+      : 'Only available times are shown in the business time zone ('+timezone()+').');
     const phone=document.querySelector('#customerPhone');
-    if(phone)phone.placeholder=prefix()+' …';
+    if(phone&&phone.placeholder!==prefix()+' …')phone.placeholder=prefix()+' …';
   }
 
   function apply(){if(!profile)return;patchCopy();patchPrices();patchSlots()}

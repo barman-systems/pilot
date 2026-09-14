@@ -109,6 +109,27 @@ jobs:
             echo 'Generated Android package evidence missing.' >&2
             exit 32
           }
+      - name: Use verified official Gradle release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The services redirect and GitHub release endpoint returned repeated 504s.
+          # Same publisher/version/bytes: https://gradle.org/release-checksums/
+          python3 - <<'PY_GRADLE'
+          from pathlib import Path
+          wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
+          text = wrapper.read_text()
+          expected = r'distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-bin.zip'
+          release = r'distributionUrl=https\://downloads.gradle.org/distributions/gradle-9.3.1-bin.zip'
+          checksum = 'distributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
+          assert expected in text, 'Review the generated Gradle version before changing its distribution source'
+          checksums = [line for line in text.splitlines() if line.startswith('distributionSha256Sum=')]
+          assert not checksums or checksums == [checksum], 'Unexpected Gradle distribution checksum'
+          text = text.replace(expected, release)
+          if not checksums:
+              text = text.rstrip() + '\n' + checksum + '\n'
+          wrapper.write_text(text)
+          PY_GRADLE
       - name: Compile Release Android App Bundle
         shell: bash
         run: |

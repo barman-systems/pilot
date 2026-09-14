@@ -3,172 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#090a0b">
+<meta name="theme-color" content="#0D1426">
 <title>DABBIR — مشغّل أعمالك الذكي</title>
 <link rel="stylesheet" href="/dabbir-design-tokens.css?v=ui-authority-v1">
-<style>:root{color-scheme:dark}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:radial-gradient(circle at 50% -20%,#20252b 0,#0c0e10 34%,var(--bg) 66%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif}
-button,input,select{font:inherit}
-button,input,select,a{min-height:44px}
-button{cursor:pointer;transition:transform .16s cubic-bezier(.23,1,.32,1),opacity .16s}
-button:active:not(:disabled){transform:scale(.97)}
-button:disabled{cursor:progress;opacity:.66}
-button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-a{color:inherit}
-.hidden{display:none!important}
-.loading{min-height:100vh;display:grid;place-items:center;color:var(--muted);letter-spacing:.12em}
-.loading:after{content:"";position:absolute;width:42px;height:3px;margin-top:52px;border-radius:999px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:loadingSweep 1s linear infinite}
-@keyframes loadingSweep{from{transform:translateX(-80%)}to{transform:translateX(80%)}}
-.authWrap{min-height:100vh;display:grid;place-items:center;padding:22px}
-.authCard{width:min(460px,100%);padding:24px;border:1px solid var(--line);border-radius:24px;background:#111315e8;box-shadow:var(--shadow)}
-.brand{display:flex;gap:11px;align-items:center}
-.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2e246b,#245fd6 55%,#38c8d9);border:1px solid #617dff66;font-weight:950;color:white;overflow:hidden}
-.logo img{width:100%;height:100%;display:block;object-fit:contain}
-.brand small,.muted{color:var(--muted)}
-.authCard h1{font-size:24px;margin:22px 0 6px}
-.authCard p{color:var(--muted);font-size:12px;line-height:1.7}
-.field{margin-top:13px}
-.field label{display:block;color:var(--muted);font-size:10px;margin-bottom:6px}
-.field input,.field select{width:100%;border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:12px;padding:11px}
-.row{display:flex;align-items:center;gap:9px}
-.space{justify-content:space-between}
-.primary,.secondary,.navBtn,.iconBtn{border-radius:12px;font-weight:850}
-.primary{border:0;background:var(--accent);color:#10130b;padding:11px 14px}
-.secondary{border:1px solid var(--line);background:#181b1f;color:#fff;padding:10px 13px}
-.ghost{border:0;background:transparent;color:var(--muted);padding:8px}
-.wide{width:100%;margin-top:16px}
-.authTabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:#171a1d;border:1px solid var(--line);padding:4px;border-radius:13px;margin-top:18px}
-.authTabs button{border:0;background:transparent;color:var(--muted);border-radius:10px}
-.authTabs button.on{background:#30343a;color:#fff}
-.authMsg{min-height:28px;margin-top:10px;color:var(--yellow);font-size:11px}
-.authHint{margin:8px 0 0!important;font-size:10px!important}
-.authLegal{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;color:var(--muted);font-size:10px}
-.authLegal a{color:var(--blue);min-height:30px;display:inline-flex;align-items:center}
-.authLegal a:hover{text-decoration:underline}
-.onboardingProgress{display:grid;grid-template-columns:1fr 1fr;gap:8px;list-style:none;padding:0;margin:18px 0 4px}
-.onboardingProgress li{border:1px solid var(--line);background:#171a1d;color:var(--muted);border-radius:12px;padding:9px 10px;font-size:9px}
-.onboardingProgress li.done{border-color:#355d42;background:#12251a;color:var(--green)}
-.onboardingProgress li.current{border-color:#65772f;color:#fff}
-.onboardingProgress strong{display:block;font-size:10px;margin-bottom:2px}
-.shell{min-height:100vh;display:grid;grid-template-columns:218px 1fr}
-.side{position:sticky;top:0;height:100vh;border-inline-end:1px solid var(--line);background:#0d0f10f2;padding:17px 12px;display:flex;flex-direction:column;z-index:20}
-.workspace{margin:16px 3px 12px;padding:11px;border:1px solid var(--line);border-radius:14px;background:#15181b}
-.workspace b{font-size:11px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.workspace span{font-size:9px;color:var(--green)}
-.nav{display:flex;flex-direction:column;gap:4px}
-.navBtn{border:0;background:transparent;color:#aeb3ba;text-align:start;padding:12px;display:flex;gap:10px;align-items:center}
-.navBtn.active,.navBtn:hover{background:#1b1e22;color:#fff}
-.navBtn.active{box-shadow:inset -3px 0 0 var(--accent)}
-html[dir=ltr] .navBtn.active{box-shadow:inset 3px 0 0 var(--accent)}
-.navIcon{width:20px;text-align:center}
-.sideFoot{margin-top:auto;border-top:1px solid var(--line);padding-top:12px}
-.main{min-width:0}
-.top{position:sticky;top:0;z-index:15;height:67px;padding:0 22px;border-bottom:1px solid #1e2226;background:#08090ada;backdrop-filter:blur(18px);display:flex;align-items:center;justify-content:space-between}
-.pageTitle{font-size:15px;font-weight:900}
-.statusChip,.badge{display:inline-flex;align-items:center;border-radius:999px;font-size:9px;font-weight:900;padding:5px 8px}
-.statusChip,.green{background:#14331e;color:var(--green)}
-.yellow{background:#3a3014;color:var(--yellow)}
-.red{background:#3b1717;color:var(--red)}
-.gray{background:#25282d;color:#c5cad0}
-.blue{background:#15283a;color:var(--blue)}
-.topActions{display:flex;align-items:center;gap:8px}
-.lang{display:flex;border:1px solid var(--line);background:#15171a;border-radius:12px;padding:3px}
-.lang button{border:0;background:transparent;color:var(--muted);border-radius:9px;padding:6px 9px;min-height:34px}
-.lang button.on{background:#30343a;color:#fff}
-.content{max-width:1180px;margin:auto;padding:24px 22px 96px}
-.screen{display:none}
-.screen.active{display:block}
-.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}
-.hero h1{font-size:27px;margin:0 0 5px}
-.hero p{font-size:12px;line-height:1.6;color:var(--muted);margin:0}
-.eyebrow{font-size:10px;color:var(--accent);font-weight:900;margin-bottom:5px}
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
-.card{border:1px solid var(--line);background:linear-gradient(180deg,#15181b,#101214);border-radius:var(--r);padding:15px}
-.metric span{font-size:10px;color:var(--muted)}
-.metric strong{font-size:25px;display:block;margin-top:7px}
-.todayGrid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:12px}
-.sectionHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.sectionHead h2{font-size:13px;margin:0}
-.list{display:flex;flex-direction:column;gap:8px}
-.item{border:1px solid #272c31;background:#171a1d;border-radius:13px;padding:11px;display:flex;gap:9px;align-items:center}
-.item.actionable{cursor:pointer}
-.item .grow{flex:1;min-width:0}
-.item b{font-size:11px;display:block}
-.item small{color:var(--muted);font-size:9px}
-.empty{border:1px dashed #31363c;border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:11px}
-.quickActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.quickAction{border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:14px;text-align:start;padding:14px}
-.quickAction b{display:block;font-size:11px;margin-bottom:4px}
-.quickAction span{font-size:9px;color:var(--muted)}
-.setupCard{border:1px solid #4a3e1d;background:linear-gradient(180deg,#2b2617,#19170f);border-radius:16px;padding:14px}
-.setupCard h3{margin:0 0 6px;font-size:12px}
-.setupCard p{margin:0;color:#d9c995;font-size:10px;line-height:1.6}
-.setupSteps{display:flex;flex-direction:column;gap:7px;margin-top:10px}
-.setupStep{display:flex;gap:8px;align-items:center;font-size:10px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--yellow)}
-.dot.ok{background:var(--green)}
-.chatGrid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:12px;min-height:590px}
-.chatList,.chatPanel{border:1px solid var(--line);background:#111315;border-radius:18px;overflow:hidden}
-.chatList{padding:10px}
-.chatContact{padding:11px;border-radius:12px;margin-top:6px;cursor:pointer}
-.chatContact.active{background:#1e2226}
-.chatContact b{font-size:11px;display:block}
-.chatContact span{font-size:9px;color:var(--muted)}
-.chatPanel{display:flex;flex-direction:column}
-.chatHead{padding:12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
-.chatHead .grow{flex:1}
-.messages{flex:1;overflow:auto;padding:15px;min-height:420px}
-.compose{display:flex;gap:7px;border-top:1px solid var(--line);padding:10px}
-.compose input{flex:1;border:1px solid var(--line);background:#191c20;color:#fff;border-radius:13px;padding:10px}
-.send{width:48px;border:0;background:var(--accent);color:#111;border-radius:12px}
-.table{border:1px solid var(--line);border-radius:16px;overflow:auto}
-.tr{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:12px;border-bottom:1px solid #24282d;min-width:550px;font-size:10px}
-.tr:last-child{border-bottom:0}
-.tr.head{background:#15181b;color:var(--muted)}
-.moreGrid,.integrationGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
-.moreCard,.integration{border:1px solid var(--line);background:#15181b;border-radius:16px;padding:14px}
-.moreCard{cursor:pointer;text-align:start;color:#fff}
-.moreCard h3,.integration h3{font-size:12px;margin:0}
-.moreCard p,.integration p{font-size:10px;line-height:1.6;color:var(--muted);margin-bottom:0}
-.truth{margin-top:12px;border:1px solid #4c4022;background:#2b2516;border-radius:14px;padding:11px;font-size:9px;color:#f4d991}
-.modal{display:none;position:fixed;inset:0;z-index:40;background:#000a;align-items:center;justify-content:center;padding:18px}
-.modal.open{display:flex}
-.modalBox{width:min(480px,100%);background:#131518;border:1px solid #343940;border-radius:22px;padding:18px;box-shadow:var(--shadow)}
-.modalBox h3{margin:0 0 10px;font-size:15px}
-.modalActions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
-.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,15px);background:#f6f7f8;color:#111;padding:10px 13px;border-radius:11px;font-size:10px;font-weight:900;opacity:0;transition:.2s;z-index:60;pointer-events:none}
-.toast.show{opacity:1;transform:translate(-50%,0)}
-.mobileMenu{display:none}
-.bottomNav{display:none}
-@media(max-width:920px){.shell{grid-template-columns:1fr}
-.side{position:fixed;inset-block:0;inset-inline-start:0;width:260px;transform:translateX(-110%);transition:.2s;box-shadow:var(--shadow)}
-html[dir=rtl] .side{transform:translateX(110%)}
-.side.open{transform:translateX(0)!important}
-.mobileMenu{display:block;border:1px solid var(--line);background:#171a1d;color:#fff;border-radius:12px;width:44px;height:44px}
-.cards{grid-template-columns:repeat(2,1fr)}
-.todayGrid{grid-template-columns:1fr}
-.chatGrid{grid-template-columns:230px 1fr}
-}
-@media(max-width:700px){button,input,select,a{min-height:48px}
-.top{padding:0 11px}
-.content{padding:16px 11px 98px}
-.hero{align-items:stretch}
-.hero h1{font-size:23px}
-.hero>.primary,.hero>.secondary{white-space:nowrap}
-.cards{grid-template-columns:repeat(2,1fr);gap:8px}
-.quickActions,.moreGrid,.integrationGrid{grid-template-columns:1fr}
-.chatGrid{display:block}
-.chatList{max-height:180px;overflow:auto;margin-bottom:10px}
-.bottomNav{position:fixed;display:grid;grid-template-columns:repeat(5,1fr);bottom:0;left:0;right:0;z-index:18;background:#0e1012f6;border-top:1px solid var(--line);padding:5px 5px calc(5px + env(safe-area-inset-bottom))}
-.bottomNav button{border:0;background:transparent;color:#9298a1;font-size:8px;border-radius:10px}
-.bottomNav button.active{color:var(--accent);background:#1a1e16}
-}
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}
-}
 
-</style>
-<link rel="stylesheet" href="/dabbir-chat.css?v=ui-authority-v1">
+<link rel="stylesheet" href="/dabbir-web.css?v=ui-authority-v2">
 </head>
 <body>
 <div id="loading" class="loading">DABBIR</div>
@@ -186,7 +25,7 @@ html[dir=rtl] .side{transform:translateX(110%)}
     <div class="authMsg" id="authMsg" role="status" aria-live="polite"></div>
     <p id="authHint" class="authHint"></p>
     <nav class="authLegal" aria-label="Legal links"><span id="authLegalPrefix"></span><a id="privacyLink" href="/privacy"></a><a id="termsLink" href="/terms"></a><a id="supportLink" href="/support"></a></nav>
-    <div class="row space" style="margin-top:10px"><span class="muted">العربية / English</span><div class="lang"><button id="authAr" type="button">عربي</button><button id="authEn" type="button">EN</button></div></div>
+    <div class="row space authLanguageRow"><span class="muted">العربية / English</span><div class="lang"><button id="authAr" type="button">عربي</button><button id="authEn" type="button">EN</button></div></div>
   </div>
 </section>
 
@@ -213,7 +52,7 @@ html[dir=rtl] .side{transform:translateX(110%)}
     <button class="navBtn" data-screen="customers"><span class="navIcon">♙</span><span data-label="customers"></span></button>
     <button class="navBtn" data-screen="more"><span class="navIcon">•••</span><span data-label="more"></span></button>
   </nav>
-  <div class="sideFoot"><a class="secondary" href="/team.html" style="display:block;text-align:center;text-decoration:none" id="teamLink"></a></div>
+  <div class="sideFoot"><a class="secondary" href="/team.html" id="teamLink"></a></div>
 </aside>
 
 <main class="main">
@@ -230,7 +69,7 @@ html[dir=rtl] .side{transform:translateX(110%)}
     <div class="card"><div class="sectionHead"><h2 id="attentionTitle"></h2><span class="badge yellow" id="attentionCount">0</span></div><div class="list" id="attentionList"></div></div>
     <div class="card"><div class="sectionHead"><h2 id="quickTitle"></h2></div><div class="quickActions"><button class="quickAction" id="quickChat"><b id="quickChatTitle"></b><span id="quickChatDesc"></span></button><button class="quickAction" id="quickAppt"><b id="quickApptTitle"></b><span id="quickApptDesc"></span></button></div></div>
   </div>
-  <div class="setupCard" id="setupCard" style="margin-top:12px"><h3 id="setupProgressTitle"></h3><p id="setupProgressDesc"></p><div class="setupSteps" id="setupSteps"></div></div>
+  <div class="setupCard" id="setupCard"><h3 id="setupProgressTitle"></h3><p id="setupProgressDesc"></p><div class="setupSteps" id="setupSteps"></div></div>
 </section>
 
 <section class="screen" id="screen-conversations">

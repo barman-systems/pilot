@@ -1,3 +1,4 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -114,8 +115,8 @@ test('the historical editor does not open for a different business type',()=>{
 });
 
 test('mobile controls use bounded grid sizing and an isolated LTR date field',()=>{
-  assert.match(script,/grid-template-columns:minmax\(0,1fr\)/);
-  assert.match(script,/box-sizing:border-box;width:100%;max-width:100%;min-width:0/);
+  assert.match(presentationFor('api/car-wash-booking-edit-ui.js'),/grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(presentationFor('api/car-wash-booking-edit-ui.js'),/box-sizing:border-box;width:100%;max-width:100%;min-width:0/);
   assert.match(script,/id="dabbirCarWashPastEditTime" type="datetime-local" dir="ltr"/);
   assert.match(script,/label for="dabbirCarWashPastEditTime"/);
   assert.doesNotMatch(script,/location\.reload\s*\(/);

@@ -6,21 +6,7 @@ const htmlPath = new URL('../index.html', import.meta.url);
 // Business/activity navigation is owned by the authoritative owner journey and activity modules,
 // not by an additional legacy businessAdaptive wrapper in this response transformer.
 const interfacePerformanceUi = String.raw`
-<style>
-button,a,[data-screen],[data-cid]{touch-action:manipulation}
-.screen.active{contain:layout paint style}
-.card,.chatList,.chatPanel,.table,.integration,.item{contain:layout paint}
-.messages{-webkit-overflow-scrolling:touch;overscroll-behavior:contain;contain:layout paint}
-.side{will-change:transform}
-@media(max-width:700px){
-  html,body{background:#08090a!important}
-  .top{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:#08090af7!important}
-  .authCard,.side,.modalBox{box-shadow:none!important}
-  .side{transition:transform .14s ease-out!important}
-  .content{contain:layout style}
-  .card,.chatList,.chatPanel,.table,.integration{box-shadow:none!important}
-}
-</style>
+
 <script>
 (()=>{
   function applyFastBusinessProfile(){
@@ -299,13 +285,7 @@ const conversationPerformanceUi = String.raw`
 </script>`;
 
 const truthVisibilityUi = String.raw`
-<style>
-.dabbirTruthBadge{display:inline-flex;align-items:center;gap:6px;margin-inline-start:8px;padding:4px 8px;border:1px solid rgba(255,255,255,.10);border-radius:999px;background:rgba(255,255,255,.04);font-size:10px;font-weight:700;letter-spacing:.01em;color:#bfc5cf;vertical-align:middle;white-space:nowrap}
-.dabbirTruthBadge[data-state="verified"]{color:#bfe7cf;border-color:rgba(137,214,170,.22);background:rgba(137,214,170,.07)}
-.dabbirTruthBadge[data-state="unverified"]{color:#f0cf9a;border-color:rgba(240,207,154,.20);background:rgba(240,207,154,.06)}
-.dabbirTruthBadge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
-@media(max-width:700px){.dabbirTruthBadge{font-size:9px;padding:3px 7px;margin-inline-start:5px}}
-</style>
+
 <script>
 (()=>{
   function exactTime(value){

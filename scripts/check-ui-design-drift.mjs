@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildTokens } from './build-design-tokens.mjs';
+import { checkUiAuthority } from './check-ui-authority.mjs';
 
 export const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const generated=new Set(['public/dabbir-design-tokens.css','mobile/src/design-tokens.ts','public/dabbir-ui-critical.js','public/dabbir-ui-deferred.js']);
@@ -55,6 +56,7 @@ export function violations(current,baseline){
 }
 export function checkDesignDrift(directory=root){
   buildTokens({check:true,directory});
+  checkUiAuthority(directory,runtimeFiles(directory));
   const baseline=JSON.parse(fs.readFileSync(path.join(directory,'config/ui-design-debt.json'),'utf8'));
   const errors=violations(inventory(directory),baseline);
   for(const file of runtimeFiles(directory)){

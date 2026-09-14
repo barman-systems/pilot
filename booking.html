@@ -15,6 +15,21 @@
 @media(max-width:650px){.wrap{padding:12px 11px 36px}.hero{padding:18px;border-radius:20px}.section{padding:13px;border-radius:17px}.vehicleGrid,.offerGrid,.fields{grid-template-columns:1fr}.slots{grid-template-columns:repeat(3,minmax(0,1fr))}.summary{grid-template-columns:1fr}.footer{display:block;line-height:2}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 .manualLocation summary{min-height:var(--touch-minimum);display:flex;align-items:center;cursor:pointer}.manualLocation{margin-top:var(--space-s12)}
+
+.eyebrow,.vehicle span,.offer p,.offer .duration,.day,.empty,.field label,.locationBox p,.summary span,.summary strong,.msg,.mapLink,.footer{font-size:12px!important;line-height:1.55}
+.vehicle strong,.offer strong{font-size:15px!important}
+.section>p,.hero p{font-size:13px!important}
+.slot{min-height:44px!important;font-size:13px!important}
+.lang button{min-height:44px!important}
+button{touch-action:manipulation}
+@media(max-width:650px){
+  input,textarea{font-size:16px!important}
+  .vehicle,.offer,.secondary,.primary{min-height:48px!important}
+  .slots{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .wrap{padding-bottom:calc(40px + env(safe-area-inset-bottom))!important}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
 </style>
 </head>
 <body>

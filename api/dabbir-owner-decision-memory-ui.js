@@ -1,22 +1,8 @@
-const css=String.raw`
-.dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}
-.dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}
-.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}
-.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}
-.dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}
-.dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}
-.dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}
-.dabbir-memory-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.dabbir-memory-actions button{min-height:36px;border-radius:10px;padding:7px 10px;font-size:9px;font-weight:900}
-.dabbir-memory-approve{border:1px solid #6c63d8;background:#262047;color:#e2ddff}.dabbir-memory-pause{border:1px solid #5e5637;background:#242117;color:#ffe4a1}.dabbir-memory-revoke{border:1px solid #64373c;background:#29191c;color:#ffb9bd}
-[data-knowledge-correction] summary{cursor:pointer;min-height:44px;padding-top:12px;box-sizing:border-box}.dabbir-memory-field{display:block;margin-top:12px;font-size:12px;color:#d8dde6}.dabbir-memory-field input,.dabbir-memory-field select{display:block;box-sizing:border-box;width:100%;margin-top:6px;min-height:44px;padding:10px;border-radius:10px;border:1px solid #465064;background:#181c23;color:#f3f4f6;font-size:16px}[data-knowledge="v2"] .dabbir-memory-card b{font-size:14px}[data-knowledge="v2"] .dabbir-memory-card p{font-size:12px}[data-knowledge="v2"] .dabbir-memory-card small{font-size:11px}[data-knowledge="v2"] button{min-height:44px;font-size:13px}[data-knowledge="v2"] .dabbir-memory-empty{font-size:12px}.dabbir-memory-status{font-size:12px;color:#bdc7d9;line-height:1.7}.dabbir-memory-actions button:disabled{opacity:.55;cursor:wait}.dabbir-memory-close{width:100%;min-height:42px;margin-top:12px;border:0;background:transparent;color:#9fa8b6;font-weight:800}.dabbir-memory-empty{padding:13px;margin-top:10px;border:1px dashed #343b49;border-radius:13px;color:#929ba8;font-size:10px}.dabbir-memory-section{margin-top:14px;font-size:11px;color:#e8ebf1}
-@media(max-width:700px){.dabbir-memory-overlay{align-items:flex-end;padding:10px}.dabbir-memory-dialog{border-radius:20px 20px 14px 14px;max-height:88vh}.dabbir-memory-btn{min-height:40px}.dabbir-memory-actions button{flex:1}}
-`;
-
 const client=String.raw`
 (()=>{
   if(window.__dabbirOwnerDecisionMemoryUiLoaded)return;
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
-  const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent=${JSON.stringify(css)};document.head.appendChild(style);
+
   const nativeFetch=window.fetch.bind(window);
   const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false,openFresh:false});
   let state=emptyState(null),generation=0,returnFocus=null,loadPromise=null;

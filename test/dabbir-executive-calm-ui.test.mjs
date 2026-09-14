@@ -3,6 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import ownerFirstUiHandler from '../api/dabbir-owner-first-ui.js';
 
+const css=fs.readFileSync(new URL('../public/dabbir-web.css',import.meta.url),'utf8');
+
 function capture(handler){
   let statusCode=200;
   const headers={};
@@ -22,11 +24,12 @@ test('owner UI exposes the single Executive Calm visual authority',()=>{
   assert.equal(statusCode,200);
   assert.equal(headers['x-dabbir-ui-authority'],'owner-first-v4');
   assert.equal(headers['x-dabbir-design-system'],'executive-calm-v1');
-  assert.match(body,/dataset\.dabbirDesignSystem='executive-calm-v1'/);
+  assert.doesNotMatch(body,/createElement\(['"]style['"]\)/);
+  assert.match(body,/data-dabbir-design/);
   assert.match(fs.readFileSync(new URL('../public/dabbir-design-tokens.css',import.meta.url),'utf8'),/--ds-brand:#4961e8/);
   assert.doesNotMatch(body,/--ds-brand:/);
-  assert.match(body,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
-  assert.match(body,/\.dabbirCopilot\{/);
+  assert.match(css,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
+  assert.match(css,/\.dabbirOperatorSummary\{/);
   assert.match(body,/reorderDashboard\(\)/);
   assert.match(body,/command-attention-metrics/);
   assert.match(body,/data-dabbir-design/);
@@ -37,7 +40,7 @@ test('owner UI exposes the single Executive Calm visual authority',()=>{
 
 test('Executive Calm keeps gradients reserved for DABBIR AI rather than ordinary primary actions',()=>{
   const {body}=capture(ownerFirstUiHandler);
-  assert.match(body,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
-  assert.match(body,/\.dcAsk button\{[^}]*linear-gradient/);
-  assert.match(body,/\.dabbirCopilot:before\{[^}]*linear-gradient/);
+  assert.match(css,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
+  assert.match(css,/\.doApprove\{[^}]*linear-gradient/);
+  assert.match(css,/\.dabbirOperatorSummary\{[^}]*linear-gradient/);
 });

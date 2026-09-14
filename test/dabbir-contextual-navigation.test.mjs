@@ -1,8 +1,9 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const shell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8');
+const shell = fs.readFileSync(new URL('../api/app-recovery.js', import.meta.url), 'utf8') + '\n' + deliverySource();
 const ownerOperations = fs.readFileSync(new URL('../api/owner-operations-ui.js', import.meta.url), 'utf8');
 const services = fs.readFileSync(new URL('../api/service-operations-ui.js', import.meta.url), 'utf8');
 const router = fs.readFileSync(new URL('../api/dabbir-contextual-navigation-ui.js', import.meta.url), 'utf8');
@@ -71,7 +72,7 @@ test('contextual navigation loads after service and owner UX layers', () => {
   assert.match(shell, /\/api\/dabbir-contextual-navigation-ui/);
   assert.ok(shell.indexOf('/api/dabbir-contextual-navigation-ui') > shell.indexOf('/api/service-operations-ui'));
   assert.ok(shell.indexOf('/api/dabbir-contextual-navigation-ui') > shell.indexOf('/api/owner-operations-ui'));
-  assert.ok(shell.indexOf('/api/dabbir-contextual-navigation-ui') > shell.indexOf('/api/owner-copilot-ui'));
+  assert.doesNotMatch(shell,/\/api\/owner-copilot-ui/);
 });
 
 test('contextual navigation is event-driven and does not add continuous DOM polling', () => {

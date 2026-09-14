@@ -16,14 +16,6 @@ const script = String.raw`(()=>{
   let salonLastRefreshAt=0;
   let salonHiddenAt=0;
 
-  function installSalonScreenIsolation(){
-    const styleId='dabbir-salon-screen-isolation';
-    if(document.getElementById(styleId)) return;
-    const style=document.createElement('style');
-    style.id=styleId;
-    style.textContent='.salonMode .screen.salonOnly{display:none}.salonMode .screen.salonOnly.active{display:block}';
-    document.head.append(style);
-  }
 
   function itemFrom(target){
     return target?.closest?.(NAV_ITEM_SELECTOR)||null;
@@ -255,7 +247,7 @@ const script = String.raw`(()=>{
     },0);
   }
 
-  installSalonScreenIsolation();
+
   installShowScreenRouterDelegation();
   setTimeout(installShowScreenRouterDelegation,0);
   setTimeout(installShowScreenRouterDelegation,250);

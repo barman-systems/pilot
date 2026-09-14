@@ -21,9 +21,7 @@ const liveScript=String.raw`(()=>{
   const screenActive=()=>q('#screen-appointments')?.classList.contains('active');
   const fmt=value=>{try{return new Intl.DateTimeFormat(ar()?'ar-AE':'en-AE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return String(value||'')}};
 
-  const style=document.createElement('style');
-  style.textContent='.dabbirExternalBusy{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.dabbirExternalBusy h4{font-size:10px;margin:0 0 7px}.dabbirExternalBusyList{display:grid;gap:5px}.dabbirExternalBusyRow{display:flex;gap:8px;align-items:center;border:1px solid #292f34;background:#15181b;border-radius:9px;padding:7px 8px;font-size:8px}.dabbirExternalBusyRow b{font-size:9px}.dabbirExternalBusyRow span{margin-inline-start:auto;color:var(--muted);white-space:nowrap}.dabbirSyncBtn{border:1px solid #414d2a;background:#252c1d;color:#fff;border-radius:9px;padding:6px 9px;min-height:36px;font-size:9px;font-weight:850}.dabbirSyncBtn:disabled{opacity:.55}.salonMode #dabbirApptManage,.salonMode #dabbirGenericCalendar{display:none!important}';
-  document.head.append(style);
+
 
   function enforceBusinessModeIsolation(){
     if(businessType()==='salon'){
@@ -91,7 +89,7 @@ const liveScript=String.raw`(()=>{
   function renderBusy(){
     const panel=q('#dabbirExternalBusy');if(!panel)return;
     const now=Date.now(),rows=lastBusy.filter(x=>new Date(x.ends_at).getTime()>now).slice(0,8);
-    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class=\"dabbirExternalBusyList\">'+rows.map(row=>'<div class=\"dabbirExternalBusyRow\"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div style=\"font-size:8px;color:var(--muted)\">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
+    panel.innerHTML='<h4>'+(ar()?'الأوقات المشغولة من Google / Outlook':'Busy time from Google / Outlook')+'</h4>'+(rows.length?'<div class=\"dabbirExternalBusyList\">'+rows.map(row=>'<div class=\"dabbirExternalBusyRow\"><b>'+esc(row.summary||(ar()?'مشغول':'Busy'))+'</b><span>'+esc(fmt(row.starts_at))+'</span></div>').join('')+'</div>':'<div data-ui-part=\"calendar-live-ui-detail-1\">'+(ar()?'لا توجد أوقات خارجية مشغولة قادمة.':'No upcoming external busy time.')+'</div>');
   }
 
   function httpError(response,body,fallback){

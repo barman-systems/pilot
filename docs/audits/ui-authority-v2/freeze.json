@@ -1,0 +1,24 @@
+{
+  "base": "00ffb68ab0dee7b184c97aa8c38c410720c23ab6",
+  "timestamp": "2026-09-14T13:38:03.629Z",
+  "branch": "refactor/ui-authority-cleanup-v2",
+  "initialWorkingTree": "clean",
+  "guard": {
+    "files": 73,
+    "additionalDebt": 0
+  },
+  "generatedBundles": "byte-for-byte PASS",
+  "metrics": {
+    "runtimeStyleInjections": 47,
+    "styleBlocks": 18,
+    "debtSources": 73,
+    "directColors": 1426,
+    "measuredValueOccurrences": 6022
+  },
+  "v1": {
+    "runtimeStyleInjections": 47,
+    "styleBlocks": 18,
+    "debtSources": 73,
+    "directColors": 1426
+  }
+}

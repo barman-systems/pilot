@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ import assert from 'node:assert/strict';
 const migration=fs.readFileSync('supabase/migrations/20260827155500_dabbir_owner_decision_memory_v1.sql','utf8');
 const api=fs.readFileSync('api/owner-decision-memory.js','utf8');
 const ui=fs.readFileSync('api/dabbir-owner-decision-memory-ui.js','utf8');
-const shell=fs.readFileSync('api/app-recovery.js','utf8');
+const shell=fs.readFileSync('api/app-recovery.js','utf8') + '\n' + deliverySource();
 const executable=migration.replace(/--.*$/gm,'');
 
 test('owner observations never activate authority and candidates require three distinct observations',()=>{

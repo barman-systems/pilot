@@ -6,4 +6,11 @@ header{border-bottom:1px solid var(--line);background:var(--surface)}.topbar{max
 @media(max-width:900px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.topbar{padding:12px 16px}.shell{padding-inline:16px}}
 @media(max-width:560px){.topbar{align-items:flex-start;gap:10px}.brand small{font-size:12px}.topActions{gap:6px}.topActions button{padding:8px;font-size:13px}.shell{padding:14px 12px 32px}#nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}#nav a{padding:8px 5px;font-size:14px}.panel{padding:14px}.forms{grid-template-columns:1fr}.wide{grid-column:auto}.context{align-items:flex-start;flex-direction:column}.sectionHeading{align-items:flex-start}h1{font-size:23px}.metrics{gap:9px}.metric{padding:12px}.metric strong{font-size:25px}.searchForm{flex-wrap:wrap}.searchForm input{flex-basis:100%}.recordTitle{flex-wrap:wrap}.dialogActions{flex-wrap:wrap}.dialogActions button{flex:1}.subnav a{font-size:14px}.topActions #refreshAll{display:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
-.permissionChoices{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}.permissionChoices label{display:flex;align-items:center;gap:10px;min-height:46px;overflow-wrap:anywhere}.permissionChoices input{width:20px;min-height:20px;flex:none}.permissionChoices span{direction:ltr;text-align:start}</style>`;
+.permissionChoices{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}.permissionChoices label{display:flex;align-items:center;gap:10px;min-height:46px;overflow-wrap:anywhere}.permissionChoices input{width:20px;min-height:20px;flex:none}.permissionChoices span{direction:ltr;text-align:start}
+[data-ui-part="owner-console-detail-1"]{margin-bottom:14px}
+[data-ui-part="owner-console-detail-2"]{margin-top:16px}
+[data-ui-part="owner-console-detail-3"]{margin-top:12px}
+
+[data-ui-part="owner-team-detail-1"]{margin-bottom:16px}
+[data-ui-part="owner-team-detail-2"]{margin-top:24px}
+</style>`;

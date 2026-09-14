@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -8,7 +9,7 @@ const [caseMigration, latestMigration, supportApi, reconcileUi, shell] = await P
   read('supabase/migrations/20260827175203_dabbir_recovery_reconciliation_latest_preview_v2.sql'),
   read('api/platform-customer-support.js'),
   read('api/platform-recovery-reconciliation-ui.js'),
-  read('api/app-recovery.js'),
+  read('api/app-recovery.js').then(source=>source+'\n'+deliverySource()),
 ]);
 
 test('reconciliation support case is idempotent and service-role only', () => {

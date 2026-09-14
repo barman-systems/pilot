@@ -1,21 +1,9 @@
-const css=String.raw`
-.dabbir-away-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}
-.dabbir-away-btn.active{border-color:#7b67d8;background:#211b35;color:#d9d2ff}
-.dabbir-away-overlay{position:fixed;inset:0;z-index:80;background:#000b;display:flex;align-items:center;justify-content:center;padding:18px}
-.dabbir-away-dialog{width:min(430px,100%);border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px;box-shadow:0 24px 80px #000a}
-.dabbir-away-dialog h3{margin:0;font-size:16px}.dabbir-away-dialog p{color:#a0a8b5;font-size:10px;line-height:1.7;margin:8px 0 14px}.dabbir-away-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.dabbir-away-options button,.dabbir-away-stop,.dabbir-away-close{min-height:44px;border-radius:12px;font-weight:900}.dabbir-away-options button{border:1px solid #343b49;background:#191e27;color:#fff}.dabbir-away-stop{width:100%;margin-top:8px;border:1px solid #5b3337;background:#26171a;color:#ffb4b4}.dabbir-away-close{width:100%;margin-top:8px;border:0;background:transparent;color:#9ba4b2}.dabbir-away-state{margin-top:12px;padding:9px;border:1px solid #2e3542;border-radius:11px;color:#bac2cf;font-size:9px}
-@media(max-width:700px){.dabbir-away-overlay{align-items:flex-end;padding:10px}.dabbir-away-dialog{border-radius:20px 20px 14px 14px}.dabbir-away-options{grid-template-columns:1fr}.dabbir-away-btn{min-height:40px}}
-`;
-
 const client=String.raw`
 (()=>{
   if(window.__dabbirOwnerAwayUiLoaded)return;
   window.__dabbirOwnerAwayUiLoaded=true;
 
-  const style=document.createElement('style');
-  style.dataset.dabbirOwnerAway='v1';
-  style.textContent=${JSON.stringify(css)};
-  document.head.appendChild(style);
+
 
   const nativeFetch=window.fetch.bind(window);
   window.fetch=function(input,init){

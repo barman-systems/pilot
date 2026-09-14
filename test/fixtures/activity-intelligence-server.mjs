@@ -1,5 +1,6 @@
 // Synthetic UI fixture only. All persistence is local in-memory test data.
 import http from 'node:http';
+import {readFile} from 'node:fs/promises';
 import ui from '../../api/business-activity-profile-ui.js';
 import {activityContext} from './understanding/activity.mjs';
 import {context,ids} from './understanding/cases.mjs';
@@ -11,6 +12,7 @@ const profile=()=>{
 };
 http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://terminal.local:4187');
+ if(['/dabbir-design-tokens.css','/dabbir-web.css'].includes(url.pathname)){res.setHeader('content-type','text/css');return res.end(await readFile(new URL('../../public'+url.pathname,import.meta.url)));}
  if(url.pathname==='/ui.js'){res.status=n=>(res.statusCode=n,res);res.send=body=>res.end(body);return ui(req,res)}
  if(url.pathname==='/api/activity-intelligence'){
   res.setHeader('content-type','application/json');
@@ -27,5 +29,5 @@ http.createServer(async(req,res)=>{
  res.setHeader('content-type','text/html;charset=utf-8');
  if(url.pathname==='/')return res.end('<!doctype html><title>Activity Intelligence UI QA</title><h1>Synthetic UI fixture</h1><iframe title="Arabic phone" width="390" height="1600" src="/form?lang=ar"></iframe><iframe title="English phone" width="390" height="1600" src="/form?lang=en"></iframe>');
  const en=url.searchParams.get('lang')==='en';
- res.end('<!doctype html><html lang="'+(en?'en':'ar')+'" dir="'+(en?'ltr':'rtl')+'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Activity fixture</title><style>body{margin:10px;font:16px system-ui;color:white;background:#101214}*{box-sizing:border-box}select,input{background:#20252a;color:#fff;border:1px solid #59616a;border-radius:8px;padding:8px}input[type=checkbox]{width:22px;height:22px}button{min-height:44px;border:1px solid #59616a;border-radius:8px;padding:8px;background:#c2e768;color:#111}.dap-grid p{font-size:14px!important}</style><div class="dabbir-knowledge-card"></div><script>let workspace={business:'+JSON.stringify({id:ids.business,business_type:'car_wash',currency_code:'AED'})+'};</script><script src="/ui.js"></script></html>');
+ res.end('<!doctype html><html data-dabbir-theme="web" lang="'+(en?'en':'ar')+'" dir="'+(en?'ltr':'rtl')+'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Activity fixture</title><link rel="stylesheet" href="/dabbir-design-tokens.css"><link rel="stylesheet" href="/dabbir-web.css"><style>body{margin:10px;font:16px system-ui;color:white;background:#101214}*{box-sizing:border-box}select,input{background:#20252a;color:#fff;border:1px solid #59616a;border-radius:8px;padding:8px}input[type=checkbox]{width:22px;height:22px}button{min-height:44px;border:1px solid #59616a;border-radius:8px;padding:8px;background:#c2e768;color:#111}.dap-grid p{font-size:14px!important}</style><div class="dabbir-knowledge-card"></div><script>let workspace={business:'+JSON.stringify({id:ids.business,business_type:'car_wash',currency_code:'AED'})+'};</script><script src="/ui.js"></script></html>');
 }).listen(4187,'0.0.0.0',()=>console.log('Activity UI fixture: http://terminal.local:4187'));

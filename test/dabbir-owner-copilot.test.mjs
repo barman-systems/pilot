@@ -1,11 +1,11 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ownerCopilotHandler from '../api/owner-copilot.js';
 
 const apiSource=fs.readFileSync(new URL('../api/owner-copilot.js',import.meta.url),'utf8');
-const uiSource=fs.readFileSync(new URL('../api/owner-copilot-ui.js',import.meta.url),'utf8');
-const recoverySource=fs.readFileSync(new URL('../api/app-recovery.js',import.meta.url),'utf8');
+const recoverySource=fs.readFileSync(new URL('../api/app-recovery.js',import.meta.url),'utf8') + '\n' + deliverySource();
 
 function responseMock(){
   return {
@@ -69,23 +69,18 @@ test('owner copilot recommends only safe in-app next screens',()=>{
   assert.match(apiSource,/recommended_screen:recommendedScreen/);
 });
 
-test('owner copilot UI gives natural-language options, value proof and accessible action navigation',()=>{
-  assert.match(uiSource,/اسأل دَبِّر عن عملك/);
-  assert.match(uiSource,/ما الذي يحتاجني اليوم؟/);
-  assert.match(uiSource,/من يحتاج متابعة؟/);
-  assert.match(uiSource,/ماذا أنجزت اليوم؟/);
-  assert.match(uiSource,/estimated_manual_minutes_saved/);
-  assert.match(uiSource,/VERIFIED_EXACT_COUNTS/);
-  assert.match(uiSource,/\/dabbir-app-icon\.png/);
-  assert.match(uiSource,/role="status" aria-live="polite"/);
-  assert.match(uiSource,/recommended_screen/);
-  assert.match(uiSource,/prefers-reduced-motion/);
-  assert.doesNotMatch(uiSource,/setInterval\s*\(/);
+test('retired copilot presentation cannot compete with the canonical business operator',()=>{
+  assert.equal(fs.existsSync(new URL('../api/owner-copilot-ui.js',import.meta.url)),false);
+  const registry=JSON.parse(fs.readFileSync(new URL('../config/ui-authority-registry.json',import.meta.url),'utf8'));
+  assert.ok(registry.retired.includes('api/owner-copilot-ui.js'));
+  assert.doesNotMatch(fs.readFileSync(new URL('../public/dabbir-web.css',import.meta.url),'utf8'),/\.dabbirCopilot|\.dcAsk/);
 });
 
-test('authoritative shell mounts owner copilot after verified metrics and activation UI',()=>{
+test('authoritative shell uses canonical operator and keeps the legacy copilot out of bundles',()=>{
   const metrics=recoverySource.indexOf('/api/verified-metrics-ui');
   const activation=recoverySource.indexOf('/api/customer-activation-ui');
   const copilot=recoverySource.indexOf('/api/owner-copilot-ui');
-  assert.ok(metrics>=0&&activation>metrics&&copilot>activation);
+  assert.ok(metrics>=0&&activation>metrics);
+  assert.equal(copilot,-1);
+  assert.match(fs.readFileSync(new URL('../api/owner-action-center-ui.js',import.meta.url),'utf8'),/import operatorHandler from '\.\/ai-business-operator-ui\.js'/);
 });

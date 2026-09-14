@@ -55,15 +55,9 @@ const script=String.raw`(()=>{
     input.setAttribute('aria-controls','dabbirCarWashCustomerMenu');
     input.setAttribute('placeholder',ar()?'ابحث عن عميل دائم أو اكتب اسمًا جديدًا':'Search a saved customer or enter a new name');
     const field=input.closest('.field');if(!field)return;
-    field.style.position='relative';
+    field.classList.add('carWashCustomerPickerField');
 
-    if(!q('#dabbirCarWashCustomerPickerStyle')){
-      const style=document.createElement('style');style.id='dabbirCarWashCustomerPickerStyle';
-      style.textContent='#dabbirCarWashCustomerMenu{position:absolute;z-index:90;inset-inline:0;top:calc(100% + 6px);max-height:min(38vh,280px);overflow:auto;background:#111a2a;border:1px solid #33445f;border-radius:14px;box-shadow:0 18px 40px #000a;padding:6px;-webkit-overflow-scrolling:touch}#dabbirCarWashCustomerMenu[hidden]{display:none!important}.dabbirCustomerChoice{width:100%;border:0;background:transparent;color:#fff;text-align:start;padding:12px 11px;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;font:inherit}.dabbirCustomerChoice:active,.dabbirCustomerChoice:focus{background:#253653;outline:none}.dabbirCustomerChoiceName{font-weight:800}.dabbirCustomerChoicePhone{font-size:12px;color:#9aabc1;direction:ltr;unicode-bidi:embed}.dabbirCustomerNew{color:#79d8ff;border-top:1px solid #2a3950;margin-top:4px;padding-top:12px}';
-      document.head.append(style);
-    }
-
-    let hidden=q('#dabbirCarWashCustomerId');
+let hidden=q('#dabbirCarWashCustomerId');
     if(!hidden){hidden=document.createElement('input');hidden.type='hidden';hidden.id='dabbirCarWashCustomerId';hidden.dataset.apptKey='customer_id';input.after(hidden)}
     let menu=q('#dabbirCarWashCustomerMenu');
     if(!menu){menu=document.createElement('div');menu.id='dabbirCarWashCustomerMenu';menu.hidden=true;menu.setAttribute('role','listbox');field.append(menu)}

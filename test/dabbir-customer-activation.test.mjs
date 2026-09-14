@@ -1,3 +1,4 @@
+import { deliverySource } from './ui-delivery-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 const activationPath='api/customer-activation-ui.js';
 const recoveryPath='api/app-recovery.js';
 const activation=fs.readFileSync(activationPath,'utf8');
-const recovery=fs.readFileSync(recoveryPath,'utf8');
+const recovery=fs.readFileSync(recoveryPath,'utf8')+'\n'+deliverySource();
 
 test('customer activation center is mounted after the authoritative owner-first shell',()=>{
   const ownerFirst=recovery.indexOf('/api/dabbir-owner-first-ui');

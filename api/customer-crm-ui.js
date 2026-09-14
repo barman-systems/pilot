@@ -29,33 +29,7 @@ const script=String.raw`(()=>{
     statuses:{new:'New',active:'Active',qualified:'Qualified',converted:'Customer',won:'Customer',closed:'Closed',inactive:'Inactive',lost:'Inactive'}
   };
 
-  const style=document.createElement('style');
-  style.dataset.dabbirCustomerCrm='v1';
-  style.textContent=[
-    '#customersTable.crmHost{border:0;border-radius:0;overflow:visible;background:transparent}',
-    '.crmMetrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px}',
-    '.crmMetric{border:1px solid var(--line);background:linear-gradient(180deg,#15181b,#101214);border-radius:15px;padding:12px}',
-    '.crmMetric span{display:block;color:var(--muted);font-size:9px}.crmMetric strong{display:block;font-size:22px;margin-top:5px}',
-    '.crmToolbar{display:grid;grid-template-columns:minmax(0,1fr) 170px 170px;gap:8px;margin-bottom:12px}',
-    '.crmToolbar input,.crmToolbar select{width:100%;border:1px solid var(--line);background:#15181b;color:#fff;border-radius:12px;padding:10px 11px}',
-    '.crmList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}',
-    '.crmCard{border:1px solid #293039;background:linear-gradient(180deg,#141922,#0f1724);border-radius:17px;padding:13px;text-align:inherit;color:inherit;min-width:0}',
-    '.crmCard:hover{border-color:#43506a}.crmCardTop{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}',
-    '.crmIdentity{min-width:0}.crmIdentity b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crmIdentity small{display:block;color:var(--muted);font-size:9px;margin-top:4px;direction:ltr;text-align:start}',
-    '.crmBadges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.crmBadge{border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;background:#202630;color:#cbd3df}.crmBadge.new{background:#14331e;color:var(--green)}.crmBadge.inactive{background:#3b1717;color:var(--red)}.crmBadge.repeat{background:#1f2550;color:#aebcff}',
-    '.crmStats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:11px}.crmStat{background:#121722;border:1px solid #222a36;border-radius:11px;padding:8px}.crmStat span{display:block;font-size:8px;color:var(--muted)}.crmStat b{font-size:12px;margin-top:3px}',
-    '.crmLast{margin-top:9px;color:var(--muted);font-size:9px;display:flex;justify-content:space-between;gap:8px}',
-    '.crmEmpty{border:1px dashed #31363c;border-radius:14px;padding:26px;text-align:center;color:var(--muted);font-size:11px;grid-column:1/-1}',
-    '.crmModal{z-index:55}.crmModal .modalBox{width:min(620px,100%);max-height:min(82vh,760px);overflow:auto}.crmDetailHead{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}.crmDetailHead h3{font-size:19px;margin:0}.crmDetailHead small{display:block;color:var(--muted);margin-top:4px;direction:ltr;text-align:start}',
-    '.crmQuick{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0}.crmQuick button,.crmQuick a{border:1px solid var(--line);background:#181b1f;color:#fff;border-radius:10px;padding:8px 10px;min-height:40px;font-size:9px;font-weight:850;text-decoration:none;display:inline-flex;align-items:center}.crmQuick .primary{border:0;background:var(--accent);color:#10130b}',
-    '.crmDetailGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:10px 0 14px}.crmDetailMetric{border:1px solid var(--line);background:#15181b;border-radius:12px;padding:9px}.crmDetailMetric span{display:block;color:var(--muted);font-size:8px}.crmDetailMetric b{display:block;font-size:13px;margin-top:4px}',
-    '.crmSection{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.crmSection h4{font-size:11px;margin:0 0 8px}.crmHistory{display:flex;flex-direction:column;gap:6px}.crmHistoryRow{border:1px solid #252b32;background:#15181b;border-radius:11px;padding:9px;display:flex;justify-content:space-between;gap:8px;font-size:9px}.crmHistoryRow b{font-size:10px}.crmHistoryRow span{color:var(--muted)}',
-    '.crmNotes{white-space:pre-wrap;color:#c7ccd3;font-size:10px;line-height:1.7}',
-    '.crmOrderModal{z-index:60}',
-    '@media(max-width:760px){.crmMetrics{grid-template-columns:repeat(2,1fr)}.crmToolbar{grid-template-columns:1fr 1fr}.crmToolbar input{grid-column:1/-1}.crmList{grid-template-columns:1fr}.crmStats{grid-template-columns:repeat(3,1fr)}.crmDetailGrid{grid-template-columns:repeat(2,1fr)}}',
-    '@media(max-width:430px){.crmMetric{padding:10px}.crmMetric strong{font-size:19px}.crmCard{padding:12px}.crmDetailHead{display:block}.crmBadges{justify-content:flex-start;margin-top:8px}.crmQuick{display:grid;grid-template-columns:repeat(2,1fr)}.crmQuick button,.crmQuick a{justify-content:center}.crmLast{display:block}.crmLast span{display:block;margin-top:3px}}'
-  ].join('');
-  document.head.appendChild(style);
+
 
   let state={query:'',filter:'all',sort:'latest',selected:null};
   let operationsCache=null;
@@ -220,7 +194,7 @@ const script=String.raw`(()=>{
       canOrder?'<button type="button" class="primary" id="crmNewOrder">＋ '+escapeHtml(t.newOrder)+'</button>':''
     ].join('');
     const apptRows=customer.appointments.slice().sort((a,b)=>new Date(b.starts_at||b.created_at||0)-new Date(a.starts_at||a.created_at||0)).slice(0,6).map(item=>'<div class="crmHistoryRow"><b>'+escapeHtml(date(item.starts_at,true))+'</b><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
-    const orderRows=orders.slice(0,6).map(item=>'<div class="crmHistoryRow"><div><b>'+escapeHtml(money(item.total_aed))+'</b><span style="display:block;margin-top:3px">'+escapeHtml(date(item.created_at))+'</span></div><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
+    const orderRows=orders.slice(0,6).map(item=>'<div class="crmHistoryRow"><div><b>'+escapeHtml(money(item.total_aed))+'</b><span data-ui-part="customer-crm-ui-detail-1">'+escapeHtml(date(item.created_at))+'</span></div><span>'+escapeHtml(statusLabel(item.status))+'</span></div>').join('');
     body.innerHTML='<div class="crmDetailHead"><div><h3>'+escapeHtml(customer.name)+'</h3><small>'+escapeHtml(customer.phone?.raw||customer.phone?.digits||t.noPhone)+'</small></div><div class="crmBadges">'+customerBadges(customer)+'</div></div>'+
       '<div class="crmQuick">'+quick+'</div>'+
       '<div class="crmDetailGrid"><div class="crmDetailMetric"><span>'+escapeHtml(t.appointments)+'</span><b>'+customer.appointments.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.conversations)+'</span><b>'+customer.conversations.length+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.orders)+'</span><b>'+(loadingOps?'…':orders.length)+'</b></div><div class="crmDetailMetric"><span>'+escapeHtml(t.spent)+'</span><b>'+(loadingOps?'…':escapeHtml(money(total)))+'</b></div></div>'+

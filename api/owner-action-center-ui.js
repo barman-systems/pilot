@@ -2,12 +2,6 @@ import coreHandler from './owner-action-center-core-ui.js';
 import operatorHandler from './ai-business-operator-ui.js';
 import memoryHandler from './dabbir-owner-decision-memory-ui.js';
 
-// Preserve the owner surface contract asserted by the existing quality suite.
-const ownerActionCenterSourceContract=String.raw`.dac-open{min-height:44px;font-size:12px} workspaceNow=`;
-const businessTimeZone=()=>'';
-void ownerActionCenterSourceContract;
-void businessTimeZone;
-
 function capture(handler,req){
   const headers=new Map();
   let statusCode=200;

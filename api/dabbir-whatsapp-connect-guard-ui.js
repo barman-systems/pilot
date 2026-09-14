@@ -46,15 +46,7 @@ const script = String.raw`(()=>{
     }catch{}
   }
 
-  const style=document.createElement('style');
-  style.dataset.dabbirWhatsAppMetaResume='v4';
-  style.textContent=[
-    '.dabbirWhatsAppMetaResume{flex-basis:100%;margin-top:7px;border:1px solid #2b3655;background:#0f1626;border-radius:12px;padding:10px 11px;color:#b8c3d6;font-size:9px;line-height:1.55}',
-    '.dabbirWhatsAppMetaResume strong{display:block;color:#eef3fb;font-size:10px;margin-bottom:3px}',
-    '.dabbirWhatsAppMetaResume button{margin-top:8px;min-height:38px;border:0;background:#1877f2;color:#fff;border-radius:9px;padding:8px 11px;font-size:9px;font-weight:900;cursor:pointer}',
-    '.dabbirWhatsAppMetaResume button:disabled{opacity:.65;cursor:wait}'
-  ].join('');
-  document.head.appendChild(style);
+
 
   async function config(force=false){
     const bid=businessId();

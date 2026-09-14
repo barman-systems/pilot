@@ -1,10 +1,11 @@
+import { presentationFor } from './ui-presentation-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const root=new URL('../',import.meta.url);
-const owner=fs.readFileSync(new URL('api/owner-operations-ui.js',root),'utf8');
-const service=fs.readFileSync(new URL('api/service-operations-ui.js',root),'utf8');
+const owner=fs.readFileSync(new URL('api/owner-operations-ui.js',root),'utf8') + '\n' + presentationFor('api/owner-operations-ui.js');
+const service=fs.readFileSync(new URL('api/service-operations-ui.js',root),'utf8') + '\n' + presentationFor('api/service-operations-ui.js');
 
 test('owner operations avoids micro typography and undersized actions',()=>{
   assert.match(owner,/\.opsMetric span\{[^}]*font-size:12px/);

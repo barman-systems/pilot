@@ -147,14 +147,14 @@ window.__productFixture={ids:${JSON.stringify(ids)},calls:fixtureCalls,navigatio
 
 export async function buildFixturePage(url=new URL('http://localhost/surface')){
   const index=await readFile(new URL('index.html',root),'utf8');
-  const baseStyles=[...index.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map(match=>match[0]).join('\n');
+  const baseStyles=[...index.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*>/g)].map(match=>match[0]).join('\n');
   const header=index.match(/<header class="top">[\s\S]*?<\/header>/)?.[0];
   const dashboard=index.match(/<section class="screen active" id="screen-dashboard">[\s\S]*?<div class="todayGrid">/)?.[0].replace(/<div class="todayGrid">$/,'')+'</section>';
   if(!header||!dashboard?.includes('dashCards'))throw new Error('LIVE_INDEX_SURFACE_NOT_FOUND');
   const language=url.searchParams.get('lang')==='en'?'en':'ar';
   const businessKey=url.searchParams.get('business')==='b'?'b':'a';
   const mode=['empty','error'].includes(url.searchParams.get('mode'))?url.searchParams.get('mode'):'normal';
-  return `<!doctype html><html lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>DABBIR — Synthetic priority-center verification</title>${baseStyles}<style>${fixtureStyles}</style></head><body>
+  return `<!doctype html><html data-dabbir-theme="web" lang="${language}" dir="${language==='ar'?'rtl':'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>DABBIR — Synthetic priority-center verification</title>${baseStyles}<style>${fixtureStyles}</style></head><body>
   <section class="fixtureControls" aria-label="Synthetic fixture controls">
     <p><strong>اختبار محلي ببيانات صناعية فقط.</strong> العرض والمنطق من ملفات المنتج الحالية. هذه البيئة لا تختبر تسجيل الدخول أو قاعدة البيانات أو إرسال الرسائل.</p>
     <label>النشاط <select id="fixtureBusiness"><option value="a">نشاط أ</option><option value="b">نشاط ب</option></select></label>
@@ -180,6 +180,7 @@ export function createFixtureServer(){
       if(req.method!=='GET'){res.statusCode=405;res.setHeader('Allow','GET');return res.end('Fixture is read only')}
       const url=new URL(req.url,'http://fixture.local');
       if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(harness)}
+      if(['/dabbir-design-tokens.css','/dabbir-web.css'].includes(url.pathname)){res.setHeader('Content-Type','text/css');return res.end(await readFile(new URL('public'+url.pathname,root)));}
       if(url.pathname==='/surface'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await buildFixturePage(url))}
       if(url.pathname==='/fixture/owner-first.js'||url.pathname==='/fixture/action-center.js'){
         res.setHeader('Content-Type','application/javascript; charset=utf-8');return res.end(capture(url.pathname.includes('owner-first')?ownerFirstUi:actionCenterUi));

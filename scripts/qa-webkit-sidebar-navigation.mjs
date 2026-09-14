@@ -24,6 +24,9 @@ const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://fixture');
   if(url.pathname==='/'){res.setHeader('content-type','text/html; charset=utf-8');return res.end(html)}
+  if(['/dabbir-design-tokens.css','/dabbir-web.css'].includes(url.pathname)){
+   res.setHeader('content-type','text/css');return res.end(await fs.readFile(new URL('public'+url.pathname,root)));
+  }
   if(['/dabbir-ui-critical.js','/dabbir-ui-deferred.js'].includes(url.pathname)){
    res.setHeader('content-type','application/javascript');return res.end(await fs.readFile(new URL('public'+url.pathname,root)));
   }
@@ -68,6 +71,7 @@ try{
  });
  try{
   await page.goto(origin,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>[...document.querySelectorAll('link[rel="stylesheet"]')].every(link=>link.sheet&&link.sheet.cssRules.length>0));
   await page.locator('#appShell:not(.hidden)').waitFor();
   await page.waitForFunction(()=>window.__dabbirUiLifecycle&&window.__dabbirContextualNavigation);
   // Execute the existing Production matrix verbatim: protocol reads inserted
