@@ -1,5 +1,6 @@
 name: DABBIR Qwen3.7 Live Benchmark
 # Isolated benchmark workflow; never promotes or mutates Production routing.
+# Exact-head evidence is required before any canary or routing proposal.
 
 on:
   workflow_dispatch:
