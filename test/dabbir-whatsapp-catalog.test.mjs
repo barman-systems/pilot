@@ -97,7 +97,7 @@ test('catalog transport uses native Meta product and product_list messages with 
 
 test('service flow prefers mapped catalog but fails closed for ambiguous business actions', () => {
   const source = read('api/_dabbir-whatsapp-ai-core.js');
-  const router = read('api/_dabbir-understanding-orchestrator.js');
+  const router = read('api/_dabbir-understanding-orchestrator-core.js');
   assert.match(source, /catalogMenuForContext/);
   assert.match(source, /sendMetaCatalogProducts/);
   assert.match(source, /resolveCatalogService/);
