@@ -48,6 +48,26 @@ test('cognitive quality repair is owned by the conversation brain boundary',()=>
   ])assert.equal(finalizer.includes(forbidden),false,`conversation brain quality finalizer gained execution authority: ${forbidden}`);
 });
 
+test('queued-goal customer prose is owned by the conversation brain boundary',()=>{
+  const facade=read('_dabbir-goal-queue.js');
+  const renderer=read('_dabbir-conversation-brain-queued-goal.js');
+  const core=read('_dabbir-goal-queue-core.js');
+
+  assert.match(facade,/renderQueuedGoalPrompt as queuedGoalPrompt/);
+  assert.match(facade,/partitionGoalRequests,resumeQueuedGoal/);
+  assert.match(renderer,/CONVERSATION_BRAIN_QUEUED_GOAL_OWNER='DABBIR_CONVERSATION_BRAIN'/);
+  assert.match(renderer,/legacyQueuedGoalPrompt\(state,context,now,reduce\)/);
+  assert.match(core,/export function queuedGoalPrompt/);
+
+  for(const forbidden of [
+    'dabbir_semantic_execute_v2',
+    'dabbir_semantic_commit_v2',
+    'dabbir_whatsapp_ai_check_availability',
+    'deliver(',
+    'handoff(',
+  ])assert.equal(renderer.includes(forbidden),false,`conversation brain queued-goal renderer gained execution authority: ${forbidden}`);
+});
+
 test('conversation brain remains a compatibility seam, not execution authority',()=>{
   const brain=read('_dabbir-conversation-brain.js');
   for(const forbidden of [
