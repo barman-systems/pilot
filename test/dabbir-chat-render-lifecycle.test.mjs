@@ -6,6 +6,8 @@ const root=new URL('../',import.meta.url);
 const read=path=>fs.readFileSync(new URL(path,root),'utf8');
 const recovery=read('api/app-recovery.js');
 const human=read('api/chat-human-ui.js');
+const tokenValues=Object.fromEntries([...read('public/dabbir-design-tokens.css').matchAll(/--([\w-]+):([^;}]+)/g)].map(m=>[m[1],m[2]]));
+const chatCss=read('public/dabbir-chat.css').replace(/var\(--([\w-]+)\)/g,(all,key)=>tokenValues[key]||all);
 
 test('central lifecycle owns independent chat and message render events',()=>{
   assert.match(recovery,/function wrapChats\(\)/);
@@ -41,13 +43,13 @@ test('human takeover and manual reply behavior remains present after lifecycle m
 });
 
 test('chat status labels and actions remain readable and tappable on iPhone',()=>{
-  assert.match(human,/\.dabbirOwnerChip\{[^}]*font-size:12px/);
-  assert.match(human,/\.dabbirTakeover\{[^}]*min-height:44px!important[^}]*font-size:12px!important/);
-  assert.match(human,/#screen-conversations #translateAll\{[^}]*font-size:12px!important[^}]*min-height:44px!important/);
-  assert.match(human,/#screen-conversations \.meta button\{[^}]*min-height:44px!important[^}]*font-size:11px!important/);
-  assert.match(human,/\.dabbirSenderLabel\{font-size:11px/);
-  assert.match(human,/#screen-conversations #chatState\{font-size:11px!important/);
-  assert.match(human,/#screen-conversations\+\.truth,#screen-conversations \.truth\{font-size:12px!important/);
-  assert.doesNotMatch(human,/\.dabbirTakeover\{[^}]*min-height:(?:36|38)px/);
-  assert.doesNotMatch(human,/#screen-conversations #translateAll\{[^}]*min-height:38px/);
+  assert.match(chatCss,/\.dabbirOwnerChip\{[^}]*font-size:12px/);
+  assert.match(chatCss,/\.dabbirTakeover\{[^}]*min-height:44px!important[^}]*font-size:12px!important/);
+  assert.match(chatCss,/#screen-conversations #translateAll\{[^}]*font-size:12px!important[^}]*min-height:44px!important/);
+  assert.match(chatCss,/#screen-conversations \.meta button\{[^}]*min-height:44px!important[^}]*font-size:11px!important/);
+  assert.match(chatCss,/\.dabbirSenderLabel\{font-size:11px/);
+  assert.match(chatCss,/#screen-conversations #chatState\{font-size:11px!important/);
+  assert.match(chatCss,/#screen-conversations\+\.truth,#screen-conversations \.truth\{font-size:12px!important/);
+  assert.doesNotMatch(chatCss,/\.dabbirTakeover\{[^}]*min-height:(?:36|38)px/);
+  assert.doesNotMatch(chatCss,/#screen-conversations #translateAll\{[^}]*min-height:38px/);
 });

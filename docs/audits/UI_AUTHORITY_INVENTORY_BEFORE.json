@@ -1,0 +1,485 @@
+[
+  {
+    "path": "delete-account.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 14,
+    "domPatches": 0
+  },
+  {
+    "path": "booking.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 49,
+    "domPatches": 7
+  },
+  {
+    "path": "support.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 9,
+    "domPatches": 0
+  },
+  {
+    "path": "index.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 89,
+    "domPatches": 14
+  },
+  {
+    "path": "privacy.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 7,
+    "domPatches": 0
+  },
+  {
+    "path": "terms.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 7,
+    "domPatches": 0
+  },
+  {
+    "path": "translation-preview.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 24,
+    "domPatches": 2
+  },
+  {
+    "path": "team.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 48,
+    "domPatches": 7
+  },
+  {
+    "path": "mobile/App.tsx",
+    "injections": 0,
+    "styleTags": 0,
+    "colors": 108,
+    "domPatches": 0
+  },
+  {
+    "path": "api/customer-name-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 1,
+    "domPatches": 2
+  },
+  {
+    "path": "api/business-brand-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 4,
+    "domPatches": 1
+  },
+  {
+    "path": "api/dabbir-owner-away-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 20,
+    "domPatches": 1
+  },
+  {
+    "path": "api/brand-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 6,
+    "domPatches": 1
+  },
+  {
+    "path": "api/app-safari-recovery.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 0,
+    "domPatches": 1
+  },
+  {
+    "path": "api/dabbir-settings-approved-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 92,
+    "domPatches": 2
+  },
+  {
+    "path": "api/car-wash-operations-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 14,
+    "domPatches": 5
+  },
+  {
+    "path": "api/_booking-lifecycle.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 2,
+    "domPatches": 0
+  },
+  {
+    "path": "api/auth-session-stability-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 0,
+    "domPatches": 1
+  },
+  {
+    "path": "api/app-recovery.js",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 0,
+    "domPatches": 0
+  },
+  {
+    "path": "api/platform-customer-support-thread-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 6,
+    "domPatches": 2
+  },
+  {
+    "path": "api/activity-mobile-polish-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 0,
+    "domPatches": 1
+  },
+  {
+    "path": "api/car-wash-booking-edit-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 13,
+    "domPatches": 2
+  },
+  {
+    "path": "api/platform-pnl-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 12,
+    "domPatches": 4
+  },
+  {
+    "path": "api/owner-operations-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 15,
+    "domPatches": 6
+  },
+  {
+    "path": "api/chat-human-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 41,
+    "domPatches": 3
+  },
+  {
+    "path": "api/business-workspaces-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 34,
+    "domPatches": 10
+  },
+  {
+    "path": "api/_dabbir-activity-intelligence-ui.js",
+    "injections": 0,
+    "styleTags": 0,
+    "colors": 1,
+    "domPatches": 2
+  },
+  {
+    "path": "api/appointment-management-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 36,
+    "domPatches": 4
+  },
+  {
+    "path": "api/salon-mode-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 50,
+    "domPatches": 16
+  },
+  {
+    "path": "api/customer-crm-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 24,
+    "domPatches": 5
+  },
+  {
+    "path": "api/dabbir-owner-first-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 125,
+    "domPatches": 4
+  },
+  {
+    "path": "api/app.js",
+    "injections": 0,
+    "styleTags": 3,
+    "colors": 11,
+    "domPatches": 1
+  },
+  {
+    "path": "api/car-wash-booking.js",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 0,
+    "domPatches": 0
+  },
+  {
+    "path": "api/dabbir-ui-refinement.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 37,
+    "domPatches": 1
+  },
+  {
+    "path": "api/business-profile-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 57,
+    "domPatches": 6
+  },
+  {
+    "path": "api/platform-customer-support-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 12,
+    "domPatches": 4
+  },
+  {
+    "path": "api/dabbir-whatsapp-embedded-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 9,
+    "domPatches": 1
+  },
+  {
+    "path": "api/customer-support-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 18,
+    "domPatches": 5
+  },
+  {
+    "path": "api/calendar-live-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 5,
+    "domPatches": 4
+  },
+  {
+    "path": "api/activity-task-navigation-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 2,
+    "domPatches": 1
+  },
+  {
+    "path": "api/activity-profile-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 42,
+    "domPatches": 9
+  },
+  {
+    "path": "api/home-service-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 11,
+    "domPatches": 7
+  },
+  {
+    "path": "api/clinic-mode-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 11,
+    "domPatches": 2
+  },
+  {
+    "path": "api/business-activity-profile-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 15,
+    "domPatches": 2
+  },
+  {
+    "path": "api/dabbir-whatsapp-connect-guard-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 6,
+    "domPatches": 1
+  },
+  {
+    "path": "api/branch-context-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 6,
+    "domPatches": 3
+  },
+  {
+    "path": "api/dabbir-contextual-navigation-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 70,
+    "domPatches": 9
+  },
+  {
+    "path": "api/car-wash-booking-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 18,
+    "domPatches": 8
+  },
+  {
+    "path": "api/dabbir-tiktok.js",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 38,
+    "domPatches": 0
+  },
+  {
+    "path": "api/_owner-command-center-design-system.js",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 15,
+    "domPatches": 0
+  },
+  {
+    "path": "api/owner-login.js",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 30,
+    "domPatches": 0
+  },
+  {
+    "path": "api/ai-business-operator-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 23,
+    "domPatches": 2
+  },
+  {
+    "path": "api/owner-copilot-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 34,
+    "domPatches": 1
+  },
+  {
+    "path": "api/dabbir-logo-placement-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 1,
+    "domPatches": 1
+  },
+  {
+    "path": "api/car-wash-manual-booking-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 8,
+    "domPatches": 1
+  },
+  {
+    "path": "api/platform-customers-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 27,
+    "domPatches": 8
+  },
+  {
+    "path": "api/customer-activation-ui.js",
+    "injections": 2,
+    "styleTags": 0,
+    "colors": 115,
+    "domPatches": 15
+  },
+  {
+    "path": "api/service-operations-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 15,
+    "domPatches": 6
+  },
+  {
+    "path": "api/dabbir-mobile-shell-v3.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 57,
+    "domPatches": 2
+  },
+  {
+    "path": "api/dabbir-navigation-event-bridge-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 0,
+    "domPatches": 0
+  },
+  {
+    "path": "api/dabbir-owner-decision-memory-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 33,
+    "domPatches": 1
+  },
+  {
+    "path": "api/owner-action-center-core-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 11,
+    "domPatches": 1
+  },
+  {
+    "path": "public/dabbir-ui-critical.js",
+    "injections": 3,
+    "styleTags": 0,
+    "colors": 36,
+    "domPatches": 9
+  },
+  {
+    "path": "public/support.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 9,
+    "domPatches": 0
+  },
+  {
+    "path": "public/privacy.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 7,
+    "domPatches": 0
+  },
+  {
+    "path": "public/terms.html",
+    "injections": 0,
+    "styleTags": 1,
+    "colors": 7,
+    "domPatches": 0
+  },
+  {
+    "path": "public/dabbir-ui-deferred.js",
+    "injections": 29,
+    "styleTags": 0,
+    "colors": 705,
+    "domPatches": 143
+  },
+  {
+    "path": "mobile/src/SubscriptionCard.tsx",
+    "injections": 0,
+    "styleTags": 0,
+    "colors": 4,
+    "domPatches": 0
+  },
+  {
+    "path": "api/auth/recovery-ui.js",
+    "injections": 1,
+    "styleTags": 0,
+    "colors": 30,
+    "domPatches": 5
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "before": {
+    "files": 333,
+    "createStyle": 48,
+    "styleTags": 19,
+    "colors": 1645,
+    "messageOwners": [
+      "api/app-recovery.js",
+      "api/chat-human-ui.js",
+      "api/dabbir-mobile-shell-v3.js",
+      "api/dabbir-owner-first-ui.js",
+      "api/dabbir-tiktok.js",
+      "api/dabbir-ui-refinement.js",
+      "index.html"
+    ]
+  },
+  "after": {
+    "files": 335,
+    "createStyle": 47,
+    "styleTags": 18,
+    "colors": 1426,
+    "messageOwners": [
+      "api/dabbir-mobile-shell-v3.js",
+      "api/dabbir-tiktok.js",
+      "api/dabbir-ui-refinement.js",
+      "public/dabbir-chat.css"
+    ]
+  }
+}

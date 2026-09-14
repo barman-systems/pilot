@@ -17,6 +17,13 @@ function sameOrigin(req){
 }
 function query(req,name){try{return new URL(String(req.url||'/'),'https://dabbir.invalid').searchParams.get(name)||''}catch{return ''}}
 function clean(value,max){return String(value??'').trim().slice(0,max)}
+// Empty/null/boolean input is not a coordinate. Number(null) must never invent 0.
+export function coordinate(value, limit){
+  if(typeof value!=='number'&&typeof value!=='string')return NaN;
+  if(typeof value==='string'&&!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim()))return NaN;
+  const number=Number(value);
+  return Number.isFinite(number)&&Math.abs(number)<=limit?number:NaN;
+}
 function slug(value){const v=clean(value,120);return SLUG_RE.test(v)?v:null}
 function readBody(req,max=12000){return new Promise((resolve,reject)=>{let n=0;const parts=[];req.on('data',chunk=>{n+=chunk.length;if(n>max){reject(Object.assign(new Error('PAYLOAD_TOO_LARGE'),{status:413}));req.destroy();return}parts.push(chunk)});req.on('end',()=>{try{resolve(JSON.parse(Buffer.concat(parts).toString('utf8')||'{}'))}catch{reject(Object.assign(new Error('INVALID_JSON'),{status:400}))}});req.on('error',reject)})}
 function serviceRoleKey(){
@@ -59,7 +66,7 @@ export default async function handler(req,res){
       const body=await readBody(req);
       const pSlug=slug(body.slug),offer=clean(body.offer_id,80),vehicle=clean(body.vehicle_type,16).toLowerCase();
       const starts=clean(body.starts_at,40),name=clean(body.customer_name,120),phone=clean(body.customer_phone,30),label=clean(body.location_label,240);
-      const lat=Number(body.location_lat),lng=Number(body.location_lng);
+      const lat=coordinate(body.location_lat,90),lng=coordinate(body.location_lng,180);
       if(!pSlug||!UUID_RE.test(offer)||!['saloon','station'].includes(vehicle)||!/^.{2,120}$/.test(name)||!/^.{7,30}$/.test(phone)||!Number.isFinite(lat)||lat<-90||lat>90||!Number.isFinite(lng)||lng<-180||lng>180||!starts)return json(res,400,{ok:false,error:'INVALID_BOOKING_INPUT'});
       const booking=await rpc('dabbir_public_car_wash_book',{p_slug:pSlug,p_offer_id:offer,p_vehicle_type:vehicle,p_starts_at:starts,p_customer_name:name,p_customer_phone:phone,p_location_lat:lat,p_location_lng:lng,p_location_label:label});
       return json(res,200,{ok:true,booking});

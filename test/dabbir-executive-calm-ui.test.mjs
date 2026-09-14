@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ownerFirstUiHandler from '../api/dabbir-owner-first-ui.js';
@@ -22,7 +23,8 @@ test('owner UI exposes the single Executive Calm visual authority',()=>{
   assert.equal(headers['x-dabbir-ui-authority'],'owner-first-v4');
   assert.equal(headers['x-dabbir-design-system'],'executive-calm-v1');
   assert.match(body,/dataset\.dabbirDesignSystem='executive-calm-v1'/);
-  assert.match(body,/--ds-brand:#4961e8/);
+  assert.match(fs.readFileSync(new URL('../public/dabbir-design-tokens.css',import.meta.url),'utf8'),/--ds-brand:#4961e8/);
+  assert.doesNotMatch(body,/--ds-brand:/);
   assert.match(body,/\.primary\{[^}]*background:var\(--ds-brand\)!important/);
   assert.match(body,/\.dabbirCopilot\{/);
   assert.match(body,/reorderDashboard\(\)/);

@@ -1851,67 +1851,7 @@
   if(window.__dabbirHumanChatUiLoaded)return;
   window.__dabbirHumanChatUiLoaded=true;
 
-  const style=document.createElement('style');
-  style.dataset.dabbirChatUi='v3-readable';
-  style.textContent=[
-    '#newChatBtn{display:none!important}',
-    '.dabbirChatControl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
-    '.dabbirOwnerChip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:8px 10px;font-size:12px;line-height:1.4;font-weight:900;border:1px solid #31363c;background:#171a1d;color:#c8cdd3}',
-    '.dabbirOwnerChip:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.9;flex:0 0 7px}',
-    '.dabbirOwnerChip.ai{border-color:#3d4b27;background:#202918;color:#bfe977}',
-    '.dabbirOwnerChip.human{border-color:#244a66;background:#132737;color:#9bd2ff}',
-    '.dabbirOwnerChip.action{border-color:#665527;background:#332b16;color:#ffd87a}',
-    '.dabbirTakeover{min-height:44px!important;padding:9px 12px!important;border-radius:11px!important;font-size:12px!important;line-height:1.35!important;white-space:nowrap}',
-    '.dabbirTakeover.take{border:1px solid #52652c;background:#26331a;color:#d7ff5f;font-weight:900}',
-    '.dabbirTakeover.return{border:1px solid #35546b;background:#172b3a;color:#b6dcff;font-weight:900}',
-    '#screen-conversations .chatPanel{background:linear-gradient(180deg,#111315,#0d0f11)}',
-    '#screen-conversations .chatHead{background:#121416}',
-    '#screen-conversations #translateAll{border:1px solid #30363d!important;background:#181b1f!important;color:#d8dde2!important;border-radius:10px!important;font-size:12px!important;padding:9px 11px!important;min-height:44px!important}',
-    '#screen-conversations .messages{scrollbar-width:thin;scrollbar-color:#31363c transparent}',
-    '#screen-conversations .msgrow{margin:12px 0}',
-    '#screen-conversations .bubble{max-width:min(78%,560px);box-shadow:none}',
-    '#screen-conversations .bubble .body{font-size:13px;line-height:1.65}',
-    '#screen-conversations .bubble .original{font-size:11px;line-height:1.55;opacity:.78}',
-    '#screen-conversations .meta{margin-top:7px;gap:6px;font-size:11px;line-height:1.4}',
-    '#screen-conversations .meta button{min-height:44px!important;padding:6px 7px!important;font-size:11px!important}',
-    '.compose.dabbirHumanLocked{opacity:1!important;background:#0f1210;border-top-color:#242a22!important}',
-    '.compose.dabbirHumanLocked input{cursor:not-allowed;background:#141814!important;border-color:#252d22!important;color:#a7b09e!important;text-align:center;font-size:12px}',
-    '.compose.dabbirHumanLocked #sendBtn{display:none!important}',
-    '.dabbirSenderLabel{font-size:11px;line-height:1.4;font-weight:900;margin:0 6px 5px;color:#9ba2aa;letter-spacing:.01em}',
-    '.msgrow.customer .bubble{margin-right:auto!important;margin-left:0!important;background:#191c20!important;border-color:#30353b!important}',
-    '.msgrow.customer .dabbirSenderLabel{margin-right:auto!important;margin-left:6px!important}',
-    '.msgrow.ai .bubble{margin-left:auto!important;margin-right:0!important;background:#202817!important;border-color:#3a4827!important}',
-    '.msgrow.ai .dabbirSenderLabel{margin-left:auto!important;margin-right:6px!important;color:#b9de7d}',
-    '.msgrow.human .bubble{margin-left:auto!important;margin-right:0!important;background:#162735!important;border-color:#2e526c!important}',
-    '.msgrow.human .dabbirSenderLabel{margin-left:auto!important;margin-right:6px!important;color:#9bcaff}',
-    '@media(max-width:700px){'+
-      '#screen-conversations .chatGrid{margin-top:0!important}'+
-      '#screen-conversations .chatList{max-height:132px!important;margin-bottom:8px!important;border-radius:14px!important}'+
-      '#screen-conversations .chatPanel{height:calc(100dvh - 238px);min-height:500px;border-radius:16px!important;overflow:hidden}'+
-      '#screen-conversations .chatHead{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important;align-items:center!important;padding:10px!important}'+
-      '#screen-conversations .chatHead>.grow{grid-column:1;grid-row:1;min-width:0}'+
-      '#screen-conversations .chatHead>.grow b,#screen-conversations #chatName{font-size:14px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
-      '#screen-conversations #chatState{font-size:11px!important;line-height:1.4!important;color:#9aa2ab!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
-      '#screen-conversations #translateAll{grid-column:2;grid-row:1;min-height:44px!important;padding:8px 10px!important;font-size:12px!important;white-space:nowrap}'+
-      '#screen-conversations .dabbirChatControl{grid-column:1/-1;grid-row:2;width:100%;display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center}'+
-      '#screen-conversations .dabbirOwnerChip{max-width:none!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 9px;font-size:11px}'+
-      '#screen-conversations .dabbirTakeover{min-height:44px!important;padding:8px 10px!important;font-size:12px!important}'+
-      '#screen-conversations .messages{min-height:0!important;padding:11px 9px 14px!important}'+
-      '#screen-conversations .msgrow{margin:10px 0!important}'+
-      '#screen-conversations .bubble{max-width:84%!important;border-radius:15px!important;padding:10px 11px!important}'+
-      '#screen-conversations .bubble .body{font-size:14px!important;line-height:1.58!important}'+
-      '#screen-conversations .bubble .original{font-size:12px!important;line-height:1.5!important}'+
-      '#screen-conversations .meta{font-size:11px!important}'+
-      '#screen-conversations .meta button{min-height:44px!important;font-size:11px!important;padding:6px 8px!important}'+
-      '#screen-conversations .dabbirSenderLabel{font-size:11px!important}'+
-      '#screen-conversations .compose{padding:8px!important;gap:7px!important;background:#101214}'+
-      '#screen-conversations .compose input{min-height:46px!important;border-radius:12px!important;font-size:16px!important}'+
-      '#screen-conversations .send{width:46px!important;min-width:46px!important;height:46px!important;border-radius:12px!important}'+
-      '#screen-conversations .compose.dabbirHumanLocked input{font-size:13px!important;min-height:46px!important}'+
-      '#screen-conversations+.truth,#screen-conversations .truth{font-size:12px!important;line-height:1.55!important;padding:10px 11px!important;margin-top:8px!important}'+
-    '}'
-  ].join('');
-  document.head.appendChild(style);
+  // Presentation is statically owned by public/dabbir-chat.css.
 
   const q=s=>document.querySelector(s);
   const isArabic=()=>document.documentElement.lang!=='en';
@@ -1942,10 +1882,11 @@
     wrap=document.createElement('div');
     wrap.id='dabbirChatControl';
     wrap.className='dabbirChatControl';
-    wrap.innerHTML='<span id="dabbirChatOwner" class="dabbirOwnerChip"></span><button id="dabbirTakeoverBtn" class="dabbirTakeover" type="button"></button>';
+    wrap.innerHTML='<span id="dabbirChatOwner" class="dabbirOwnerChip"></span><button id="dabbirTakeoverBtn" class="dabbirTakeover" type="button"></button><button id="dabbirReturnToAiBtn" class="dabbirTakeover return" type="button" hidden></button>';
     const translate=q('#translateAll');
     if(translate)head.insertBefore(wrap,translate);else head.appendChild(wrap);
     q('#dabbirTakeoverBtn').addEventListener('click',toggleTakeover);
+    q('#dabbirReturnToAiBtn').addEventListener('click',()=>toggleTakeover(true));
     return wrap;
   }
 
@@ -1983,13 +1924,12 @@
     const messages=q('#messages');
     if(!messages)return;
     messages.querySelectorAll('.msgrow').forEach(row=>{
-      const old=row.querySelector('.dabbirSenderLabel');
-      if(old)old.remove();
+      row.querySelectorAll(':scope > .dabbirSenderLabel,:scope > .d4-sender,:scope > .dabbirAiIdentity').forEach(node=>node.remove());
       const label=document.createElement('div');
       label.className='dabbirSenderLabel';
       if(row.classList.contains('customer'))label.textContent=t.customer;
       else if(row.classList.contains('human'))label.textContent=t.staff;
-      else if(row.classList.contains('ai'))label.textContent=t.assistant;
+      else if(row.classList.contains('ai')){label.classList.add('d4-sender');const img=document.createElement('img');img.src='/dabbir-app-icon.png';img.alt='';img.decoding='async';const name=document.createElement('span');name.textContent=t.assistant;label.append(img,name);}
       else return;
       row.prepend(label);
     });
@@ -2005,6 +1945,8 @@
     const state=String(conversation?conversation.state:'');
     const owner=q('#dabbirChatOwner');
     const control=q('#dabbirTakeoverBtn');
+    const directReturn=q('#dabbirReturnToAiBtn');
+    if(directReturn){directReturn.textContent=t.returnAi;directReturn.hidden=state!=='action_required';}
     const input=q('#composer');
     const send=q('#sendBtn');
     const compose=input?input.closest('.compose'):null;
@@ -2058,14 +2000,18 @@
     return payload;
   }
 
-  async function toggleTakeover(){
-    const button=q('#dabbirTakeoverBtn');
+  async function toggleTakeover(forceReturn=false){
+    const directReturn=forceReturn===true;
+    const button=q(directReturn?'#dabbirReturnToAiBtn':'#dabbirTakeoverBtn');
     const conversation=currentConversation();
     if(!conversation||(button&&button.disabled))return;
+    if(directReturn&&conversation.state!=='action_required')return;
+    const selectedBusiness=currentBusinessId(),selectedConversation=currentConversationId();
     const t=copy();
-    const returning=conversation.state==='human_active';
+    const returning=directReturn||conversation.state==='human_active';
     const confirmed=window.__dabbirConfirm?await window.__dabbirConfirm({title:returning?t.returnConfirmTitle:t.takeoverConfirmTitle,body:returning?t.returnConfirmBody:t.takeoverConfirmBody,accept:t.continueAction,cancel:t.cancelAction}):window.confirm(returning?t.returnConfirmTitle:t.takeoverConfirmTitle);
     if(!confirmed)return;
+    if(currentBusinessId()!==selectedBusiness||currentConversationId()!==selectedConversation)return;
     if(button)button.disabled=true;
     try{
       if(returning){
@@ -2076,7 +2022,7 @@
         notify(t.takeoverOk);
       }
       if(typeof loadRuntime==='function')await loadRuntime(currentBusinessId(),currentConversationId());
-    }catch(error){notify((conversation.state==='human_active'?t.returnFail:t.takeoverFail)+(error&&error.message?' — '+error.message:''))}
+    }catch(error){notify((returning?t.returnFail:t.takeoverFail)+(error&&error.message?' — '+error.message:''))}
     finally{if(button)button.disabled=false;queueHumanUi()}
   }
 
@@ -4318,8 +4264,8 @@
   window.__dabbirOwnerDecisionMemoryUiLoaded=true;
   const style=document.createElement('style');style.dataset.dabbirOwnerDecisionMemory='v1';style.textContent="\n.dabbir-memory-btn{min-height:36px;padding:7px 10px;border:1px solid #3d4350;background:#181c23;color:#d8dde6;border-radius:11px;font-size:9px;font-weight:900}\n.dabbir-memory-btn.has-candidate{border-color:#665fd0;background:#201d35;color:#ddd8ff}\n.dabbir-memory-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;box-sizing:border-box;background:#000c;color:#e8ebf1;display:flex;align-items:center;justify-content:center;padding:18px}\n.dabbir-memory-overlay::backdrop{background:transparent}.dabbir-memory-dialog{width:min(560px,100%);max-height:84vh;overflow:auto;border:1px solid #323846;background:#11151c;border-radius:20px;padding:17px}\n.dabbir-memory-dialog h3{margin:0;font-size:16px}.dabbir-memory-dialog>p{color:#9fa8b6;font-size:10px;line-height:1.7}\n.dabbir-memory-card{border:1px solid #2e3542;background:#171b23;border-radius:14px;padding:12px;margin-top:9px}\n.dabbir-memory-card b{font-size:11px}.dabbir-memory-card p{font-size:9px;color:#a9b1bf;line-height:1.6;margin:5px 0 8px}.dabbir-memory-card small{display:block;color:#7f8998;font-size:8px;word-break:break-word}\n.dabbir-memory-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.dabbir-memory-actions button{min-height:36px;border-radius:10px;padding:7px 10px;font-size:9px;font-weight:900}\n.dabbir-memory-approve{border:1px solid #6c63d8;background:#262047;color:#e2ddff}.dabbir-memory-pause{border:1px solid #5e5637;background:#242117;color:#ffe4a1}.dabbir-memory-revoke{border:1px solid #64373c;background:#29191c;color:#ffb9bd}\n[data-knowledge-correction] summary{cursor:pointer;min-height:44px;padding-top:12px;box-sizing:border-box}.dabbir-memory-field{display:block;margin-top:12px;font-size:12px;color:#d8dde6}.dabbir-memory-field input,.dabbir-memory-field select{display:block;box-sizing:border-box;width:100%;margin-top:6px;min-height:44px;padding:10px;border-radius:10px;border:1px solid #465064;background:#181c23;color:#f3f4f6;font-size:16px}[data-knowledge=\"v2\"] .dabbir-memory-card b{font-size:14px}[data-knowledge=\"v2\"] .dabbir-memory-card p{font-size:12px}[data-knowledge=\"v2\"] .dabbir-memory-card small{font-size:11px}[data-knowledge=\"v2\"] button{min-height:44px;font-size:13px}[data-knowledge=\"v2\"] .dabbir-memory-empty{font-size:12px}.dabbir-memory-status{font-size:12px;color:#bdc7d9;line-height:1.7}.dabbir-memory-actions button:disabled{opacity:.55;cursor:wait}.dabbir-memory-close{width:100%;min-height:42px;margin-top:12px;border:0;background:transparent;color:#9fa8b6;font-weight:800}.dabbir-memory-empty{padding:13px;margin-top:10px;border:1px dashed #343b49;border-radius:13px;color:#929ba8;font-size:10px}.dabbir-memory-section{margin-top:14px;font-size:11px;color:#e8ebf1}\n@media(max-width:700px){.dabbir-memory-overlay{align-items:flex-end;padding:10px}.dabbir-memory-dialog{border-radius:20px 20px 14px 14px;max-height:88vh}.dabbir-memory-btn{min-height:40px}.dabbir-memory-actions button{flex:1}}\n";document.head.appendChild(style);
   const nativeFetch=window.fetch.bind(window);
-  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false});
-  let state=emptyState(null),generation=0,returnFocus=null;
+  const emptyState=id=>({candidates:[],policies:[],proposals:[],services:[],audit:[],draft:{alias:'',target_id:'',correction:''},correctionError:'',loading:false,business:id,knowledgeError:false,policyError:false,openFresh:false});
+  let state=emptyState(null),generation=0,returnFocus=null,loadPromise=null;
   const ar=()=>String(document.documentElement.lang||'ar').toLowerCase().startsWith('ar');
   const copy=()=>ar()?{
     button:'سياسات دبّر',candidate:'اقتراح جديد',title:'سياسات المالك',
@@ -4346,21 +4292,26 @@
     return id;
   }
   async function load(force=false){
-    const id=syncScope();if(!id||state.loading)return;
+    const id=syncScope();if(!id)return;
+    if(state.loading){const pending=loadPromise;if(!force)return pending;await pending;return load(true)}
     if(!force&&state.loaded)return renderButton();
     state.loading=true;const epoch=generation;
     document.querySelectorAll('#dabbirMemoryOverlay button,#dabbirMemoryOverlay input,#dabbirMemoryOverlay select').forEach(el=>el.disabled=true);
-    const get=async path=>{
-      const response=await nativeFetch(path+'?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
-      const payload=await response.json().catch(()=>null);
-      if(!response.ok||!payload?.ok)throw new Error('OWNER_KNOWLEDGE_LOOKUP_FAILED');
-      return payload;
-    };
-    const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
-    if(!current(id,epoch))return;
-    const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
-    state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',policyError:policies.status!=='fulfilled',loaded:true};
-    renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
+    const task=(async()=>{
+      const get=async path=>{
+        const response=await nativeFetch(path+'?business_id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}});
+        const payload=await response.json().catch(()=>null);
+        if(!response.ok||!payload?.ok)throw new Error('OWNER_KNOWLEDGE_LOOKUP_FAILED');
+        return payload;
+      };
+      const [policies,knowledge]=await Promise.allSettled([get('/api/owner-decision-memory'),get('/api/understanding-knowledge')]);
+      if(!current(id,epoch))return;
+      const p=policies.status==='fulfilled'?policies.value:{},k=knowledge.status==='fulfilled'?knowledge.value:{};
+      state={...emptyState(id),draft:state.draft,correctionError:state.correctionError,candidates:p.candidates||[],policies:p.policies||[],proposals:k.proposals||[],services:k.services||[],audit:k.audit||[],knowledgeError:knowledge.status!=='fulfilled',policyError:policies.status!=='fulfilled',loaded:true,openFresh:Boolean(force)};
+      renderButton();if(document.querySelector('#dabbirMemoryOverlay'))openDialog();
+    })();
+    loadPromise=task;
+    try{return await task}finally{if(loadPromise===task)loadPromise=null}
   }
   function renderButton(){
     if(!syncScope())return;
@@ -4368,7 +4319,7 @@
     const autoHero=document.querySelector('#screen-automations .hero');
     const host=actionHead||autoHero;if(!host)return;
     let button=document.querySelector('#dabbirMemoryButton');
-    if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',openDialog);const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
+    if(!button){button=document.createElement('button');button.id='dabbirMemoryButton';button.type='button';button.className='dabbir-memory-btn';button.addEventListener('click',()=>{if(state.openFresh){state.openFresh=false;return openDialog()}return load(true).then(()=>{if(!syncScope())return;state.openFresh=false;openDialog()})});const refresh=actionHead?.querySelector('#dacRefresh');refresh?.parentNode?refresh.parentNode.insertBefore(button,refresh):host.append(button)}
     // The automation screen exists before the asynchronous dashboard mounts.
     // Move the existing control when its authoritative visible host arrives.
     if(button.parentNode!==host)host.append(button);

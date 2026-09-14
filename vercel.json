@@ -72,6 +72,10 @@
   ],
   "headers": [
     {
+      "source": "/dabbir-(design-tokens|chat)\\.css",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
       "source": "/dabbir-ui-(critical|deferred)\\.js",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
