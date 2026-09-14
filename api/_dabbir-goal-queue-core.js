@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {clarification,normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
+import {normalizeSemanticText} from './_dabbir-semantic-engine-core.js';
 
 const arr=v=>Array.isArray(v)?v:[];
 const actions={BOOK_SERVICE:'CREATE_BOOKING',CANCEL_BOOKING:'CANCEL_BOOKING',RESCHEDULE_BOOKING:'RESCHEDULE_BOOKING'};
@@ -79,16 +79,4 @@ export function resumeQueuedGoal(previous,c,now){
  seed.revision=previous.revision;seed.goal_queue=rest;seed.goal_queue_version=1;seed.goal_queue_seen=arr(previous.goal_queue_seen);
  seed.goal_queue_resumed=frame.id;seed.updated_at=now.toISOString();
  return {previous:seed,resumed:true};
-}
-
-export function queuedGoalPrompt(state,c,now,reduce){
- const frame=arr(state.goal_queue)[0];
- if(!frame||!live(frame.state,c,now))return '';
- const context={...c,pending_state:null,batch_messages:[],cognitive_active:true};
- if(Array.isArray(frame.state.goal_queue_target_ids))context.upcoming_appointments=arr(c.upcoming_appointments).filter(a=>frame.state.goal_queue_target_ids.includes(a.id));
- const r=reduce({previous:frameState(frame.state),context,now});
- const label=r.state.goal==='CANCEL_BOOKING'?(state.language==='en'?'cancellation':'إلغاء الموعد'):r.state.goal==='RESCHEDULE_BOOKING'?(state.language==='en'?'rescheduling':'تعديل الموعد'):(state.language==='en'?'next booking':'الحجز التالي');
- const question=clarification(r.state,context,{acknowledge:false});
- if(r.decision.action==='CLARIFY'&&r.decision.reply)return state.language==='en'?`\nFor your ${label}: ${question}`:`\nوبخصوص ${label}: ${question}`;
- return state.language==='en'?`\nShall we continue with your ${label}?`:`\nنكمل طلب ${label}؟`;
 }

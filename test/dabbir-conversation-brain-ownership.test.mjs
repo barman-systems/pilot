@@ -61,7 +61,8 @@ test('queued-goal customer prose is owned by the conversation brain boundary',()
   assert.match(renderer,/semanticClarificationReply/);
   assert.doesNotMatch(renderer,/legacyQueuedGoalPrompt/);
   assert.doesNotMatch(renderer,/from '\.\/_dabbir-goal-queue-core\.js'/);
-  assert.match(core,/export function queuedGoalPrompt/);
+  assert.doesNotMatch(core,/export function queuedGoalPrompt/);
+  assert.doesNotMatch(core,/\bclarification\b/);
 
   for(const forbidden of [
     'dabbir_semantic_execute_v2',
