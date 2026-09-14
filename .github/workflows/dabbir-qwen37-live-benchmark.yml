@@ -1,4 +1,4 @@
-name: DABBIR Qwen3.5 Live Benchmark
+name: DABBIR Qwen3.7 Live Benchmark
 # Isolated benchmark workflow; never promotes or mutates Production routing.
 
 on:
@@ -7,17 +7,18 @@ on:
     branches:
       - feat/qwen37-bonsai-intelligence-benchmark-20260914
     paths:
-      - 'api/_dabbir-qwen35-benchmark.js'
-      - 'api/dabbir-qwen35-benchmark.js'
+      - 'api/_dabbir-qwen37-benchmark.js'
+      - 'api/dabbir-qwen37-benchmark.js'
       - 'api/_dabbir-cognitive-probe.js'
       - 'api/_dabbir-semantic-interpreter.js'
       - 'api/_ai-core.js'
-      - 'test/dabbir-qwen35-benchmark.test.mjs'
-      - 'test/dabbir-qwen35-live-benchmark.mjs'
+      - 'test/dabbir-qwen37-benchmark.test.mjs'
+      - 'test/dabbir-qwen37-gateway-contract.test.mjs'
+      - 'test/dabbir-qwen37-live-benchmark.mjs'
       - '.github/workflows/dabbir-qwen37-live-benchmark.yml'
 
 concurrency:
-  group: dabbir-qwen35-live-${{ github.ref }}
+  group: dabbir-qwen37-live-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -25,15 +26,15 @@ permissions:
   id-token: write
 
 jobs:
-  qwen35-live-benchmark:
-    name: Protected Qwen3.5 cognitive benchmark
+  qwen37-live-benchmark:
+    name: Protected Qwen3.7 cognitive benchmark
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      QWEN35_BENCHMARK_ORIGIN: https://dabbir-git-feat-qwen37-bonsai-549b7c-nd56cm4j5v-3619s-projects.vercel.app
+      QWEN37_BENCHMARK_ORIGIN: https://dabbir-git-feat-qwen37-bonsai-549b7c-nd56cm4j5v-3619s-projects.vercel.app
       EXPECTED_BENCHMARK_SHA: ${{ github.sha }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-      QWEN35_BENCHMARK_REPORT_PATH: dabbir-qwen35-live-benchmark.json
+      QWEN37_BENCHMARK_REPORT_PATH: dabbir-qwen37-live-benchmark.json
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
-            echo 'QWEN35_BENCHMARK_PROTECTION=automation_bypass'
+            echo 'QWEN37_BENCHMARK_PROTECTION=automation_bypass'
             exit 0
           fi
           response="$(mktemp)"
@@ -62,30 +63,30 @@ jobs:
           fi
           echo "::add-mask::$token"
           echo "VERCEL_TRUSTED_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
-          echo 'QWEN35_BENCHMARK_PROTECTION=trusted_oidc'
-      - name: Run real Qwen3.5 benchmark on protected preview
-        run: node test/dabbir-qwen35-live-benchmark.mjs
+          echo 'QWEN37_BENCHMARK_PROTECTION=trusted_oidc'
+      - name: Run real Qwen3.7 benchmark on protected preview
+        run: node test/dabbir-qwen37-live-benchmark.mjs
       - name: Publish benchmark summary
         if: always()
         shell: bash
         run: |
-          if [ -f "$QWEN35_BENCHMARK_REPORT_PATH" ]; then
-            echo '## DABBIR Qwen3.5 Live Benchmark' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$QWEN37_BENCHMARK_REPORT_PATH" ]; then
+            echo '## DABBIR Qwen3.7 Live Benchmark' >> "$GITHUB_STEP_SUMMARY"
             echo "**Expected SHA:** $EXPECTED_BENCHMARK_SHA" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Verdict:** $(jq -r '.verdict' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Scenarios:** $(jq -r '.aggregate.scenario_passed|tostring' "$QWEN35_BENCHMARK_REPORT_PATH")/$(jq -r '.aggregate.scenario_total|tostring' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Provider calls:** $(jq -r '.aggregate.provider_calls' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Input tokens:** $(jq -r '.aggregate.input_tokens' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Output tokens:** $(jq -r '.aggregate.output_tokens' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Reasoning tokens:** $(jq -r '.aggregate.reasoning_tokens' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Actual cost USD:** $(jq -r '.aggregate.actual_cost_usd' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Average provider latency ms:** $(jq -r '.aggregate.avg_provider_latency_ms' "$QWEN35_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Scenarios:** $(jq -r '.aggregate.scenario_passed|tostring' "$QWEN37_BENCHMARK_REPORT_PATH")/$(jq -r '.aggregate.scenario_total|tostring' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Provider calls:** $(jq -r '.aggregate.provider_calls' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Input tokens:** $(jq -r '.aggregate.input_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Output tokens:** $(jq -r '.aggregate.output_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Reasoning tokens:** $(jq -r '.aggregate.reasoning_tokens' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Actual cost USD:** $(jq -r '.aggregate.actual_cost_usd // 0' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Average provider latency ms:** $(jq -r '.aggregate.avg_provider_latency_ms' "$QWEN37_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Upload Qwen3.5 benchmark evidence
+      - name: Upload Qwen3.7 benchmark evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: dabbir-qwen35-live-benchmark-evidence
-          path: dabbir-qwen35-live-benchmark.json
+          name: dabbir-qwen37-live-benchmark-evidence
+          path: dabbir-qwen37-live-benchmark.json
           if-no-files-found: warn
           retention-days: 7
