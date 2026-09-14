@@ -5,6 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 
 const db=new PGlite();
 const migration=fs.readFileSync(new URL('../supabase/migrations/20260914194000_dabbir_ai_provider_reliability_authority_v1.sql',import.meta.url),'utf8');
+const adaptiveMigration=fs.readFileSync(new URL('../supabase/migrations/20260914214500_dabbir_ai_provider_adaptive_quarantine_v1.sql',import.meta.url),'utf8');
 const rpc=async(name,args=[])=>{
   const placeholders=args.map((_,index)=>`$${index+1}`).join(',');
   const result=await db.query(`select public.${name}(${placeholders}) result`,args);
@@ -12,10 +13,12 @@ const rpc=async(name,args=[])=>{
 };
 const claim=(provider,model)=>rpc('dabbir_ai_provider_health_claim_v1',[provider,model]);
 const observe=(provider,model,success,failureClass,status,retryAfterMs,latencyMs=10)=>rpc('dabbir_ai_provider_health_observe_v1',[provider,model,success,failureClass,status,retryAfterMs,latencyMs]);
+const expireCooldown=async(provider,model)=>db.exec(`update dabbir_private.dabbir_ai_provider_health_v1 set cooldown_until=clock_timestamp()-interval '1 millisecond',probe_lease_until=null where provider='${provider}' and model='${model}'`);
 
 before(async()=>{
   await db.exec('create role anon; create role authenticated; create role service_role;');
   await db.exec(migration);
+  await db.exec(adaptiveMigration);
   await db.query("select set_config('request.jwt.claim.role','service_role',false)");
 });
 after(()=>db.close());
@@ -61,8 +64,55 @@ test('one timeout does not open a circuit; the second bounded timeout does',asyn
   assert.equal(first.cooldown_ms,0);
   assert.equal((await claim('cloudflare-workers-ai','@cf/zai-org/glm-4.7-flash')).decision,'ATTEMPT');
   const second=await observe('cloudflare-workers-ai','@cf/zai-org/glm-4.7-flash',false,'TIMEOUT',null,null,5000);
-  assert.ok(second.cooldown_ms>=10000);
+  assert.equal(second.cooldown_ms,10000);
   assert.equal((await claim('cloudflare-workers-ai','@cf/zai-org/glm-4.7-flash')).decision,'SKIP');
+});
+
+test('sustained 429 without Retry-After escalates quarantine instead of probing every two minutes forever',async()=>{
+  const provider='google-gemini',model='gemini-3.7-flash';
+  const expected=[15000,30000,60000,120000,300000,600000];
+  for(let index=0;index<expected.length;index++){
+    if(index===0) assert.equal((await claim(provider,model)).decision,'ATTEMPT');
+    else {
+      await expireCooldown(provider,model);
+      assert.equal((await claim(provider,model)).decision,'PROBE');
+    }
+    const observed=await observe(provider,model,false,'RATE_LIMIT',429,null,50);
+    assert.equal(observed.consecutive_failures,index+1);
+    assert.equal(observed.cooldown_ms,expected[index]);
+  }
+});
+
+test('sustained timeout/network failures graduate to long quarantine while the first timeout stays observational',async()=>{
+  const provider='cloudflare-workers-ai',model='@cf/zai-org/glm-4.7-flash';
+  const expected=[0,10000,30000,60000,120000,300000,600000];
+  for(let index=0;index<expected.length;index++){
+    if(index===0) assert.equal((await claim(provider,model)).decision,'ATTEMPT');
+    else if(expected[index-1]>0){
+      await expireCooldown(provider,model);
+      assert.equal((await claim(provider,model)).decision,'PROBE');
+    }else assert.equal((await claim(provider,model)).decision,'ATTEMPT');
+    const observed=await observe(provider,model,false,'TIMEOUT',null,null,5000);
+    assert.equal(observed.consecutive_failures,index+1);
+    assert.equal(observed.cooldown_ms,expected[index]);
+  }
+});
+
+test('real success resets adaptive quarantine immediately',async()=>{
+  const provider='google-gemini',model='gemini-3.7-flash';
+  for(let index=0;index<5;index++){
+    if(index===0) await claim(provider,model);
+    else {await expireCooldown(provider,model);await claim(provider,model);}
+    await observe(provider,model,false,'RATE_LIMIT',429,null,20);
+  }
+  await expireCooldown(provider,model);
+  await claim(provider,model);
+  const healthy=await observe(provider,model,true,null,200,null,40);
+  assert.equal(healthy.state,'HEALTHY');
+  assert.equal((await claim(provider,model)).decision,'ATTEMPT');
+  const nextFailure=await observe(provider,model,false,'RATE_LIMIT',429,null,30);
+  assert.equal(nextFailure.consecutive_failures,1);
+  assert.equal(nextFailure.cooldown_ms,15000);
 });
 
 test('400 contract failure is recorded but never converted into provider outage',async()=>{
