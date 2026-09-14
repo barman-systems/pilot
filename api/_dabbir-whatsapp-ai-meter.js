@@ -106,7 +106,7 @@ export async function generateDABBIRAiReply(args={}){
       try{
         const parsed=JSON.parse(String(options.body));
         requestedModel=clean(parsed?.model,160)||null;
-        if(endpoint===GATEWAY_ENDPOINT&&identity.businessId){
+        if(endpoint===GATEWAY_ENDPOINT&&identity.businessId&&attemptType==='CUSTOMER'){
           parsed.providerOptions={...(parsed.providerOptions||{}),gateway:{...(parsed.providerOptions?.gateway||{}),user:identity.businessId,tags:['channel:whatsapp','feature:customer-ai-reply']}};
           nextOptions={...options,body:JSON.stringify(parsed)};
         }
@@ -148,7 +148,7 @@ export async function generateDABBIRAiReply(args={}){
     console.warn('dabbir_whatsapp_ai_provider_chain_failed',{attempt_type:attemptType,attempts:attempts.slice(0,8).map(a=>({provider:a.endpoint,status:a.status,duration_ms:a.duration_ms,outcome:a.outcome||'HTTP_RESPONSE'})),skipped_attempts:skippedAttempts.slice(0,8),configured_attempts:attempts.length});
     return result;
   }
-  if(!identity.businessId)return result;
+  if(attemptType==='BENCHMARK'||!identity.businessId)return result;
 
   const usage=usageFromPayload(successfulPayload||{});
   const operationKey=`wa-ai-usage:${hash([identity.businessId,identity.conversationId,identity.messageTimestamp,clean(args.message,2000)].join('|')).slice(0,48)}`;
