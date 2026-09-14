@@ -1,0 +1,189 @@
+name: DABBIR P0-A Critical Negative Proofs
+
+on:
+  push:
+    branches:
+      - audit/p0a-agent-runtime-hardening-v1
+    paths:
+      - .github/workflows/p0a-critical-negatives.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_SHA: 1796df7fa7eab418157ecc7531313f0af0e73ebf
+  AUDIT_BRANCH: audit/p0a-agent-runtime-hardening-v1
+  EVIDENCE_ROOT: evidence/p0a/1796df7fa7eab418157ecc7531313f0af0e73ebf/pilot
+  AWS_ROLE_ARN: arn:aws:iam::388699644093:role/DabbirGithubDeployRole
+  VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+  VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+
+jobs:
+  aws-non-main-lowercase-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Attempt Production role from non-main branch with exact trusted casing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence"
+          response="$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq -r '.value' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          TOKEN="$token" python3 - <<'PY'
+          import os,json,base64,pathlib
+          t=os.environ['TOKEN']; p=t.split('.')[1]; p += '='*(-len(p)%4)
+          c=json.loads(base64.urlsafe_b64decode(p))
+          safe={k:c.get(k) for k in ['iss','aud','sub','repository','environment','ref','workflow_ref','event_name','iat','nbf','exp']}
+          (pathlib.Path(os.environ['RUNNER_TEMP'])/'evidence'/'lowercase-production-claims.json').write_text(json.dumps(safe,indent=2,sort_keys=True)+'\n')
+          PY
+          set +e
+          aws sts assume-role-with-web-identity \
+            --role-arn "$AWS_ROLE_ARN" \
+            --role-session-name "p0a-lowercase-production-${GITHUB_RUN_ID}" \
+            --web-identity-token "$token" \
+            --duration-seconds 900 --output json \
+            >"$RUNNER_TEMP/aws-creds.json" 2>"$RUNNER_TEMP/aws-error.txt"
+          status=$?
+          set -e
+          unset token response
+          rm -f "$RUNNER_TEMP/aws-creds.json"
+          export ASSUME_STATUS="$status"
+          python3 - <<'PY'
+          import os,json,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); out=root/'evidence'
+          claims=json.loads((out/'lowercase-production-claims.json').read_text())
+          allowed=int(os.environ['ASSUME_STATUS'])==0
+          state='FAIL' if claims.get('ref')!='refs/heads/main' and allowed else 'PASS'
+          evidence={'state':state,'test':'NON_MAIN_BRANCH_WITH_EXACT_TRUSTED_PRODUCTION_CASING','assume_role_allowed':allowed,
+                    'ref':claims.get('ref'),'environment':claims.get('environment'),'workflow_ref':claims.get('workflow_ref'),
+                    'subject':claims.get('sub'),'severity':'HIGH' if state=='FAIL' else None,
+                    'finding':'OIDC_TRUST_ALLOWS_NON_MAIN_BRANCH_VIA_PRODUCTION_ENVIRONMENT' if state=='FAIL' else None,
+                    'production_mutation_performed':False}
+          (out/'production-lowercase-branch-negative.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$RUNNER_TEMP/aws-error.txt"
+
+      - name: Upload exact-casing AWS evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-lowercase-production-negative
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  vercel-env-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Read Vercel env metadata or emit safe blocker evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence"
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            jq -n '{state:"BLOCKED_EXTERNAL",token_present:false,http_status:null,error_code:"VERCEL_TOKEN_UNAVAILABLE_TO_AUDIT_WORKFLOW",values_exported:false}' \
+              > "$RUNNER_TEMP/evidence/vercel-env-access.json"
+            cp "$RUNNER_TEMP/evidence/vercel-env-access.json" "$RUNNER_TEMP/evidence/vercel-env-summary.json"
+            exit 0
+          fi
+          echo "::add-mask::$VERCEL_TOKEN"
+          raw="$RUNNER_TEMP/vercel-raw.json"
+          http="$(curl -sS -o "$raw" -w '%{http_code}' \
+            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?decrypt=false&teamId=${VERCEL_TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          if [ "$http" != 200 ]; then
+            RAW_FILE="$raw" OUT="$RUNNER_TEMP/evidence/vercel-env-access.json" HTTP="$http" python3 - <<'PY'
+          import json,os,pathlib
+          try: d=json.loads(pathlib.Path(os.environ['RAW_FILE']).read_text())
+          except Exception: d={}
+          err=d.get('error') if isinstance(d.get('error'),dict) else {}
+          pathlib.Path(os.environ['OUT']).write_text(json.dumps({'state':'BLOCKED_EXTERNAL','token_present':True,'http_status':int(os.environ['HTTP']),'error_code':err.get('code'),'error_message':err.get('message'),'values_exported':False},indent=2,sort_keys=True)+'\n')
+          PY
+            cp "$RUNNER_TEMP/evidence/vercel-env-access.json" "$RUNNER_TEMP/evidence/vercel-env-summary.json"
+            rm -f "$raw"
+            exit 0
+          fi
+          RAW_FILE="$raw" OUT_DIR="$RUNNER_TEMP/evidence" python3 - <<'PY'
+          import os,json,csv,pathlib
+          payload=json.loads(pathlib.Path(os.environ['RAW_FILE']).read_text()); out=pathlib.Path(os.environ['OUT_DIR']); envs=payload.get('envs') or []
+          def classify(key):
+              k=key.upper()
+              if k.startswith(('NEXT_PUBLIC_','PUBLIC_','VITE_PUBLIC_')) or 'PUBLISHABLE' in k or k.endswith('_ANON_KEY'): return 'PUBLIC_CONFIG'
+              if 'TOKEN' in k: return 'TOKEN'
+              if 'PRIVATE_KEY' in k or 'SECRET' in k or 'PASSWORD' in k or k.endswith('_PASS'): return 'SECRET'
+              if 'CREDENTIAL' in k or 'SERVICE_ROLE' in k or 'SERVICE_ACCOUNT' in k: return 'CREDENTIAL'
+              if 'KEY' in k: return 'KEY'
+              if any(x in k for x in ('URL','URI','HOST','DOMAIN','REGION','PROJECT_ID','TEAM_ID','ACCOUNT_ID','BUCKET','PORT','ENV','MODE','NAME')): return 'PRIVATE_CONFIG'
+              return 'UNKNOWN'
+          fields=['key','targets','type','git_branch','created_at','updated_at','custom_environment_ids']
+          with (out/'env-metadata.csv').open('w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader()
+              for e in envs:
+                  w.writerow({'key':e.get('key'),'targets':';'.join(e.get('target') or []),'type':e.get('type'),'git_branch':e.get('gitBranch') or '',
+                              'created_at':e.get('createdAt') or '','updated_at':e.get('updatedAt') or '','custom_environment_ids':';'.join(e.get('customEnvironmentIds') or [])})
+          rows=[]; problematic=[]
+          for e in envs:
+              cls=classify(str(e.get('key') or '')); secret_like=cls in {'SECRET','CREDENTIAL','TOKEN','KEY'}; sensitive=e.get('type')=='sensitive'
+              status='OK' if not secret_like or sensitive else 'NEEDS_SENSITIVE_OR_EXCEPTION_EVIDENCE'
+              if status!='OK': problematic.append(e.get('key'))
+              rows.append({'key':e.get('key'),'classification':cls,'targets':';'.join(e.get('target') or []),'vercel_type':e.get('type'),'sensitive':str(sensitive).lower(),'secret_like':str(secret_like).lower(),'status':status,'exception_basis':''})
+          fields=['key','classification','targets','vercel_type','sensitive','secret_like','status','exception_basis']
+          with (out/'classification-sheet.csv').open('w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          access={'state':'PASS','token_present':True,'http_status':200,'error_code':None,'values_exported':False}
+          (out/'vercel-env-access.json').write_text(json.dumps(access,indent=2,sort_keys=True)+'\n')
+          (out/'vercel-env-summary.json').write_text(json.dumps({'state':'PASS' if not problematic else 'FAIL','variable_count':len(envs),'secret_like_not_sensitive_count':len(problematic),'secret_like_not_sensitive_names':problematic,'values_exported':False},indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f "$raw"
+
+      - name: Upload Vercel access evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-p0a-vercel-diagnostic
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  persist:
+    needs:
+      - aws-non-main-lowercase-production
+      - vercel-env-diagnostic
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.AUDIT_BRANCH }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pilot-p0a-*
+          path: ${{ runner.temp }}/evidence
+          merge-multiple: true
+      - name: Persist critical evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          cp -f "$RUNNER_TEMP/evidence/"* "$EVIDENCE_ROOT/"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$EVIDENCE_ROOT"
+          if ! git diff --cached --quiet; then
+            git commit -m 'evidence(p0a): persist exact negative and Vercel access proof [skip ci]'
+            git push origin "HEAD:$AUDIT_BRANCH"
+          fi
