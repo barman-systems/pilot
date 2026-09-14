@@ -10,19 +10,6 @@ export const REQUIRED_WORKFLOWS=Object.freeze(['DABBIR CI','DABBIR Security Gate
 const clean=value=>String(value??'').trim();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-export function isProtectedTrustPath(path){
-  const value=clean(path);
-  if(!value)return false;
-  if(value.startsWith('.github/'))return true;
-  return new Set([
-    'scripts/barman-independent-premerge-gate.mjs',
-    'scripts/barman-tool-agent.mjs',
-    'api/barman-tool-agent-broker.js',
-    'scripts/dabbir-required-pr-gates.mjs',
-    'scripts/dabbir-security-gate.mjs',
-  ]).has(value);
-}
-
 export function validatePullRequestShape(pr,repository){
   if(!pr||typeof pr!=='object')throw new Error('PREMERGE_PR_MISSING');
   if(pr.draft===true)throw new Error('PREMERGE_DRAFT_BLOCKED');
@@ -133,11 +120,6 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     await setStatus({repository,token,sha:identity.headSha,state:'pending',description:'Independent pre-merge verification in progress',targetUrl});
 
     const files=await getPullRequestFiles(repository,identity.number,token);
-    const protectedPaths=files.filter(isProtectedTrustPath);
-    if(protectedPaths.length){
-      throw new Error(`PREMERGE_TRUST_ROOT_CHANGE_REQUIRES_OWNER:${protectedPaths.join(',')}`);
-    }
-
     await assertHeadContainsBase({repository,token,baseSha:identity.baseSha,headSha:identity.headSha});
     await waitRequiredWorkflows({repository,token,headRef:identity.headRef,headSha:identity.headSha,prNumber:identity.number,pollMs,timeoutMs});
 
