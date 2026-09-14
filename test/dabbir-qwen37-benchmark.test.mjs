@@ -24,12 +24,17 @@ test('benchmark environment isolates Qwen from every configured direct Productio
   assert.equal(source.DABBIR_AI_GATEWAY_MODEL,'old-model');
 });
 
-test('benchmark fetch pins Qwen and disables default reasoning for structured semantic extraction',async()=>{
+test('benchmark pins Qwen to strict schema, low reasoning and bounded output headroom',async()=>{
   let captured=null;
   const wrapped=qwen37BenchmarkFetch(async(_url,options)=>{captured=JSON.parse(options.body);return new Response('{}',{status:200,headers:{'content-type':'application/json'}});});
-  await wrapped(gateway,{method:'POST',body:JSON.stringify({model:QWEN37_BENCHMARK_MODEL,messages:[],response_format:{type:'json_object'}})});
+  await wrapped(gateway,{method:'POST',body:JSON.stringify({model:QWEN37_BENCHMARK_MODEL,messages:[],max_tokens:1600,response_format:{type:'json_object'}})});
   assert.equal(captured.model,'alibaba/qwen3.7-flash');
-  assert.deepEqual(captured.reasoning,{effort:'none'});
+  assert.deepEqual(captured.reasoning,{effort:'low'});
+  assert.equal(captured.max_tokens,2400);
+  assert.equal(captured.response_format.type,'json_schema');
+  assert.equal(captured.response_format.json_schema.name,'dabbir_semantic_interpretation');
+  assert.equal(captured.response_format.json_schema.strict,true);
+  assert.equal(captured.response_format.json_schema.schema.additionalProperties,false);
 });
 
 test('benchmark fetch fails closed if the gateway model drifts',async()=>{
