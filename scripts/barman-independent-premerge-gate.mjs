@@ -3,6 +3,8 @@ import fs from 'node:fs';
 const API='https://api.github.com';
 const DEFAULT_POLL_MS=15_000;
 const DEFAULT_TIMEOUT_MS=50*60_000;
+const ATTESTATION_AUDIENCE='barman-promotion-attestation-shadow';
+const ATTESTATION_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-promotion-attestation-shadow';
 
 export const STATUS_CONTEXT='BARMAN Independent Pre-Merge Gate';
 export const REQUIRED_WORKFLOWS=Object.freeze(['DABBIR CI','DABBIR Security Gate']);
@@ -58,8 +60,7 @@ async function githubJson(repository,path,token,{method='GET',body}={}){
     body:body===undefined?undefined:JSON.stringify(body),
     signal:AbortSignal.timeout(30_000),
   });
-  const text=await response.text();
-  let payload=null;
+  const text=await response.text();let payload=null;
   try{payload=text?JSON.parse(text):null}catch{payload=text}
   if(!response.ok)throw new Error(`GITHUB_${response.status}_${clean(payload?.message||text).slice(0,240)}`);
   return payload;
@@ -131,6 +132,51 @@ async function waitRequiredWorkflows({repository,token,headRef,headSha,prNumber,
   throw new Error(`PREMERGE_REQUIRED_WORKFLOW_TIMEOUT:${headSha}`);
 }
 
+async function githubOidcToken(audience,{env=process.env,fetchImpl=fetch}={}){
+  const requestUrl=clean(env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  const requestToken=clean(env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
+  if(!requestUrl||!requestToken)return {ok:false,state:'SHADOW_UNAVAILABLE',reason:'GITHUB_OIDC_ENV_MISSING'};
+  try{
+    const join=requestUrl.includes('?')?'&':'?';
+    const response=await fetchImpl(`${requestUrl}${join}audience=${encodeURIComponent(audience)}`,{
+      headers:{authorization:`Bearer ${requestToken}`,accept:'application/json'},
+      signal:AbortSignal.timeout(10_000),
+    });
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||!clean(body?.value))return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`GITHUB_OIDC_${response.status}`};
+    return {ok:true,token:clean(body.value)};
+  }catch(error){
+    return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`GITHUB_OIDC_${clean(error?.message||error).slice(0,120)}`};
+  }
+}
+
+export async function observePromotionAttestation({repository,prNumber,headSha,env=process.env,fetchImpl=fetch}={}){
+  const oidc=await githubOidcToken(ATTESTATION_AUDIENCE,{env,fetchImpl});
+  if(!oidc.ok)return {ok:false,state:oidc.state,reason:oidc.reason,blocks_merge:false};
+  try{
+    const response=await fetchImpl(ATTESTATION_URL,{
+      method:'POST',
+      headers:{authorization:`Bearer ${oidc.token}`,'content-type':'application/json'},
+      body:JSON.stringify({repository,pr_number:Number(prNumber),head_sha:headSha}),
+      signal:AbortSignal.timeout(12_000),
+    });
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||body?.ok!==true){
+      return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`ATTESTATION_HTTP_${response.status}_${clean(body?.error).slice(0,120)}`,blocks_merge:false};
+    }
+    return {
+      ok:true,
+      state:clean(body?.state)||'UNKNOWN',
+      enforcement:clean(body?.enforcement)||'SHADOW_ONLY',
+      attestation:body?.attestation||null,
+      stale_attestation:body?.stale_attestation||null,
+      blocks_merge:false,
+    };
+  }catch(error){
+    return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`ATTESTATION_${clean(error?.message||error).slice(0,120)}`,blocks_merge:false};
+  }
+}
+
 async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,timeoutMs}){
   let statusIdentity=null;
   try{
@@ -158,9 +204,16 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     if(finalIdentity.authorLogin!==identity.authorLogin)throw new Error('PREMERGE_AUTHOR_CHANGED_DURING_VERIFY');
     await assertHeadContainsBase({repository,token,baseSha:finalIdentity.baseSha,headSha:finalIdentity.headSha});
 
-    await setStatus({repository,token,sha:identity.headSha,state:'success',description:`Independent gate passed for exact head; base ${identity.baseSha.slice(0,7)}`,targetUrl});
-    console.log(`BARMAN_INDEPENDENT_PREMERGE_PASS pr=${identity.number} head=${identity.headSha} base=${identity.baseSha}`);
-    return {identity,files};
+    const attestationShadow=await observePromotionAttestation({repository,prNumber:identity.number,headSha:identity.headSha});
+    console.log(`BARMAN_ATTESTATION_SHADOW state=${attestationShadow.state} blocks_merge=false sha=${identity.headSha} pr=${identity.number}`);
+
+    await setStatus({
+      repository,token,sha:identity.headSha,state:'success',
+      description:`Independent gate passed; attestation shadow ${attestationShadow.state}`,
+      targetUrl,
+    });
+    console.log(`BARMAN_INDEPENDENT_PREMERGE_PASS pr=${identity.number} head=${identity.headSha} base=${identity.baseSha} attestation_shadow=${attestationShadow.state}`);
+    return {identity,files,attestationShadow};
   }catch(error){
     if(statusIdentity?.headSha){
       try{
