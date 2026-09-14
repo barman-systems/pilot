@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
   CONVERSATION_BRAIN_RESPONSE_OWNER,
+  finalizeCustomerResponse,
   recoveryGreetingReply,
   greetingReply,
   staleChoiceReply,
@@ -22,6 +23,7 @@ const source=fs.readFileSync(path.join(root,'api/_dabbir-conversation-brain-resp
 
 test('response renderer is explicitly conversation-brain owned and pure',()=>{
   assert.equal(CONVERSATION_BRAIN_RESPONSE_OWNER,'DABBIR_CONVERSATION_BRAIN');
+  assert.equal(finalizeCustomerResponse({text:'نفس الرد',purpose:'reply'}),'نفس الرد');
   for(const forbidden of [
     'dabbir_semantic_execute_v2',
     'dabbir_semantic_commit_v2',
