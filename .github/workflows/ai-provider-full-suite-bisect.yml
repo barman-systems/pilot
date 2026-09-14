@@ -1,0 +1,47 @@
+name: AI Provider Full Suite Bisect
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'config/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/ai-provider-full-suite-bisect.yml'
+permissions:
+  contents: read
+jobs:
+  bisect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: shard 0
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 0 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 1
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 1 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 2
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 2 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 3
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 3 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 4
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 4 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 5
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 5 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 6
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 6 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
+      - name: shard 7
+        continue-on-error: true
+        run: bash -lc 'mapfile -t f < <(find test -maxdepth 1 -name "*.test.mjs" | sort); s=(); for i in "${!f[@]}"; do (( i % 8 == 7 )) && s+=("${f[$i]}"); done; node --test "${s[@]}"'
