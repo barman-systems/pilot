@@ -1,0 +1,119 @@
+{
+  "schema": "dabbir.data-egress-policy.v1",
+  "version": 1,
+  "state": "NOT_ENFORCED",
+  "activation": {
+    "requires_p0_a_pass": true,
+    "gate": "P0_A_PASS",
+    "runtime_binding_allowed": false,
+    "reason": "P0-B is a draft only until P0-A closes with openable evidence artifacts."
+  },
+  "authority": {
+    "owner": "BARMAN_POLICY",
+    "central_policy": true,
+    "composes_with_existing_sanitizer": "api/_dabbir-semantic-privacy.js",
+    "creates_new_orchestrator": false,
+    "creates_new_browser_authority": false
+  },
+  "default_action": "DENY",
+  "data_classes": [
+    "PUBLIC",
+    "INTERNAL",
+    "CONFIDENTIAL",
+    "SECRET",
+    "PRODUCTION_CUSTOMER_DATA",
+    "PRODUCTION_CREDENTIAL",
+    "LEGAL_RESTRICTED"
+  ],
+  "harness_default_allow": [
+    "TASK_REQUIRED_SOURCE_CODE",
+    "TESTS",
+    "SANITIZED_FIXTURES",
+    "PUBLIC_SCHEMAS",
+    "NON_SECRET_CONFIG"
+  ],
+  "harness_default_deny": [
+    "SECRET",
+    "PRODUCTION_CUSTOMER_DATA",
+    "PRODUCTION_CREDENTIAL",
+    "LEGAL_RESTRICTED",
+    "UNSANITIZED_CONFIDENTIAL"
+  ],
+  "forbidden_path_globs": [
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    "**/*.pem",
+    "**/*.key",
+    "**/*production*.dump",
+    "**/*production*.sql",
+    "**/*customer-data*",
+    "**/*session-cookie*"
+  ],
+  "forbidden_key_patterns": [
+    "(?i)(^|_)(password|passwd|pwd)($|_)",
+    "(?i)(^|_)(secret|client_secret|app_secret)($|_)",
+    "(?i)(^|_)(token|access_token|refresh_token|bearer)($|_)",
+    "(?i)(^|_)(api_key|private_key|service_role|service_role_key)($|_)",
+    "(?i)(^|_)(session_cookie|cookie_secret|payment_credential)($|_)"
+  ],
+  "explicit_forbidden_examples": [
+    "credential values",
+    "production database dumps",
+    "customer personal data",
+    "service-role keys",
+    "OAuth refresh tokens",
+    "WhatsApp or Meta tokens",
+    "payment credentials",
+    "private keys",
+    "production session cookies"
+  ],
+  "sanitization": {
+    "required_before_harness_context": true,
+    "sanitizer": "api/_dabbir-semantic-privacy.js",
+    "fail_closed_on_sanitizer_error": true,
+    "secret_canary_must_not_reach_harness": true,
+    "data_minimization_required": true
+  },
+  "provider_evidence": [
+    {
+      "provider": "openai",
+      "account_product_type": "UNVERIFIED",
+      "training_policy": "UNVERIFIED",
+      "retention_policy": "UNVERIFIED",
+      "zdr_status": "UNVERIFIED",
+      "contractual_setting": "UNVERIFIED",
+      "verification_date": null,
+      "egress_allowed": false
+    },
+    {
+      "provider": "anthropic",
+      "account_product_type": "UNVERIFIED",
+      "training_policy": "UNVERIFIED",
+      "retention_policy": "UNVERIFIED",
+      "zdr_status": "UNVERIFIED",
+      "contractual_setting": "UNVERIFIED",
+      "verification_date": null,
+      "egress_allowed": false
+    }
+  ],
+  "exception_contract": {
+    "default": "DENY",
+    "requires_barman_policy_decision": true,
+    "requires_task_scope": true,
+    "requires_reason": true,
+    "requires_expiry": true,
+    "requires_evidence": true,
+    "may_not_override": [
+      "SECRET",
+      "PRODUCTION_CREDENTIAL"
+    ]
+  },
+  "run_binding_contract": {
+    "policy_hash_required_when_enforced": true,
+    "hash_algorithm": "sha256",
+    "canonicalization": "recursive-lexicographic-json-v1",
+    "field_name": "data_egress_policy_hash"
+  }
+}
