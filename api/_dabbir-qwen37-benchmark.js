@@ -1,5 +1,6 @@
 import { probeCognitiveDialogue } from './_dabbir-cognitive-probe.js';
 import { interpretSemanticMessage } from './_dabbir-semantic-interpreter.js';
+import { SEMANTIC_JSON_SCHEMA } from './_dabbir-semantic-contract.js';
 
 export const QWEN37_BENCHMARK_MODEL = 'alibaba/qwen3.7-flash';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -32,10 +33,21 @@ export function qwen37BenchmarkFetch(fetchImpl = fetch) {
     try { body = JSON.parse(String(options.body)); }
     catch { return fetchImpl(url, options); }
     if (String(body.model || '') !== QWEN37_BENCHMARK_MODEL) throw new Error('QWEN37_BENCHMARK_MODEL_DRIFT');
-    // Qwen3.7 Flash reasons by default. DABBIR's semantic interpreter is a
-    // bounded structured extraction task, so disable hidden reasoning here.
-    // This preserves output headroom, latency and comparable token accounting.
-    body.reasoning = { effort: 'none' };
+
+    // Wave 2: give Qwen the same canonical generation contract that DABBIR
+    // already validates, rather than asking for unconstrained JSON. Keep
+    // reasoning low (not high/default) so the cheap model still represents a
+    // viable production candidate instead of winning by unbounded deliberation.
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'dabbir_semantic_interpretation',
+        strict: true,
+        schema: SEMANTIC_JSON_SCHEMA,
+      },
+    };
+    body.reasoning = { effort: 'low' };
+    body.max_tokens = Math.max(Number(body.max_tokens) || 0, 2400);
     return fetchImpl(url, { ...options, body: JSON.stringify(body) });
   };
 }
@@ -73,8 +85,9 @@ export async function runQwen37Benchmark({ scenario = 'critical', env = process.
   return {
     ok: Boolean(result.ok && isolatedProvider),
     state: result.ok && isolatedProvider ? 'SUCCESS' : 'FAILED',
-    benchmark: 'DABBIR_QWEN37_FLASH_V1',
+    benchmark: 'DABBIR_QWEN37_STRICT_LOW_V2',
     model: QWEN37_BENCHMARK_MODEL,
+    configuration: 'STRICT_JSON_SCHEMA_LOW_REASONING_2400_MAX',
     scenario,
     isolated_provider: isolatedProvider,
     checks: result.checks || {},
