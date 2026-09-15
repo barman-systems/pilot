@@ -18,7 +18,7 @@ const config=validateReleaseClosureConfig({
     '.github/workflows/dabbir-release-guardian.yml',
     'test/dabbir-release-closure-guard.test.mjs',
   ],
-  allowed_head_refs:['fix/ai-provider-cost-registry-v1'],
+  allowed_head_refs:['fix/ai-provider-cost-registry-v1','security/runtime-exposure-hardening-20260915'],
   allowed_head_prefixes:['guardian/revert-'],
   guardian_title_prefix:'revert(guardian):',
 });
@@ -30,8 +30,9 @@ const pr=(headRef,{title='candidate',headRepo='barman-systems/pilot',baseRepo='b
   head:{ref:headRef,repo:{full_name:headRepo}},
 });
 
-test('release closure allows only the remaining canonical implementation lane',()=>{
+test('release closure allows only the owner-authorized implementation lanes',()=>{
   assert.equal(evaluateReleaseClosure({config,pr:pr('fix/ai-provider-cost-registry-v1')}).allowed,true);
+  assert.equal(evaluateReleaseClosure({config,pr:pr('security/runtime-exposure-hardening-20260915')}).allowed,true);
   for(const retired of ['security/p0a-secret-history-audit','feat/v3-baseline-instrumentation-v2']){
     const denied=evaluateReleaseClosure({config,pr:pr(retired)});
     assert.equal(denied.allowed,false);
@@ -41,7 +42,7 @@ test('release closure allows only the remaining canonical implementation lane',(
 
 test('release closure blocks forks and non-main bases even when branch name looks allowed',()=>{
   assert.equal(evaluateReleaseClosure({config,pr:pr('fix/ai-provider-cost-registry-v1',{headRepo:'other/fork'})}).reason,'RELEASE_CLOSURE_FORK_DENIED');
-  assert.equal(evaluateReleaseClosure({config,pr:pr('fix/ai-provider-cost-registry-v1',{baseRef:'develop'})}).reason,'RELEASE_CLOSURE_BASE_NOT_MAIN');
+  assert.equal(evaluateReleaseClosure({config,pr:pr('security/runtime-exposure-hardening-20260915',{baseRef:'develop'})}).reason,'RELEASE_CLOSURE_BASE_NOT_MAIN');
 });
 
 test('guardian rollback prefix is allowed only with the governed revert title',()=>{
