@@ -146,6 +146,7 @@ declare
   v_request_id bigint;
   v_delivered integer:=0;
   v_requeued integer:=0;
+  v_stale_requeued integer:=0;
   v_enqueued integer:=0;
 begin
   p_limit:=greatest(1,least(coalesce(p_limit,100),500));
@@ -157,6 +158,21 @@ begin
   if nullif(btrim(coalesce(v_token,'')),'') is null then
     return jsonb_build_object('ok',false,'state','POSTHOG_TOKEN_MISSING');
   end if;
+
+  -- pg_net request/response tables are unlogged and responses expire. If Postgres
+  -- restarts or a response ages out before reconciliation, never strand the durable
+  -- DABBIR outbox row behind a dead request id. The stable event UUID makes retry safe.
+  update public.dabbir_posthog_product_event_outbox_v1 o
+     set posthog_request_id=null,
+         posthog_last_error='PG_NET_RESPONSE_MISSING_RETRY'
+   where o.posthog_delivered_at is null
+     and o.posthog_request_id is not null
+     and o.posthog_enqueued_at < now()-interval '15 minutes'
+     and o.posthog_attempts<5
+     and not exists(select 1 from net.http_request_queue q where q.id=o.posthog_request_id)
+     and not exists(select 1 from net._http_response r where r.id=o.posthog_request_id);
+  get diagnostics v_stale_requeued = row_count;
+  v_requeued:=v_requeued+v_stale_requeued;
 
   for v_row in
     select o.id,o.posthog_request_id,r.status_code,r.timed_out,r.error_msg
