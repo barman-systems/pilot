@@ -13,6 +13,7 @@ import {
 } from '../scripts/barman-independent-premerge-gate.mjs';
 
 const workflow=fs.readFileSync(new URL('../.github/workflows/barman-independent-premerge-gate.yml',import.meta.url),'utf8');
+const candidateCi=fs.readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
 const script=fs.readFileSync(new URL('../scripts/barman-independent-premerge-gate.mjs',import.meta.url),'utf8');
 
 const shaA='a'.repeat(40);
@@ -42,7 +43,7 @@ test('pre-merge gate runs from trusted base and has only required OIDC/status pe
   assert.doesNotMatch(workflow,/pull_request\.head\.sha/);
 });
 
-test('trusted gate owns the branch-protection required status context',()=>{
+test('trusted gate exclusively owns the branch-protection required test context',()=>{
   assert.equal(STATUS_CONTEXT,'test');
   assert.deepEqual([...REQUIRED_WORKFLOWS],['DABBIR CI','DABBIR Security Gate']);
   assert.match(script,/\/statuses\/\$\{sha\}/);
@@ -51,6 +52,8 @@ test('trusted gate owns the branch-protection required status context',()=>{
   assert.match(script,/state:'success'/);
   assert.match(script,/state:'failure'/);
   assert.match(script,/BARMAN_REQUIRED_TEST_PASS/);
+  assert.match(candidateCi,/github\.event_name == 'pull_request' && 'candidate-ci'/);
+  assert.doesNotMatch(candidateCi,/github\.event_name == 'pull_request' && 'test'/);
 });
 
 test('trusted identity is same-repository main and fail-closed for drafts or forks',()=>{
