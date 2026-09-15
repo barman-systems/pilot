@@ -30,7 +30,9 @@ on:
       - 'test/support/dabbir-protected-journey-access.mjs'
       - 'test/dabbir-capacity-load.mjs'
       - 'test/dabbir-activity-regression.test.mjs'
+      - 'test/dabbir-evidence-secret-gate.test.mjs'
       - 'scripts/dabbir-production-origin-gate.mjs'
+      - 'scripts/dabbir-evidence-secret-gate.mjs'
       - 'config/barman-integration-contract.json'
       - '.github/workflows/dabbir-ai-customer-journey.yml'
       - '.github/scripts/dabbir-bar12-*'
@@ -195,8 +197,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Playwright owns the pinned WebKit build. A stale/unrelated Google Chrome
-          # apt source must not consume the bounded Production verification window.
           for source in /etc/apt/sources.list.d/*; do
             if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome-stable/deb' "$source"; then
               sudo rm -f "$source"
@@ -286,6 +286,26 @@ jobs:
           echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
           echo "STABLE_EXACT_PRODUCTION_SHA=$sha deployment=$deployment"
 
+      - name: Gate full journey evidence against secret persistence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=()
+          for target in \
+            dabbir-ai-customer-journey-report.json \
+            dabbir-ai-customer-journey-report-en.json \
+            dabbir-ai-customer-journey-screenshot.png \
+            dabbir-internal-visual \
+            dabbir-cross-tenant-isolation-report.json; do
+            if [ -e "$target" ]; then targets+=("$target"); fi
+          done
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo 'DABBIR_EVIDENCE_SECRET_GATE_NO_FILES'
+            exit 0
+          fi
+          node scripts/dabbir-evidence-secret-gate.mjs "${targets[@]}"
+
       - name: Upload full journey evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -322,6 +342,14 @@ jobs:
         with:
           node-version: '24'
       - run: node test/dabbir-capacity-load.mjs
+      - name: Gate AI capacity evidence against secret persistence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -e "$CAPACITY_REPORT_PATH" ]; then
+            node scripts/dabbir-evidence-secret-gate.mjs "$CAPACITY_REPORT_PATH"
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -352,6 +380,14 @@ jobs:
         with:
           node-version: '24'
       - run: node test/dabbir-capacity-load.mjs
+      - name: Gate runtime capacity evidence against secret persistence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -e "$CAPACITY_REPORT_PATH" ]; then
+            node scripts/dabbir-evidence-secret-gate.mjs "$CAPACITY_REPORT_PATH"
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:
