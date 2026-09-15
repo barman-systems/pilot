@@ -34,6 +34,10 @@ function gatewayConfigured(env = process.env) {
   return Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
 }
 
+function geminiAutomaticRecoveryEnabled(env = process.env) {
+  return String(env.DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED ?? '1').trim() !== '0';
+}
+
 function gatewayConfig(env = process.env) {
   const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
   return {
@@ -97,19 +101,15 @@ export function getDABBIRAiConfig(env = process.env) {
 }
 
 export function getDABBIRAiRedundancy(env = process.env) {
-  const geminiConfigured = Boolean(env.GEMINI_API_KEY);
-  const groqConfigured = Boolean(env.GROQ_API_KEY);
-  const cloudflareConfigured = Boolean(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID);
-  const directProviderCount = [geminiConfigured, groqConfigured, cloudflareConfigured].filter(Boolean).length;
+  const directProviderCount = [
+    Boolean(env.GEMINI_API_KEY),
+    Boolean(env.GROQ_API_KEY),
+    Boolean(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID),
+  ].filter(Boolean).length;
   const gatewayPrimaryConfigured = gatewayConfigured(env);
-  const automaticRecoveryProviderCount = gatewayPrimaryConfigured
-    ? [groqConfigured, cloudflareConfigured].filter(Boolean).length
-    : directProviderCount;
-  const configuredProviderCount = automaticRecoveryProviderCount + (gatewayPrimaryConfigured ? 1 : 0);
+  const configuredProviderCount = directProviderCount + (gatewayPrimaryConfigured ? 1 : 0);
   return {
     direct_provider_count: directProviderCount,
-    automatic_recovery_provider_count: automaticRecoveryProviderCount,
-    gemini_diagnostic_only: gatewayPrimaryConfigured && geminiConfigured,
     gateway_primary_configured: gatewayPrimaryConfigured,
     gateway_fallback_configured: gatewayPrimaryConfigured,
     routing_mode: gatewayPrimaryConfigured ? ROUTING_MODE_GATEWAY_PRIMARY : ROUTING_MODE_DIRECT_ONLY,
@@ -353,18 +353,19 @@ async function generateDABBIRAiReplyInternal({ project, message, language = 'aut
       }
     }
 
-    const directRecoveryReady = Boolean(groqKey || cloudflareReady);
+    const geminiRecoveryEnabled=geminiAutomaticRecoveryEnabled(env);
+    const directRecoveryReady = Boolean((geminiRecoveryEnabled && geminiKey) || groqKey || cloudflareReady);
     if (directRecoveryReady && budgetRemaining(reliability) > 150) {
       console.warn('dabbir_ai_gateway_primary_recovery_pool',{reason:result.error,status:result.status||null,model:result.model||config.model});
-      const {
-        VERCEL_ENV: _vercelEnv,
-        AI_GATEWAY_API_KEY: _gatewayKey,
-        VERCEL_OIDC_TOKEN: _oidcToken,
-        DABBIR_AI_GATEWAY_MODEL: _gatewayModel,
-        GEMINI_API_KEY: _geminiRecoveryKey,
-        DABBIR_GEMINI_MODEL: _geminiRecoveryModel,
-        ...recoveryEnv
-      } = env;
+      const recoveryEnv={...env};
+      delete recoveryEnv.VERCEL_ENV;
+      delete recoveryEnv.AI_GATEWAY_API_KEY;
+      delete recoveryEnv.VERCEL_OIDC_TOKEN;
+      delete recoveryEnv.DABBIR_AI_GATEWAY_MODEL;
+      if(!geminiRecoveryEnabled){
+        delete recoveryEnv.GEMINI_API_KEY;
+        delete recoveryEnv.DABBIR_GEMINI_MODEL;
+      }
       return generateDABBIRAiReplyInternal({
         project: normalizedProject,
         message: input,
