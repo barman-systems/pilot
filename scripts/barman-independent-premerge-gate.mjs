@@ -3,10 +3,13 @@ import fs from 'node:fs';
 const API='https://api.github.com';
 const DEFAULT_POLL_MS=15_000;
 const DEFAULT_TIMEOUT_MS=50*60_000;
-const ATTESTATION_AUDIENCE='barman-promotion-attestation-shadow';
-const ATTESTATION_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-promotion-attestation-shadow';
+const ATTESTATION_AUDIENCE='barman-promotion-attestation-gate';
+const ATTESTATION_URL='https://spohjzrsymsmzsseygtw.supabase.co/functions/v1/barman-promotion-attestation-gate';
 
-export const STATUS_CONTEXT='BARMAN Independent Pre-Merge Gate';
+// `test` is already the branch-protection required context. The trusted
+// pull_request_target workflow becomes its authority; PR-head CI will be renamed
+// in the follow-up cutover after this gate is live-verified.
+export const STATUS_CONTEXT='test';
 export const REQUIRED_WORKFLOWS=Object.freeze(['DABBIR CI','DABBIR Security Gate']);
 export const TRUST_ROOT_AUTHORITY_ACTORS=Object.freeze(['barmanai']);
 
@@ -91,9 +94,7 @@ async function getPullRequestFiles(repository,number,token){
 async function assertHeadContainsBase({repository,token,baseSha,headSha}){
   const result=await githubJson(repository,`/compare/${baseSha}...${headSha}`,token);
   const behind=Number(result?.behind_by??-1);
-  if(!Number.isFinite(behind)||behind!==0){
-    throw new Error(`PREMERGE_HEAD_BEHIND_BASE:${behind}`);
-  }
+  if(!Number.isFinite(behind)||behind!==0)throw new Error(`PREMERGE_HEAD_BEHIND_BASE:${behind}`);
   return result;
 }
 
@@ -132,49 +133,53 @@ async function waitRequiredWorkflows({repository,token,headRef,headSha,prNumber,
   throw new Error(`PREMERGE_REQUIRED_WORKFLOW_TIMEOUT:${headSha}`);
 }
 
+export function requiredWorkflowEvidence(passed){
+  return [...passed.entries()].map(([name,run])=>({
+    name,
+    run_id:String(run?.id||''),
+    conclusion:clean(run?.conclusion).toLowerCase(),
+    head_sha:clean(run?.head_sha).toLowerCase(),
+    event:clean(run?.event),
+    workflow_id:String(run?.workflow_id||''),
+  }));
+}
+
 async function githubOidcToken(audience,{env=process.env,fetchImpl=fetch}={}){
   const requestUrl=clean(env.ACTIONS_ID_TOKEN_REQUEST_URL);
   const requestToken=clean(env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
-  if(!requestUrl||!requestToken)return {ok:false,state:'SHADOW_UNAVAILABLE',reason:'GITHUB_OIDC_ENV_MISSING'};
-  try{
-    const join=requestUrl.includes('?')?'&':'?';
-    const response=await fetchImpl(`${requestUrl}${join}audience=${encodeURIComponent(audience)}`,{
-      headers:{authorization:`Bearer ${requestToken}`,accept:'application/json'},
-      signal:AbortSignal.timeout(10_000),
-    });
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok||!clean(body?.value))return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`GITHUB_OIDC_${response.status}`};
-    return {ok:true,token:clean(body.value)};
-  }catch(error){
-    return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`GITHUB_OIDC_${clean(error?.message||error).slice(0,120)}`};
-  }
+  if(!requestUrl||!requestToken)throw new Error('PREMERGE_ATTESTATION_OIDC_ENV_MISSING');
+  const join=requestUrl.includes('?')?'&':'?';
+  const response=await fetchImpl(`${requestUrl}${join}audience=${encodeURIComponent(audience)}`,{
+    headers:{authorization:`Bearer ${requestToken}`,accept:'application/json'},
+    signal:AbortSignal.timeout(10_000),
+  });
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok||!clean(body?.value))throw new Error(`PREMERGE_ATTESTATION_OIDC_${response.status}`);
+  return clean(body.value);
 }
 
-export async function observePromotionAttestation({repository,prNumber,headSha,env=process.env,fetchImpl=fetch}={}){
+export async function requirePromotionAttestation({repository,prNumber,headSha,baseSha,requiredWorkflows,protectedPaths=[],env=process.env,fetchImpl=fetch}={}){
   const oidc=await githubOidcToken(ATTESTATION_AUDIENCE,{env,fetchImpl});
-  if(!oidc.ok)return {ok:false,state:oidc.state,reason:oidc.reason,blocks_merge:false};
-  try{
-    const response=await fetchImpl(ATTESTATION_URL,{
-      method:'POST',
-      headers:{authorization:`Bearer ${oidc.token}`,'content-type':'application/json'},
-      body:JSON.stringify({repository,pr_number:Number(prNumber),head_sha:headSha}),
-      signal:AbortSignal.timeout(12_000),
-    });
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok||body?.ok!==true){
-      return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`ATTESTATION_HTTP_${response.status}_${clean(body?.error).slice(0,120)}`,blocks_merge:false};
-    }
-    return {
-      ok:true,
-      state:clean(body?.state)||'UNKNOWN',
-      enforcement:clean(body?.enforcement)||'SHADOW_ONLY',
-      attestation:body?.attestation||null,
-      stale_attestation:body?.stale_attestation||null,
-      blocks_merge:false,
-    };
-  }catch(error){
-    return {ok:false,state:'SHADOW_UNAVAILABLE',reason:`ATTESTATION_${clean(error?.message||error).slice(0,120)}`,blocks_merge:false};
+  const response=await fetchImpl(ATTESTATION_URL,{
+    method:'POST',
+    headers:{authorization:`Bearer ${oidc}`,'content-type':'application/json'},
+    body:JSON.stringify({
+      repository,
+      pr_number:Number(prNumber),
+      head_sha:headSha,
+      base_sha:baseSha,
+      required_workflows:Array.isArray(requiredWorkflows)?requiredWorkflows:[],
+      protected_paths:Array.isArray(protectedPaths)?protectedPaths:[],
+    }),
+    signal:AbortSignal.timeout(30_000),
+  });
+  const body=await response.json().catch(()=>({}));
+  const state=clean(body?.state)||'UNKNOWN';
+  const exact=state==='ATTESTED'||state==='ATTESTED_REPLAY';
+  if(!response.ok||body?.ok!==true||body?.blocks_merge!==true||!exact){
+    throw new Error(`PREMERGE_ATTESTATION_REQUIRED:${response.status}:${state}:${clean(body?.error).slice(0,120)}`);
   }
+  return {ok:true,state,enforcement:'HARD',attestation:body?.attestation||null,blocks_merge:true};
 }
 
 async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,timeoutMs}){
@@ -183,7 +188,7 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     const initial=await getPullRequest(repository,prNumber,token);
     const identity=validatePullRequestShape(initial,repository);
     statusIdentity=identity;
-    await setStatus({repository,token,sha:identity.headSha,state:'pending',description:'Independent pre-merge verification in progress',targetUrl});
+    await setStatus({repository,token,sha:identity.headSha,state:'pending',description:'BARMAN exact-SHA verification in progress',targetUrl});
 
     const files=await getPullRequestFiles(repository,identity.number,token);
     const protectedPaths=files.filter(isProtectedTrustPath);
@@ -195,7 +200,7 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     }
 
     await assertHeadContainsBase({repository,token,baseSha:identity.baseSha,headSha:identity.headSha});
-    await waitRequiredWorkflows({repository,token,headRef:identity.headRef,headSha:identity.headSha,prNumber:identity.number,pollMs,timeoutMs});
+    const passed=await waitRequiredWorkflows({repository,token,headRef:identity.headRef,headSha:identity.headSha,prNumber:identity.number,pollMs,timeoutMs});
 
     const finalPr=await getPullRequest(repository,identity.number,token);
     const finalIdentity=validatePullRequestShape(finalPr,repository);
@@ -204,16 +209,24 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     if(finalIdentity.authorLogin!==identity.authorLogin)throw new Error('PREMERGE_AUTHOR_CHANGED_DURING_VERIFY');
     await assertHeadContainsBase({repository,token,baseSha:finalIdentity.baseSha,headSha:finalIdentity.headSha});
 
-    const attestationShadow=await observePromotionAttestation({repository,prNumber:identity.number,headSha:identity.headSha});
-    console.log(`BARMAN_ATTESTATION_SHADOW state=${attestationShadow.state} blocks_merge=false sha=${identity.headSha} pr=${identity.number}`);
+    const workflowEvidence=requiredWorkflowEvidence(passed);
+    const attestation=await requirePromotionAttestation({
+      repository,
+      prNumber:identity.number,
+      headSha:identity.headSha,
+      baseSha:identity.baseSha,
+      requiredWorkflows:workflowEvidence,
+      protectedPaths,
+    });
+    console.log(`BARMAN_ATTESTATION_ENFORCED state=${attestation.state} blocks_merge=true sha=${identity.headSha} pr=${identity.number}`);
 
     await setStatus({
       repository,token,sha:identity.headSha,state:'success',
-      description:`Independent gate passed; attestation shadow ${attestationShadow.state}`,
+      description:`BARMAN exact-SHA attestation ${attestation.state}`,
       targetUrl,
     });
-    console.log(`BARMAN_INDEPENDENT_PREMERGE_PASS pr=${identity.number} head=${identity.headSha} base=${identity.baseSha} attestation_shadow=${attestationShadow.state}`);
-    return {identity,files,attestationShadow};
+    console.log(`BARMAN_REQUIRED_TEST_PASS pr=${identity.number} head=${identity.headSha} base=${identity.baseSha} attestation=${attestation.state}`);
+    return {identity,files,attestation};
   }catch(error){
     if(statusIdentity?.headSha){
       try{
@@ -235,7 +248,7 @@ async function invalidateOpenPullRequests({repository,token,targetUrl}){
       if(clean(pr?.head?.repo?.full_name)!==repository)continue;
       const sha=clean(pr?.head?.sha).toLowerCase();
       if(!/^[0-9a-f]{40}$/.test(sha))continue;
-      await setStatus({repository,token,sha,state:'pending',description:'main changed; update branch and re-run independent gate',targetUrl});
+      await setStatus({repository,token,sha,state:'pending',description:'main changed; update branch and re-run BARMAN required test',targetUrl});
       invalidated+=1;
     }
     if(rows.length<100)break;
@@ -252,9 +265,7 @@ export async function run({env=process.env}={}){
   const targetUrl=clean(env.BARMAN_PREMERGE_TARGET_URL||`${env.GITHUB_SERVER_URL||'https://github.com'}/${repository}/actions/runs/${env.GITHUB_RUN_ID||''}`);
   if(!token||!repository||!eventName)throw new Error('PREMERGE_ENV_MISSING');
 
-  if(eventName==='push'){
-    return invalidateOpenPullRequests({repository,token,targetUrl});
-  }
+  if(eventName==='push')return invalidateOpenPullRequests({repository,token,targetUrl});
   if(!['pull_request_target','workflow_dispatch'].includes(eventName))throw new Error(`PREMERGE_EVENT_DENIED:${eventName}`);
   if(!eventPath)throw new Error('PREMERGE_EVENT_PATH_MISSING');
   const event=JSON.parse(fs.readFileSync(eventPath,'utf8'));
