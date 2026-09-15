@@ -12,6 +12,12 @@ permissions:
   pull-requests: read
   statuses: read
 
+# Latest-head-wins for PR validation. Main runs share a group but are never
+# canceled, so Production migration execution remains serialized and intact.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: ${{ github.event_name == 'pull_request' && 'candidate-ci' || 'ci-non-pr' }}
