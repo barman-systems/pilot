@@ -5,8 +5,7 @@ const state=facts=>({facts:facts.map(([field,value])=>({field,value,status:'VERI
 
 test('semantic preference opens grounded day read without invented time',()=>{
   const scope=buildAvailabilitySearchScope({request:{preferences:[{kind:'semantic',evidence:'أول الصباح'}]},state:state([['service','svc'],['date','2026-09-16']])});
-  assert.equal(scope.ok,true);assert.equal(scope.mode,'DAY');assert.equal(scope.from,null);assert.equal(scope.to,null);assert.equal(scope.read_only,true);
-  assert.equal(JSON.stringify(scope).includes('06:00'),false);
+  assert.equal(scope.ok,true);assert.equal(scope.mode,'DAY');assert.equal(scope.from,null);assert.equal(scope.to,null);assert.equal(scope.read_only,true);assert.equal(JSON.stringify(scope).includes('06:00'),false);
 });
 
 test('hard not-before/not-after bounds are enforced as customer authority',()=>{
@@ -21,7 +20,7 @@ test('wrong date/service cannot leak into candidates',()=>{
   assert.equal(rows.length,1);assert.equal(rows[0].local_start,'2026-09-16T08:00:00');
 });
 
-test('candidate volume is code bounded',()=>{
+test('candidate volume is code bounded to truthful broad authority maximum',()=>{
   const scope=buildAvailabilitySearchScope({request:{},state:state([['service','svc'],['date','2026-09-16']]),maxCandidates:999});
-  assert.equal(scope.max_candidates,24);
+  assert.equal(scope.max_candidates,12);
 });
