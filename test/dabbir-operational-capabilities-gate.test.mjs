@@ -23,7 +23,7 @@ test('Supabase advisor regression gate is part of the required PR check', () => 
   assert.match(ci, /dabbir-supabase-advisors-gate\.mjs/);
   assert.match(gate, /SUPABASE_MANAGEMENT_CREDENTIAL_REQUIRED_FOR_ADVISOR_GATE/);
   assert.match(gate, /new affected object\(s\)/);
-  assert.equal(baseline.security.authenticated_security_definer_function_executable.count, 7);
+  assert.equal(baseline.security.authenticated_security_definer_function_executable.count, 9);
   assert.equal(baseline.performance.unindexed_foreign_keys.count, 26);
 });
 

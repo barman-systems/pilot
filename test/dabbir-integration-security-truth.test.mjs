@@ -17,19 +17,22 @@ test('server-only RLS tables are explicitly denied to client roles',()=>{
   assert.doesNotMatch(sql,/from anon, authenticated, service_role/i);
 });
 
-test('advisor baseline makes zero no-policy RLS findings a regression gate',()=>{
+test('advisor baseline records only reviewed current security exceptions and keeps them regression-gated',()=>{
   const baseline=JSON.parse(read('config/supabase-advisor-baseline.json'));
   assert.equal(baseline.project_ref,'fphpoysqdsceniwduxjq');
-  assert.equal(baseline.security.rls_enabled_no_policy.count,0);
+  assert.equal(baseline.security.rls_enabled_no_policy.count,1);
+  assert.deepEqual(baseline.security.rls_enabled_no_policy.objects,['public.dabbir_posthog_product_event_outbox_v1']);
   assert.ok(baseline.policy.monitored_info_lints.includes('rls_enabled_no_policy'));
   assert.ok(baseline.policy.monitored_info_lints.includes('unindexed_foreign_keys'));
-  assert.equal(baseline.security.authenticated_security_definer_function_executable.count,7);
+  assert.equal(baseline.security.authenticated_security_definer_function_executable.count,9);
   assert.deepEqual(baseline.security.authenticated_security_definer_function_executable.objects,[
     'public.dabbir_activate_owner_policy',
     'public.dabbir_activity_profile_v1',
     'public.dabbir_activity_service_configure_v1',
     'public.dabbir_knowledge_propose_v2',
     'public.dabbir_knowledge_review_v2',
+    'public.dabbir_owner_activity_booking_v1',
+    'public.dabbir_owner_booking_locations_v1',
     'public.dabbir_owner_policy_candidates',
     'public.dabbir_set_owner_policy_state',
   ]);
