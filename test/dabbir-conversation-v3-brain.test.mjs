@@ -43,16 +43,16 @@ test('service selection is decisive booking behavior and never asks intent_confi
  assert.doesNotMatch(r.response.text,/تقصد تبا تحجز/);assert.match(r.response.text,/خارجي/);assert.match(r.response.text,/صالون/);assert.match(r.response.text,/ستيشن\/SUV/);assert.match(r.response.text,/موقع/);
 });
 
-test('unseen الاستيشن survives as station tentative and is surfaced, not repeated generic vehicle question',()=>{
+test('direct الاستيشن answer is accepted as grounded station enum without redundant confirmation',()=>{
  const c=context('الاستيشن','2026-09-11T06:32:00Z');
  const previous={version:2,goal:'BOOK_SERVICE',intent_confirmed:true,facts:[{field:'branch',status:'VERIFIED',value:ids.branch,source:'DATABASE_FACT'},{field:'service',status:'VERIFIED',value:ids.service,source:'CUSTOMER_STATED'},{field:'delivery_mode',status:'VERIFIED',value:'MOBILE',source:'DATABASE_FACT'},{field:'date',status:'VERIFIED',value:'2026-09-11',source:'CUSTOMER_STATED'},{field:'time',status:'VERIFIED',value:'10:30',source:'CUSTOMER_STATED'},{field:'immediacy',status:'VERIFIED',value:'NOW',source:'CUSTOMER_STATED'}],tentatives:[],pending_question:{fields:['vehicle','location']},last_turn_at:'2026-09-11T06:31:00Z',episode_id:'e1',episode_started_at:'2026-09-11T06:30:00Z'};
  const p=proposal({role:'ANSWER_TO_PENDING_QUESTION',entities:[entity('vehicle','station','الاستيشن')]});
  const u=understandTurnV3({context:c,proposal:p,previousState:previous});
  const r=planConversationTurnV3({previousState:previous,understanding:u,episode:{kind:'CONTINUE',reason:'SEMANTIC_ANSWER_TO_PENDING_QUESTION',idle_ms:60000},context:c});
- assert.equal(r.state.tentatives.find(x=>x.field==='vehicle')?.candidate_value,'station');
- assert.deepEqual(r.plan.next_question.fields,['vehicle']);
- assert.match(r.response.text,/فهمت إن السيارة ستيشن\/SUV/);assert.doesNotMatch(r.response.text,/أي سيارة نخدم لك/);
- assert.equal((r.response.text.match(/[؟?]/g)||[]).length,1);
+ const vehicle=r.state.facts.find(x=>x.field==='vehicle');
+ assert.equal(vehicle?.value,'station');assert.equal(vehicle?.source,'CUSTOMER_STATED');assert.equal(vehicle?.resolution,'DIRECT_PENDING_ENUM_ANSWER');
+ assert.equal(r.state.tentatives.some(x=>x.field==='vehicle'),false);assert.deepEqual(r.plan.next_question.fields,['location']);
+ assert.match(r.response.text,/موقع/);assert.doesNotMatch(r.response.text,/صح[؟?]?/);
 });
 
 test('price side question is answered without abandoning booking',()=>{

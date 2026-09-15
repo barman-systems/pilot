@@ -78,7 +78,7 @@ function renderArabic({state,plan,context,understanding}){
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('السيارة صالون أو ستيشن/SUV؟');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('باقي موقعك بس — أرسله من خيار الموقع في واتساب وبكمل لك.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`تمام، ${timeWindowArabic(q.time_window)||'الفترة اللي ذكرتها'}. أي ساعة تقريبًا تبي؟`);
-  else if(q?.purpose==='COLLECT_WHEN')segments.push('متى تبيه؟');
+  else if(q?.purpose==='COLLECT_WHEN'){if(q.fields?.length===1&&q.fields[0]==='time')segments.push('أي ساعة تبيه؟');else if(q.fields?.length===1&&q.fields[0]==='date')segments.push('أي يوم تبيه؟');else segments.push('متى تبيه؟');}
   else if(q)segments.push('أعطني المعلومة الباقية وبكمل لك.');
   else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`الخدمات المتاحة: ${menuArabic(options)}. إذا تبا تحجز، قل لي أي واحد.`:'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.');}
   else if(state.goal==='PRICE_SERVICE'&&!answer){const options=serviceOptions(context);segments.push(options.length?`حدد الخدمة عشان أعطيك السعر الصحيح: ${menuArabic(options)}. أي واحد تقصد؟`:'حدد لي الخدمة اللي تسأل عن سعرها.');}
@@ -96,7 +96,7 @@ function renderEnglish({state,plan,context,understanding}){
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('Is the vehicle saloon/sedan or station/SUV?');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('I only need your service location — send it using WhatsApp Location.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`Okay, ${timeWindowEnglish(q.time_window)||'that time window'}. About what exact time would you like?`);
-  else if(q?.purpose==='COLLECT_WHEN')segments.push('When would you like it?');
+  else if(q?.purpose==='COLLECT_WHEN'){if(q.fields?.length===1&&q.fields[0]==='time')segments.push('What time would you like?');else if(q.fields?.length===1&&q.fields[0]==='date')segments.push('Which day would you like?');else segments.push('When would you like it?');}
   else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`Available services: ${menuEnglish(options)}.`:'No active services are available to show right now.');}
   else if(state.goal==='SUPPORT')segments.push('Tell me what you need and I will help.');else if(state.goal==='BOOK_SERVICE')segments.push('I have the required booking details.');return segments.join(' ');
 }
