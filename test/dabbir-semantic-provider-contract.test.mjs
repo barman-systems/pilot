@@ -146,43 +146,45 @@ test('Gateway-primary semantic success does not spend direct-recovery budget',as
  assert.equal(result.telemetry.routing_mode,'GATEWAY_PRIMARY_DIRECT_RECOVERY');
  assert.deepEqual(result.telemetry.skipped_attempts,[]);
 });
-test('hard Gateway failure opens direct recovery within the same four-request cap',async()=>{
+test('hard Gateway failure skips retired Gemini and opens direct recovery within the cap',async()=>{
  const endpoints=[];
  const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async url=>{
   endpoints.push(url);
   if(url.includes('ai-gateway'))return new Response('{}',{status:503});
-  if(url.includes('generativelanguage.googleapis.com'))return new Response('{}',{status:429});
+  if(url.includes('generativelanguage.googleapis.com'))throw new Error('retired Gemini recovery must not be called');
   if(url.includes('groq.com'))return response();
-  throw new Error('unexpected provider after four-request cap');
+  throw new Error('unexpected provider');
  }});
- assert.equal(endpoints.length,4);
+ assert.equal(endpoints.length,3);
  assert.ok(endpoints[0].includes('ai-gateway')&&endpoints[1].includes('ai-gateway'));
- assert.ok(endpoints[2].includes('generativelanguage.googleapis.com'));
- assert.ok(endpoints[3].includes('groq.com'));
- assert.equal(result.telemetry.request_count,4);assert.equal(result.provider,'groq');
+ assert.ok(endpoints[2].includes('groq.com'));
+ assert.equal(endpoints.some(x=>x.includes('generativelanguage.googleapis.com')),false);
+ assert.equal(result.telemetry.request_count,3);assert.equal(result.provider,'groq');
 });
-test('failed final fallback never increases the four actual HTTP request cap',async()=>{
+test('exhausted eligible fallback never increases the four actual HTTP request cap',async()=>{
  let calls=0;
  await assert.rejects(interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async()=>{calls++;return new Response('{}',{status:429});}}),error=>{
   assert.equal(error.code,'AI_PLANNER_UNAVAILABLE');
   assert.equal(error.telemetry.request_count,4);
-  assert.ok(error.telemetry.skipped_attempts.some(x=>x.reason==='SEMANTIC_PROVIDER_BUDGET'));
+  assert.equal(error.telemetry.skipped_attempts.some(x=>x.reason==='SEMANTIC_PROVIDER_BUDGET'),false);
   return true;
  });
  assert.equal(calls,4);
 });
-test('slow failed Gateway attempts preserve remaining time for direct recovery',async t=>{
+test('slow failed Gateway attempts preserve remaining time for eligible direct recovery',async t=>{
  let clock=100000; t.mock.method(Date,'now',()=>clock);
  const endpoints=[];
  const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async url=>{
   endpoints.push(url);
   if(url.includes('ai-gateway')){clock+=6100;return new Response('{}',{status:503});}
-  if(url.includes('generativelanguage.googleapis.com'))return response();
+  if(url.includes('generativelanguage.googleapis.com'))throw new Error('retired Gemini recovery must not be called');
+  if(url.includes('groq.com'))return response();
   throw new Error('unexpected provider');
  }});
- assert.equal(result.provider,'google-gemini');assert.equal(endpoints.length,3);
+ assert.equal(result.provider,'groq');assert.equal(endpoints.length,3);
  assert.ok(endpoints[0].includes('ai-gateway')&&endpoints[1].includes('ai-gateway'));
- assert.ok(endpoints[2].includes('generativelanguage.googleapis.com'));
+ assert.ok(endpoints[2].includes('groq.com'));
+ assert.equal(endpoints.some(x=>x.includes('generativelanguage.googleapis.com')),false);
  assert.equal(result.telemetry.request_count,3);
 });
 test('a valid structured fallback completing after six seconds is not cut off while budget remains',async()=>{

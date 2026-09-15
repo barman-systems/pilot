@@ -6,6 +6,7 @@ import {
   reliableAiProviderFetch,
   summarizeProviderReliability,
 } from './_ai-provider-reliability.js';
+import { geminiAutomaticGenerationRecoveryEnabled } from './_ai-provider-readiness.js';
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -32,10 +33,6 @@ function semanticSpec(semantic){
 
 function gatewayConfigured(env = process.env) {
   return Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
-}
-
-function geminiAutomaticRecoveryEnabled(env = process.env) {
-  return String(env.DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED ?? '1').trim() !== '0';
 }
 
 function gatewayConfig(env = process.env) {
@@ -353,7 +350,7 @@ async function generateDABBIRAiReplyInternal({ project, message, language = 'aut
       }
     }
 
-    const geminiRecoveryEnabled=geminiAutomaticRecoveryEnabled(env);
+    const geminiRecoveryEnabled=geminiAutomaticGenerationRecoveryEnabled(env);
     const directRecoveryReady = Boolean((geminiRecoveryEnabled && geminiKey) || groqKey || cloudflareReady);
     if (directRecoveryReady && budgetRemaining(reliability) > 150) {
       console.warn('dabbir_ai_gateway_primary_recovery_pool',{reason:result.error,status:result.status||null,model:result.model||config.model});
@@ -476,7 +473,7 @@ async function generateDABBIRAiReplyInternal({ project, message, language = 'aut
         return generateDABBIRAiReplyInternal({ project: normalizedProject, message: input, language, businessContext, history, env: fallbackEnv, fetchImpl, oidcGetter, semantic },reliability);
       }
       if(isAiProviderCooldown(error))return cooldownFailure(config,error);
-      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.code==='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED'?'ai_provider_chain_budget_exhausted':error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider: config.provider, model: config.model, auth_mode: config.auth_mode, cost_mode: config.cost_mode };
+      return { ok: false, state: error?.name === 'AbortError' ? 'TIMEOUT' : 'PROVIDER_ERROR', error: error?.code==='AI_PROVIDER_CHAIN_BUDGET_EXHAUSTED'?'ai_provider_chain_budget_exhausted':error?.name === 'AbortError' ? 'groq_timeout' : 'groq_network_error', provider:config.provider,model:config.model,auth_mode:config.auth_mode,cost_mode:config.cost_mode};
     }
   }
 

@@ -47,6 +47,75 @@ function requireContains(errors,root,file,needles){
   for(const needle of needles)if(!source.includes(needle))errors.push(`${file}: missing authority marker ${needle}`);
 }
 
+function readSource(root,file){
+  const full=path.join(root,String(file||''));
+  return file&&fs.existsSync(full)?fs.readFileSync(full,'utf8'):'';
+}
+
+export function validateRoutingAuthorityContract(registry={},sources={}){
+  const errors=[];
+  const version=String(registry?.version||'');
+  if(!/^DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V[1-9]\d*$/.test(version)){
+    errors.push('registry: reliability authority version must use the canonical monotonic V<n> format');
+  }
+
+  const readinessAuthority=String(registry?.routing_readiness_authority||'');
+  if(readinessAuthority!=='api/_ai-provider-readiness.js'){
+    errors.push('registry: routing readiness authority must remain api/_ai-provider-readiness.js');
+  }
+
+  const routing=registry?.automatic_generation_routing||{};
+  if(routing.primary!=='vercel-ai-gateway')errors.push('registry: Vercel AI Gateway must remain the automatic generation primary');
+  if(routing.direct_recovery_readiness!==readinessAuthority){
+    errors.push('registry: direct recovery readiness must delegate to the single routing readiness authority');
+  }
+  if(routing.diagnostic_credentials_do_not_imply_recovery!==true){
+    errors.push('registry: diagnostic credentials must not imply automatic generation recovery');
+  }
+  if(routing.gemini_generation_recovery_production_state!=='RETIRED'){
+    errors.push('registry: Gemini automatic generation recovery must remain retired in Production');
+  }
+  if(routing.gemini_diagnostic_capability_retained!==true){
+    errors.push('registry: Gemini diagnostic/direct capability must remain explicitly retained');
+  }
+  if(registry?.invariants?.configured_credential_counts_as_automatic_recovery!==false){
+    errors.push('registry: configured credentials cannot count as automatic recovery authority');
+  }
+  if(registry?.invariants?.health_readiness_uses_routing_readiness_authority!==true){
+    errors.push('registry: public health/readiness must use the routing readiness authority');
+  }
+
+  const readinessSource=String(sources[readinessAuthority]||'');
+  if(!readinessSource)errors.push(`${readinessAuthority||'routing readiness authority'}: missing protected source`);
+  else{
+    for(const marker of ['providerRoutingReadiness','configuredAutomaticRecoveryProviders','configuredDiagnosticDirectProviders','geminiAutomaticGenerationRecoveryEnabled','gatewayPrimaryConfigured','DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED','return !gatewayPrimaryConfigured(env);']){
+      if(!readinessSource.includes(marker))errors.push(`${readinessAuthority}: missing routing contract marker ${marker}`);
+    }
+  }
+
+  const coreSource=String(sources['api/_ai-core.js']||'');
+  if(!coreSource)errors.push('api/_ai-core.js: missing protected source');
+  else{
+    for(const marker of ['geminiAutomaticGenerationRecoveryEnabled',"from './_ai-provider-readiness.js'",'delete recoveryEnv.GEMINI_API_KEY']){
+      if(!coreSource.includes(marker))errors.push(`api/_ai-core.js: missing automatic recovery authority marker ${marker}`);
+    }
+    if(coreSource.includes('DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED'))errors.push('api/_ai-core.js: Gemini recovery policy duplicated outside routing readiness authority');
+    if(/function\s+geminiAutomaticRecoveryEnabled\s*\(/.test(coreSource))errors.push('api/_ai-core.js: legacy local Gemini recovery decision reintroduced');
+  }
+
+  const publicReadinessSource=String(sources['api/dabbir-ai.js']||'');
+  if(!publicReadinessSource)errors.push('api/dabbir-ai.js: missing protected source');
+  else{
+    if(!publicReadinessSource.includes('providerRoutingReadiness'))errors.push('api/dabbir-ai.js: public readiness bypasses routing readiness authority');
+    if(publicReadinessSource.includes('getDABBIRAiRedundancy'))errors.push('api/dabbir-ai.js: legacy credential-count redundancy authority reintroduced');
+    for(const marker of ['automatic_recovery_providers','diagnostic_direct_providers']){
+      if(!publicReadinessSource.includes(marker))errors.push(`api/dabbir-ai.js: missing truthful readiness marker ${marker}`);
+    }
+  }
+
+  return errors;
+}
+
 export function checkProviderAuthority(root=ROOT){
   const registryPath=path.join(root,'config/ai-provider-authority-registry.json');
   const registry=JSON.parse(fs.readFileSync(registryPath,'utf8'));
@@ -102,6 +171,13 @@ export function checkProviderAuthority(root=ROOT){
   if(registry.background_recovery?.attempt_type!=='RECOVERY_PROBE')errors.push('registry: background recovery attempt type must be RECOVERY_PROBE');
   if(registry.background_recovery?.required_successes_to_healthy!==2)errors.push('registry: recovery hysteresis must require two successful probes');
 
+  const routingSources={
+    [registry.routing_readiness_authority]:readSource(root,registry.routing_readiness_authority),
+    'api/_ai-core.js':readSource(root,'api/_ai-core.js'),
+    'api/dabbir-ai.js':readSource(root,'api/dabbir-ai.js'),
+  };
+  errors.push(...validateRoutingAuthorityContract(registry,routingSources));
+
   for(const [file,entry] of Object.entries(registry.diagnostic_exemptions||{})){
     const source=fs.readFileSync(path.join(root,file),'utf8');
     if(!/PRODUCTION_FORBIDDEN/.test(source))errors.push(`${file}: diagnostic exemption lacks a production-forbidden guard`);
@@ -109,7 +185,18 @@ export function checkProviderAuthority(root=ROOT){
     if(!fs.existsSync(path.join(root,entry.workflow)))errors.push(`${file}: diagnostic workflow missing`);
   }
 
-  return {ok:errors.length===0,errors,scanned_api_files:apiFiles.length,registry_version:registry.version};
+  return {
+    ok:errors.length===0,
+    errors,
+    scanned_api_files:apiFiles.length,
+    registry_version:registry.version,
+    routing_contract:{
+      readiness_authority:registry.routing_readiness_authority,
+      primary:registry.automatic_generation_routing?.primary||null,
+      gemini_generation_recovery_production_state:registry.automatic_generation_routing?.gemini_generation_recovery_production_state||null,
+      diagnostic_credentials_do_not_imply_recovery:registry.automatic_generation_routing?.diagnostic_credentials_do_not_imply_recovery===true,
+    },
+  };
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

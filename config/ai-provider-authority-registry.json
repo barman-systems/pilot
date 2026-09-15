@@ -1,7 +1,15 @@
 {
-  "version": "DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V2",
+  "version": "DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V3",
   "authority": "api/_ai-provider-reliability.js",
+  "routing_readiness_authority": "api/_ai-provider-readiness.js",
   "authority_fetch_adapter": "api/_ai-provider-authority-fetch.js",
+  "automatic_generation_routing": {
+    "primary": "vercel-ai-gateway",
+    "direct_recovery_readiness": "api/_ai-provider-readiness.js",
+    "diagnostic_credentials_do_not_imply_recovery": true,
+    "gemini_generation_recovery_production_state": "RETIRED",
+    "gemini_diagnostic_capability_retained": true
+  },
   "background_recovery": {
     "worker": "api/_ai-provider-recovery.js",
     "cron": "api/dabbir-ai-provider-recovery-cron.js",
@@ -19,7 +27,9 @@
     "customer_can_acquire_probe_lease": false,
     "customer_network_probe_allowed": false,
     "recovery_probe_requires_shared_lease": true,
-    "benchmark_mutates_customer_health_state": false
+    "benchmark_mutates_customer_health_state": false,
+    "configured_credential_counts_as_automatic_recovery": false,
+    "health_readiness_uses_routing_readiness_authority": true
   },
   "shared_state": {
     "backend": "supabase_postgres",
