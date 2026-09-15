@@ -101,6 +101,37 @@ test('retired Gemini is skipped and Groq is reached as recovery after a hard Gat
   assert.equal(calls.some(call=>/generativelanguage\.googleapis\.com/.test(call)), false);
 });
 
+test('missing Gemini recovery flag under Gateway-primary fails closed and reaches Groq without touching Gemini', async () => {
+  const calls = [];
+  const result = await generateDABBIRAiReply({
+    project: 'dabbir_businesses',
+    message: 'مرحبا',
+    language: 'ar',
+    env: {
+      GEMINI_API_KEY: 'test-gemini-key',
+      GROQ_API_KEY: 'test-groq-key',
+      VERCEL_ENV: 'production',
+      AI_GATEWAY_API_KEY: 'test-gateway-key',
+      DABBIR_AI_GATEWAY_MODEL: 'google/gemini-3.7-flash',
+    },
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      if(String(url).includes('ai-gateway.vercel.sh')) return new Response('{}',{status:402});
+      if(String(url).includes('api.groq.com')) return new Response(JSON.stringify({model:'openai/gpt-oss-20b',choices:[{message:{content:'تعافى عبر Groq'}}]}),{status:200,headers:{'content-type':'application/json'}});
+      if(String(url).includes('generativelanguage.googleapis.com')) throw new Error('DEFAULT_RETIRED_GEMINI_RECOVERY_WAS_CALLED');
+      return new Response('{}',{status:500});
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'groq');
+  assert.equal(result.telemetry.routing_mode, 'GATEWAY_PRIMARY_DIRECT_RECOVERY');
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /ai-gateway\.vercel\.sh/);
+  assert.match(calls[1], /api\.groq\.com/);
+  assert.equal(calls.some(call=>/generativelanguage\.googleapis\.com/.test(call)), false);
+});
+
 test('Gemini uses Google OpenAI-compatible endpoint and DABBIR grounding prompt in direct-only mode', async () => {
   let request;
   const fakeFetch = async (url, options) => {
