@@ -1,4 +1,3 @@
-// Synchronize event proves the migration workflow is registered before merge.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,9 +5,9 @@ import path from 'node:path';
 import {validateMigrationSql,validateMigrationFile} from '../scripts/dabbir-migration-contract.mjs';
 
 const root=path.resolve(import.meta.dirname,'..');
-const workflowPath='.github/workflows/dabbir-migration-deploy.yml';
-const workflow=fs.readFileSync(path.join(root,workflowPath),'utf8');
-const must=(pattern,message)=>assert.match(workflow,pattern,message);
+const ci=fs.readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8');
+const deploy=fs.readFileSync(path.join(root,'scripts/dabbir-migration-deploy.sh'),'utf8');
+const must=(text,pattern,message)=>assert.match(text,pattern,message);
 
 const cutover='20260915124900';
 const episodeMigrations=[
@@ -34,9 +33,7 @@ test('migration lexer allows transactional PL/pgSQL bodies but rejects transacti
     ['COPY t FROM STDIN;','COPY_DENIED'],
     ['alter system set work_mem="1GB";','ALTER_SYSTEM_DENIED'],
     ['insert into supabase_migrations.schema_migrations(version) values (\'x\');','MIGRATION_HISTORY_MUTATION_DENIED'],
-  ]){
-    assert.throws(()=>validateMigrationSql(sql),new RegExp(code));
-  }
+  ]) assert.throws(()=>validateMigrationSql(sql),new RegExp(code));
 });
 
 test('psql meta commands are denied in migration source',()=>{
@@ -44,79 +41,70 @@ test('psql meta commands are denied in migration source',()=>{
   assert.throws(()=>validateMigrationSql('select 1;\n  \\i evil.sql\n'),/PSQL_META_COMMAND_DENIED/);
 });
 
-test('migration workflow proves registration on pull requests while Production deploy remains push-main only',()=>{
-  must(/pull_request:\n\s+branches: \[main\]/);
-  must(/name: DABBIR Migration Source Contract/);
-  must(/if: github\.event_name == 'pull_request'/);
-  must(/node --test test\/dabbir-migration-deploy-workflow\.test\.mjs/);
-  must(/push:\n\s+branches: \[main\]/);
-  must(/if: github\.event_name == 'push' && github\.repository == 'barman-systems\/pilot' && github\.ref == 'refs\/heads\/main'/);
-  assert.doesNotMatch(workflow,/workflow_dispatch:/);
+test('canonical migration deploy runs only as a dependent job inside the already-registered DABBIR CI workflow',()=>{
+  assert.equal(fs.existsSync(path.join(root,'.github/workflows/dabbir-migration-deploy.yml')),false,'standalone migration workflow must stay retired');
+  must(ci,/migration-deploy:\n\s+name: DABBIR Migration Deploy/);
+  must(ci,/needs: test/);
+  must(ci,/if: github\.event_name == 'push' && github\.repository == 'barman-systems\/pilot' && github\.ref == 'refs\/heads\/main'/);
+  must(ci,/environment: production/);
+  must(ci,/run: bash scripts\/dabbir-migration-deploy\.sh/);
 });
 
-test('migration deploy has no manual arbitrary-SQL entry point',()=>{
-  must(/name: DABBIR Migration Deploy/);
-  must(/environment: production/);
-  must(/SUPABASE_DB_URL: \$\{\{ secrets\.SUPABASE_DB_URL \}\}/);
-  assert.doesNotMatch(workflow,/SUPABASE_ACCESS_TOKEN|service_role|SUPABASE_SERVICE_ROLE_KEY|apply_migration/i);
+test('manual CI dispatch and non-main pushes cannot enter migration deploy authority',()=>{
+  must(ci,/workflow_dispatch:/);
+  must(ci,/if: github\.event_name == 'push'/);
+  assert.doesNotMatch(deploy,/workflow_dispatch|repository_dispatch|read -p|select /i);
 });
 
-test('Production DB credential stays confined to recovery proof and canonical migration deploy',()=>{
+test('Production DB credential remains confined to recovery proof and registered DABBIR CI',()=>{
   const dir=path.join(root,'.github/workflows');
   const users=fs.readdirSync(dir)
     .filter(name=>/\.ya?ml$/.test(name))
     .filter(name=>fs.readFileSync(path.join(dir,name),'utf8').includes('secrets.SUPABASE_DB_URL'))
     .sort();
-  assert.deepEqual(users,['dabbir-migration-deploy.yml','dabbir-recovery-proof.yml']);
-  assert.equal((workflow.match(/secrets\.SUPABASE_DB_URL/g)||[]).length,1,'deploy workflow may reference the Production DB secret exactly once');
+  assert.deepEqual(users,['ci.yml','dabbir-recovery-proof.yml']);
+  assert.equal((ci.match(/secrets\.SUPABASE_DB_URL/g)||[]).length,1,'CI may reference the Production DB secret exactly once');
+  const job=ci.slice(ci.indexOf('  migration-deploy:'));
+  must(job,/SUPABASE_DB_URL: \$\{\{ secrets\.SUPABASE_DB_URL \}\}/);
 });
 
-test('workflow proves source and validates the full Git manifest before the Production secret is injected',()=>{
-  must(/MERGED_PR_PROVENANCE_REQUIRED/);
-  must(/SQUASH_MERGE_REQUIRED/);
-  must(/MERGE_BASE_FRESHNESS_MISMATCH/);
-  must(/latest_state test/);
-  must(/latest_state Vercel/);
-  must(/require_run 'DABBIR CI'/);
-  must(/require_run 'DABBIR Security Gate'/);
-  const proof=workflow.indexOf('Prove merged PR and exact-head gates');
-  const history=workflow.indexOf('Reject migration history mutation in this push');
-  const manifest=workflow.indexOf('Build exact post-cutover Git manifest');
-  const credential=workflow.indexOf('Normalize existing Production database credential');
-  assert.ok(proof>=0&&history>proof&&manifest>history&&credential>manifest,'Production secret must be unavailable until source and migration manifest validation finish');
-  const preCredential=workflow.slice(0,credential);
-  assert.doesNotMatch(preCredential,/secrets\.SUPABASE_DB_URL/,'secret expression must not appear before the dedicated injection step');
+test('deploy script proves merged PR, fresh base and exact candidate gates before database normalization',()=>{
+  for(const marker of ['MERGED_PR_PROVENANCE_REQUIRED','SQUASH_MERGE_REQUIRED','MERGE_BASE_FRESHNESS_MISMATCH','REQUIRED_TEST_STATUS_MISSING','REQUIRED_VERCEL_STATUS_MISSING']) must(deploy,new RegExp(marker));
+  must(deploy,/require_run 'DABBIR CI'/);
+  must(deploy,/require_run 'DABBIR Security Gate'/);
+  const proof=deploy.indexOf('MERGED_PR_PROVENANCE_REQUIRED');
+  const manifest=deploy.indexOf(': > migration-manifest.tsv');
+  const credential=deploy.indexOf('echo "::add-mask::\$SUPABASE_DB_URL"');
+  assert.ok(proof>=0&&manifest>proof&&credential>manifest,'database credential cannot be normalized before source and manifest proof');
 });
 
-test('post-cutover migration history is add-only and unsafe source is rejected before execution',()=>{
-  must(/IMMUTABLE_MIGRATION_HISTORY/);
-  must(/DABBIR_MIGRATION_CUTOVER_VERSION: '20260915124900'/);
-  must(/node scripts\/dabbir-migration-contract\.mjs/);
-  must(/POST_CUTOVER_MANIFEST_TOO_LARGE/);
+test('post-cutover migration history is append-only and full Git manifest is reconciled',()=>{
+  must(deploy,/IMMUTABLE_MIGRATION_HISTORY/);
+  must(deploy,/find supabase\/migrations -maxdepth 1 -type f -name '\*\.sql'/);
+  must(deploy,/POST_CUTOVER_MANIFEST_TOO_LARGE/);
+  must(deploy,/ATTESTED_REPLAY/);
+  must(deploy,/APPLIED \$version \$name/);
 });
 
-test('each migration is applied atomically under an advisory lock and records exact source provenance',()=>{
-  must(/pg_advisory_xact_lock\(hashtextextended/);
-  must(/--single-transaction/);
-  must(/MIGRATION_VERSION_RACE/);
-  must(/insert into supabase_migrations\.schema_migrations/);
-  must(/array\[convert_from\(decode\('\$\{source_b64\}'/);
-  must(/dabbir-ci-migrator:\$\{GITHUB_ACTOR\}:\$\{GITHUB_SHA\}:run:\$\{GITHUB_RUN_ID\}/);
-  must(/dabbir-ci-v1:\$\{GITHUB_REPOSITORY\}:\$\{version\}:\$\{sha256\}:\$\{blob\}/);
+test('each migration is applied atomically under advisory lock with exact source provenance',()=>{
+  must(deploy,/pg_advisory_xact_lock\(hashtextextended/);
+  must(deploy,/--single-transaction/);
+  must(deploy,/MIGRATION_VERSION_RACE/);
+  must(deploy,/insert into supabase_migrations\.schema_migrations/);
+  must(deploy,/array\[convert_from\(decode\('\$\{source_b64\}'/);
+  must(deploy,/dabbir-ci-migrator:\$\{GITHUB_ACTOR\}:\$\{GITHUB_SHA\}:run:\$\{GITHUB_RUN_ID\}/);
+  must(deploy,/dabbir-ci-v1:\$\{GITHUB_REPOSITORY\}:\$\{version\}:\$\{sha256\}:\$\{blob\}/);
 });
 
-test('post-deploy drift compares the stored SQL SHA-256 and Git blob SHA, not names alone',()=>{
-  must(/extensions\.digest\(convert_to\(statements\[1\],'UTF8'\),'sha256'\)/);
-  must(/'blob '\|\|octet_length\(convert_to\(statements\[1\],'UTF8'\)\)/);
-  must(/'sha1'/);
-  must(/UNATTESTED_OR_DRIFTED_MIGRATION_VERSION/);
-  must(/DABBIR_MIGRATION_DRIFT_DETECTED/);
-  must(/UNATTESTED_CREATED_BY/);
+test('post-deploy drift hashes actual stored SQL and rejects unattributed rows',()=>{
+  must(deploy,/extensions\.digest\(convert_to\(statements\[1\],'UTF8'\),'sha256'\)/);
+  must(deploy,/'blob '\|\|octet_length\(convert_to\(statements\[1\],'UTF8'\)\)/);
+  must(deploy,/'sha1'/);
+  must(deploy,/UNATTESTED_OR_DRIFTED_MIGRATION_VERSION/);
+  must(deploy,/DABBIR_MIGRATION_DRIFT_DETECTED/);
+  must(deploy,/UNATTESTED_CREATED_BY/);
 });
 
-test('the deployer reconciles all post-cutover Git migrations so the first run can adopt already-merged #866 files',()=>{
-  must(/find supabase\/migrations -maxdepth 1 -type f -name '\*\.sql'/);
-  assert.doesNotMatch(workflow,/git diff[^\n]+\|[^\n]+apply/i);
-  must(/ATTESTED_REPLAY/);
-  must(/APPLIED \$version \$name/);
+test('deployer has no Supabase management token, service-role key or arbitrary migration API escape',()=>{
+  assert.doesNotMatch(deploy,/SUPABASE_ACCESS_TOKEN|SUPABASE_MANAGEMENT_TOKEN|SUPABASE_SERVICE_ROLE_KEY|service_role|apply_migration/i);
 });
