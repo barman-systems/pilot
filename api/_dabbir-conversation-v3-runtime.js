@@ -30,7 +30,8 @@ function authorityProjection({load,state,plan,context,action,at,interpretation})
   if(Buffer.byteLength(JSON.stringify(projection),'utf8')>32000)throw Object.assign(new Error('V3_AUTHORITY_STATE_TOO_LARGE'),{code:'V3_AUTHORITY_STATE_TOO_LARGE'});return projection;
 }
 function authorityAction({state,plan}){if(plan.proposed_action==='REPLY')return 'REPLY';if(state.goal==='BOOK_SERVICE'&&plan.proposed_action==='READY_FOR_AUTHORITY')return factValue(state,'slot')!=null?'CREATE_BOOKING':'CHECK_AVAILABILITY';if(['RESCHEDULE_BOOKING','CANCEL_BOOKING'].includes(state.goal))return 'HANDOFF';if(plan.proposed_action==='CLARIFY')return 'CLARIFY';return 'REPLY';}
-function metricsFor({state,plan,action,interpretation,episode}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,message_role:interpretation?.proposal?.dialogue?.message_role||null,requested_action:interpretation?.proposal?.action||null,turn_disposition:plan.turn_disposition||'OPERATIONAL',evidence_invalidations:arr(state.invalidations).map(x=>({field:x.field,reason:x.reason})),episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null};}
+function currentCorrectionCount({understanding,interpretation}){const fields=new Set();for(const item of arr(understanding?.turn_verified))if(item?.source==='CUSTOMER_CORRECTION'&&item?.field)fields.add(clean(item.field,80));for(const field of arr(interpretation?.proposal?.dialogue?.invalidated_fields))if(field)fields.add(clean(field,80));return fields.size;}
+function metricsFor({state,plan,action,interpretation,episode,understanding=null,decisionLatencyMs=null}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,message_role:interpretation?.proposal?.dialogue?.message_role||null,requested_action:interpretation?.proposal?.action||null,turn_disposition:plan.turn_disposition||'OPERATIONAL',evidence_invalidations:arr(state.invalidations).map(x=>({field:x.field,reason:x.reason})),episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null,correction_count:currentCorrectionCount({understanding,interpretation}),clarification_count:action==='CLARIFY'?1:0,decision_latency_ms:Number.isFinite(Number(decisionLatencyMs))?Math.max(0,Math.round(Number(decisionLatencyMs))):null};}
 function preserveUnmappedService(understanding,proposal){
   const surface=clean(proposal?.serviceSurface,180),hasVerified=arr(understanding?.facts).some(f=>f?.field==='service'&&f?.status==='VERIFIED'),hasTentative=arr(understanding?.tentatives).some(t=>t?.field==='service');
   if(!surface||proposal?.serviceName||hasVerified||hasTentative)return understanding;
@@ -38,20 +39,23 @@ function preserveUnmappedService(understanding,proposal){
   return {...understanding,tentatives:[...arr(understanding.tentatives),candidate],turn_tentative:[...arr(understanding.turn_tentative),candidate]};
 }
 function log(logger,record){try{logger.info?.(JSON.stringify(record));}catch{}}
+const monotonicNow=()=>globalThis.performance?.now?.()??Date.now();
 
-export async function runConversationV3Runtime({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,interpreter=interpretConversationTurnV3,now=()=>new Date(),logger=console,preloadedLoad=null}){
+export async function runConversationV3Runtime({claim,context,rpc,deliver,finish,handoff,bookingText,slotsText,interpreter=interpretConversationTurnV3,now=()=>new Date(),performanceNow=monotonicNow,logger=console,preloadedLoad=null}){
   const load=preloadedLoad||await rpc('dabbir_semantic_load_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token});
   const mode=load?.cognitive_policy?.mode||'shadow';if(!LIVE_MODES.has(mode))throw Object.assign(new Error('V3_RUNTIME_NOT_SELECTED'),{code:'V3_RUNTIME_NOT_SELECTED'});
   const at=currentAt(context,now()),previousRuntime=load?.semantic_state?.v3_runtime||null,merged={...context,...load};
   const firstV3=!previousRuntime,seeded=seedConversationStateV3({previousShadow:previousRuntime,canonicalState:firstV3?{}:load.semantic_state||{}});
+  const decisionStarted=performanceNow();
   const interpretation=await interpreter({context:merged,previousState:firstV3?null:seeded,now:at});const enriched={...merged,v3_fast_facts:arr(interpretation.fastFacts)};
   const episode=firstV3?{kind:'NEW_EPISODE',reason:'V3_ENGINE_CUTOVER',idle_ms:null,at:at.toISOString()}:classifyEpisodeBoundaryV3({previousState:seeded,canonicalState:load.semantic_state||{},proposal:interpretation.proposal,context:enriched,now:at});
   const base=episode.kind==='NEW_EPISODE'?freshConversationStateV3({context:enriched,at}):seeded;
   const understood=understandTurnV3({context:enriched,proposal:interpretation.proposal,previousState:base,now:at});
   const understanding=preserveUnmappedService(understood,interpretation.proposal);
   let {state,plan,response}=planConversationTurnV3({previousState:base,understanding,episode,context:enriched});const action=authorityAction({state,plan});
+  const decisionLatencyMs=Math.max(0,Number(performanceNow())-Number(decisionStarted));
   const projection=authorityProjection({load,state,plan,context:enriched,action,at,interpretation});
-  const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:projection,p_metrics:metricsFor({state,plan,action,interpretation,episode})});
+  const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:projection,p_metrics:metricsFor({state,plan,action,interpretation,episode,understanding,decisionLatencyMs})});
   const version=committed.version,guarded={...claim,semantic_version:version};
   const sendV3=async(v3Response,purpose,receipt=null)=>{assertFinalResponseSourceV3(v3Response);assertResponseGrounding(v3Response.text,receipt);await rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});const sent=await deliver(guarded,enriched,v3Response.text,purpose);log(logger,{event:'DABBIR_V3_OUTBOUND',engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,batch_id:claim.batch_id,semantic_version:version,provider_message_id:sent?.providerMessageId||null,action});return sent;};
   await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:enriched.business.id,p_conversation_id:enriched.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','REPLY'].includes(action)?'REPLY':action,p_intent:intentForGoal(state.goal),p_confidence:Math.max(.5,Number(interpretation?.proposal?.confidence)||0),p_risk_level:action==='CREATE_BOOKING'?'MEDIUM':'LOW',p_missing_fields:arr(plan.missing_fields),p_reason_code:`V3_${clean(plan.next_question?.purpose||action,80)}`}).catch(()=>null);
@@ -72,4 +76,4 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   await sendV3(response,action==='CLARIFY'?'v3-clarify':'v3-reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};
 }
 
-export const _v3RuntimeTest={authorityProjection,authorityAction,metricsFor,preserveUnmappedService};
+export const _v3RuntimeTest={authorityProjection,authorityAction,metricsFor,currentCorrectionCount,preserveUnmappedService};
