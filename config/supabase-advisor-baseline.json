@@ -1,45 +1,41 @@
 {
   "project_ref": "fphpoysqdsceniwduxjq",
-  "captured_at": "2026-09-09T05:51:50Z",
+  "captured_at": "2026-09-15T12:07:20Z",
   "policy": {
     "fail_on_new_warning_or_error": true,
     "fail_on_warning_or_error_count_increase": true,
-    "monitored_info_lints": [
-      "rls_enabled_no_policy",
-      "unindexed_foreign_keys"
-    ]
+    "monitored_info_lints": ["rls_enabled_no_policy", "unindexed_foreign_keys"]
   },
   "security": {
     "rls_enabled_no_policy": {
       "level": "INFO",
-      "count": 0
+      "count": 1,
+      "objects": ["public.dabbir_posthog_product_event_outbox_v1"]
     },
     "authenticated_security_definer_function_executable": {
       "level": "WARN",
-      "count": 7,
+      "count": 9,
       "objects": [
         "public.dabbir_activate_owner_policy",
         "public.dabbir_activity_profile_v1",
         "public.dabbir_activity_service_configure_v1",
         "public.dabbir_knowledge_propose_v2",
         "public.dabbir_knowledge_review_v2",
+        "public.dabbir_owner_activity_booking_v1",
+        "public.dabbir_owner_booking_locations_v1",
         "public.dabbir_owner_policy_candidates",
         "public.dabbir_set_owner_policy_state"
       ]
     }
   },
   "performance": {
-    "unindexed_foreign_keys": {
-      "level": "INFO",
-      "count": 26
-    },
-    "unused_index": {
-      "level": "INFO",
-      "count": 130
-    },
-    "auth_db_connections_absolute": {
-      "level": "INFO",
-      "count": 1
-    }
+    "unindexed_foreign_keys": {"level": "INFO", "count": 26},
+    "unused_index": {"level": "INFO", "count": 130},
+    "auth_db_connections_absolute": {"level": "INFO", "count": 1}
+  },
+  "reconciliation_notes": {
+    "dabbir_owner_activity_booking_v1": "Authenticated execution is intentional and internally gated by dabbir_private.activity_owner_authorized_v1 before quote or mutation; execution rechecks owner authority and uses idempotency/slot verification.",
+    "dabbir_owner_booking_locations_v1": "Authenticated execution is intentional and internally gated by dabbir_private.activity_owner_authorized_v1 plus customer/branch tenant scope checks.",
+    "dabbir_posthog_product_event_outbox_v1": "RLS-without-policy is intentional: table ACL is postgres/service_role only; authenticated/anon have no table privileges. RLS remains defense in depth."
   }
 }
