@@ -1,25 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, openSync, closeSync, writeFileSync, unlinkSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
-const gateVersion = 'v4-fail-closed';
-const rawSha = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local').trim();
-const rawDeploymentId = String(process.env.VERCEL_DEPLOYMENT_ID || `pid-${process.pid}`).trim();
-const safeSha = rawSha.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'local';
-const safeDeploymentId = rawDeploymentId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || `pid-${process.pid}`;
-const evidenceKey = `${safeDeploymentId}-${safeSha}`;
-const marker = path.join(os.tmpdir(), `dabbir-vercel-tests-passed-${evidenceKey}`);
-const lock = path.join(os.tmpdir(), `dabbir-vercel-tests-running-${evidenceKey}`);
-const maxWaitMs = 120000;
-const pollMs = 250;
+const gateVersion = 'v5-vercel-build-only';
 
-function sleep(milliseconds) {
-  const buffer = new SharedArrayBuffer(4);
-  Atomics.wait(new Int32Array(buffer), 0, 0, milliseconds);
-}
-
-function runNpm(args,label) {
+function runNpm(args, label) {
   console.log(`[dabbir-build-gate:${gateVersion}] ${label}`);
   const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
     stdio: 'inherit',
@@ -27,59 +10,21 @@ function runNpm(args,label) {
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    const error = new Error(`DABBIR_BUILD_GATE_${label.replace(/[^A-Z0-9]+/gi,'_').toUpperCase()}_FAILED_${result.status ?? 1}`);
+    const error = new Error(`DABBIR_BUILD_GATE_${label.replace(/[^A-Z0-9]+/gi, '_').toUpperCase()}_FAILED_${result.status ?? 1}`);
     error.exitCode = result.status ?? 1;
     throw error;
   }
 }
 
-function runTests() {
-  console.log(`[dabbir-build-gate:${gateVersion}] verifying deployment ${safeDeploymentId} commit ${safeSha}`);
-  runNpm(['run','check:syntax'],'syntax');
-  runNpm(['run','audit:prod'],'dependency-audit');
-  runNpm(['test'],'test-suite');
-  writeFileSync(marker, `${new Date().toISOString()}\n`, { encoding: 'utf8', mode: 0o600 });
-  console.log(`[dabbir-build-gate:${gateVersion}] verified deployment ${safeDeploymentId} commit ${safeSha}`);
-}
-
-if (existsSync(marker)) {
-  console.log(`[dabbir-build-gate:${gateVersion}] deployment ${safeDeploymentId} commit ${safeSha} already verified; skipping duplicate gate run`);
-  process.exit(0);
-}
-
-let lockFd = null;
+// GitHub DABBIR CI is the logical verification authority and already runs
+// check:syntax, audit:prod, and the full npm test suite. Vercel must not
+// duplicate those expensive checks for every intermediate preview commit.
+// Keep one lightweight build-environment sanity check here; the actual UI
+// bundle build runs immediately before this gate in `npm run dabbir:build`.
 try {
-  lockFd = openSync(lock, 'wx', 0o600);
+  runNpm(['run', 'check:syntax'], 'vercel-build-syntax');
+  console.log(`[dabbir-build-gate:${gateVersion}] Vercel build-environment verification passed`);
 } catch (error) {
-  if (error?.code !== 'EEXIST') throw error;
+  console.error(`[dabbir-build-gate:${gateVersion}] ${String(error?.message || error)}`);
+  process.exit(Number(error?.exitCode || 1));
 }
-
-if (lockFd !== null) {
-  let exitCode = 0;
-  try {
-    runTests();
-  } catch (error) {
-    exitCode = Number(error?.exitCode || 1);
-    console.error(`[dabbir-build-gate:${gateVersion}] ${String(error?.message || error)}`);
-  } finally {
-    closeSync(lockFd);
-    try { unlinkSync(lock); } catch {}
-  }
-  process.exit(exitCode);
-}
-
-const waitStarted = Date.now();
-while (Date.now() - waitStarted < maxWaitMs) {
-  if (existsSync(marker)) {
-    console.log(`[dabbir-build-gate:${gateVersion}] deployment ${safeDeploymentId} commit ${safeSha} verified by another invocation`);
-    process.exit(0);
-  }
-  if (!existsSync(lock)) {
-    console.error(`[dabbir-build-gate:${gateVersion}] verification lock disappeared without success evidence`);
-    process.exit(1);
-  }
-  sleep(pollMs);
-}
-
-console.error(`[dabbir-build-gate:${gateVersion}] timed out waiting for verified test evidence`);
-process.exit(1);
