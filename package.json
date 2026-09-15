@@ -7,7 +7,7 @@
     "test": "node --test test/*.test.mjs",
     "check:syntax": "git ls-files '*.js' '*.mjs' | xargs -r -n1 node --check",
     "audit:prod": "node scripts/audit-prod-retry.mjs",
-    "dabbir:build": "node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs",
+    "dabbir:build": "node scripts/dabbir-preview-privileged-env-guard.mjs && node scripts/build-dabbir-ui-bundles.mjs && node scripts/vercel-build-gate.mjs",
     "dev": "node --watch test/fixtures/owner-dashboard-server.mjs"
   },
   "dependencies": {
