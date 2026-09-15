@@ -43,10 +43,18 @@ test('psql meta commands are denied in migration source',()=>{
   assert.throws(()=>validateMigrationSql('select 1;\n  \\i evil.sql\n'),/PSQL_META_COMMAND_DENIED/);
 });
 
-test('migration deploy is push-to-main only and has no manual arbitrary-SQL entry point',()=>{
-  must(/name: DABBIR Migration Deploy/);
+test('migration workflow proves registration on pull requests while Production deploy remains push-main only',()=>{
+  must(/pull_request:\n\s+branches: \[main\]/);
+  must(/name: DABBIR Migration Source Contract/);
+  must(/if: github\.event_name == 'pull_request'/);
+  must(/node --test test\/dabbir-migration-deploy-workflow\.test\.mjs/);
   must(/push:\n\s+branches: \[main\]/);
+  must(/if: github\.event_name == 'push' && github\.repository == 'barman-systems\/pilot' && github\.ref == 'refs\/heads\/main'/);
   assert.doesNotMatch(workflow,/workflow_dispatch:/);
+});
+
+test('migration deploy has no manual arbitrary-SQL entry point',()=>{
+  must(/name: DABBIR Migration Deploy/);
   must(/environment: production/);
   must(/SUPABASE_DB_URL: \$\{\{ secrets\.SUPABASE_DB_URL \}\}/);
   assert.doesNotMatch(workflow,/SUPABASE_ACCESS_TOKEN|service_role|SUPABASE_SERVICE_ROLE_KEY|apply_migration/i);
