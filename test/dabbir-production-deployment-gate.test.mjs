@@ -25,11 +25,11 @@ test('GitHub CI owns syntax, dependency audit, and full logical tests', () => {
   assert.match(ci, /run: npm test/);
 });
 
-test('Vercel gate verifies build environment without duplicating the full logical suite', () => {
+test('Vercel gate verifies build environment without duplicating executable logical-suite commands', () => {
   assert.match(gate, /v5-vercel-build-only/);
-  assert.match(gate, /check:syntax/);
-  assert.doesNotMatch(gate, /audit:prod/);
-  assert.doesNotMatch(gate, /\['test'\]/);
+  assert.match(gate, /runNpm\(\['run', 'check:syntax'\], 'vercel-build-syntax'\)/);
+  assert.doesNotMatch(gate, /runNpm\(\['run',\s*'audit:prod'\]/);
+  assert.doesNotMatch(gate, /runNpm\(\['test'\]/);
   assert.match(gate, /DABBIR_BUILD_GATE_/);
 });
 
