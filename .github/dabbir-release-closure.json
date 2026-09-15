@@ -7,7 +7,7 @@
   "control_allowed_paths": [
     ".github/dabbir-release-closure.json",
     ".github/scripts/dabbir-release-closure-guard.mjs",
-    ".github/workflows/barman-independent-premerge-gate.yml",
+    ".github/workflows/dabbir-release-guardian.yml",
     "test/dabbir-release-closure-guard.test.mjs"
   ],
   "allowed_head_refs": [
