@@ -13,12 +13,12 @@ on:
         type: string
 
 # Trust boundary: this workflow is loaded from the protected base/default branch.
-# It never checks out or executes candidate code. It only verifies exact-SHA
-# results and publishes a status on that candidate SHA.
+# It never checks out or executes candidate code. During an active release closure
+# it also rejects and closes out-of-scope PRs before exact-SHA verification.
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
+  actions: write
+  pull-requests: write
   statuses: write
   id-token: write
 
@@ -41,6 +41,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Enforce active release-closure scope on every open PR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/dabbir-release-closure-guard.mjs
       - name: Invalidate previous pre-merge receipts after main changes
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -61,6 +65,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Enforce release-closure scope before candidate verification
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BARMAN_PREMERGE_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+        run: node .github/scripts/dabbir-release-closure-guard.mjs
       - name: Verify exact candidate with trusted base logic
         env:
           GITHUB_TOKEN: ${{ github.token }}
