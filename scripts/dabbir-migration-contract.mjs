@@ -93,9 +93,12 @@ export function validateMigrationPath(file,cutoverVersion){
   return {path:normalized,version,name};
 }
 
-export function validateMigrationFile(file,{cutoverVersion}={}){
-  const info=validateMigrationPath(String(file),cutoverVersion);
-  const sql=fs.readFileSync(file,'utf8');
+export function validateMigrationFile(file,{cutoverVersion,repositoryRoot=process.cwd()}={}){
+  const diskPath=path.resolve(String(file));
+  const contractPath=path.relative(path.resolve(repositoryRoot),diskPath).replace(/\\/g,'/');
+  if(contractPath.startsWith('../')||path.isAbsolute(contractPath))throw new Error('MIGRATION_OUTSIDE_REPOSITORY');
+  const info=validateMigrationPath(contractPath,cutoverVersion);
+  const sql=fs.readFileSync(diskPath,'utf8');
   return {...info,...validateMigrationSql(sql)};
 }
 
