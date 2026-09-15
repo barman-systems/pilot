@@ -11,6 +11,13 @@ const ALLOWED_ENTITY_FIELDS=new Set(['service','date','time','location','vehicle
 const ALLOWED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED','AI_INFERENCE']);
 const LIVE_MODES=new Set(['canary','active']);
 const READ_TYPES=new Set(['BUSINESS_HOURS','AVAILABILITY_DISCOVERY','SERVICE_PRICE','SERVICE_DURATION','SERVICE_MENU','UNKNOWN_READ']);
+const TIME_WINDOW_RANGES=Object.freeze({
+  EARLY_MORNING:{from:'05:00',to:'07:59'},
+  MORNING:{from:'08:00',to:'11:59'},
+  AFTERNOON:{from:'12:00',to:'16:59'},
+  EVENING:{from:'17:00',to:'20:59'},
+  NIGHT:{from:'21:00',to:'23:59'},
+});
 
 const factMap=state=>new Map(arr(state?.facts).filter(f=>f?.status==='VERIFIED'&&f.field).map(f=>[f.field,f]));
 const factValue=(state,field)=>factMap(state).get(field)?.value??null;
@@ -74,14 +81,21 @@ function businessHoursReply(context,language){
 }
 function businessLocalDate(at,timezone){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:timezone||'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(at).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}`;}catch{return at.toISOString().slice(0,10)}}
 function addCalendarDays(date,days){const d=new Date(`${date}T12:00:00Z`);if(Number.isNaN(d.getTime()))return date;d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
+function timeWindowRange(state){
+  const name=String(factValue(state,'time_window')||'').toUpperCase(),range=TIME_WINDOW_RANGES[name];
+  return range?{name,from:range.from,to:range.to}:null;
+}
+function slotMinute(slot){const match=String(slot?.local_start||'').match(/T(\d{2}):(\d{2})/);if(!match)return null;return Number(match[1])*60+Number(match[2]);}
+function rangeMinute(value){const match=String(value||'').match(/^(\d{2}):(\d{2})$/);return match?Number(match[1])*60+Number(match[2]):null;}
+function slotMatchesTimeWindow(slot,range){if(!range)return true;const minute=slotMinute(slot),from=rangeMinute(range.from),to=rangeMinute(range.to);return minute!=null&&from!=null&&to!=null&&minute>=from&&minute<=to;}
 async function discoverAvailability({rpc,state,context,at}){
   const serviceId=factValue(state,'service');if(!serviceId)return {slots:[],state:'NEED_GROUNDED_SERVICE'};
-  const workerId=factValue(state,'worker')||null,start=/^20\d{2}-\d{2}-\d{2}$/.test(String(factValue(state,'date')||''))?String(factValue(state,'date')):businessLocalDate(at,context?.business?.timezone);
+  const workerId=factValue(state,'worker')||null,start=/^20\d{2}-\d{2}-\d{2}$/.test(String(factValue(state,'date')||''))?String(factValue(state,'date')):businessLocalDate(at,context?.business?.timezone),range=timeWindowRange(state);
   for(let day=0;day<4;day++){
-    const date=addCalendarDays(start,day),raw=await rpc('dabbir_whatsapp_ai_find_available_options_v1',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:serviceId,p_worker_id:workerId,p_requested_date:date,p_from:null,p_to:null,p_max_candidates:12});
-    const future=arr(raw?.slots).filter(s=>Number.isFinite(Date.parse(s?.starts_at))&&Date.parse(s.starts_at)>at.getTime());if(future.length)return {slots:future,date,state:'OPTIONS_FOUND'};
+    const date=addCalendarDays(start,day),raw=await rpc('dabbir_whatsapp_ai_find_available_options_v1',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:serviceId,p_worker_id:workerId,p_requested_date:date,p_from:range?.from||null,p_to:range?.to||null,p_max_candidates:12});
+    const future=arr(raw?.slots).filter(s=>Number.isFinite(Date.parse(s?.starts_at))&&Date.parse(s.starts_at)>at.getTime()&&slotMatchesTimeWindow(s,range));if(future.length)return {slots:future,date,state:'OPTIONS_FOUND',time_window:range?.name||null,from:range?.from||null,to:range?.to||null};
   }
-  return {slots:[],date:start,state:'NO_OPTIONS'};
+  return {slots:[],date:start,state:'NO_OPTIONS',time_window:range?.name||null,from:range?.from||null,to:range?.to||null};
 }
 function serviceMenuReply(context,language){const rows=arr(context?.services).slice(0,10).filter(x=>x?.id);if(!rows.length)return language==='ar'?'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.':'No active services are available to show right now.';return language==='ar'?`الخدمات المتاحة: ${rows.map((x,i)=>`${i+1}) ${clean(x.name_ar||x.name||x.name_en,120)}${Number.isFinite(Number(x.price))?` — ${Number(x.price)} درهم`:''}`).join('، ')}.`:`Available services: ${rows.map((x,i)=>`${i+1}) ${clean(x.name_en||x.name||x.name_ar,120)}${Number.isFinite(Number(x.price))?` — ${Number(x.price)} ${clean(context?.business?.currency_code||'AED',8)}`:''}`).join(', ')}.`;}
 function metricsFor({state,plan,action,interpretation,episode,authority,deniedAction}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,message_role:interpretation?.proposal?.dialogue?.message_role||null,requested_action:interpretation?.proposal?.action||null,turn_disposition:plan.turn_disposition||'OPERATIONAL',read_intent:authority?.read||null,current_turn_authority:{goal_progress:authority?.goal_progress===true,slot_selected:authority?.slot_selected===true,explicit_mutation:authority?.explicit_mutation||null,evidence_source:authority?.evidence_source||'NONE'},proposed_but_denied:deniedAction||null,evidence_invalidations:arr(state.invalidations).map(x=>({field:x.field,reason:x.reason})),episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null};}
@@ -118,7 +132,7 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   if(readIntent==='AVAILABILITY_DISCOVERY'){
     const found=await discoverAvailability({rpc,state,context:enriched,at});let slots=[];
     if(found.slots.length)slots=verifiedAvailability({slots:found.slots},enriched,projection);
-    if(slots.length){const payload={activity_contract_version:projection.activity_contract_version,mode:'booking',slots,presented:false};await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:payload});response=brainResponseV3({text:slotsText(slots,projection.language,null),plan_id:`${state.episode_id}:availability-discovery`,metadata:{goal:state.goal,read_intent:readIntent,read_only:true}});const sent=await sendV3(response,'v3-availability-discovery');if(!sent?.providerMessageId)throw Object.assign(new Error('V3_PRESENTATION_UNVERIFIED'),{code:'V3_PRESENTATION_UNVERIFIED'});await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:{...payload,presented:true,provider_message_id:sent.providerMessageId}});}else{response=brainResponseV3({text:projection.language==='ar'?'ما حصلت مواعيد متاحة في الأيام القريبة.':'I could not find available appointments in the next few days.',plan_id:`${state.episode_id}:availability-discovery-empty`,metadata:{goal:state.goal,read_intent:readIntent,read_only:true}});await sendV3(response,'v3-availability-discovery-empty');}
+    if(slots.length){const payload={activity_contract_version:projection.activity_contract_version,mode:'booking',slots,presented:false};await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:payload});response=brainResponseV3({text:slotsText(slots,projection.language,null),plan_id:`${state.episode_id}:availability-discovery`,metadata:{goal:state.goal,read_intent:readIntent}});const sent=await sendV3(response,'v3-availability-discovery');if(!sent?.providerMessageId)throw Object.assign(new Error('V3_PRESENTATION_UNVERIFIED'),{code:'V3_PRESENTATION_UNVERIFIED'});await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:{...payload,presented:true,provider_message_id:sent.providerMessageId}});}else{response=brainResponseV3({text:projection.language==='ar'?'ما حصلت مواعيد متاحة في الأيام القريبة.':'I could not find available appointments in the next few days.',plan_id:`${state.episode_id}:availability-discovery-empty`,metadata:{goal:state.goal,read_intent:readIntent,read_only:true}});await sendV3(response,'v3-availability-discovery-empty');}
     await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY',read_intent:readIntent,slots:slots.length,engine:'V3',legacy_dialogue_called:false};
   }
   if(readIntent==='SERVICE_MENU'){
@@ -143,4 +157,4 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   await sendV3(response,action==='CLARIFY'?'v3-clarify':'v3-reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};
 }
 
-export const _v3RuntimeTest={authorityProjection,authorityAction,deriveCurrentTurnAuthority,inheritedOperationalAction,executableReadIntent,approvedKnowledge,businessHoursReply,discoverAvailability,metricsFor,preserveUnmappedService};
+export const _v3RuntimeTest={authorityProjection,authorityAction,deriveCurrentTurnAuthority,inheritedOperationalAction,executableReadIntent,approvedKnowledge,businessHoursReply,discoverAvailability,timeWindowRange,slotMatchesTimeWindow,metricsFor,preserveUnmappedService};
