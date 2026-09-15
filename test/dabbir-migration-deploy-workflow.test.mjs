@@ -5,7 +5,8 @@ import path from 'node:path';
 import {validateMigrationSql,validateMigrationFile} from '../scripts/dabbir-migration-contract.mjs';
 
 const root=path.resolve(import.meta.dirname,'..');
-const workflow=fs.readFileSync(path.join(root,'.github/workflows/dabbir-migration-deploy.yml'),'utf8');
+const workflowPath='.github/workflows/dabbir-migration-deploy.yml';
+const workflow=fs.readFileSync(path.join(root,workflowPath),'utf8');
 const must=(pattern,message)=>assert.match(workflow,pattern,message);
 
 const cutover='20260915124900';
@@ -49,6 +50,15 @@ test('migration deploy is push-to-main only and has no manual arbitrary-SQL entr
   must(/environment: production/);
   must(/SUPABASE_DB_URL: \$\{\{ secrets\.SUPABASE_DB_URL \}\}/);
   assert.doesNotMatch(workflow,/SUPABASE_ACCESS_TOKEN|service_role|SUPABASE_SERVICE_ROLE_KEY|apply_migration/i);
+});
+
+test('Production DB credential stays confined to recovery proof and canonical migration deploy',()=>{
+  const dir=path.join(root,'.github/workflows');
+  const users=fs.readdirSync(dir)
+    .filter(name=>/\.ya?ml$/.test(name))
+    .filter(name=>fs.readFileSync(path.join(dir,name),'utf8').includes('secrets.SUPABASE_DB_URL'))
+    .sort();
+  assert.deepEqual(users,['dabbir-migration-deploy.yml','dabbir-recovery-proof.yml']);
 });
 
 test('workflow proves merged PR, fresh base and exact candidate gates before database access',()=>{
