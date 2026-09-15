@@ -1,11 +1,19 @@
 name: DABBIR Migration Deploy
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/dabbir-migration-contract.mjs'
+      - 'test/dabbir-migration-deploy-workflow.test.mjs'
+      - '.github/workflows/dabbir-migration-deploy.yml'
   push:
     branches: [main]
     paths:
       - 'supabase/migrations/**'
       - 'scripts/dabbir-migration-contract.mjs'
+      - 'test/dabbir-migration-deploy-workflow.test.mjs'
       - '.github/workflows/dabbir-migration-deploy.yml'
 
 permissions:
@@ -15,7 +23,7 @@ permissions:
   statuses: read
 
 concurrency:
-  group: dabbir-migration-deploy-main
+  group: dabbir-migration-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -23,9 +31,40 @@ env:
   DABBIR_MIGRATION_CUTOVER_VERSION: '20260915124900'
 
 jobs:
+  validate:
+    name: DABBIR Migration Source Contract
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Use locked Node runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate workflow and migration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/dabbir-migration-contract.mjs
+          node --test test/dabbir-migration-deploy-workflow.test.mjs
+          count=0
+          while IFS= read -r file; do
+            base="${file##*/}"
+            if [[ ! "$base" =~ ^([0-9]{14})_ ]]; then continue; fi
+            [[ "${BASH_REMATCH[1]}" > "$DABBIR_MIGRATION_CUTOVER_VERSION" ]] || continue
+            node scripts/dabbir-migration-contract.mjs "$file" "$DABBIR_MIGRATION_CUTOVER_VERSION" >/dev/null
+            count=$((count+1))
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
+          (( count > 0 )) || { echo 'POST_CUTOVER_MANIFEST_EMPTY' >&2; exit 73; }
+          echo "validated_post_cutover_migrations=$count"
+
   deploy:
     name: DABBIR Migration Deploy
-    if: github.repository == 'barman-systems/pilot' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.repository == 'barman-systems/pilot' && github.ref == 'refs/heads/main'
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
