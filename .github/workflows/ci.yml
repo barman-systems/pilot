@@ -10,6 +10,7 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  statuses: read
 
 jobs:
   test:
@@ -68,3 +69,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/dabbir-required-pr-gates.mjs
+
+  migration-deploy:
+    name: DABBIR Migration Deploy
+    needs: test
+    if: github.event_name == 'push' && github.repository == 'barman-systems/pilot' && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact protected main commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use locked Node runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - name: Deploy reviewed migrations and prove exact Production drift
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DABBIR_PROJECT_REF: fphpoysqdsceniwduxjq
+          DABBIR_MIGRATION_CUTOVER_VERSION: '20260915124900'
+        run: bash scripts/dabbir-migration-deploy.sh
+      - name: Upload non-secret migration proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-migration-deploy-proof
+          path: |
+            migration-source-proof.txt
+            migration-drift-proof.txt
+            repo-migration-manifest.tsv
+          if-no-files-found: warn
+          retention-days: 14
