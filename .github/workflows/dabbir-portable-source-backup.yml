@@ -1,0 +1,54 @@
+name: DABBIR Portable Source Backup
+
+on:
+  push:
+    branches:
+      - 'ops/dabbir-full-backup-final-20260915-957d2cf'
+
+permissions:
+  contents: read
+
+env:
+  BACKUP_SOURCE_SHA: 957d2cf63707438af7a9502da593a288861edc8d
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Verify and archive exact main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          actual_main="$(git rev-parse origin/main)"
+          if [[ "$actual_main" != "$BACKUP_SOURCE_SHA" ]]; then
+            echo "Main moved after backup request. Refusing mixed-state backup." >&2
+            echo "expected=$BACKUP_SOURCE_SHA actual=$actual_main" >&2
+            exit 1
+          fi
+          mkdir -p backup
+          short_sha="${BACKUP_SOURCE_SHA:0:12}"
+          git archive --format=zip --prefix="pilot-main-${short_sha}/" --output="backup/pilot-main-${short_sha}.zip" "$BACKUP_SOURCE_SHA"
+          cat > "backup/PILOT-MANIFEST.txt" <<EOF
+          repository=barman-systems/pilot
+          source_sha=$BACKUP_SOURCE_SHA
+          created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          source_archive=pilot-main-${short_sha}.zip
+          live_secret_values_included=false
+          live_customer_database_rows_included=false
+          note=Portable current-main source snapshot. Git history is intentionally not embedded in this portable ZIP because historical audit findings may contain credential-like strings; repository history remains preserved in GitHub/internal disaster-recovery artifacts.
+          EOF
+          (cd backup && sha256sum pilot-main-${short_sha}.zip PILOT-MANIFEST.txt > SHA256SUMS.txt)
+      - name: Upload portable source backup
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-pilot-portable-source-957d2cf63707
+          path: backup/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
