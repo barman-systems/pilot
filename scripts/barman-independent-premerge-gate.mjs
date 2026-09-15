@@ -91,6 +91,21 @@ async function getPullRequestFiles(repository,number,token){
   return out;
 }
 
+async function getCurrentMainSha(repository,token){
+  const branch=await githubJson(repository,'/branches/main',token);
+  const sha=clean(branch?.commit?.sha).toLowerCase();
+  if(!/^[0-9a-f]{40}$/.test(sha))throw new Error('PREMERGE_CURRENT_MAIN_SHA_INVALID');
+  return sha;
+}
+
+async function assertCurrentMainMatchesBase({repository,token,baseSha,stage}){
+  const currentMainSha=await getCurrentMainSha(repository,token);
+  if(currentMainSha!==baseSha){
+    throw new Error(`PREMERGE_MAIN_MOVED_${clean(stage)||'UNKNOWN'}:${baseSha}:${currentMainSha}`);
+  }
+  return currentMainSha;
+}
+
 async function assertHeadContainsBase({repository,token,baseSha,headSha}){
   const result=await githubJson(repository,`/compare/${baseSha}...${headSha}`,token);
   const behind=Number(result?.behind_by??-1);
@@ -208,6 +223,7 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     if(finalIdentity.baseSha!==identity.baseSha)throw new Error('PREMERGE_BASE_CHANGED_DURING_VERIFY');
     if(finalIdentity.authorLogin!==identity.authorLogin)throw new Error('PREMERGE_AUTHOR_CHANGED_DURING_VERIFY');
     await assertHeadContainsBase({repository,token,baseSha:finalIdentity.baseSha,headSha:finalIdentity.headSha});
+    await assertCurrentMainMatchesBase({repository,token,baseSha:finalIdentity.baseSha,stage:'BEFORE_ATTESTATION'});
 
     const workflowEvidence=requiredWorkflowEvidence(passed);
     const attestation=await requirePromotionAttestation({
@@ -220,11 +236,22 @@ async function verifyPullRequest({repository,token,prNumber,targetUrl,pollMs,tim
     });
     console.log(`BARMAN_ATTESTATION_ENFORCED state=${attestation.state} blocks_merge=true sha=${identity.headSha} pr=${identity.number}`);
 
+    await assertCurrentMainMatchesBase({repository,token,baseSha:finalIdentity.baseSha,stage:'BEFORE_SUCCESS_STATUS'});
     await setStatus({
       repository,token,sha:identity.headSha,state:'success',
       description:`BARMAN exact-SHA attestation ${attestation.state}`,
       targetUrl,
     });
+    try{
+      await assertCurrentMainMatchesBase({repository,token,baseSha:finalIdentity.baseSha,stage:'AFTER_SUCCESS_STATUS'});
+    }catch(error){
+      await setStatus({
+        repository,token,sha:identity.headSha,state:'pending',
+        description:'main moved after attestation; re-run BARMAN required test',
+        targetUrl,
+      });
+      throw error;
+    }
     console.log(`BARMAN_REQUIRED_TEST_PASS pr=${identity.number} head=${identity.headSha} base=${identity.baseSha} attestation=${attestation.state}`);
     return {identity,files,attestation};
   }catch(error){
