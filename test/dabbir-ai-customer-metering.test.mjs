@@ -51,8 +51,6 @@ test('shared 429 cooldown skips a known-limited direct provider across instances
   assert.equal(firstGemini.retry_after_ms,60_000);
 
   calls.length=0;
-  // This second invocation represents another serverless instance: it owns no local Map,
-  // but sees the same distributed health store.
   const second=await generateDABBIRAiReply({project:'dabbir_businesses',message:'second',env,fetchImpl,providerHealthStore:sharedStore});
   assert.equal(second.ok,true);assert.equal(calls.some(x=>x.includes('generativelanguage.googleapis.com')),false);
   assert.deepEqual(second.telemetry.attempts.map(x=>`${x.provider}:${x.status}`),['groq:200']);
@@ -91,9 +89,11 @@ test('WhatsApp AI routes both legacy and V3 interpretation through the per-busin
   }
 });
 
-test('meter preserves paid fallback attribution while provider health belongs to the shared authority',()=>{
+test('meter preserves Gateway-primary and direct-recovery attribution while provider health belongs to the shared authority',()=>{
   assert.match(meter,/provider==='vercel-ai-gateway'/);
-  assert.match(meter,/PAID_FALLBACK/);
+  assert.match(meter,/GATEWAY_PRIMARY/);
+  assert.match(meter,/DIRECT_RECOVERY/);
+  assert.doesNotMatch(meter,/PAID_FALLBACK|FREE_FIRST_DIRECT/);
   assert.match(meter,/user:identity\.businessId/);
   assert.match(meter,/channel:whatsapp/);
   assert.match(meter,/dabbir_record_ai_usage_v1/);

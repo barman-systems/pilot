@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateDABBIRAiReply, getDABBIRAiConfig } from '../api/_ai-core.js';
 
-test('free Groq AI is fail-closed when key is missing outside Vercel', async () => {
+test('AI provider chain is fail-closed when no provider is configured outside Vercel', async () => {
   const config = getDABBIRAiConfig({});
   assert.equal(config.provider, 'groq');
   assert.equal(config.model, 'openai/gpt-oss-20b');
@@ -12,7 +12,7 @@ test('free Groq AI is fail-closed when key is missing outside Vercel', async () 
   const result = await generateDABBIRAiReply({ project: 'dabbir_clinics', message: 'أريد موعد غداً', env: {} });
   assert.equal(result.ok, false);
   assert.equal(result.state, 'UNCONFIGURED');
-  assert.equal(result.error, 'groq_api_key_missing');
+  assert.equal(result.error, 'ai_provider_unconfigured');
 });
 
 test('Vercel AI Gateway uses OIDC environment token when present', async () => {
@@ -78,7 +78,7 @@ test('Vercel Gateway fails closed when Project OIDC resolution returns no token'
   assert.equal(providerCalled, false);
 });
 
-test('free Groq AI uses configured model and returns provider output', async () => {
+test('free Groq AI uses configured model and returns provider output in direct-only mode', async () => {
   let request;
   const fakeFetch = async (url, options) => {
     request = { url, options, body: JSON.parse(options.body) };
