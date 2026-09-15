@@ -57,6 +57,16 @@ test('routing mutation guard rejects split readiness, credential recovery, Gemin
   assert.ok(errors.some(error=>/legacy credential-count redundancy authority/.test(error)),errors.join('\n'));
 });
 
+test('routing mutation guard rejects a duplicated Gemini recovery decision inside the runtime core',()=>{
+  const duplicated={
+    ...routingSources,
+    'api/_ai-core.js':routingSources['api/_ai-core.js']+"\nconst DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED='1';\nfunction geminiAutomaticRecoveryEnabled(){}\n",
+  };
+  const errors=validateRoutingAuthorityContract(registry,duplicated);
+  assert.ok(errors.some(error=>/Gemini recovery policy duplicated/.test(error)),errors.join('\n'));
+  assert.ok(errors.some(error=>/legacy local Gemini recovery decision reintroduced/.test(error)),errors.join('\n'));
+});
+
 test('mutation guard rejects a new direct model transport even when the endpoint is hidden behind a constant',()=>{
   const samples=[
     "const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions'; await fetch(GATEWAY_ENDPOINT,{method:'POST'});",
