@@ -1,0 +1,90 @@
+name: DABBIR V3 Reasoning Shadow Benchmark
+# Synthetic Preview-only measurement. Never promotes or mutates Production routing.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/v3-reasoning-shadow-benchmark-v1
+    paths:
+      - 'api/_dabbir-v3-reasoning-shadow-benchmark.js'
+      - 'api/dabbir-v3-reasoning-shadow-benchmark.js'
+      - 'api/_ai-provider-reliability.js'
+      - 'test/dabbir-v3-reasoning-shadow-benchmark.test.mjs'
+      - 'test/dabbir-v3-reasoning-shadow-headroom.test.mjs'
+      - 'test/dabbir-v3-reasoning-shadow-live.mjs'
+      - '.github/workflows/dabbir-v3-reasoning-shadow-benchmark.yml'
+
+concurrency:
+  group: dabbir-v3-reasoning-shadow-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  v3-reasoning-shadow:
+    name: Protected V3 reasoning synthetic benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      V3_REASONING_BENCHMARK_ORIGIN: https://dabbir-git-feat-v3-reasoning-s-f931f4-nd56cm4j5v-3619s-projects.vercel.app
+      EXPECTED_BENCHMARK_SHA: ${{ github.sha }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      V3_REASONING_BENCHMARK_REPORT_PATH: dabbir-v3-reasoning-shadow-benchmark.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Prepare protected preview access
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo 'V3_REASONING_BENCHMARK_PROTECTION=automation_bypass'
+            exit 0
+          fi
+          response="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}" || true)"
+          if [ "$status" != '200' ]; then
+            echo "TRUSTED_OIDC_REQUEST_FAILED_HTTP_${status:-000}"
+            exit 2
+          fi
+          token="$(jq -r '.value // empty' "$response")"
+          if [ -z "$token" ]; then
+            echo 'TRUSTED_OIDC_TOKEN_EMPTY'
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          echo "VERCEL_TRUSTED_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
+          echo 'V3_REASONING_BENCHMARK_PROTECTION=trusted_oidc'
+      - name: Run real V3 reasoning benchmark on protected preview
+        run: node test/dabbir-v3-reasoning-shadow-live.mjs
+      - name: Publish benchmark summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$V3_REASONING_BENCHMARK_REPORT_PATH" ]; then
+            echo '## DABBIR V3 Reasoning Shadow Benchmark' >> "$GITHUB_STEP_SUMMARY"
+            echo "**Expected SHA:** $EXPECTED_BENCHMARK_SHA" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Verdict:** $(jq -r '.verdict' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Cases:** $(jq -r '.result.cases // 0' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Model calls:** $(jq -r '.result.model_calls // 0' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Wrong mutations:** $(jq -r '.result.metrics.wrong_mutations // "unknown"' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Unsupported assumptions:** $(jq -r '.result.metrics.unsupported_assumptions // "unknown"' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Completion rate:** $(jq -r '.result.metrics.task_completion_rate // "unknown"' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**P95 latency ms:** $(jq -r '.result.metrics.p95_latency_ms // "unknown"' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Measured Gateway cost USD:** $(jq -r '.result.metrics.measured_gateway_cost_usd // "unknown"' "$V3_REASONING_BENCHMARK_REPORT_PATH")" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload V3 reasoning benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dabbir-v3-reasoning-shadow-benchmark-evidence
+          path: dabbir-v3-reasoning-shadow-benchmark.json
+          if-no-files-found: warn
+          retention-days: 7
