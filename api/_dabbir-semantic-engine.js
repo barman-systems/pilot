@@ -25,6 +25,11 @@ const BRAIN_CLARIFICATION_REASONS=new Set(['READ_SCOPE_UNRESOLVED','MISSING_OR_A
 const memoryKind=m=>String(m?.memory_key||'').replace(/^last_verified_|^preferred_|^known_|^usual_/,'');
 const activeEntity=(s,key)=>s?.entities?.[key]?.status==='active'?s.entities[key].value:null;
 const validPoint=p=>p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180;
+const ACRONYM_TOKEN_LETTERS=Object.freeze({
+  'اي':['a','e','i'],'ايه':['a'],'بي':['b','p'],'سي':['c'],'دي':['d'],'اف':['f'],'جي':['g'],'اتش':['h'],
+  'جاي':['j'],'كي':['k'],'ال':['l'],'ام':['m'],'ان':['n'],'او':['o'],'كيو':['q'],'ار':['r'],'اس':['s'],
+  'تي':['t'],'يو':['u'],'في':['v'],'دبليو':['w'],'اكس':['x'],'واي':['y'],'زي':['z'],'زد':['z'],
+});
 
 function ownSemanticRoute(result,context){
   if(!result?.decision)return result;
@@ -69,6 +74,68 @@ function replaceLatestBody(context,body){
 function onlyMemories(context,memories){
   return {...context,verified_memory:memories,activity_profile:context?.activity_profile?{...context.activity_profile,verified_memory:memories}:context?.activity_profile};
 }
+function scopedServices(context){
+  return arr(context?.services).filter(s=>(!s?.business_id||s.business_id===context?.business?.id)&&(!s?.branch_id||s.branch_id===context?.conversation?.branch_id));
+}
+function acronymNames(service){
+  return [service?.name,service?.name_ar,service?.name_en,service?.display_name]
+    .map(v=>String(v||'').trim().toLowerCase())
+    .filter(v=>/^[a-z]{2,6}$/.test(v));
+}
+function phoneticAcronymService(context,raw){
+  const tokens=normalizeSemanticText(raw).split(' ').filter(Boolean);
+  if(tokens.length<2)return null;
+  const matches=[];
+  for(const service of scopedServices(context)){
+    let hit=false;
+    for(const acronym of acronymNames(service)){
+      if(hit||acronym.length<2||acronym.length>tokens.length)continue;
+      for(let start=0;start<=tokens.length-acronym.length;start++){
+        const window=tokens.slice(start,start+acronym.length);
+        if(window.every((token,index)=>arr(ACRONYM_TOKEN_LETTERS[token]).includes(acronym[index]))){hit=true;break;}
+      }
+    }
+    if(hit)matches.push(service);
+  }
+  const unique=[...new Map(matches.filter(x=>x?.id).map(x=>[x.id,x])).values()];
+  return unique.length===1?unique[0]:null;
+}
+function localDateAt(now,timeZone){
+  return new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+}
+function localMinuteAt(now,timeZone){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now);
+  const hour=Number(parts.find(x=>x.type==='hour')?.value),minute=Number(parts.find(x=>x.type==='minute')?.value);
+  return Number.isFinite(hour)&&Number.isFinite(minute)?hour*60+minute:null;
+}
+function inferSafeTodayPeriod(raw,context,previous,now){
+  const text=normalizeSemanticText(raw),tz=context?.business?.timezone;
+  if(!tz||/(?:^|\s)(?:am|pm|ص|م|الصبح|صباح|صباحا|مساء|المسا|المغرب|الليل|العصر|morning|evening|afternoon|night)(?:\s|$)/.test(text))return null;
+  const clock=text.match(/(?:الساعه\s*|الساع\s*|at\s+)([1-9]|1[0-2])(?::([0-5]\d))?(?=\s|$)/);
+  if(!clock)return null;
+  let today,currentMinute;
+  try{today=localDateAt(now,tz);currentMinute=localMinuteAt(now,tz);}catch{return null;}
+  if(currentMinute==null)return null;
+  const explicitToday=/(?:^|\s)(?:اليوم|اباليوم|باليوم|today)(?:\s|$)/.test(text);
+  if(!explicitToday&&activeEntity(previous,'date')!==today)return null;
+  const hour=Number(clock[1]),minute=Number(clock[2]||0);
+  const amMinute=(hour%12)*60+minute,pmMinute=(hour%12+12)*60+minute;
+  // Only infer a period when one interpretation is already impossible today and
+  // the other is still in the future. Otherwise preserve explicit clarification.
+  return currentMinute>amMinute&&currentMinute<pmMinute?'pm':null;
+}
+function enrichOperationalContext(context,previous,now){
+  const messages=arr(context?.batch_messages);
+  if(!messages.length)return context;
+  const index=messages.length-1,last=messages[index],raw=String(last?.language_body??last?.body??'');
+  let next=last,changed=false;
+  const service=phoneticAcronymService(context,raw);
+  if(service?.id&&!last?.catalog_service_id){next={...next,catalog_service_id:service.id};changed=true;}
+  const inferredPeriod=inferSafeTodayPeriod(raw,context,previous,now);
+  if(inferredPeriod){const semanticBody=`${raw} ${inferredPeriod}`;next={...next,body:semanticBody,language_body:semanticBody};changed=true;}
+  if(!changed)return context;
+  return {...context,batch_messages:messages.map((m,i)=>i===index?next:m)};
+}
 function affirmative(text){
   return /^(?:نفس(?:هم|هما)?|نفس السياره(?: والموقع)?|نفس الموقع(?: والسياره)?|هيه|نعم|اي|تمام|ماشي|اوكي|yes|yeah|yep|ok|okay|same|same ones|correct)(?:\s|$)/.test(text);
 }
@@ -90,9 +157,11 @@ function sanitizeChange(raw){
   return cleaned||(ar?'بيانات جديدة':'new details');
 }
 
-export function understandLegacyConversation(args){
-  const now=args?.now||new Date();
-  const previous=args?.previous;
+export function understandLegacyConversation(inputArgs){
+  const now=inputArgs?.now||new Date();
+  const previous=inputArgs?.previous;
+  const enrichedContext=enrichOperationalContext(inputArgs?.context,previous,now);
+  const args=enrichedContext===inputArgs?.context?inputArgs:{...inputArgs,context:enrichedContext};
   const marker=previous?.repeat_vehicle_location_prompt;
 
   if(marker==='pending'){
@@ -135,7 +204,10 @@ export function understandLegacyConversation(args){
   return result;
 }
 
-export function understandConversation(args){
+export function understandConversation(inputArgs){
+  const now=inputArgs?.now||new Date();
+  const context=enrichOperationalContext(inputArgs?.context,inputArgs?.previous,now);
+  const args=context===inputArgs?.context?inputArgs:{...inputArgs,context};
   return runConversationBrain(args,understandLegacyConversation);
 }
 
