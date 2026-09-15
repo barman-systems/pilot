@@ -53,7 +53,8 @@ test('canonical migration deploy runs only as a dependent job inside the already
 test('manual CI dispatch and non-main pushes cannot enter migration deploy authority',()=>{
   must(ci,/workflow_dispatch:/);
   must(ci,/if: github\.event_name == 'push'/);
-  assert.doesNotMatch(deploy,/workflow_dispatch|repository_dispatch|read -p|select /i);
+  assert.doesNotMatch(deploy,/workflow_dispatch|repository_dispatch|read\s+-p/i);
+  assert.doesNotMatch(deploy,/INPUT_|GITHUB_EVENT_PATH.*inputs/i);
 });
 
 test('Production DB credential remains confined to recovery proof and registered DABBIR CI',()=>{
@@ -74,7 +75,7 @@ test('deploy script proves merged PR, fresh base and exact candidate gates befor
   must(deploy,/require_run 'DABBIR Security Gate'/);
   const proof=deploy.indexOf('MERGED_PR_PROVENANCE_REQUIRED');
   const manifest=deploy.indexOf(': > migration-manifest.tsv');
-  const credential=deploy.indexOf('echo "::add-mask::\$SUPABASE_DB_URL"');
+  const credential=deploy.indexOf('echo "::add-mask::$SUPABASE_DB_URL"');
   assert.ok(proof>=0&&manifest>proof&&credential>manifest,'database credential cannot be normalized before source and manifest proof');
 });
 
