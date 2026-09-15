@@ -7,7 +7,7 @@ const ACTIONS=['NONE','SERVICE_MENU','CHECK_AVAILABILITY','CREATE_BOOKING','CANC
 const TIME_WINDOWS=['EARLY_MORNING','MORNING','AFTERNOON','EVENING','NIGHT'];
 const ENTITIES=['vehicle','date','time','time_window','delivery_mode','property_details'];
 const INVALIDATIONS=['service','vehicle','date','time','time_window','immediacy','delivery_mode','property_details','location','slot'];
-const SIDE=['price','duration_minutes','availability'];
+const SIDE=['price','duration_minutes','availability','business_hours'];
 
 export const V3_SEMANTIC_JSON_SCHEMA=strictObject({
   intent:choice(INTENTS),role:choice(ROLES),confidence:{type:'number'},
@@ -27,7 +27,7 @@ For non-exact time language such as الصبح, أول الصباح, morning, af
 role describes the conversational role of the CURRENT message. A direct answer to the pending question remains ANSWER_TO_PENDING_QUESTION. A side question does not cancel an active booking. A correction invalidates only the corrected fact and dependent temporal facts. A complete independent request may be NEW_REQUEST or TOPIC_SWITCH.
 When a customer corrects an exact/now time to a time_window, mark the new entity correction=true and invalidate time, slot and immediacy. When a customer corrects to an exact time, invalidate time_window, slot and immediacy. When the date changes, invalidate slot and immediacy. Do not preserve NOW after a conflicting temporal correction.
 Use previous.last_operational_turn_at to distinguish a returning customer's fresh request from continuation of an old request; intervening greetings do not renew the old request. A greeting or social acknowledgement without request evidence is GREETING or SOCIAL with requested_action=NONE. If the same turn includes a request, retain its entities and side questions. Previous assistant wording is not customer evidence; the supplied reconciled state supersedes unsupported claims in assistant history.
-side_questions captures explicit price, duration or availability questions. requested_action is only the customer's semantic request, never execution authority. Never claim availability, booking completion, cancellation, payment, identity, policy or any external action. The application and database own all authority.
+side_questions captures explicit price, duration, availability or business-hours questions. A request asking what times or options are available without supplying a new desired time is an availability side question with requested_action=NONE. A question about when the business opens, closes, or its working hours is a business_hours side question with requested_action=NONE. These reads do not authorize inherited booking execution. requested_action is only the customer's semantic request, never execution authority. Never claim availability, booking completion, cancellation, payment, identity, policy or any external action. The application and database own all authority.
 Use confirmation true/false only when the current message clearly confirms or denies the immediately pending proposition; otherwise null. Never emit internal ids, coordinates, secrets or unsupported business facts.`;
 
 const finite01=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1;

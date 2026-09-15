@@ -9,7 +9,7 @@ const ROLES=new Set(['GREETING','NEW_REQUEST','ANSWER_TO_PENDING_QUESTION','CORR
 const ACTIONS=new Set(['NONE','SERVICE_MENU','CHECK_AVAILABILITY','CREATE_BOOKING','CANCEL_BOOKING','RESCHEDULE_BOOKING','HANDOFF']);
 const TIME_WINDOWS=new Set(['EARLY_MORNING','MORNING','AFTERNOON','EVENING','NIGHT']);
 const ENTITIES=new Set(['vehicle','date','time','time_window','delivery_mode','property_details']);
-const SIDE_QUESTIONS=new Set(['price','duration_minutes','availability']);
+const SIDE_QUESTIONS=new Set(['price','duration_minutes','availability','business_hours']);
 const CONFIRM_RE=/^(?:هي|هيه|ايوه|ايوا|نعم|تمام|صح|yes|yeah|yep|ok|okay|correct)$/i;
 const DENY_RE=/^(?:لا|مب|مو|لا لا|no|nope)$/i;
 const ORDINAL_RE=/^(?:الخيار\s*)?(\d{1,2})$/u;
@@ -47,7 +47,7 @@ function previousSummary(previousState){
 function activitySummary(context){return arr(context?.activity_profile?.services).slice(0,10).map(c=>({service_label:serviceLabel(scopedServices(context).find(s=>s.id===c.service_id)),delivery_modes:arr(c.delivery_modes),booking_model:c.booking_model||c.operating_model||null,entity_definitions:c.entity_definitions||{}}));}
 function providerContext(context,previousState,referenceTime){return {reference_time:referenceTime,business_timezone:context?.business?.timezone||'Asia/Dubai',activity_type:context?.business?.business_type||null,catalog:scopedServices(context).slice(0,10).map(s=>({label:serviceLabel(s),price:Number.isFinite(Number(s.price))?Number(s.price):null,duration_minutes:Number.isFinite(Number(s.duration_minutes??s.duration))?Number(s.duration_minutes??s.duration):null})),activity_contracts:activitySummary(context),previous:previousSummary(previousState)};}
 function roleHistory(context){return arr(context?.history||context?.recent_conversation).slice(-4).flatMap(item=>{const sender=String(item?.sender_type??item?.role??'').toLowerCase(),content=clean(item?.body??item?.content,500);if(!content)return[];return [{role:sender==='ai'||sender==='assistant'||sender==='human'?'assistant':'user',content}]});}
-function proposalBase({intent='BOOKING',role='ANSWER_TO_PENDING_QUESTION',confidence=1,serviceName=null,serviceSurface=null,serviceVerified=false,action='REPLY',invalidated_fields=[]}={}){return {intent,action,confidence,serviceName,serviceSurface,serviceVerified,entities:[],serviceQuestion:null,dialogue:{message_role:role,evidence:serviceSurface,invalidated_fields}};}
+function proposalBase({intent='BOOKING',role='ANSWER_TO_PENDING_QUESTION',confidence=1,serviceName=null,serviceSurface=null,serviceVerified=false,action='REPLY',invalidated_fields=[]}={}){return {intent,action,confidence,serviceName,serviceSurface,serviceVerified,entities:[],serviceQuestion:null,serviceQuestions:[],dialogue:{message_role:role,evidence:serviceSurface,invalidated_fields}};}
 function fastPath({context,previousState,raw}){
   const msg=currentMessage(context),trimmed=clean(raw,200),fastFacts=[];
   const receipt=arr(context?.location_receipts).find(r=>r?.message_id===msg?.id&&(!r?.business_id||r.business_id===context?.business?.id)&&(!r?.conversation_id||r.conversation_id===context?.conversation?.id));
@@ -103,9 +103,10 @@ export async function interpretConversationTurnV3({context,previousState=null,ge
   const entities=x.entities.map(e=>({entity:e.entity,value:e.value,evidence:e.surface,confidence:e.confidence,correction:e.correction}));
   const serviceQuestion=x.side_questions.find(q=>q.type==='price'||q.type==='duration_minutes')||null;
   const semanticServiceSurface=x.service_candidate?.label?x.service_candidate?.surface:null;
+  const serviceQuestions=x.side_questions.map(q=>({field:q.type,evidence:q.surface}));
   const proposal={intent:x.intent==='UNKNOWN'?'SUPPORT':x.intent,action:x.requested_action==='NONE'?'REPLY':x.requested_action,confidence:x.confidence,serviceName,serviceSurface:semanticServiceSurface,serviceCandidateLabel:x.service_candidate?.label||null,serviceVerified:false,entities,
-    serviceQuestion:serviceQuestion?{field:serviceQuestion.type,evidence:serviceQuestion.surface}:null,serviceQuestions:x.side_questions.map(q=>({field:q.type,evidence:q.surface})),dialogue:{message_role:x.role,evidence:clean(raw,300),invalidated_fields:x.invalidated_fields},requestSpans:[],contextReference:null};
-  return {proposal,fastFacts:fast.fastFacts,provider:result.provider,model:result.model,telemetry:result.telemetry||null,raw_interpretation:{intent:x.intent,role:x.role,service_candidate_label:x.service_candidate?.label||null,requested_action:x.requested_action}};
+    serviceQuestion:serviceQuestion?{field:serviceQuestion.type,evidence:serviceQuestion.surface}:null,serviceQuestions,dialogue:{message_role:x.role,evidence:clean(raw,300),invalidated_fields:x.invalidated_fields},requestSpans:[],contextReference:null};
+  return {proposal,fastFacts:fast.fastFacts,provider:result.provider,model:result.model,telemetry:result.telemetry||null,raw_interpretation:{intent:x.intent,role:x.role,service_candidate_label:x.service_candidate?.label||null,requested_action:x.requested_action,side_questions:x.side_questions.map(q=>q.type)}};
 }
 
 export const _v3InterpreterTest={norm,serviceByLabel,serviceExactFromMessage,normalizeModelContract,validModelContract,fastPath,providerContext,v3SemanticEnv,v3GatewayStructuredOptions,createV3ProviderFetch,V3_PROVIDER_MAX_REQUESTS,V3_GATEWAY_MODEL};
