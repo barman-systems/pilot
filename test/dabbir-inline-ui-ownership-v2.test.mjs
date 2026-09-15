@@ -19,10 +19,11 @@ test('duplicate legacy businessAdaptive UI layer cannot return',()=>{
   assert.doesNotMatch(app,/workspace\.followups\|\|\[\]\)\.length/,'bounded followup arrays must not become owner KPI truth');
 });
 
-test('app transformer only injects the three remaining inline runtime layers',()=>{
+test('app transformer injects only runtime shell and truth layers; chat sending has one external authority',()=>{
   assert.match(app,/html = html\.replace\('<\/body>', `\$\{interfacePerformanceUi\}/);
-  assert.match(app,/\$\{conversationPerformanceUi\}/);
   assert.match(app,/\$\{truthVisibilityUi\}/);
+  assert.doesNotMatch(app,/conversationPerformanceUi/);
+  assert.doesNotMatch(app,/fastSendMessage|sendWebConversation|sendApprovedWhatsAppReply/);
   assert.doesNotMatch(app,/`\$\{businessAdaptiveUi\}/);
 });
 
