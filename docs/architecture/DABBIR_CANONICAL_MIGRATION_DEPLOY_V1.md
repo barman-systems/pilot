@@ -2,18 +2,22 @@
 
 ## Purpose
 
-DABBIR Production migrations must have one ordinary deployment path:
+DABBIR Production migrations have one ordinary deployment path:
 
 ```text
 reviewed PR
   -> required exact-head gates
   -> squash merge to protected main
-  -> fixed GitHub Actions workflow
+  -> registered DABBIR CI
+  -> migration-deploy job after CI success
+  -> fixed scripts/dabbir-migration-deploy.sh
   -> existing Production database credential
   -> one atomic migration transaction
   -> schema_migrations exact-source provenance
   -> post-deploy content drift proof
 ```
+
+The earlier standalone `dabbir-migration-deploy.yml` experiment was retired because GitHub did not register/execute that new workflow reliably. Migration authority is deliberately embedded in the already-established `DABBIR CI` workflow instead of maintaining a second workflow authority.
 
 This does not add a new database credential, service, server, broker, agent, or paid dependency. It constrains the existing `SUPABASE_DB_URL` already used by the protected Production recovery workflow.
 
@@ -25,7 +29,7 @@ Canonical post-cutover versions are strictly greater than:
 20260915124900
 ```
 
-At cutover, Production had no `schema_migrations` rows at or above this boundary. The first canonical run therefore reconciles already-merged post-cutover migration files, including Episode Correlation Authority V1, instead of requiring a manual SQL application.
+At cutover, Production had no `schema_migrations` rows at or above this boundary. The first canonical CI run therefore reconciles already-merged post-cutover migration files, including Episode Correlation Authority V1, instead of requiring a manual SQL application.
 
 ## Source authority
 
@@ -33,13 +37,16 @@ A deployment is eligible only when all are true:
 
 - repository is exactly `barman-systems/pilot`;
 - event is a push to `refs/heads/main`;
+- the `DABBIR CI` test job for that push completed successfully because migration deploy has `needs: test`;
 - checked-out HEAD equals `GITHUB_SHA`;
 - the main commit maps to exactly one merged PR;
 - the squash commit's sole parent equals that PR's base SHA;
 - the PR head has latest `test=success` and `Vercel=success` statuses;
 - `DABBIR CI` and `DABBIR Security Gate` completed successfully for the exact PR head.
 
-The database credential is not normalized or used before this proof succeeds.
+`workflow_dispatch` may run ordinary CI tests, but the migration job is explicitly restricted to `event_name=push` on protected `main`, so manual CI dispatch cannot enter migration authority.
+
+The Production DB secret appears only in the migration-deploy step. It is unavailable to PR validation and ordinary CI test steps.
 
 ## Migration source contract
 
@@ -57,7 +64,7 @@ PL/pgSQL function bodies may contain their own `BEGIN/END`; the source guard tok
 
 ## Atomic application
 
-For each missing version, the workflow:
+For each missing version, the CI deploy script:
 
 1. takes a transaction-scoped advisory lock for the version;
 2. rechecks the version does not already exist;
@@ -74,9 +81,9 @@ Any error rolls back both schema changes and provenance registration.
 
 ## Drift proof
 
-Every run builds a manifest from **all** Git migration files after cutover, not only the current diff.
+Every main CI migration run builds a manifest from **all** Git migration files after cutover, not only the current diff.
 
-Production must contain exactly the same set of versions. For each row the workflow compares:
+Production must contain exactly the same set of versions. For each row the deployer compares:
 
 - migration name,
 - content-addressed idempotency key,
@@ -86,22 +93,23 @@ Production must contain exactly the same set of versions. For each row the workf
 
 The SHA calculations are server-side using installed `pgcrypto`. A name-only match is insufficient.
 
-Any missing, extra, mismatched, or unattributed Production row makes the workflow fail.
+Any missing, extra, mismatched, or unattributed Production row makes the CI migration job fail.
 
 ## Ordinary vs break-glass authority
 
-This workflow is the ordinary migration channel. It does **not** claim that a database owner can be made technically incapable of emergency administration.
+This CI job is the ordinary migration channel. It does **not** claim that a database owner can be made technically incapable of emergency administration.
 
-Raw Production SQL through ChatGPT/MCP/SQL Editor is not an ordinary deployment path. Emergency break-glass remains a separate governance problem and must not be emulated by this workflow through free-form inputs.
+Raw Production SQL through ChatGPT/MCP/SQL Editor is not an ordinary deployment path. Emergency break-glass remains separate and must not be emulated through free-form workflow inputs.
 
-Accordingly the deploy workflow deliberately has:
+Accordingly the deployment path deliberately has:
 
-- no `workflow_dispatch` SQL input;
-- no arbitrary command input;
-- no Supabase Management API token;
+- no arbitrary SQL input;
+- no migration selector input;
+- no Supabase Management API token in the deploy script;
 - no service-role key;
+- no standalone migration workflow authority;
 - no mechanism to select a migration outside the reviewed Git manifest.
 
 ## Cost
 
-No new paid service or subscription is introduced by this design. It uses GitHub Actions, the existing Production environment secret, PostgreSQL, and pgcrypto already present in the current system.
+No new paid service or subscription is introduced. The design uses the existing GitHub Actions CI, the existing Production environment secret, PostgreSQL, Docker tooling already used by Recovery Proof, and pgcrypto already present in Production.
