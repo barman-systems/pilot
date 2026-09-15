@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -65,8 +63,3 @@ jobs:
           test "${#files[@]}" -gt 0
           printf 'DABBIR_INTELLIGENCE_TEST_FILES=%s\n' "${#files[@]}"
           node --test "${files[@]}"
-      - name: Bootstrap old security gate for this cutover only
-        if: github.event_name == 'pull_request'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/dabbir-required-pr-gates.mjs
