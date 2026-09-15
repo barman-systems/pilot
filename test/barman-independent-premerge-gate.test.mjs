@@ -87,13 +87,27 @@ test('trust-root changes use trusted actor authority without owner bottleneck',(
   assert.match(script,/PREMERGE_TRUST_ROOT_ACTOR_DENIED/);
 });
 
-test('gate binds current base and exact head and invalidates when main moves',()=>{
+test('gate binds current base and exact head and closes main-movement races around attestation',()=>{
   assert.match(script,/\/compare\/\$\{baseSha\}\.\.\.\$\{headSha\}/);
+  assert.match(script,/\/branches\/main/);
   assert.match(script,/behind_by/);
   assert.match(script,/PREMERGE_HEAD_BEHIND_BASE/);
   assert.match(script,/PREMERGE_HEAD_CHANGED_DURING_VERIFY/);
   assert.match(script,/PREMERGE_BASE_CHANGED_DURING_VERIFY/);
   assert.match(script,/PREMERGE_AUTHOR_CHANGED_DURING_VERIFY/);
+  assert.match(script,/PREMERGE_CURRENT_MAIN_SHA_INVALID/);
+  assert.match(script,/PREMERGE_MAIN_MOVED_\$\{clean\(stage\)/);
+  for(const stage of ['BEFORE_ATTESTATION','BEFORE_SUCCESS_STATUS','AFTER_SUCCESS_STATUS']){
+    assert.match(script,new RegExp(`stage:'${stage}'`));
+  }
+  const beforeAttest=script.indexOf("stage:'BEFORE_ATTESTATION'");
+  const attest=script.indexOf('const attestation=await requirePromotionAttestation');
+  const beforeSuccess=script.indexOf("stage:'BEFORE_SUCCESS_STATUS'");
+  const success=script.indexOf("state:'success'",beforeSuccess);
+  const afterSuccess=script.indexOf("stage:'AFTER_SUCCESS_STATUS'");
+  assert.ok(beforeAttest>0&&beforeAttest<attest);
+  assert.ok(attest<beforeSuccess&&beforeSuccess<success&&success<afterSuccess);
+  assert.match(script,/main moved after attestation; re-run BARMAN required test/);
   assert.match(script,/main changed; update branch and re-run BARMAN required test/);
 });
 
@@ -122,8 +136,9 @@ test('promotion attestation is hard, OIDC-authenticated, exact-SHA and fail-clos
   let calls=0;
   const requiredWorkflows=[
     {name:'DABBIR CI',run_id:'11',conclusion:'success',head_sha:shaB},
-    {name:'DABBIR Security Gate',run_id:'12',conclusion:'success',head_sha:shaB},
+    {name:'DABBIR Security Gate',{id:12,conclusion:'success',head_sha:shaB}],
   ];
+  requiredWorkflows[1]={name:'DABBIR Security Gate',run_id:'12',conclusion:'success',head_sha:shaB};
   const result=await requirePromotionAttestation({
     repository:'barman-systems/pilot',prNumber:755,headSha:shaB,baseSha:shaA,requiredWorkflows,protectedPaths:['.github/workflows/ci.yml'],
     env:{ACTIONS_ID_TOKEN_REQUEST_URL:'https://oidc.example/token',ACTIONS_ID_TOKEN_REQUEST_TOKEN:'req'},
