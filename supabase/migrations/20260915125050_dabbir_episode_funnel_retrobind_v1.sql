@@ -1,7 +1,9 @@
 -- DABBIR Episode Correlation Authority V1 — action-to-funnel retro-bind
--- Appointment INSERT happens before the booking action-ledger INSERT. Once the
--- authoritative AI action exists and its episode is bound, repair any earlier
--- appointment/payment funnel evidence for that same appointment.
+-- Appointment INSERT happens before the booking.create action-ledger INSERT.
+-- Once that authoritative AI creation action exists and its episode is bound,
+-- repair any earlier appointment/payment funnel evidence for the same appointment.
+-- Reschedule/cancel actions intentionally do not claim the appointment's original
+-- creation evidence; their own action funnel event carries their episode.
 
 create or replace function dabbir_private.propagate_action_episode_to_funnel_v1()
 returns trigger
@@ -11,7 +13,7 @@ set search_path=''
 as $$
 begin
   if new.episode_id is null or new.entity_id is null then return new; end if;
-  if new.operation_type not in ('booking.create','booking.reschedule','booking.cancel') then return new; end if;
+  if new.operation_type<>'booking.create' then return new; end if;
 
   update public.dabbir_ai_booking_funnel_events f
   set episode_id=new.episode_id
