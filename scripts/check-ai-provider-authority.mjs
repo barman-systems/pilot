@@ -88,7 +88,7 @@ export function validateRoutingAuthorityContract(registry={},sources={}){
   const readinessSource=String(sources[readinessAuthority]||'');
   if(!readinessSource)errors.push(`${readinessAuthority||'routing readiness authority'}: missing protected source`);
   else{
-    for(const marker of ['providerRoutingReadiness','configuredAutomaticRecoveryProviders','configuredDiagnosticDirectProviders','DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED']){
+    for(const marker of ['providerRoutingReadiness','configuredAutomaticRecoveryProviders','configuredDiagnosticDirectProviders','geminiAutomaticGenerationRecoveryEnabled','gatewayPrimaryConfigured','DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED','return !gatewayPrimaryConfigured(env);']){
       if(!readinessSource.includes(marker))errors.push(`${readinessAuthority}: missing routing contract marker ${marker}`);
     }
   }
@@ -96,9 +96,11 @@ export function validateRoutingAuthorityContract(registry={},sources={}){
   const coreSource=String(sources['api/_ai-core.js']||'');
   if(!coreSource)errors.push('api/_ai-core.js: missing protected source');
   else{
-    for(const marker of ['geminiAutomaticRecoveryEnabled','DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED','delete recoveryEnv.GEMINI_API_KEY']){
-      if(!coreSource.includes(marker))errors.push(`api/_ai-core.js: missing automatic recovery retirement marker ${marker}`);
+    for(const marker of ['geminiAutomaticGenerationRecoveryEnabled',"from './_ai-provider-readiness.js'",'delete recoveryEnv.GEMINI_API_KEY']){
+      if(!coreSource.includes(marker))errors.push(`api/_ai-core.js: missing automatic recovery authority marker ${marker}`);
     }
+    if(coreSource.includes('DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED'))errors.push('api/_ai-core.js: Gemini recovery policy duplicated outside routing readiness authority');
+    if(/function\s+geminiAutomaticRecoveryEnabled\s*\(/.test(coreSource))errors.push('api/_ai-core.js: legacy local Gemini recovery decision reintroduced');
   }
 
   const publicReadinessSource=String(sources['api/dabbir-ai.js']||'');
