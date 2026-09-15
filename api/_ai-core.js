@@ -34,6 +34,10 @@ function gatewayConfigured(env = process.env) {
   return Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
 }
 
+function geminiAutomaticRecoveryEnabled(env = process.env) {
+  return String(env.DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED ?? '1').trim() !== '0';
+}
+
 function gatewayConfig(env = process.env) {
   const gatewayCredential = String(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN || '');
   return {
@@ -349,16 +353,19 @@ async function generateDABBIRAiReplyInternal({ project, message, language = 'aut
       }
     }
 
-    const directRecoveryReady = Boolean(geminiKey || groqKey || cloudflareReady);
+    const geminiRecoveryEnabled=geminiAutomaticRecoveryEnabled(env);
+    const directRecoveryReady = Boolean((geminiRecoveryEnabled && geminiKey) || groqKey || cloudflareReady);
     if (directRecoveryReady && budgetRemaining(reliability) > 150) {
       console.warn('dabbir_ai_gateway_primary_recovery_pool',{reason:result.error,status:result.status||null,model:result.model||config.model});
-      const {
-        VERCEL_ENV: _vercelEnv,
-        AI_GATEWAY_API_KEY: _gatewayKey,
-        VERCEL_OIDC_TOKEN: _oidcToken,
-        DABBIR_AI_GATEWAY_MODEL: _gatewayModel,
-        ...recoveryEnv
-      } = env;
+      const recoveryEnv={...env};
+      delete recoveryEnv.VERCEL_ENV;
+      delete recoveryEnv.AI_GATEWAY_API_KEY;
+      delete recoveryEnv.VERCEL_OIDC_TOKEN;
+      delete recoveryEnv.DABBIR_AI_GATEWAY_MODEL;
+      if(!geminiRecoveryEnabled){
+        delete recoveryEnv.GEMINI_API_KEY;
+        delete recoveryEnv.DABBIR_GEMINI_MODEL;
+      }
       return generateDABBIRAiReplyInternal({
         project: normalizedProject,
         message: input,

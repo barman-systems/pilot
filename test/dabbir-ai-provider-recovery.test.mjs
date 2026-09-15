@@ -51,7 +51,7 @@ test('two concurrent background probes share one lease and only one reaches the 
   assert.equal(JSON.stringify({a,b,seen}).includes('secret-test-key'),false);
 });
 
-test('configured targets use the same provider models and auth boundaries without exposing them in worker result',async()=>{
+test('automatic recovery targets exclude Gemini generation while preserving other auth boundaries',async()=>{
   const env={
     GEMINI_API_KEY:'gemini-secret',DABBIR_GEMINI_MODEL:'gemini-3.7-flash',
     GROQ_API_KEY:'groq-secret',DABBIR_GROQ_MODEL:'openai/gpt-oss-20b',
@@ -59,8 +59,9 @@ test('configured targets use the same provider models and auth boundaries withou
     VERCEL_ENV:'production',DABBIR_AI_GATEWAY_MODEL:'google/gemini-3.7-flash',
   };
   const targets=await configuredRecoveryTargets(env,{oidcGetter:async()=> 'gateway-secret'});
-  assert.deepEqual(targets.map(item=>item.provider),['google-gemini','groq','cloudflare-workers-ai','vercel-ai-gateway']);
-  assert.deepEqual(targets.map(item=>item.model),['gemini-3.7-flash','openai/gpt-oss-20b','@cf/zai-org/glm-4.7-flash','google/gemini-3.7-flash']);
+  assert.deepEqual(targets.map(item=>item.provider),['groq','cloudflare-workers-ai','vercel-ai-gateway']);
+  assert.deepEqual(targets.map(item=>item.model),['openai/gpt-oss-20b','@cf/zai-org/glm-4.7-flash','google/gemini-3.7-flash']);
+  assert.equal(targets.some(item=>item.provider==='google-gemini'),false);
 
   const healthStore={
     async claim(provider,model,attemptType){return {decision:'SKIP',reason:'HEALTHY',health_state:'SHARED',recovery_state:'HEALTHY',scope:'model',provider,model,attemptType}},
@@ -68,7 +69,7 @@ test('configured targets use the same provider models and auth boundaries withou
   };
   const result=await runAiProviderRecovery({env,healthStore,oidcGetter:async()=> 'gateway-secret',fetchImpl:async()=>{throw new Error('unexpected provider call')}});
   assert.equal(result.network_probes,0);
-  assert.equal(result.skipped,4);
+  assert.equal(result.skipped,3);
   const serialized=JSON.stringify(result);
   for(const secret of ['gemini-secret','groq-secret','cf-secret','gateway-secret'])assert.equal(serialized.includes(secret),false);
 });
