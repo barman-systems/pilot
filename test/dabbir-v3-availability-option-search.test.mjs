@@ -15,7 +15,7 @@ test('broad availability migration satisfies canonical deploy contract',()=>{
 test('broad search is read-only service-role authority and reuses existing availability truth',()=>{
   assert.match(sql,/create or replace function public\.dabbir_whatsapp_ai_find_available_options_v1/);
   assert.match(sql,/public\.dabbir_whatsapp_ai_check_availability\(/);
-  assert.match(sql,/coalesce\(auth\.role\(\),' '\)<>/); // structural service-role check is present; exact whitespace is irrelevant
+  assert.match(sql,/coalesce\(auth\.role\(\),''\)<>'service_role'/);
   assert.match(sql,/grant execute on function public\.dabbir_whatsapp_ai_find_available_options_v1[\s\S]+to service_role/);
   assert.doesNotMatch(sql,/insert\s+into\s+public\.dabbir_appointments|update\s+public\.dabbir_appointments|delete\s+from\s+public\.dabbir_appointments/i);
 });
