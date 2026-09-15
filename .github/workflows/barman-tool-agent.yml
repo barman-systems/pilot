@@ -1,45 +1,15 @@
-name: BARMAN Persistent Tool Agent
+name: BARMAN Tool Agent
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  schedule:
-    - cron: '*/5 * * * *'
 
-# P0 trust-order containment.
-# The executor remains intentionally disabled until an independent pre-merge
-# gate is implemented and enforced before any merge-capable path.
+# Frozen by owner directive on 2026-09-15. No automatic tool/governance agent
+# activity while DABBIR development is intelligence/product-only.
 permissions:
   contents: read
-  pull-requests: read
-  actions: read
-  checks: read
-
-concurrency:
-  group: barman-persistent-tool-agent
-  cancel-in-progress: false
 
 jobs:
-  execute:
-    if: ${{ false }}
+  frozen:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          package-manager-cache: false
-      - name: Wait for exact Production broker on push wake-up
-        if: github.event_name == 'push'
-        env:
-          BARMAN_EXPECTED_SHA: ${{ github.sha }}
-        run: node scripts/wait-dabbir-production-sha.mjs
-      - name: Execute one BARMAN tool-agent command
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node --import=./scripts/barman-git-apply-normalizer.mjs scripts/barman-tool-agent.mjs
+      - run: echo 'BARMAN Tool Agent automation is frozen.'
