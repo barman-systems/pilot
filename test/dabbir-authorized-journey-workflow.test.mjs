@@ -7,6 +7,7 @@ const OWNER_AWAY_WORKFLOW = '.github/workflows/dabbir-owner-away-production.yml'
 const UNAUTHORIZED_DUPLICATE = '.github/workflows/dabbir-protected-full-customer-journey.yml';
 const BROKER = 'supabase/functions/barman-qa-suite-runner/index.ts';
 const ISOLATION_JOURNEY = 'test/dabbir-cross-tenant-isolation.mjs';
+const EVIDENCE_SECRET_GATE = 'scripts/dabbir-evidence-secret-gate.mjs';
 
 function read(path) {
   return fs.readFileSync(path, 'utf8');
@@ -69,6 +70,22 @@ test('canonical release journey permanently gates tenant and WhatsApp cross-tena
   assert.match(isolation, /NO_TENANT_SELECTED/);
   assert.match(isolation, /BUSINESS_ACCESS_REQUIRED/);
   assert.match(isolation, /dabbir_ai_qa_cleanup/);
+});
+
+test('journey artifacts cannot upload before the secret-free evidence gate succeeds', () => {
+  const workflow = read(AUTHORIZED_WORKFLOW);
+  const gate = read(EVIDENCE_SECRET_GATE);
+  const gateIndex = workflow.indexOf('Gate full journey evidence against secret persistence');
+  const uploadIndex = workflow.indexOf('Upload full journey evidence');
+  assert.ok(gateIndex >= 0 && uploadIndex > gateIndex);
+  assert.match(workflow, /id: evidence-secret-gate/);
+  assert.match(workflow, /steps\.evidence-secret-gate\.outcome == 'success'/);
+  assert.match(workflow, /dabbir-evidence-secret-gate\.mjs/);
+  assert.match(workflow, /Gate AI capacity evidence against secret persistence/);
+  assert.match(workflow, /Gate runtime capacity evidence against secret persistence/);
+  assert.match(gate, /forbidden_json_key/);
+  assert.match(gate, /qa_password/);
+  assert.match(gate, /otp_uri/);
 });
 
 test('duplicate privileged workflow is removed so it cannot request a broker-denied OIDC identity', () => {
