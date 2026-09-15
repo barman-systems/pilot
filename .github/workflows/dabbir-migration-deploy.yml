@@ -137,6 +137,9 @@ jobs:
           count=0
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
+            base="${file##*/}"
+            if [[ ! "$base" =~ ^([0-9]{14})_ ]]; then continue; fi
+            [[ "${BASH_REMATCH[1]}" > "$DABBIR_MIGRATION_CUTOVER_VERSION" ]] || continue
             meta="$(node scripts/dabbir-migration-contract.mjs "$file" "$DABBIR_MIGRATION_CUTOVER_VERSION")"
             version="$(jq -er '.version' <<<"$meta")"
             name="$(jq -er '.name' <<<"$meta")"
@@ -146,13 +149,7 @@ jobs:
             printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$version" "$name" "$idem" "$sha256" "$blob" "$file" >> migration-manifest.tsv
             count=$((count+1))
             (( count <= 500 )) || { echo 'POST_CUTOVER_MANIFEST_TOO_LARGE' >&2; exit 69; }
-          done < <(
-            find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print \
-              | awk -F/ -v c="$DABBIR_MIGRATION_CUTOVER_VERSION" '
-                  match($NF,/^([0-9]{14})_/,m) && m[1] > c {print}
-                ' \
-              | sort
-          )
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
           test -s migration-manifest.tsv || { echo 'POST_CUTOVER_MANIFEST_EMPTY' >&2; exit 70; }
           sort -o migration-manifest.tsv migration-manifest.tsv
           echo "manifest_count=$count"
@@ -168,13 +165,13 @@ jobs:
             docker run --rm \
               -e DATABASE_URL -e PGAPPNAME \
               postgres:17 \
-              sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "\t" -c "$1"' sh "$query"
+              sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "|" -c "$1"' sh "$query"
           }
 
           while IFS=$'\t' read -r version name idem sha256 blob file; do
             existing="$(psql_query "select name,coalesce(idempotency_key,''),coalesce(encode(extensions.digest(convert_to(statements[1],'UTF8'),'sha256'),'hex'),''),coalesce(encode(extensions.digest(convert_to('blob '||octet_length(convert_to(statements[1],'UTF8'))::text,'UTF8')||decode('00','hex')||convert_to(statements[1],'UTF8'),'sha1'),'hex'),'') from supabase_migrations.schema_migrations where version='${version}'")"
             if [[ -n "$existing" ]]; then
-              IFS=$'\t' read -r db_name db_idem db_sha db_blob <<<"$existing"
+              IFS='|' read -r db_name db_idem db_sha db_blob <<<"$existing"
               [[ "$db_name" == "$name" && "$db_idem" == "$idem" && "$db_sha" == "$sha256" && "$db_blob" == "$blob" ]] \
                 || { echo "UNATTESTED_OR_DRIFTED_MIGRATION_VERSION:${version}" >&2; exit 71; }
               echo "ATTESTED_REPLAY $version $name"
@@ -192,7 +189,7 @@ begin
   end if;
 end
 \$guard\$;
-\\i /work/${file}
+\i /work/${file}
 insert into supabase_migrations.schema_migrations(version,statements,name,created_by,idempotency_key,rollback)
 values(
   '${version}',
@@ -224,10 +221,10 @@ SQL
             -e DATABASE_URL -e PGAPPNAME \
             -v "$PWD:/work" \
             postgres:17 \
-            sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "\t" -c "$1" > /work/db-migration-manifest-with-actor.tsv' sh "$query"
+            sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "|" -c "$1" > /work/db-migration-manifest-with-actor.txt' sh "$query"
 
-          awk -F $'\t' 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5}' db-migration-manifest-with-actor.tsv > db-migration-manifest.tsv
-          awk -F $'\t' '$6 !~ /^dabbir-ci-migrator:[A-Za-z0-9-]+:[0-9a-f]{40}:run:[0-9]+$/ {bad=1; print "UNATTESTED_CREATED_BY:" $1 ":" $6 > "/dev/stderr"} END{exit bad}' db-migration-manifest-with-actor.tsv
+          awk -F '|' 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5}' db-migration-manifest-with-actor.txt > db-migration-manifest.tsv
+          awk -F '|' '$6 !~ /^dabbir-ci-migrator:[A-Za-z0-9-]+:[0-9a-f]{40}:run:[0-9]+$/ {bad=1; print "UNATTESTED_CREATED_BY:" $1 ":" $6 > "/dev/stderr"} END{exit bad}' db-migration-manifest-with-actor.txt
           diff -u repo-migration-manifest.tsv db-migration-manifest.tsv || { echo 'DABBIR_MIGRATION_DRIFT_DETECTED' >&2; exit 72; }
 
           rows="$(wc -l < db-migration-manifest.tsv | tr -d ' ')"
