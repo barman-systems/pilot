@@ -54,19 +54,20 @@ function chooseQuestion(state,missing,context){
 function menuArabic(options){return options.map((x,i)=>`${i+1}. ${x.label}${x.price!=null?` — ${x.price} ${x.currency==='AED'?'درهم':x.currency}`:''}`).join('\n');}
 function menuEnglish(options){return options.map((x,i)=>`${i+1}. ${x.label}${x.price!=null?` — ${x.price} ${x.currency}`:''}`).join('\n');}
 function serviceCandidateSummary(context,tentative){const row=serviceRow(context,tentative?.candidate_value);if(!row)return null;return {label:clean(row?.name_ar||row?.name||row?.name_en,120),price:Number.isFinite(Number(row?.price))?Number(row.price):null,currency:currency(context)};}
+function currentSelectedService(understanding,context){const f=arr(understanding?.turn_verified).find(x=>x?.field==='service'&&x?.status==='VERIFIED');return f?serviceLabel(context,f.value):null;}
 function renderArabic({state,plan,context,understanding}){
-  const parts=summaryParts(state,context),answer=plan.answers?.[0]||null,vehicle=tentativeVehicle(state),serviceTentative=tentativeService(state),q=plan.next_question;
+  const parts=summaryParts(state,context),answer=plan.answers?.[0]||null,vehicle=tentativeVehicle(state),serviceTentative=tentativeService(state),q=plan.next_question,selectedService=currentSelectedService(understanding,context);
   if(understanding?.role==='GREETING'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'هلا، حياك. كيف أقدر أساعدك؟';
   if(understanding?.role==='SOCIAL'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'حياك. قل لي وش تحتاج وبساعدك.';
   const segments=[];if(answer?.type==='price')segments.push(`${answer.service_label||'الخدمة'} ${answer.value} ${answer.currency==='AED'?'درهم':answer.currency}.`);
-  if(parts.length&&understanding?.role==='NEW_REQUEST')segments.push(`تمام: ${parts.join('، ')}.`);else if(parts.length&&understanding?.role==='CORRECTION')segments.push(`تم تحديث طلبك: ${parts.join('، ')}.`);
+  if(parts.length&&understanding?.role==='NEW_REQUEST')segments.push(`تمام: ${parts.join('، ')}.`);else if(parts.length&&understanding?.role==='CORRECTION')segments.push(`تم تحديث طلبك: ${parts.join('، ')}.`);else if(selectedService)segments.push(`تم اختيار ${selectedService}.`);
   if(serviceTentative){
     if(q?.purpose==='CONFIRM_TENTATIVE_SERVICE'){
       const candidate=serviceCandidateSummary(context,serviceTentative),surface=clean(serviceTentative.surface,100)||candidate?.label||'الخدمة';
       if(candidate)segments.push(`فهمت «${surface}» على أنها ${candidate.label}${candidate.price!=null?` بـ${candidate.price} ${candidate.currency==='AED'?'درهم':candidate.currency}`:''} — هذا قصدك؟`);
       else segments.push(`فهمت «${surface}» كخدمة محتملة — هذا قصدك؟`);
     }else{
-      const surface=clean(serviceTentative.surface,100)||'الخدمة اللي ذكرتها',options=arr(q?.options);segments.push(`ما قدرت أربط «${surface}» بخدمة واحدة بثقة.`);if(options.length)segments.push(`الخدمات المتاحة:\n${menuArabic(options)}\n\nاختر رقم الخدمة أو اسمها.`);else segments.push('وضح لي اسم الخدمة شوي؟');
+      const surface=clean(serviceTentative.surface,100)||'الخدمة اللي ذكرتها',options=arr(q?.options);segments.push(`ما قدرت أربط «${surface}» بخدمة واحدة بثقة.`);if(options.length)segments.push(`الخدمات المتاحة:\n${menuArabic(options)}\n\nأي خدمة تقصد؟ اختر الرقم أو الاسم.`);else segments.push('وضح لي اسم الخدمة شوي؟');
     }
     return segments.join('\n');
   }
@@ -74,31 +75,31 @@ function renderArabic({state,plan,context,understanding}){
     if(vehicle.candidate_value){const label=vehicle.candidate_value==='station'?'ستيشن/SUV':vehicle.candidate_value==='saloon'?'صالون':clean(vehicle.surface,100)||'هذا النوع';segments.push(`فهمت إن السيارة ${label} — صح؟`);if(plan.missing_fields.includes('location'))segments.push('إذا صحيح، أرسل موقعك من خيار الموقع في واتساب وبكمل لك.');}
     else{const surface=clean(vehicle.surface,100)||'هذا النوع';segments.push(`فهمت السيارة «${surface}»، لكن أحتاج أحدد فئتها عندنا: صالون أو ستيشن/SUV؟`);}return segments.join(' ');
   }
-  if(q?.purpose==='COLLECT_SERVICE'){const options=arr(q.options);if(options.length)segments.push(`الخدمات المتاحة:\n${menuArabic(options)}\n\nاختر رقم الخدمة أو اسمها.`);else segments.push('أي خدمة تبي بالضبط؟');}
+  if(q?.purpose==='COLLECT_SERVICE'){const options=arr(q.options);if(options.length)segments.push(`الخدمات المتاحة:\n${menuArabic(options)}\n\nأي خدمة تبي؟ اختر الرقم أو الاسم.`);else segments.push('أي خدمة تبي بالضبط؟');}
   else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('قل لي نوع السيارة: صالون أو ستيشن/SUV، وأرسل موقعك من خيار الموقع في واتساب.');
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('السيارة صالون أو ستيشن/SUV؟');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('باقي موقعك بس — أرسله من خيار الموقع في واتساب وبكمل لك.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`تمام، ${timeWindowArabic(q.time_window)||'الفترة اللي ذكرتها'}. أي ساعة تقريبًا تبي؟`);
   else if(q?.purpose==='COLLECT_WHEN'){if(q.fields?.length===1&&q.fields[0]==='time')segments.push('أي ساعة تبيه؟');else if(q.fields?.length===1&&q.fields[0]==='date')segments.push('أي يوم تبيه؟');else segments.push('متى تبيه؟');}
   else if(q)segments.push('أعطني المعلومة الباقية وبكمل لك.');
-  else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`الخدمات المتاحة:\n${menuArabic(options)}\n\nإذا تبا تحجز، اختر رقم الخدمة أو اسمها.`:'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.');}
-  else if(state.goal==='PRICE_SERVICE'&&!answer){const options=serviceOptions(context);segments.push(options.length?`حدد الخدمة عشان أعطيك السعر الصحيح:\n${menuArabic(options)}\n\nاختر رقم الخدمة أو اسمها.`:'حدد لي الخدمة اللي تسأل عن سعرها.');}
+  else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`الخدمات المتاحة:\n${menuArabic(options)}\n\nأي خدمة تبي؟ اختر الرقم أو الاسم.`:'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.');}
+  else if(state.goal==='PRICE_SERVICE'&&!answer){const options=serviceOptions(context);segments.push(options.length?`حدد الخدمة عشان أعطيك السعر الصحيح:\n${menuArabic(options)}\n\nأي خدمة تقصد؟ اختر الرقم أو الاسم.`:'حدد لي الخدمة اللي تسأل عن سعرها.');}
   else if(state.goal==='SUPPORT')segments.push('قل لي وش تحتاج وبساعدك.');else if(state.goal==='BOOK_SERVICE')segments.push('المعلومات المطلوبة للحجز مكتملة عندي.');else segments.push('قل لي وش تحتاج وبساعدك.');return segments.join('\n');
 }
 function renderEnglish({state,plan,context,understanding}){
   if(understanding?.role==='GREETING'&&['SUPPORT','UNKNOWN'].includes(state.goal))return 'Hi. How can I help?';
-  const service=serviceLabel(context,factValue(state,'service')),q=plan.next_question,serviceTentative=tentativeService(state),segments=[];
-  if(plan.answers?.[0]?.type==='price')segments.push(`${service||'The service'} is ${plan.answers[0].value} ${plan.answers[0].currency}.`);if(service&&understanding?.role==='NEW_REQUEST')segments.push(`Got it: ${service}.`);else if(service&&understanding?.role==='CORRECTION')segments.push(`Updated: ${service}.`);
+  const service=serviceLabel(context,factValue(state,'service')),q=plan.next_question,serviceTentative=tentativeService(state),selectedService=currentSelectedService(understanding,context),segments=[];
+  if(plan.answers?.[0]?.type==='price')segments.push(`${service||'The service'} is ${plan.answers[0].value} ${plan.answers[0].currency}.`);if(service&&understanding?.role==='NEW_REQUEST')segments.push(`Got it: ${service}.`);else if(service&&understanding?.role==='CORRECTION')segments.push(`Updated: ${service}.`);else if(selectedService)segments.push(`Selected: ${selectedService}.`);
   if(serviceTentative&&q?.purpose==='CONFIRM_TENTATIVE_SERVICE'){const candidate=serviceCandidateSummary(context,serviceTentative);segments.push(candidate?`I understood “${clean(serviceTentative.surface,100)}” as ${candidate.label}${candidate.price!=null?` at ${candidate.price} ${candidate.currency}`:''} — is that what you mean?`:`I have a possible service match for “${clean(serviceTentative.surface,100)}” — is that right?`);}
-  else if(q?.purpose==='COLLECT_SERVICE'){const options=arr(q.options);segments.push(options.length?`Available services:\n${menuEnglish(options)}\n\nChoose the service number or name.`:'Which service would you like?');}
-  else if(q?.purpose==='MAP_TENTATIVE_SERVICE'){const options=arr(q.options);segments.push(`I could not safely map “${clean(tentativeService(state)?.surface,100)}” to one service.${options.length?`\nAvailable services:\n${menuEnglish(options)}\n\nWhich one do you mean?`:' Please clarify the service.'}`);}
+  else if(q?.purpose==='COLLECT_SERVICE'){const options=arr(q.options);segments.push(options.length?`Available services:\n${menuEnglish(options)}\n\nWhich service would you like? Choose the number or name.`:'Which service would you like?');}
+  else if(q?.purpose==='MAP_TENTATIVE_SERVICE'){const options=arr(q.options);segments.push(`I could not safely map “${clean(tentativeService(state)?.surface,100)}” to one service.${options.length?`\nAvailable services:\n${menuEnglish(options)}\n\nWhich one do you mean? Choose the number or name.`:' Please clarify the service.'}`);}
   else if(q?.purpose==='CONFIRM_TENTATIVE_VEHICLE')segments.push('I understood the vehicle as station/SUV — is that right?');
   else if(q?.purpose==='COLLECT_VEHICLE_AND_LOCATION')segments.push('Is the vehicle saloon/sedan or station/SUV? Then send your WhatsApp location.');
   else if(q?.purpose==='COLLECT_VEHICLE')segments.push('Is the vehicle saloon/sedan or station/SUV?');
   else if(q?.purpose==='COLLECT_LOCATION')segments.push('I only need your service location — send it using WhatsApp Location.');
   else if(q?.purpose==='COLLECT_EXACT_TIME_IN_WINDOW')segments.push(`Okay, ${timeWindowEnglish(q.time_window)||'that time window'}. About what exact time would you like?`);
   else if(q?.purpose==='COLLECT_WHEN'){if(q.fields?.length===1&&q.fields[0]==='time')segments.push('What time would you like?');else if(q.fields?.length===1&&q.fields[0]==='date')segments.push('Which day would you like?');else segments.push('When would you like it?');}
-  else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`Available services:\n${menuEnglish(options)}\n\nChoose the service number or name.`:'No active services are available to show right now.');}
+  else if(state.goal==='DISCOVER_SERVICE'){const options=serviceOptions(context);segments.push(options.length?`Available services:\n${menuEnglish(options)}\n\nWhich service would you like? Choose the number or name.`:'No active services are available to show right now.');}
   else if(state.goal==='SUPPORT')segments.push('Tell me what you need and I will help.');else if(state.goal==='BOOK_SERVICE')segments.push('I have the required booking details.');return segments.join('\n');
 }
 

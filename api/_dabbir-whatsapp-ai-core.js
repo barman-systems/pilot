@@ -25,7 +25,7 @@ function slotsText(slots,lang,requested=null){
   const lines=list.map((s,i)=>`${i+1}. ${sameDate?fmtTime(s.starts_at,s.timezone||timezone,lang):fmtWhen(s.starts_at,s.timezone||timezone,lang)}${s.worker_name?(lang==='ar'?` — ${s.worker_name}`:` — ${s.worker_name}`):''}`);
   const requestedStamp=requested?.date&&requested?.time?`${requested.date}T${requested.time}`:null,firstStamp=stamps[0],shifted=!!requestedStamp&&!!firstStamp&&firstStamp>requestedStamp;
   if(lang==='ar'){
-    const heading=shifted?`الوقت اللي طلبته ${requested.time} غير متاح. أقرب المواعيد${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`:`المواعيد المتاحة${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`;
+    const heading=shifted?`الوقت اللي طلبته ${requested.time} غير متاح. أقرب المتاح${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`:`المواعيد المتاحة${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`;
     return `${heading}\n\n${lines.join('\n')}\n\nاختر رقم الموعد (${lines.map((_,i)=>i+1).join('، ')}).`;
   }
   const heading=shifted?`The requested time ${requested.time} is unavailable. Nearest options${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`:`Available times${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`;
