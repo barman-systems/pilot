@@ -1,14 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import { createAiProviderAuthorityFetch } from './_ai-provider-authority-fetch.js';
 
 const EMBEDDING_DIMENSIONS=768;
 const DEFAULT_MODEL='gemini-embedding-2';
 const DEFAULT_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent';
+const EMBEDDING_PROVIDER='google-gemini';
+const EMBEDDING_CHANNEL='knowledge_rag';
+const EMBEDDING_COST_SOURCE='DIRECT_PROVIDER_COST_UNPRICED';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clean=(value,max=16000)=>String(value??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').slice(0,max);
 const ragEnabled=env=>['1','true'].includes(String(env?.DABBIR_KNOWLEDGE_RAG_ENABLED||'').trim().toLowerCase());
+const embeddingInputUpperBound=text=>Math.max(1,Buffer.byteLength(clean(text,16000),'utf8'));
 function failureCode(error){
   const code=String(error?.code||error?.message||'');
-  if(/^(?:EMBEDDING_PROVIDER_[45][0-9]{2}|EMBEDDING_CONTRACT_INVALID|EMBEDDING_TEXT_EMPTY|EMBEDDING_MODEL_UNAPPROVED|GEMINI_API_KEY_MISSING|KNOWLEDGE_ID_INVALID|KNOWLEDGE_SCOPE_INVALID|DABBIR_KNOWLEDGE_HASH_MISMATCH|KNOWLEDGE_UPSERT_UNVERIFIED|AI_PROVIDER_COOLDOWN)$/.test(code))return code;
+  if(/^(?:EMBEDDING_PROVIDER_[45][0-9]{2}|EMBEDDING_CONTRACT_INVALID|EMBEDDING_TEXT_EMPTY|EMBEDDING_MODEL_UNAPPROVED|EMBEDDING_USAGE_METER_UNVERIFIED|GEMINI_API_KEY_MISSING|KNOWLEDGE_ID_INVALID|KNOWLEDGE_SCOPE_INVALID|DABBIR_KNOWLEDGE_HASH_MISMATCH|KNOWLEDGE_UPSERT_UNVERIFIED|AI_PROVIDER_COOLDOWN)$/.test(code))return code;
   if(['AbortError','TimeoutError'].includes(error?.name))return 'RAG_TIMEOUT';
   return 'RAG_DEPENDENCY_FAILED';
 }
@@ -27,6 +32,27 @@ function vectorFromPayload(payload){
   const values=payload?.embedding?.values||payload?.embeddings?.[0]?.values;
   if(!Array.isArray(values)||values.length!==EMBEDDING_DIMENSIONS)return null;
   const vector=values.map(Number);return vector.every(Number.isFinite)?vector:null;
+}
+async function recordEmbeddingUsage({rpc,businessId,operationKey,operationType,inputUpperBound}){
+  if(typeof rpc!=='function'||!UUID.test(String(businessId||'')))throw Object.assign(new Error('EMBEDDING_USAGE_METER_UNVERIFIED'),{code:'EMBEDDING_USAGE_METER_UNVERIFIED'});
+  const result=await rpc('dabbir_record_ai_usage_v1',{
+    p_business_id:businessId,
+    p_operation_key:clean(operationKey,240),
+    p_operation_type:clean(operationType,160),
+    p_channel:EMBEDDING_CHANNEL,
+    p_provider:EMBEDDING_PROVIDER,
+    p_model:DEFAULT_MODEL,
+    p_cost_mode:'DIRECT_FREE_OR_QUOTA',
+    p_input_tokens:Math.max(1,Math.trunc(Number(inputUpperBound)||0)),
+    p_output_tokens:0,
+    p_reasoning_tokens:0,
+    p_request_count:1,
+    p_actual_cost_microusd:null,
+    p_cost_source:EMBEDDING_COST_SOURCE,
+    p_metadata:{meter_scope:'knowledge_embedding',usage_evidence:'utf8_byte_upper_bound'},
+  });
+  if(result?.ok!==true)throw Object.assign(new Error('EMBEDDING_USAGE_METER_UNVERIFIED'),{code:'EMBEDDING_USAGE_METER_UNVERIFIED'});
+  return result;
 }
 export async function embedKnowledgeText(text,{env=process.env,fetchImpl=fetch,providerHealthStore,providerTrace=[],timeoutMs=12000}={}){
   const config=embeddingConfiguration(env);if(!config.ok)throw Object.assign(new Error(config.reason),{code:config.reason});
@@ -50,7 +76,9 @@ export async function retrieveDabbirKnowledge({businessId,query,rpc,env=process.
   const diagnose=code=>console.warn('dabbir_knowledge_retrieval_failed',{business_id:businessId,code,provider:'gemini',model:DEFAULT_MODEL,latency_ms:Date.now()-started});
   const config=embeddingConfiguration(env);if(!config.ok){diagnose(config.reason);return []}
   try{
-    const vector=await embedKnowledgeText(knowledgeQueryInstruction(query),{env,fetchImpl,providerHealthStore,timeoutMs:2500});
+    const instruction=knowledgeQueryInstruction(query);
+    const vector=await embedKnowledgeText(instruction,{env,fetchImpl,providerHealthStore,timeoutMs:2500});
+    await recordEmbeddingUsage({rpc,businessId,operationKey:`knowledge_retrieval_embedding:${randomUUID()}`,operationType:'knowledge_retrieval_embedding',inputUpperBound:embeddingInputUpperBound(instruction)});
     const rows=await rpc('dabbir_knowledge_hybrid_search_v1',{p_business_id:businessId,p_query:clean(query,1200),p_embedding_text:vectorSqlText(vector),p_limit:Math.min(8,Math.max(1,Number(limit)||5))});
     return (Array.isArray(rows)?rows:[]).slice(0,8).map(row=>({
       knowledge_key:clean(row?.knowledge_key,180),knowledge_type:clean(row?.knowledge_type,80),content:clean(row?.content,1400),
@@ -70,6 +98,7 @@ export async function indexApprovedKnowledge({rpc,env=process.env,fetchImpl=fetc
       if(!UUID.test(String(row?.business_id||'')))throw new Error('KNOWLEDGE_SCOPE_INVALID');
       const instruction=knowledgeDocumentInstruction({title:row?.title,content:row?.content});
       const vector=await embedKnowledgeText(instruction,{env,fetchImpl,providerHealthStore});
+      await recordEmbeddingUsage({rpc,businessId:row.business_id,operationKey:`knowledge_index_embedding:${row.knowledge_id}:${clean(row.content_hash,64)}`,operationType:'knowledge_index_embedding',inputUpperBound:embeddingInputUpperBound(instruction)});
       const saved=await rpc('dabbir_knowledge_embedding_upsert_v1',{p_knowledge_id:row.knowledge_id,p_content:row.content,p_content_hash:row.content_hash,p_embedding_text:vectorSqlText(vector),p_model:DEFAULT_MODEL});
       if(saved?.ok!==true||saved.knowledge_id!==row.knowledge_id||saved.business_id!==row.business_id||saved.content_hash!==row.content_hash)throw new Error('KNOWLEDGE_UPSERT_UNVERIFIED');
       indexed++;

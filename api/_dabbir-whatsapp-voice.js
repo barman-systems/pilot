@@ -212,8 +212,8 @@ export async function transcribeWhatsAppVoiceAudio(audioBuffer,mimeType,{env=pro
 }
 
 async function recordVoiceUsage(claim,result,byteLength){
-  if(!claim?.business_id||!result?.provider)return;
-  await serviceRpc('dabbir_record_ai_usage_v1',{
+  if(!claim?.business_id||!result?.provider)throw errorWithCode('VOICE_USAGE_METER_UNVERIFIED',{retryable:true});
+  const receipt=await serviceRpc('dabbir_record_ai_usage_v1',{
     p_business_id:claim.business_id,
     p_operation_key:`wa-voice:${claim.voice_ingest_id}`,
     p_operation_type:'whatsapp.voice_transcription',
@@ -222,7 +222,9 @@ async function recordVoiceUsage(claim,result,byteLength){
     p_input_tokens:0,p_output_tokens:0,p_reasoning_tokens:0,p_request_count:1,
     p_actual_cost_microusd:null,p_cost_source:'DIRECT_PROVIDER_COST_UNPRICED',
     p_metadata:{feature:'voice_note_transcription',audio_bytes:Number(byteLength)||0,raw_audio_persisted:false,confidence:result.confidence,needs_confirmation:result.needsConfirmation===true},
-  }).catch(()=>null);
+  });
+  if(receipt?.ok!==true)throw errorWithCode('VOICE_USAGE_METER_UNVERIFIED',{retryable:true});
+  return receipt;
 }
 
 function clarificationText(language){
@@ -279,13 +281,13 @@ async function processClaim(claim,{env=process.env,fetchImpl=fetch}={}){
   if(claim?.clarification_pending===true)return {state:'CLARIFICATION_REQUIRED',...(await completeClarification(claim,fallbackLanguage(claim)))};
   const media=await loadMetaAudio(claim,{env,fetchImpl});
   const transcription=await transcribeWhatsAppVoiceAudio(media.bytes,media.mimeType,{env,fetchImpl});
+  await recordVoiceUsage(claim,transcription,media.bytes.length);
   const finalized=await serviceRpc('dabbir_whatsapp_voice_finalize',{
     p_voice_ingest_id:claim.voice_ingest_id,p_lock_token:claim.lock_token,
     p_transcript:transcription.transcript,p_language:transcription.language,p_confidence:transcription.confidence,
     p_needs_confirmation:transcription.needsConfirmation===true,p_provider:transcription.provider,p_model:transcription.model,
     p_media_mime_type:media.mimeType,p_byte_length:media.bytes.length,
   });
-  await recordVoiceUsage(claim,transcription,media.bytes.length);
   if(finalized?.state==='CLARIFICATION_PENDING'){
     await completeClarification(claim,transcription.language);
     return {state:'CLARIFICATION_REQUIRED',provider:transcription.provider,model:transcription.model,confidence:transcription.confidence};

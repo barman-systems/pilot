@@ -65,12 +65,12 @@ function makeSemanticFetch({fetchImpl,budgetMs=18000,maxAttempts=4}){
   };
 }
 
-async function requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv,fetchImpl,budgetMs,maxAttempts}){
+async function requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv,fetchImpl,meterFetchImpl,providerHealthStore,budgetMs,maxAttempts}){
   const bounded=makeSemanticFetch({fetchImpl,budgetMs,maxAttempts});
   return generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
     message:sanitizeSemanticText(message).slice(0,2000),
     businessContext:JSON.stringify(providerSemanticContext(context,referenceTime)),
-    history:semanticRoleHistory(context),fetchImpl:bounded,env:activeEnv,meteringContext});
+    history:semanticRoleHistory(context),fetchImpl:bounded,meterFetchImpl,providerHealthStore,env:activeEnv,meteringContext});
 }
 
 function acceptedQwen37CanaryResult(result){
@@ -80,7 +80,7 @@ function acceptedQwen37CanaryResult(result){
     && String(result.model||'')===QWEN37_CANARY_MODEL);
 }
 
-export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, env=process.env, canaryControlLoader=loadQwen37CanaryControl }) {
+export async function interpretSemanticMessage({ message, context, referenceTime, meteringContext, fetchImpl=fetch, meterFetchImpl, providerHealthStore, env=process.env, canaryControlLoader=loadQwen37CanaryControl }) {
   let control;
   try{
     control=await canaryControlLoader({env});
@@ -99,6 +99,7 @@ export async function interpretSemanticMessage({ message, context, referenceTime
         message,context,referenceTime,meteringContext,
         activeEnv:candidateEnv,
         fetchImpl:qwen37CanaryFetch(fetchImpl),
+        meterFetchImpl,providerHealthStore,
         budgetMs:7000,
         maxAttempts:2,
       });
@@ -107,10 +108,10 @@ export async function interpretSemanticMessage({ message, context, referenceTime
       canaryFallback=true;
       canaryFailure=String(error?.code||error?.message||'QWEN37_CANARY_FAILED').slice(0,80);
       console.warn('dabbir_qwen37_canary_fallback',{reason:canaryFailure,bucket:canary.bucket,percent:canary.percent});
-      result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,budgetMs:18000,maxAttempts:4});
+      result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,meterFetchImpl,providerHealthStore,budgetMs:18000,maxAttempts:4});
     }
   }else{
-    result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,budgetMs:18000,maxAttempts:4});
+    result=await requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv:env,fetchImpl,meterFetchImpl,providerHealthStore,budgetMs:18000,maxAttempts:4});
   }
 
   if(!result?.ok) throw Object.assign(new Error('AI_PLANNER_UNAVAILABLE'),{code:'AI_PLANNER_UNAVAILABLE',telemetry:result?.telemetry||null});

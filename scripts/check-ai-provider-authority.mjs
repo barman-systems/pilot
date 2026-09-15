@@ -52,6 +52,12 @@ function readSource(root,file){
   return file&&fs.existsSync(full)?fs.readFileSync(full,'utf8'):'';
 }
 
+function validateCostAuthority(errors,costCapabilities,provider){
+  const entries=costCapabilities[provider];
+  if(!Array.isArray(entries)||entries.length<1){errors.push(`${provider}: provider has no AI Capability Registry cost authority`);return;}
+  for(const key of entries)if(!/^ai\.provider\.[a-z0-9_.]+$/.test(String(key)))errors.push(`${provider}: invalid cost capability key ${key}`);
+}
+
 export function validateRoutingAuthorityContract(registry={},sources={}){
   const errors=[];
   const version=String(registry?.version||'');
@@ -120,6 +126,20 @@ export function checkProviderAuthority(root=ROOT){
   const registryPath=path.join(root,'config/ai-provider-authority-registry.json');
   const registry=JSON.parse(fs.readFileSync(registryPath,'utf8'));
   const errors=[];
+
+  const reliabilityProviders=registry.providers||[];
+  const directProviders=registry.direct_providers||[];
+  const gatewayProvider=String(registry.gateway_provider||'').trim();
+  const costCapabilities=registry.cost_capabilities||{};
+  if(registry.cost_registry_version!=='DABBIR_AI_PROVIDER_COST_REGISTRY_V1')errors.push('registry: cost registry version must remain V1');
+  if(!reliabilityProviders.includes('vercel-ai-gateway'))errors.push('registry: Vercel AI Gateway must remain a reliability provider');
+  if(directProviders.includes('vercel-ai-gateway'))errors.push('registry: Vercel AI Gateway must not be classified as a direct provider');
+  for(const provider of directProviders)validateCostAuthority(errors,costCapabilities,provider);
+  if(gatewayProvider!=='vercel-ai-gateway')errors.push('gateway_provider must remain vercel-ai-gateway');
+  else validateCostAuthority(errors,costCapabilities,gatewayProvider);
+  if(Number(registry?.cost_policy?.hard_monthly_budget_aed)!==300)errors.push('AI provider cost policy must retain the 300 AED hard monthly budget');
+  if(registry?.cost_policy?.unpriced_direct_usage!=='FAIL_CLOSED_BEFORE_PAID_FALLBACK')errors.push('unpriced direct provider usage must fail closed before paid fallback');
+
   const allowedDirect=new Set([
     ...Object.keys(registry.delegated_transport_cores||{}),
     ...Object.keys(registry.diagnostic_exemptions||{}),
@@ -155,10 +175,14 @@ export function checkProviderAuthority(root=ROOT){
   requireContains(errors,root,'api/_ai-provider-recovery.js',['RECOVERY_PROBE','Reply exactly OK.','max_tokens:4','reliableAiProviderFetch']);
   requireContains(errors,root,'api/dabbir-ai-provider-recovery-cron.js',["./_ai-provider-recovery.js",'CRON_AUTH_REQUIRED']);
   requireContains(errors,root,'api/_ai-core.js',['reliableAiProviderFetch','createSupabaseProviderHealthStore','provider_reliability']);
-  requireContains(errors,root,'api/_dabbir-whatsapp-ai-meter.js',['provider_reliability','skipped_attempts']);
+  requireContains(errors,root,'api/_dabbir-whatsapp-ai-meter.js',['provider_reliability','skipped_attempts','attempt_type','dabbir_record_ai_usage_v1','AI_USAGE_METER_UNVERIFIED','DIRECT_PROVIDER_RESULT_REJECTED']);
+  requireContains(errors,root,'api/_dabbir-daily-operator-core.js',['dabbir_record_ai_usage_v1','DIRECT_PROVIDER_COST_UNPRICED']);
+  requireContains(errors,root,'api/_dabbir-daily-operator-reliable.js',['recordDirectEnhancementUsage','FREE_DIRECT_METER_UNVERIFIED','AI_USAGE_METER_UNVERIFIED']);
+  requireContains(errors,root,'api/_dabbir-whatsapp-voice.js',['dabbir_record_ai_usage_v1','DIRECT_PROVIDER_COST_UNPRICED','VOICE_USAGE_METER_UNVERIFIED']);
+  requireContains(errors,root,'api/_dabbir-ai-budget.js',['directMonthlyExposureSpend','DIRECT_PROVIDER_SPEND_UNVERIFIED']);
   const meter=fs.readFileSync(path.join(root,'api/_dabbir-whatsapp-ai-meter.js'),'utf8');
   if(/providerCooldowns|provider429Strikes|armProviderCooldown|cooldownKey/.test(meter))errors.push('api/_dabbir-whatsapp-ai-meter.js: process-local provider circuit reintroduced');
-  requireContains(errors,root,'api/_dabbir-knowledge-rag.js',['createAiProviderAuthorityFetch','authorityFetch(config.endpoint']);
+  requireContains(errors,root,'api/_dabbir-knowledge-rag.js',['createAiProviderAuthorityFetch','authorityFetch(config.endpoint','dabbir_record_ai_usage_v1','EMBEDDING_USAGE_METER_UNVERIFIED']);
   requireContains(errors,root,'api/_barman-executive-core.js',['createAiProviderAuthorityFetch','authorityFetch(GATEWAY_ENDPOINT']);
   requireContains(errors,root,'api/_barman-executive-automation.js',['createAiProviderAuthorityFetch','authorityFetch(GATEWAY_ENDPOINT']);
   requireContains(errors,root,'api/barman-tool-agent-broker.js',['createAiProviderAuthorityFetch','authorityFetch(GATEWAY_ENDPOINT']);
@@ -190,6 +214,7 @@ export function checkProviderAuthority(root=ROOT){
     errors,
     scanned_api_files:apiFiles.length,
     registry_version:registry.version,
+    cost_registry_version:registry.cost_registry_version,
     routing_contract:{
       readiness_authority:registry.routing_readiness_authority,
       primary:registry.automatic_generation_routing?.primary||null,
@@ -202,5 +227,5 @@ export function checkProviderAuthority(root=ROOT){
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const result=checkProviderAuthority(ROOT);
   if(!result.ok){for(const error of result.errors)console.error(`AI_PROVIDER_AUTHORITY_VIOLATION: ${error}`);process.exit(1);}
-  console.log(`AI provider authority guard passed (${result.scanned_api_files} api files, ${result.registry_version}).`);
+  console.log(`AI provider authority guard passed (${result.scanned_api_files} api files, ${result.registry_version}, ${result.cost_registry_version}).`);
 }

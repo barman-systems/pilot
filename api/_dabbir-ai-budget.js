@@ -81,6 +81,36 @@ function serviceRoleKey(env = process.env) {
   return key;
 }
 
+export async function directMonthlyExposureSpend({ now = new Date(), env = process.env, fetchImpl = fetch } = {}) {
+  const key = serviceRoleKey(env);
+  const current = toDate(now);
+  const monthStart = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1)).toISOString();
+  const query = new URLSearchParams({
+    select: 'provider,exposure_microusd,unpriced_operations',
+    month_start: `eq.${monthStart}`,
+  });
+  const response = await fetchImpl(`${SUPABASE_URL}/rest/v1/dabbir_ai_budget_exposure_monthly_v1?${query.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+    redirect: 'manual',
+    headers: supabaseKeyHeaders(key, { accept: 'application/json' }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  const text = await response.text();
+  let rows = null;
+  try { rows = text ? JSON.parse(text) : []; } catch {}
+  if (!response.ok || !Array.isArray(rows)) throw Object.assign(new Error(rows?.message || rows?.code || 'DIRECT_AI_SPEND_READ_FAILED'), { status: response.status || 503 });
+  const microusd = rows.reduce((sum, row) => sum + Math.max(0, Math.trunc(finite(row?.exposure_microusd))), 0);
+  const unpricedOperations = rows.reduce((sum, row) => sum + Math.max(0, Math.trunc(finite(row?.unpriced_operations))), 0);
+  return {
+    usd: microusd / 1_000_000,
+    microusd,
+    unpriced_operations: unpricedOperations,
+    providers: rows.length,
+    source: 'dabbir_ai_budget_exposure_monthly_v1',
+  };
+}
+
 async function budgetRpc(name, params, env = process.env) {
   const key = serviceRoleKey(env);
   const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(name)}`, {
@@ -108,13 +138,14 @@ export async function claimAiBudget({
   maxSteps = 6,
   env = process.env,
   gatewayClient = gateway,
+  directSpendReader = null,
   rpc = budgetRpc,
   now = new Date(),
 }) {
   const budgetAed = configuredBudgetAed(env);
-  let external;
+  let gatewaySpend;
   try {
-    external = await gatewayMonthlySpend({ now, gatewayClient });
+    gatewaySpend = await gatewayMonthlySpend({ now, gatewayClient });
   } catch (error) {
     return {
       allowed: false,
@@ -124,12 +155,42 @@ export async function claimAiBudget({
       source: 'fail_closed_before_paid_model_call',
     };
   }
-  const pressure = budgetPressure({ spentUsd: external.usd, budgetAed });
+
+  let directSpend;
+  try {
+    const reader = directSpendReader || (rpc === budgetRpc ? directMonthlyExposureSpend : async () => ({ usd: 0, microusd: 0, unpriced_operations: 0, providers: 0, source: 'injected_rpc_test_default' }));
+    directSpend = await reader({ now, env });
+  } catch (error) {
+    return {
+      allowed: false,
+      reason: 'DIRECT_PROVIDER_SPEND_UNAVAILABLE',
+      error: clean(error?.message || error, 160),
+      gateway_spend_usd: gatewaySpend.usd,
+      hard_limit_aed: budgetAed,
+      source: 'fail_closed_before_paid_model_call',
+    };
+  }
+  if (Math.max(0, Math.trunc(finite(directSpend?.unpriced_operations))) > 0) {
+    return {
+      allowed: false,
+      reason: 'DIRECT_PROVIDER_SPEND_UNVERIFIED',
+      direct_unpriced_operations: Math.trunc(finite(directSpend.unpriced_operations)),
+      gateway_spend_usd: gatewaySpend.usd,
+      direct_paid_equivalent_usd: finite(directSpend.usd),
+      hard_limit_aed: budgetAed,
+      source: 'fail_closed_on_unpriced_direct_provider_usage',
+    };
+  }
+  const combinedMicrousd = Math.max(0, Math.trunc(finite(gatewaySpend.microusd))) + Math.max(0, Math.trunc(finite(directSpend?.microusd)));
+  const combinedUsd = combinedMicrousd / 1_000_000;
+  const pressure = budgetPressure({ spentUsd: combinedUsd, budgetAed });
   if (!pressure.paid_allowed) {
     return {
       allowed: false,
       reason: 'BUDGET_PROTECTION',
-      external_spend_usd: external.usd,
+      external_spend_usd: combinedUsd,
+      gateway_spend_usd: gatewaySpend.usd,
+      direct_paid_equivalent_usd: finite(directSpend?.usd),
       hard_limit_aed: budgetAed,
       budget_pressure: pressure,
       source: 'budget_pressure_guard_before_paid_model_call',
@@ -144,12 +205,15 @@ export async function claimAiBudget({
     p_operation_type: clean(operationType, 160),
     p_autonomous: autonomous === true,
     p_reserve_microusd: aedToMicrousd(effectiveReserveAed),
-    p_external_spent_microusd: external.microusd,
+    p_external_spent_microusd: combinedMicrousd,
     p_hard_limit_microusd: Math.min(HARD_MONTHLY_AI_BUDGET_MICROUSD, aedToMicrousd(budgetAed)),
   }, env);
   return {
     ...result,
-    external_spend_usd: external.usd,
+    external_spend_usd: combinedUsd,
+    gateway_spend_usd: gatewaySpend.usd,
+    direct_paid_equivalent_usd: finite(directSpend?.usd),
+    direct_unpriced_operations: Math.trunc(finite(directSpend?.unpriced_operations)),
     hard_limit_aed: budgetAed,
     reservation_aed: effectiveReserveAed,
     budget_pressure: pressure,
@@ -178,8 +242,6 @@ export async function finalizeAiBudget({
     p_estimated_manual_seconds: Math.min(86_400, Math.max(0, Math.trunc(finite(estimatedManualSeconds)))),
     p_metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
   }, env);
-  // Optional metadata-only export runs after the authoritative ledger succeeds.
-  // It must never turn a completed ledger write into a failed business request.
   if (finalized?.ok !== false) await publishBudgetObservation({ businessId, operationKey, outcome, failureClass, actualCostUsd, metadata }, { env }).catch(() => null);
   return finalized;
 }

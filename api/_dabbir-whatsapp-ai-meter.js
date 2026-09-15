@@ -48,9 +48,9 @@ export function actualGatewayCost(payload={},response){
   return null;
 }
 
-async function recordUsage({businessId,operationKey,result,attempts,skippedAttempts,usage,actualCostUsd}){
-  const key=clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192);
-  if(!businessId||!key||key.startsWith('sb_publishable_'))return {ok:false,state:'METER_NOT_CONFIGURED'};
+async function recordUsage({businessId,operationKey,result,attempts,skippedAttempts,usage,actualCostUsd,env=process.env,fetchImpl=fetch}){
+  const key=clean(env.SUPABASE_SERVICE_ROLE_KEY,8192);
+  if(!businessId||!key||key.startsWith('sb_publishable_'))throw new Error('AI_USAGE_METER_NOT_CONFIGURED');
   const provider=clean(result?.provider,120)||'unknown';
   const gateway=provider==='vercel-ai-gateway';
   const routingMode=clean(result?.telemetry?.routing_mode,80)||'DIRECT_ONLY';
@@ -81,13 +81,16 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
       billing_note:gateway?'Gateway is the primary customer path and is attributed to business_id; exact report cost remains authoritative when response cost is absent.':routingMode==='GATEWAY_PRIMARY_DIRECT_RECOVERY'?'Direct provider served only as recovery after the primary Gateway path was unavailable; monetary cost is not guessed when no billing amount is returned.':'Direct-only provider call; monetary cost is not guessed when the provider response has no billing amount.',
     },
   };
-  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_record_ai_usage_v1`,{
+  const response=await fetchImpl(`${SUPABASE_URL}/rest/v1/rpc/dabbir_record_ai_usage_v1`,{
     method:'POST',cache:'no-store',redirect:'manual',
     headers:supabaseKeyHeaders(key,{accept:'application/json','content-type':'application/json',prefer:'return=representation'}),
     body:JSON.stringify(body),signal:AbortSignal.timeout(8000),
   });
   if(!response.ok)throw new Error(`AI_USAGE_METER_HTTP_${response.status}`);
-  return response.json().catch(()=>({ok:true}));
+  let receipt=null;
+  try{receipt=await response.json()}catch{}
+  if(receipt?.ok!==true)throw new Error('AI_USAGE_METER_UNVERIFIED');
+  return receipt;
 }
 
 export async function generateDABBIRAiReply(args={}){
@@ -154,8 +157,22 @@ export async function generateDABBIRAiReply(args={}){
 
   const usage=usageFromPayload(successfulPayload||{});
   const operationKey=`wa-ai-usage:${hash([identity.businessId,identity.conversationId,identity.messageTimestamp,clean(args.message,2000)].join('|')).slice(0,48)}`;
-  await recordUsage({businessId:identity.businessId,operationKey,result,attempts,skippedAttempts,usage,actualCostUsd}).catch(error=>{
-    console.warn('dabbir_whatsapp_ai_meter_failed',{error:clean(error?.message||error,120),provider:clean(result?.provider,80)});
-  });
-  return result;
+  try{
+    await recordUsage({businessId:identity.businessId,operationKey,result,attempts,skippedAttempts,usage,actualCostUsd,env:args.env||process.env,fetchImpl:args.meterFetchImpl||fetch});
+    return {...result,telemetry:{...result.telemetry,usage_meter:{ok:true,state:'VERIFIED'}}};
+  }catch(error){
+    const meterError=clean(error?.message||error,120)||'AI_USAGE_METER_UNVERIFIED';
+    console.warn('dabbir_whatsapp_ai_meter_failed',{error:meterError,provider:clean(result?.provider,80)});
+    if(result.provider==='vercel-ai-gateway'){
+      return {...result,telemetry:{...result.telemetry,usage_meter:{ok:false,state:'GATEWAY_RECONCILIATION_REQUIRED',error:meterError}}};
+    }
+    return {
+      ...result,
+      ok:false,
+      state:'PROVIDER_ERROR',
+      error:'AI_USAGE_METER_UNVERIFIED',
+      reply:null,
+      telemetry:{...result.telemetry,usage_meter:{ok:false,state:'DIRECT_PROVIDER_RESULT_REJECTED',error:meterError}},
+    };
+  }
 }

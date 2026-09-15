@@ -1,5 +1,6 @@
 {
   "version": "DABBIR_AI_PROVIDER_RELIABILITY_AUTHORITY_V3",
+  "cost_registry_version": "DABBIR_AI_PROVIDER_COST_REGISTRY_V1",
   "authority": "api/_ai-provider-reliability.js",
   "routing_readiness_authority": "api/_ai-provider-readiness.js",
   "authority_fetch_adapter": "api/_ai-provider-authority-fetch.js",
@@ -43,6 +44,34 @@
     "cloudflare-workers-ai",
     "vercel-ai-gateway"
   ],
+  "direct_providers": [
+    "google-gemini",
+    "groq",
+    "cloudflare-workers-ai"
+  ],
+  "gateway_provider": "vercel-ai-gateway",
+  "cost_capabilities": {
+    "google-gemini": [
+      "ai.provider.google_gemini.gemini_3_7_flash",
+      "ai.provider.google_gemini.embedding_2"
+    ],
+    "groq": [
+      "ai.provider.groq.gpt_oss_20b"
+    ],
+    "cloudflare-workers-ai": [
+      "ai.provider.cloudflare.glm_4_7_flash",
+      "ai.provider.cloudflare.whisper_large_v3_turbo"
+    ],
+    "vercel-ai-gateway": [
+      "ai.provider.vercel_ai_gateway"
+    ]
+  },
+  "cost_policy": {
+    "hard_monthly_budget_aed": 300,
+    "direct_provider_accounting": "PAID_EQUIVALENT_UPPER_BOUND",
+    "unpriced_direct_usage": "FAIL_CLOSED_BEFORE_PAID_FALLBACK",
+    "actual_invoice_authority": "PROVIDER_OR_GATEWAY_REPORT"
+  },
   "delegated_transport_cores": {
     "api/_dabbir-whatsapp-voice.js": {
       "production_adapter": "api/_dabbir-whatsapp-voice-reliable.js",
