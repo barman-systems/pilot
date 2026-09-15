@@ -57,7 +57,7 @@ const script=String.raw`(()=>{
 
   function replaceLegacyComposer(){
     const input=q('#composer');
-    if(input&&!input.dataset.dabbirComposerAuthority){
+    if(input&&!input.dataset.dabbirComposerAuthority&&!input.dataset.dabbirHumanComposer){
       const clone=input.cloneNode(true);
       clone.dataset.dabbirComposerAuthority='v4-channel-aware';
       input.replaceWith(clone);
@@ -66,7 +66,7 @@ const script=String.raw`(()=>{
       },true);
     }
     const button=q('#sendBtn');
-    if(button&&!button.dataset.dabbirComposerAuthority){
+    if(button&&!button.dataset.dabbirComposerAuthority&&!button.dataset.dabbirHumanComposer){
       const clone=button.cloneNode(true);
       clone.dataset.dabbirComposerAuthority='v4-channel-aware';
       button.replaceWith(clone);
