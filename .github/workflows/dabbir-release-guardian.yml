@@ -36,7 +36,7 @@ jobs:
       - name: Checkout trusted release authority
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || 'main' }}
+          ref: main
           fetch-depth: 1
           persist-credentials: false
 

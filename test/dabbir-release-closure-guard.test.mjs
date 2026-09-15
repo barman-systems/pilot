@@ -18,7 +18,7 @@ const config=validateReleaseClosureConfig({
     '.github/workflows/dabbir-release-guardian.yml',
     'test/dabbir-release-closure-guard.test.mjs',
   ],
-  allowed_head_refs:['fix/ai-provider-cost-registry-v1','security/p0a-secret-history-audit'],
+  allowed_head_refs:['fix/ai-provider-cost-registry-v1'],
   allowed_head_prefixes:['guardian/revert-'],
   guardian_title_prefix:'revert(guardian):',
 });
@@ -30,12 +30,13 @@ const pr=(headRef,{title='candidate',headRepo='barman-systems/pilot',baseRepo='b
   head:{ref:headRef,repo:{full_name:headRepo}},
 });
 
-test('release closure allows only the two canonical implementation lanes',()=>{
+test('release closure allows only the remaining canonical implementation lane',()=>{
   assert.equal(evaluateReleaseClosure({config,pr:pr('fix/ai-provider-cost-registry-v1')}).allowed,true);
-  assert.equal(evaluateReleaseClosure({config,pr:pr('security/p0a-secret-history-audit')}).allowed,true);
-  const denied=evaluateReleaseClosure({config,pr:pr('feat/v3-baseline-instrumentation-v2')});
-  assert.equal(denied.allowed,false);
-  assert.equal(denied.reason,'RELEASE_CLOSURE_HEAD_REF_DENIED');
+  for(const retired of ['security/p0a-secret-history-audit','feat/v3-baseline-instrumentation-v2']){
+    const denied=evaluateReleaseClosure({config,pr:pr(retired)});
+    assert.equal(denied.allowed,false);
+    assert.equal(denied.reason,'RELEASE_CLOSURE_HEAD_REF_DENIED');
+  }
 });
 
 test('release closure blocks forks and non-main bases even when branch name looks allowed',()=>{
@@ -79,6 +80,8 @@ test('mutation authority lives only in the existing Release Guardian, not pre-me
   assert.match(guardian,/pull-requests: write/);
   assert.match(guardian,/actions: write/);
   assert.match(guardian,/dabbir-release-closure-guard\.mjs/);
+  assert.match(guardian,/Checkout trusted release authority[\s\S]*?ref: main/);
+  assert.doesNotMatch(guardian,/pull_request\.base\.sha/);
   assert.match(guardian,/persist-credentials: false/);
 
   assert.match(premerge,/actions: read/);

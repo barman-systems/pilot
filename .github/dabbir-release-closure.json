@@ -11,8 +11,7 @@
     "test/dabbir-release-closure-guard.test.mjs"
   ],
   "allowed_head_refs": [
-    "fix/ai-provider-cost-registry-v1",
-    "security/p0a-secret-history-audit"
+    "fix/ai-provider-cost-registry-v1"
   ],
   "allowed_head_prefixes": [
     "guardian/revert-"
