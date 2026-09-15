@@ -40,23 +40,24 @@ test('live provider shape uses one structured Gateway-primary request and leaves
   assert.equal(gatewayBody.model,_v3InterpreterTest.V3_GATEWAY_MODEL);
 });
 
-test('invalid HTTP-200 Gateway semantics stay inside the four-request cap and then use direct recovery',async()=>{
+test('invalid HTTP-200 Gateway semantics stay inside the four-request cap and use eligible direct recovery',async()=>{
   const endpoints=[];
   await assert.rejects(interpretConversationTurnV3({context:context(),env:allProviders,fetchImpl:async(url)=>{
     endpoints.push(url);
-    if(url.includes('generativelanguage.googleapis.com')||url.includes('groq.com'))return new Response('{}',{status:429});
+    if(url.includes('generativelanguage.googleapis.com'))throw new Error('retired Gemini recovery must not be called');
+    if(url.includes('groq.com'))return new Response('{}',{status:429});
     if(url.includes('cloudflare.com'))throw new TypeError('simulated network failure');
     if(url===GATEWAY)return response(JSON.stringify({unexpected:true}));
     throw new Error('unexpected endpoint');
   }}),error=>{
     assert.equal(error.code,'V3_INTERPRETER_UNAVAILABLE');
     assert.equal(error.telemetry.request_count,_v3InterpreterTest.V3_PROVIDER_MAX_REQUESTS);
-    assert.ok(error.telemetry.skipped_attempts.some(x=>x.reason==='SEMANTIC_PROVIDER_BUDGET'));
+    assert.equal(error.telemetry.skipped_attempts.some(x=>x.reason==='SEMANTIC_PROVIDER_BUDGET'),false);
     return true;
   });
   assert.equal(endpoints.length,_v3InterpreterTest.V3_PROVIDER_MAX_REQUESTS);
   assert.equal(endpoints.filter(x=>x===GATEWAY).length,2,'Gateway primary and its bounded secondary model consume only the first two requests');
-  assert.equal(endpoints.some(x=>x.includes('generativelanguage.googleapis.com')),true);
+  assert.equal(endpoints.some(x=>x.includes('generativelanguage.googleapis.com')),false);
   assert.equal(endpoints.some(x=>x.includes('groq.com')),true);
-  assert.equal(endpoints.some(x=>x.includes('cloudflare.com')),false,'the fifth provider request remains blocked by the hard cap');
+  assert.equal(endpoints.some(x=>x.includes('cloudflare.com')),true,'Cloudflare remains eligible after retired Gemini is skipped');
 });
