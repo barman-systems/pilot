@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {evaluateReleaseClosure,validateReleaseClosureConfig} from '../.github/scripts/dabbir-release-closure-guard.mjs';
+
+const guardian=fs.readFileSync(new URL('../.github/workflows/dabbir-release-guardian.yml',import.meta.url),'utf8');
+const premerge=fs.readFileSync(new URL('../.github/workflows/barman-independent-premerge-gate.yml',import.meta.url),'utf8');
 
 const config=validateReleaseClosureConfig({
   version:1,
@@ -11,7 +15,7 @@ const config=validateReleaseClosureConfig({
   control_allowed_paths:[
     '.github/dabbir-release-closure.json',
     '.github/scripts/dabbir-release-closure-guard.mjs',
-    '.github/workflows/barman-independent-premerge-gate.yml',
+    '.github/workflows/dabbir-release-guardian.yml',
     'test/dabbir-release-closure-guard.test.mjs',
   ],
   allowed_head_refs:['fix/ai-provider-cost-registry-v1','security/p0a-secret-history-audit'],
@@ -51,7 +55,7 @@ test('release control branch can change only closure trust-root files',()=>{
   const good=evaluateReleaseClosure({
     config,
     pr:pr('release-closure/control-878',{title:'governance(release-closure): enforce finish line'}),
-    files:['.github/dabbir-release-closure.json','.github/scripts/dabbir-release-closure-guard.mjs'],
+    files:['.github/dabbir-release-closure.json','.github/scripts/dabbir-release-closure-guard.mjs','.github/workflows/dabbir-release-guardian.yml'],
   });
   assert.equal(good.allowed,true);
 
@@ -68,6 +72,20 @@ test('release control branch can change only closure trust-root files',()=>{
 test('control branch requires exact governance title and an explicit changed-file set',()=>{
   assert.equal(evaluateReleaseClosure({config,pr:pr('release-closure/control-878',{title:'ordinary change'}),files:['.github/dabbir-release-closure.json']}).reason,'RELEASE_CLOSURE_CONTROL_TITLE_DENIED');
   assert.equal(evaluateReleaseClosure({config,pr:pr('release-closure/control-878',{title:'governance(release-closure): empty'})}).reason,'RELEASE_CLOSURE_CONTROL_FILES_REQUIRED');
+});
+
+test('mutation authority lives only in the existing Release Guardian, not pre-merge',()=>{
+  assert.match(guardian,/pull_request_target:/);
+  assert.match(guardian,/pull-requests: write/);
+  assert.match(guardian,/actions: write/);
+  assert.match(guardian,/dabbir-release-closure-guard\.mjs/);
+  assert.match(guardian,/persist-credentials: false/);
+
+  assert.match(premerge,/actions: read/);
+  assert.match(premerge,/pull-requests: read/);
+  assert.doesNotMatch(premerge,/actions: write/);
+  assert.doesNotMatch(premerge,/pull-requests: write/);
+  assert.doesNotMatch(premerge,/dabbir-release-closure-guard\.mjs/);
 });
 
 test('inactive closure stops restricting pull requests',()=>{
