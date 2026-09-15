@@ -13,7 +13,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const safeId = value => UUID_RE.test(String(value || '').trim()) ? String(value).trim() : null;
 const DABBIR_TIME_ZONE = 'Asia/Dubai';
 const DABBIR_UTC_OFFSET = '+04:00';
-const DABBIR_FAST_RUNTIME_VERSION = 'fast-v7-timeout-guarded';
+const DABBIR_FAST_RUNTIME_VERSION = 'fast-v8-live-conversations';
 
 // Every required Supabase request in the fast runtime is bounded independently
 // so a hung auth or tenant-data call cannot consume the full Vercel function
@@ -168,7 +168,7 @@ async function loadVerifiedMetrics(accessToken, businessId, now = new Date()) {
   const start = encodeURIComponent(day.starts_at_gte);
   const end = encodeURIComponent(day.starts_at_lt);
   const [activeChats, todayAppointments, customers, activeHandoffs, openFollowups, aiMessages, humanHandoffs] = await Promise.all([
-    restCount(accessToken, `dabbir_conversations?select=id&business_id=eq.${b}&channel_type=eq.web&state=neq.closed&limit=1`, 'ACTIVE_CHATS_COUNT_FAILED'),
+    restCount(accessToken, `dabbir_conversations?select=id&business_id=eq.${b}&state=neq.closed&limit=1`, 'ACTIVE_CHATS_COUNT_FAILED'),
     restCount(accessToken, `dabbir_appointments?select=id&business_id=eq.${b}&starts_at=gte.${start}&starts_at=lt.${end}&limit=1`, 'TODAY_APPOINTMENTS_COUNT_FAILED'),
     restCount(accessToken, `dabbir_customers?select=id&business_id=eq.${b}&limit=1`, 'CUSTOMERS_COUNT_FAILED'),
     restCount(accessToken, `dabbir_handoffs?select=id&business_id=eq.${b}&state=in.(QUEUED,ASSIGNED,HUMAN_ACTIVE)&limit=1`, 'ACTIVE_HANDOFFS_COUNT_FAILED'),
@@ -305,7 +305,7 @@ async function handleFastGet(req, res) {
   );
   const conversationsPromise = rest(
     accessToken,
-    `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&channel_type=eq.web&state=neq.closed&order=updated_at.desc&limit=40`,
+    `dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&state=neq.closed&order=updated_at.desc&limit=40`,
     'CONVERSATIONS_LOOKUP_FAILED',
   );
   const customersPromise = rest(
@@ -352,7 +352,7 @@ async function handleFastGet(req, res) {
 
   let exactConversation=requestedConversationId&&(rawConversations||[]).find(row=>row.id===requestedConversationId);
   if(requestedConversationId&&!exactConversation){
-    const rows=await rest(accessToken,`dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&id=eq.${requestedConversationId}&channel_type=eq.web&limit=1`,'CONVERSATION_LOOKUP_FAILED');
+    const rows=await rest(accessToken,`dabbir_conversations?select=id,customer_id,channel_type,state,demo_mode,created_at,updated_at&business_id=eq.${businessId}&id=eq.${requestedConversationId}&limit=1`,'CONVERSATION_LOOKUP_FAILED');
     exactConversation=Array.isArray(rows)?rows.find(row=>row.id===requestedConversationId):null;
     if(!exactConversation)return json(res,404,{ok:false,error:'CONVERSATION_NOT_FOUND'});
     rawConversations.unshift(exactConversation);
@@ -409,7 +409,7 @@ async function handleFastGet(req, res) {
       state: aiConfig.configured ? 'OPERATIONAL_PROVIDER_READY' : 'UNCONFIGURED',
     },
     whatsapp: { state: 'NOT_OPERATIONAL', blocker: 'META_AUTHORIZATION_NOT_COMPLETED' },
-    performance: { runtime_ms: duration, runtime_version: DABBIR_FAST_RUNTIME_VERSION, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true },
+    performance: { runtime_ms: duration, runtime_version: DABBIR_FAST_RUNTIME_VERSION, summary_only: summaryOnly, conversation_dedupe: true, auth_fast_path: true, exact_metrics: true, multi_channel_conversations: true },
   });
 }
 
