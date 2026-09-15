@@ -10,6 +10,7 @@ const clean=(v,n=500)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' '
 const ALLOWED_ENTITY_FIELDS=new Set(['service','date','time','location','vehicle','delivery_mode','worker','branch','appointment','slot','price','customer_reference']);
 const ALLOWED_SOURCES=new Set(['DATABASE_FACT','CUSTOMER_STATED','CUSTOMER_CONFIRMED','CUSTOMER_CORRECTION','CUSTOMER_MEMORY','OWNER_POLICY','VERIFIED_BUSINESS_KNOWLEDGE','PROVIDER_VERIFIED','AI_INFERENCE']);
 const LIVE_MODES=new Set(['canary','active']);
+const READ_TYPES=new Set(['BUSINESS_HOURS','AVAILABILITY_DISCOVERY','SERVICE_PRICE','SERVICE_DURATION','SERVICE_MENU','UNKNOWN_READ']);
 
 const factMap=state=>new Map(arr(state?.facts).filter(f=>f?.status==='VERIFIED'&&f.field).map(f=>[f.field,f]));
 const factValue=(state,field)=>factMap(state).get(field)?.value??null;
@@ -29,8 +30,60 @@ function authorityProjection({load,state,plan,context,action,at,interpretation})
   const projection={version:2,revision:Number(previous.revision||0)+1,scope,goal:state.goal,intent:intentForGoal(state.goal),sub_intent:'V3_RUNTIME',entities,pending_action:action,missing_fields:missing,unresolved_references:[],user_corrections:arr(previous.user_corrections).slice(-12),business_constraints:arr(previous.business_constraints).slice(-12),owner_policies:arr(previous.owner_policies).slice(-12),last_confirmed_facts:previous.last_confirmed_facts||{},last_verified_action:previous.last_verified_action||null,last_verified_outcome:previous.last_verified_outcome||null,language,dialect:previous.dialect||'unknown',overall_confidence:Math.max(.5,Number(interpretation?.proposal?.confidence)||0),semantic_confidence:Math.max(.5,Number(interpretation?.proposal?.confidence)||0),operational_confidence:ready?1:.6,created_at:created,updated_at:at.toISOString(),expires_at:new Date(at.getTime()+86400000).toISOString(),intent_confirmed:state.intent_confirmed===true,delivery_mode:factValue(state,'delivery_mode')||null,service_type:context.business?.business_type||null,required_entities:arr(plan?.required_fields).slice(0,24),supported_actions:arr(contract?.supported_actions||contract?.actions).slice(0,24),activity_contract_version:contract?.contract_version||contract?.schema_version||null,clarification_entity:missing[0]||null,policy_dependencies:arr(previous.policy_dependencies).slice(0,20),v3_runtime:runtime,v3_engine:{version:3,engine:'V3',interpreter:'V3_INDEPENDENT',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,mode:load?.cognitive_policy?.mode||null,provider:clean(interpretation?.provider,100)||null,model:clean(interpretation?.model,120)||null}};
   if(Buffer.byteLength(JSON.stringify(projection),'utf8')>32000)throw Object.assign(new Error('V3_AUTHORITY_STATE_TOO_LARGE'),{code:'V3_AUTHORITY_STATE_TOO_LARGE'});return projection;
 }
-function authorityAction({state,plan}){if(plan.proposed_action==='REPLY')return 'REPLY';if(state.goal==='BOOK_SERVICE'&&plan.proposed_action==='READY_FOR_AUTHORITY')return factValue(state,'slot')!=null?'CREATE_BOOKING':'CHECK_AVAILABILITY';if(['RESCHEDULE_BOOKING','CANCEL_BOOKING'].includes(state.goal))return 'HANDOFF';if(plan.proposed_action==='CLARIFY')return 'CLARIFY';return 'REPLY';}
-function metricsFor({state,plan,action,interpretation,episode}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,message_role:interpretation?.proposal?.dialogue?.message_role||null,requested_action:interpretation?.proposal?.action||null,turn_disposition:plan.turn_disposition||'OPERATIONAL',evidence_invalidations:arr(state.invalidations).map(x=>({field:x.field,reason:x.reason})),episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null};}
+function sideQuestionFields(interpretation){return arr(interpretation?.proposal?.serviceQuestions).map(x=>String(x?.field||'').toLowerCase()).filter(Boolean);}
+function deriveCurrentTurnAuthority({interpretation}={}){
+  const proposal=interpretation?.proposal||{},role=String(proposal?.dialogue?.message_role||'').toUpperCase(),questions=sideQuestionFields(interpretation),fast=arr(interpretation?.fastFacts);
+  let read=null;
+  if(questions.includes('business_hours'))read='BUSINESS_HOURS';
+  else if(questions.includes('availability'))read='AVAILABILITY_DISCOVERY';
+  else if(questions.includes('price'))read='SERVICE_PRICE';
+  else if(questions.includes('duration_minutes'))read='SERVICE_DURATION';
+  else if(role==='SIDE_QUESTION'&&proposal?.intent==='SERVICE_DISCOVERY')read='SERVICE_MENU';
+  else if(role==='SIDE_QUESTION')read='UNKNOWN_READ';
+  const structuredLocation=fast.some(x=>x?.field==='location'&&x?.source==='PROVIDER_VERIFIED');
+  const structuredSlot=fast.some(x=>x?.field==='slot'&&x?.source==='CUSTOMER_CONFIRMED');
+  const entityProgress=arr(proposal?.entities).some(x=>typeof x?.evidence==='string'&&x.evidence.trim().length>0);
+  const serviceProgress=!!(proposal?.serviceName&&proposal?.serviceSurface);
+  const confirmation=role==='CONFIRMATION'&&typeof proposal?.dialogue?.evidence==='string'&&proposal.dialogue.evidence.trim().length>0;
+  const explicitMutation=proposal?.intent==='CANCEL_BOOKING'&&proposal?.action==='CANCEL_BOOKING'?'CANCEL_BOOKING':proposal?.intent==='RESCHEDULE_BOOKING'&&proposal?.action==='RESCHEDULE_BOOKING'?'RESCHEDULE_BOOKING':null;
+  return {read:READ_TYPES.has(read)?read:null,goal_progress:structuredLocation||structuredSlot||entityProgress||serviceProgress||confirmation,slot_selected:structuredSlot,explicit_mutation:explicitMutation,evidence_source:structuredSlot?'STRUCTURED_SLOT_SELECTION':structuredLocation?'STRUCTURED_LOCATION_RECEIPT':entityProgress||serviceProgress||confirmation?'CURRENT_MESSAGE':'NONE'};
+}
+function inheritedOperationalAction({state,plan}){
+  if(state.goal==='BOOK_SERVICE'&&plan.proposed_action==='READY_FOR_AUTHORITY')return factValue(state,'slot')!=null?'CREATE_BOOKING':'CHECK_AVAILABILITY';
+  if(['RESCHEDULE_BOOKING','CANCEL_BOOKING'].includes(state.goal))return 'HANDOFF';
+  return null;
+}
+function authorityAction({state,plan,authority}){
+  if(authority?.read&&!authority?.explicit_mutation)return 'REPLY';
+  if(plan.proposed_action==='REPLY')return 'REPLY';
+  if(state.goal==='BOOK_SERVICE'&&plan.proposed_action==='READY_FOR_AUTHORITY'){
+    if(factValue(state,'slot')!=null)return authority?.slot_selected?'CREATE_BOOKING':'REPLY';
+    return authority?.goal_progress?'CHECK_AVAILABILITY':'REPLY';
+  }
+  if(['RESCHEDULE_BOOKING','CANCEL_BOOKING'].includes(state.goal))return authority?.explicit_mutation===state.goal?'HANDOFF':'REPLY';
+  if(plan.proposed_action==='CLARIFY')return 'CLARIFY';return 'REPLY';
+}
+function approvedKnowledge(context,key){return arr(context?.knowledge).find(x=>x?.key===key&&x?.source==='owner_approved'&&Number(x?.confidence)>=.95)||null;}
+function knowledgeText(row,language){const value=row?.value;if(typeof value==='string')return clean(value,1200);if(!value||typeof value!=='object')return null;const ar=value.answer_ar||value.text_ar,en=value.answer_en||value.text_en,base=value.text||value.answer;return clean(language==='ar'?(ar||base||en):(en||base||ar),1200)||null;}
+function businessHoursReply(context,language){
+  const row=approvedKnowledge(context,'business_hours'),text=knowledgeText(row,language);if(!text)return null;
+  const ranges=[...text.matchAll(/\b([01]\d|2[0-3]):[0-5]\d\s*[-–—]\s*([01]\d|2[0-3]):[0-5]\d\b/g)].map(m=>m[0].replace(/\s+/g,''));const unique=[...new Set(ranges)];
+  if(unique.length===1){const [open,close]=unique[0].split(/[-–—]/);return language==='ar'?`ساعات العمل: من ${open} إلى ${close} يوميًا.`:`Business hours: ${open} to ${close} daily.`;}
+  return language==='ar'?`ساعات العمل المعتمدة: ${text}`:`Approved business hours: ${text}`;
+}
+function businessLocalDate(at,timezone){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:timezone||'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(at).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}`;}catch{return at.toISOString().slice(0,10)}}
+function addCalendarDays(date,days){const d=new Date(`${date}T12:00:00Z`);if(Number.isNaN(d.getTime()))return date;d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
+async function discoverAvailability({rpc,state,context,at}){
+  const serviceId=factValue(state,'service');if(!serviceId)return {slots:[],state:'NEED_GROUNDED_SERVICE'};
+  const workerId=factValue(state,'worker')||null,start=/^20\d{2}-\d{2}-\d{2}$/.test(String(factValue(state,'date')||''))?String(factValue(state,'date')):businessLocalDate(at,context?.business?.timezone);
+  for(let day=0;day<4;day++){
+    const date=addCalendarDays(start,day),raw=await rpc('dabbir_whatsapp_ai_find_available_options_v1',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_service_id:serviceId,p_worker_id:workerId,p_requested_date:date,p_from:null,p_to:null,p_max_candidates:12});
+    const future=arr(raw?.slots).filter(s=>Number.isFinite(Date.parse(s?.starts_at))&&Date.parse(s.starts_at)>at.getTime());if(future.length)return {slots:future,date,state:'OPTIONS_FOUND'};
+  }
+  return {slots:[],date:start,state:'NO_OPTIONS'};
+}
+function serviceMenuReply(context,language){const rows=arr(context?.services).slice(0,10).filter(x=>x?.id);if(!rows.length)return language==='ar'?'ما عندي خدمات مفعّلة أقدر أعرضها لك الآن.':'No active services are available to show right now.';return language==='ar'?`الخدمات المتاحة: ${rows.map((x,i)=>`${i+1}) ${clean(x.name_ar||x.name||x.name_en,120)}${Number.isFinite(Number(x.price))?` — ${Number(x.price)} درهم`:''}`).join('، ')}.`:`Available services: ${rows.map((x,i)=>`${i+1}) ${clean(x.name_en||x.name||x.name_ar,120)}${Number.isFinite(Number(x.price))?` — ${Number(x.price)} ${clean(context?.business?.currency_code||'AED',8)}`:''}`).join(', ')}.`;}
+function metricsFor({state,plan,action,interpretation,episode,authority,deniedAction}){return {engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,goal:state.goal,action,message_role:interpretation?.proposal?.dialogue?.message_role||null,requested_action:interpretation?.proposal?.action||null,turn_disposition:plan.turn_disposition||'OPERATIONAL',read_intent:authority?.read||null,current_turn_authority:{goal_progress:authority?.goal_progress===true,slot_selected:authority?.slot_selected===true,explicit_mutation:authority?.explicit_mutation||null,evidence_source:authority?.evidence_source||'NONE'},proposed_but_denied:deniedAction||null,evidence_invalidations:arr(state.invalidations).map(x=>({field:x.field,reason:x.reason})),episode:episode?.kind||null,episode_reason:episode?.reason||null,missing_fields:arr(plan.missing_fields),intent_confirmed:state.intent_confirmed===true,interpreter:'V3_INDEPENDENT',provider:clean(interpretation?.provider,80)||null,model:clean(interpretation?.model,100)||null};}
 function preserveUnmappedService(understanding,proposal){
   const surface=clean(proposal?.serviceSurface,180),hasVerified=arr(understanding?.facts).some(f=>f?.field==='service'&&f?.status==='VERIFIED'),hasTentative=arr(understanding?.tentatives).some(t=>t?.field==='service');
   if(!surface||proposal?.serviceName||hasVerified||hasTentative)return understanding;
@@ -49,13 +102,30 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   const base=episode.kind==='NEW_EPISODE'?freshConversationStateV3({context:enriched,at}):seeded;
   const understood=understandTurnV3({context:enriched,proposal:interpretation.proposal,previousState:base,now:at});
   const understanding=preserveUnmappedService(understood,interpretation.proposal);
-  let {state,plan,response}=planConversationTurnV3({previousState:base,understanding,episode,context:enriched});const action=authorityAction({state,plan});
+  let {state,plan,response}=planConversationTurnV3({previousState:base,understanding,episode,context:enriched});
+  const authority=deriveCurrentTurnAuthority({interpretation,state,plan,context:enriched}),candidate=inheritedOperationalAction({state,plan}),action=authorityAction({state,plan,authority}),deniedAction=candidate&&candidate!==action?candidate:null;
   const projection=authorityProjection({load,state,plan,context:enriched,action,at,interpretation});
-  const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:projection,p_metrics:metricsFor({state,plan,action,interpretation,episode})});
+  const committed=await rpc('dabbir_semantic_commit_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_expected_version:load.version,p_message_revision:load.message_revision,p_state:projection,p_metrics:metricsFor({state,plan,action,interpretation,episode,authority,deniedAction})});
   const version=committed.version,guarded={...claim,semantic_version:version};
-  const sendV3=async(v3Response,purpose,receipt=null)=>{assertFinalResponseSourceV3(v3Response);assertResponseGrounding(v3Response.text,receipt);await rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});const sent=await deliver(guarded,enriched,v3Response.text,purpose);log(logger,{event:'DABBIR_V3_OUTBOUND',engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,batch_id:claim.batch_id,semantic_version:version,provider_message_id:sent?.providerMessageId||null,action});return sent;};
-  await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:enriched.business.id,p_conversation_id:enriched.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','REPLY'].includes(action)?'REPLY':action,p_intent:intentForGoal(state.goal),p_confidence:Math.max(.5,Number(interpretation?.proposal?.confidence)||0),p_risk_level:action==='CREATE_BOOKING'?'MEDIUM':'LOW',p_missing_fields:arr(plan.missing_fields),p_reason_code:`V3_${clean(plan.next_question?.purpose||action,80)}`}).catch(()=>null);
+  const sendV3=async(v3Response,purpose,receipt=null)=>{assertFinalResponseSourceV3(v3Response);assertResponseGrounding(v3Response.text,receipt);await rpc('dabbir_semantic_assert_current_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version});const sent=await deliver(guarded,enriched,v3Response.text,purpose);log(logger,{event:'DABBIR_V3_OUTBOUND',engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false,batch_id:claim.batch_id,semantic_version:version,provider_message_id:sent?.providerMessageId||null,action,read_intent:authority.read||null,proposed_but_denied:deniedAction});return sent;};
+  await rpc('dabbir_record_ai_operator_decision_v1',{p_business_id:enriched.business.id,p_conversation_id:enriched.conversation.id,p_batch_id:claim.batch_id,p_action:['CLARIFY','REPLY'].includes(action)?'REPLY':action,p_intent:intentForGoal(state.goal),p_confidence:Math.max(.5,Number(interpretation?.proposal?.confidence)||0),p_risk_level:action==='CREATE_BOOKING'?'MEDIUM':'LOW',p_missing_fields:arr(plan.missing_fields),p_reason_code:`V3_${clean(authority.read||plan.next_question?.purpose||action,80)}`}).catch(()=>null);
 
+  if(authority.read==='BUSINESS_HOURS'){
+    const grounded=businessHoursReply(enriched,projection.language),fallback=projection.language==='ar'?'ما عندي ساعات عمل معتمدة أقدر أعطيك إياها الآن.':'I do not have approved business hours I can give you right now.';const suffix=plan.next_question?response.text:'';
+    response=brainResponseV3({text:`${grounded||fallback}${suffix?`\n${suffix}`:''}`,plan_id:`${state.episode_id}:business-hours`,metadata:{goal:state.goal,read_intent:authority.read}});await sendV3(response,'v3-business-hours');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY',read_intent:authority.read,engine:'V3',legacy_dialogue_called:false};
+  }
+  if(authority.read==='AVAILABILITY_DISCOVERY'){
+    const found=await discoverAvailability({rpc,state,context:enriched,at});let slots=[];
+    if(found.slots.length)slots=verifiedAvailability({slots:found.slots},enriched,projection);
+    if(slots.length){const payload={activity_contract_version:projection.activity_contract_version,mode:'booking',slots,presented:false};await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:payload});response=brainResponseV3({text:slotsText(slots,projection.language,null),plan_id:`${state.episode_id}:availability-discovery`,metadata:{goal:state.goal,read_intent:authority.read,read_only:true}});const sent=await sendV3(response,'v3-availability-discovery');if(!sent?.providerMessageId)throw Object.assign(new Error('V3_PRESENTATION_UNVERIFIED'),{code:'V3_PRESENTATION_UNVERIFIED'});await rpc('dabbir_semantic_set_pending_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:'choose_slot',p_payload:{...payload,presented:true,provider_message_id:sent.providerMessageId}});}else{response=brainResponseV3({text:projection.language==='ar'?'ما حصلت مواعيد متاحة في الأيام القريبة.':'I could not find available appointments in the next few days.',plan_id:`${state.episode_id}:availability-discovery-empty`,metadata:{goal:state.goal,read_intent:authority.read,read_only:true}});await sendV3(response,'v3-availability-discovery-empty');}
+    await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY',read_intent:authority.read,slots:slots.length,engine:'V3',legacy_dialogue_called:false};
+  }
+  if(authority.read==='SERVICE_MENU'){
+    response=brainResponseV3({text:serviceMenuReply(enriched,projection.language),plan_id:`${state.episode_id}:service-menu-read`,metadata:{goal:state.goal,read_intent:authority.read}});await sendV3(response,'v3-service-menu-read');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY',read_intent:authority.read,engine:'V3',legacy_dialogue_called:false};
+  }
+  if(authority.read==='UNKNOWN_READ'){
+    const unknown=projection.language==='ar'?'ما عندي معلومة معتمدة عن هذا حاليًا.':'I do not have approved information about that right now.',suffix=plan.next_question?response.text:'';response=brainResponseV3({text:`${unknown}${suffix?`\n${suffix}`:''}`,plan_id:`${state.episode_id}:unknown-read`,metadata:{goal:state.goal,read_intent:authority.read}});await sendV3(response,'v3-unknown-read');await finish(claim,'PROCESSED');return {state:'PROCESSED',action:'REPLY',read_intent:authority.read,engine:'V3',legacy_dialogue_called:false};
+  }
   if(action==='HANDOFF'){await handoff(enriched,'V3_OPERATION_REQUIRES_SAFE_AUTHORITY','V3 does not silently fall back to legacy dialogue','SUPPORT');await finish(claim,'HUMAN_REQUIRED','V3_OPERATION_REQUIRES_SAFE_AUTHORITY');return {state:'HUMAN_REQUIRED',action:'HANDOFF',engine:'V3',legacy_dialogue_called:false};}
   if(action==='CREATE_BOOKING'){
     const executed=await rpc('dabbir_semantic_execute_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:version,p_action:action});if(executed?.verified!==true||!executed?.appointment_id)throw Object.assign(new Error('V3_AUTHORITY_OUTCOME_UNVERIFIED'),{code:'V3_AUTHORITY_OUTCOME_UNVERIFIED'});
@@ -72,4 +142,4 @@ export async function runConversationV3Runtime({claim,context,rpc,deliver,finish
   await sendV3(response,action==='CLARIFY'?'v3-clarify':'v3-reply');await finish(claim,'PROCESSED');return {state:'PROCESSED',action,engine:'V3',response_source:V3_RESPONSE_SOURCE,legacy_dialogue_called:false};
 }
 
-export const _v3RuntimeTest={authorityProjection,authorityAction,metricsFor,preserveUnmappedService};
+export const _v3RuntimeTest={authorityProjection,authorityAction,deriveCurrentTurnAuthority,inheritedOperationalAction,approvedKnowledge,businessHoursReply,discoverAvailability,metricsFor,preserveUnmappedService};
