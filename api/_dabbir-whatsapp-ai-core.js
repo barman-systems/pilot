@@ -9,6 +9,7 @@ const PERMANENT_AI_FAILURES=new Set([
   'AI_CONTEXT_UNVERIFIED','SEMANTIC_TENANT_SCOPE_INVALID','SEMANTIC_STATE_SCOPE_INVALID','SEMANTIC_MUTATION_BLOCKED','SEMANTIC_OUTCOME_NOT_VERIFIED','SEMANTIC_BUDGET_EXCEEDED','AI_PENDING_ACTION_INVALID','AI_CONVERSATION_NOT_FOUND','AI_CONVERSATION_BRANCH_INACTIVE','AI_BLOCKED_BY_HUMAN_TAKEOVER','BUSINESS_PROFILE_UNVERIFIED','ACTION_SERVICE_NOT_AVAILABLE','ACTION_SERVICE_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_NOT_AVAILABLE','ACTION_WORKER_NOT_AVAILABLE_IN_BRANCH','ACTION_WORKER_SERVICE_MISMATCH','CUSTOMER_APPOINTMENT_NOT_FOUND_IN_BRANCH','DABBIR_SERVICE_NOT_AVAILABLE_IN_BRANCH','DABBIR_WORKER_NOT_ASSIGNED_TO_BRANCH','BOOKING_TIMEZONE_UNVERIFIED','WHATSAPP_CONNECTION_AMBIGUOUS_BRANCH','WHATSAPP_CONVERSATION_BRANCH_SCOPE_MISMATCH','WHATSAPP_TENANT_NOT_LINKED','WHATSAPP_SERVER_DATA_ACCESS_NOT_CONFIGURED','V3_AUTHORITY_STATE_TOO_LARGE','V3_AUTHORITY_OUTCOME_UNVERIFIED','V3_PRESENTATION_UNVERIFIED','ACTIVITY_DELIVERY_MODE_UNRESOLVED',
 ]);
 const clean=(v,max=4000)=>String(v??'').trim().replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
+const messageText=(v,max=4000)=>String(v??'').trim().replace(/\r\n?/g,'\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g,' ').replace(/[ \t]+/g,' ').replace(/\n[ \t]+/g,'\n').slice(0,max);
 const arr=v=>Array.isArray(v)?v:[];
 const one=v=>Array.isArray(v)?v[0]??null:v??null;
 const hash=value=>createHash('sha256').update(String(value)).digest('hex');
@@ -43,7 +44,7 @@ export function bookingText(result,lang){
 }
 async function handoff(context,reason,summary,route='SUPPORT'){return serviceRpc('dabbir_whatsapp_ai_handoff',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_route_class:route,p_reason:clean(reason,500),p_summary:clean(summary,1200)})}
 async function reserveReply(claim,context,body,purpose){
-  const text=clean(body,4000),key=claim.semantic_version?`wa-understanding:${claim.batch_id}:${clean(purpose,24)}`:`wa-ai:${claim.batch_id}:attempt:${claim.attempt_count}:${clean(purpose,24)}`;
+  const text=messageText(body,4000),key=claim.semantic_version?`wa-understanding:${claim.batch_id}:${clean(purpose,24)}`:`wa-ai:${claim.batch_id}:attempt:${claim.attempt_count}:${clean(purpose,24)}`;
   const row=one(claim.semantic_version?await serviceRpc('dabbir_semantic_reserve_outbound_v2',{p_batch_id:claim.batch_id,p_lock_token:claim.lock_token,p_version:claim.semantic_version,p_key:key,p_hash:hash(text),p_body:text}):await serviceRpc('dabbir_whatsapp_ai_reserve_outbound',{p_business_id:context.business.id,p_conversation_id:context.conversation.id,p_idempotency_key:key,p_payload_hash:hash(text),p_body:text}));
   if(!row?.reservation_id)throw Object.assign(new Error('AI_OUTBOUND_RESERVATION_UNVERIFIED'),{code:'AI_OUTBOUND_RESERVATION_UNVERIFIED'});return row;
 }
@@ -100,4 +101,4 @@ async function handleFailure(claim,error){
 }
 export async function processClaimedWhatsAppAiBatch(claim){try{return await processClaim(claim)}catch(error){return handleFailure(claim,error)}}
 export const _v3CutoverTest={engineForMode:conversationEngineForMode};
-export const _aiFailureTest={isPermanentCode:code=>PERMANENT_AI_FAILURES.has(String(code)),slotsText,localStamp};
+export const _aiFailureTest={isPermanentCode:code=>PERMANENT_AI_FAILURES.has(String(code)),slotsText,localStamp,messageText};
