@@ -6,12 +6,12 @@ const buildGate=fs.readFileSync(new URL('../scripts/vercel-build-gate.mjs',impor
 const guardian=fs.readFileSync(new URL('../.github/workflows/dabbir-release-guardian.yml',import.meta.url),'utf8');
 const lineage=fs.readFileSync(new URL('../.github/workflows/dabbir-main-lineage-guard.yml',import.meta.url),'utf8');
 
-test('Vercel build gate fails closed on syntax, dependency audit, and full tests',()=>{
-  assert.match(buildGate,/v4-fail-closed/);
-  assert.match(buildGate,/runNpm\(\['run','check:syntax'\],'syntax'\)/);
-  assert.match(buildGate,/runNpm\(\['run','audit:prod'\],'dependency-audit'\)/);
-  assert.match(buildGate,/runNpm\(\['test'\],'test-suite'\)/);
-  assert.match(buildGate,/process\.exit\(exitCode\)/);
+test('Vercel build gate stays lightweight while GitHub owns logical verification',()=>{
+  assert.match(buildGate,/v5-vercel-build-only/);
+  assert.match(buildGate,/runNpm\(\['run', 'check:syntax'\], 'vercel-build-syntax'\)/);
+  assert.doesNotMatch(buildGate,/runNpm\(\['run',\s*'audit:prod'\]/);
+  assert.doesNotMatch(buildGate,/runNpm\(\['test'\]/);
+  assert.match(buildGate,/process\.exit/);
 });
 
 test('release guardian creates a governed rollback PR without bypassing protected main',()=>{

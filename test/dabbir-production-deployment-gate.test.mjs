@@ -8,6 +8,7 @@ const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.
 const ignore = fs.readFileSync(new URL('../vercel-ignore-if-unaffected.sh', import.meta.url), 'utf8');
 const gatePath = 'scripts/vercel-build-gate.mjs';
 const gate = fs.readFileSync(new URL(`../${gatePath}`, import.meta.url), 'utf8');
+const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 
 test('Vercel uses one explicit non-recursive DABBIR build command', () => {
   assert.equal(vercel.buildCommand, 'npm run dabbir:build');
@@ -18,31 +19,25 @@ test('Vercel uses one explicit non-recursive DABBIR build command', () => {
   assert.equal(parse.status, 0, parse.stderr || parse.stdout);
 });
 
-test('cached build evidence is scoped to deployment plus commit and written only after every fail-closed verification succeeds', () => {
-  assert.match(gate, /VERCEL_DEPLOYMENT_ID/);
-  assert.match(gate, /VERCEL_GIT_COMMIT_SHA/);
-  assert.match(gate, /const evidenceKey = `\$\{safeDeploymentId\}-\$\{safeSha\}`/);
-  assert.match(gate, /dabbir-vercel-tests-passed-/);
-  assert.match(gate, /runNpm\(\['run','check:syntax'\],'syntax'\)/);
-  assert.match(gate, /runNpm\(\['run','audit:prod'\],'dependency-audit'\)/);
-  assert.match(gate, /runNpm\(\['test'\],'test-suite'\)/);
-  const testRun = gate.indexOf("runNpm(['test'],'test-suite')");
-  const markerWrite = gate.indexOf('writeFileSync(marker');
-  assert.ok(testRun >= 0 && markerWrite > testRun, 'success evidence must be written only after the final verification process');
+test('GitHub CI owns syntax, dependency audit, and full logical tests', () => {
+  assert.match(ci, /run: npm run check:syntax/);
+  assert.match(ci, /run: npm run audit:prod/);
+  assert.match(ci, /run: npm test/);
+});
+
+test('Vercel gate verifies build environment without duplicating executable logical-suite commands', () => {
+  assert.match(gate, /v5-vercel-build-only/);
+  assert.match(gate, /runNpm\(\['run', 'check:syntax'\], 'vercel-build-syntax'\)/);
+  assert.doesNotMatch(gate, /runNpm\(\['run',\s*'audit:prod'\]/);
+  assert.doesNotMatch(gate, /runNpm\(\['test'\]/);
   assert.match(gate, /DABBIR_BUILD_GATE_/);
 });
 
-test('failure cleanup cannot leave a stale success path', () => {
-  assert.match(gate, /finally \{[\s\S]*closeSync\(lockFd\)[\s\S]*unlinkSync\(lock\)/);
-  assert.match(gate, /process\.exit\(exitCode\)/);
-  assert.doesNotMatch(gate, /if \(result\.status !== 0\) process\.exit/);
-});
-
-test('concurrent duplicate invocations fail closed without fabricating success evidence', () => {
-  assert.match(gate, /openSync\(lock, 'wx'/);
-  assert.match(gate, /verification lock disappeared without success evidence/);
-  assert.match(gate, /timed out waiting for verified test evidence/);
-  assert.match(gate, /if \(existsSync\(marker\)\)/);
+test('PR validation is latest-head-wins while main runs are never canceled', () => {
+  assert.match(ci, /concurrency:/);
+  assert.match(ci, /github\.event\.pull_request\.number \|\| github\.ref/);
+  assert.match(ci, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.match(ci, /migration-deploy:[\s\S]*github\.event_name == 'push'[\s\S]*refs\/heads\/main/);
 });
 
 test('runtime and package changes cannot be skipped by the Vercel ignore gate', () => {
