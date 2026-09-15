@@ -20,8 +20,10 @@ async function gatewayCredential(env,oidcGetter=getVercelOidcToken){
 
 export async function configuredRecoveryTargets(env=process.env,{oidcGetter=getVercelOidcToken}={}){
   const targets=[];
-  const gemini=clean(env.GEMINI_API_KEY,16384);
-  if(gemini)targets.push({provider:'google-gemini',model:clean(env.DABBIR_GEMINI_MODEL||'gemini-3.7-flash',160),endpoint:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',credential:gemini});
+  // Production evidence after Gateway-primary cutover showed Gemini generation had
+  // zero successful recovery probes and sustained quarantine. Keep its credential
+  // available for explicit diagnostics/specialized Gemini capabilities, but do
+  // not spend automatic recovery traffic trying to revive the generation route.
   const groq=clean(env.GROQ_API_KEY,16384);
   if(groq)targets.push({provider:'groq',model:clean(env.DABBIR_AI_MODEL||env.DABBIR_GROQ_MODEL||'openai/gpt-oss-20b',160),endpoint:'https://api.groq.com/openai/v1/chat/completions',credential:groq});
   const cloudflare=clean(env.CLOUDFLARE_API_TOKEN,16384);
