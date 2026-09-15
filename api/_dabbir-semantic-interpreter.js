@@ -52,23 +52,21 @@ function gatewaySemanticOptions(url,options={}) {
   return options;
 }
 
-function makeSemanticFetch({activeEnv,fetchImpl,budgetMs=18000,maxAttempts=4}){
+function makeSemanticFetch({fetchImpl,budgetMs=18000,maxAttempts=4}){
   const deadline=Date.now()+budgetMs;
   let attempts=0;
   return async(url,options={})=>{
     const remaining=deadline-Date.now();
     if(attempts>=maxAttempts || remaining<=0) throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
-    const reserve=activeEnv.VERCEL_ENV&&String(url)!==GATEWAY_ENDPOINT?6000:0;
-    if(reserve&&(attempts>=maxAttempts-1||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
     attempts++;
     const nextOptions=gatewaySemanticOptions(url,options);
-    const signal=AbortSignal.timeout(Math.max(1,remaining-reserve));
+    const signal=AbortSignal.timeout(Math.max(1,remaining));
     return fetchImpl(url,{...nextOptions,signal:nextOptions.signal?AbortSignal.any([signal,nextOptions.signal]):signal});
   };
 }
 
 async function requestSemanticProvider({message,context,referenceTime,meteringContext,activeEnv,fetchImpl,budgetMs,maxAttempts}){
-  const bounded=makeSemanticFetch({activeEnv,fetchImpl,budgetMs,maxAttempts});
+  const bounded=makeSemanticFetch({fetchImpl,budgetMs,maxAttempts});
   return generateDABBIRAiReply({project:'dabbir_businesses',semantic:true,
     message:sanitizeSemanticText(message).slice(0,2000),
     businessContext:JSON.stringify(providerSemanticContext(context,referenceTime)),

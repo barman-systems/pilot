@@ -22,29 +22,27 @@ const allProviders={
   DABBIR_AI_GATEWAY_MODEL:'google/gemini-3.7-flash',
 };
 
-test('degraded direct providers leave Gemini gateway semantic output enough reasoning and JSON headroom',async()=>{
+test('Gateway-primary Gemini semantic output gets reasoning and JSON headroom without touching direct providers',async()=>{
   const requests=[];
   const result=await interpretSemanticMessage({
     message:'ستيشن',context:{},env:allProviders,
     fetchImpl:async(url,options)=>{
       const body=JSON.parse(options.body);
       requests.push({url:String(url),body});
-      if(String(url).includes('ai-gateway.vercel.sh')){
-        assert.equal(body.model,'google/gemini-3.7-flash');
-        assert.equal(body.response_format.type,'json_object');
-        assert.equal(body.max_tokens,2400);
-        assert.deepEqual(body.reasoning,{effort:'low'});
-        return okResponse();
-      }
-      return new Response('{}',{status:429});
+      assert.equal(String(url).includes('ai-gateway.vercel.sh'),true);
+      assert.equal(body.model,'google/gemini-3.7-flash');
+      assert.equal(body.response_format.type,'json_object');
+      assert.equal(body.max_tokens,2400);
+      assert.deepEqual(body.reasoning,{effort:'low'});
+      return okResponse();
     },
   });
 
   assert.equal(result.provider,'vercel-ai-gateway');
   assert.equal(result.model,'google/gemini-3.7-flash');
-  assert.equal(result.telemetry.request_count,4);
+  assert.equal(result.telemetry.request_count,1);
   assert.deepEqual(result.telemetry.skipped_attempts,[]);
-  assert.equal(requests.filter(x=>x.url.includes('ai-gateway.vercel.sh')).length,1);
+  assert.equal(requests.length,1);
 });
 
 test('Gemini semantic gateway hardening does not alter ordinary gateway replies',async()=>{
@@ -80,6 +78,7 @@ for(const [name,content,finishReason] of [
     },
   }),error=>error.code==='AI_PLANNER_UNAVAILABLE'&&error.telemetry.request_count===4);
   assert.equal(requests.length,4,'no fifth attempt or unvalidated proposal is returned');
-  assert.equal(requests[3].body.max_tokens,2400);
-  assert.deepEqual(requests[3].body.reasoning,{effort:'low'});
+  assert.equal(requests[0].body.max_tokens,2400);
+  assert.deepEqual(requests[0].body.reasoning,{effort:'low'});
+  assert.equal(requests.slice(2).every(x=>!x.url.includes('ai-gateway.vercel.sh')),true);
 });

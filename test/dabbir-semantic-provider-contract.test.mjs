@@ -135,27 +135,31 @@ test('strict schema rejection uses the existing fallback budget and format',asyn
 });
 
 const allProviders={GEMINI_API_KEY:'test',GROQ_API_KEY:'test',CLOUDFLARE_API_TOKEN:'test',CLOUDFLARE_ACCOUNT_ID:'test',VERCEL_ENV:'production',AI_GATEWAY_API_KEY:'test'};
-test('production regression: schema repair cannot exhaust the final provider request reservation',async()=>{
- const endpoints=[];
- const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async(url,options)=>{
-  endpoints.push(url);
-  if(url.includes('ai-gateway'))return response();
-  if(url.includes('groq')&&JSON.parse(options.body).response_format.type==='json_schema')return new Response(JSON.stringify({error:{code:'json_validate_failed'}}),{status:400});
-  return new Response('{}',{status:429});
- }});
- assert.equal(result.provider,'vercel-ai-gateway');
- assert.equal(endpoints.length,4);
- assert.equal(endpoints.some(x=>x.includes('cloudflare')),false);
- assert.equal(result.telemetry.request_count,4);
- assert.deepEqual(result.telemetry.skipped_attempts,[{provider:'cloudflare-workers-ai',attempt_type:'CUSTOMER',reason:'SEMANTIC_PROVIDER_RESERVED'}]);
-});
-test('all configured providers remain reachable when each consumes only one attempt',async()=>{
+test('Gateway-primary semantic success does not spend direct-recovery budget',async()=>{
  const endpoints=[];
  const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async url=>{
-  endpoints.push(url);return url.includes('ai-gateway')?response():new Response('{}',{status:429});
+  endpoints.push(url);assert.ok(url.includes('ai-gateway'));return response();
  }});
- assert.equal(endpoints.length,4);assert.ok(endpoints[2].includes('cloudflare'));
- assert.equal(result.telemetry.request_count,4);assert.equal(result.provider,'vercel-ai-gateway');
+ assert.equal(result.provider,'vercel-ai-gateway');
+ assert.equal(endpoints.length,1);
+ assert.equal(result.telemetry.request_count,1);
+ assert.equal(result.telemetry.routing_mode,'GATEWAY_PRIMARY_DIRECT_RECOVERY');
+ assert.deepEqual(result.telemetry.skipped_attempts,[]);
+});
+test('hard Gateway failure opens direct recovery within the same four-request cap',async()=>{
+ const endpoints=[];
+ const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async url=>{
+  endpoints.push(url);
+  if(url.includes('ai-gateway'))return new Response('{}',{status:503});
+  if(url.includes('generativelanguage.googleapis.com'))return new Response('{}',{status:429});
+  if(url.includes('groq.com'))return response();
+  throw new Error('unexpected provider after four-request cap');
+ }});
+ assert.equal(endpoints.length,4);
+ assert.ok(endpoints[0].includes('ai-gateway')&&endpoints[1].includes('ai-gateway'));
+ assert.ok(endpoints[2].includes('generativelanguage.googleapis.com'));
+ assert.ok(endpoints[3].includes('groq.com'));
+ assert.equal(result.telemetry.request_count,4);assert.equal(result.provider,'groq');
 });
 test('failed final fallback never increases the four actual HTTP request cap',async()=>{
  let calls=0;
@@ -167,16 +171,18 @@ test('failed final fallback never increases the four actual HTTP request cap',as
  });
  assert.equal(calls,4);
 });
-test('slow direct providers preserve time for the configured final fallback',async t=>{
+test('slow failed Gateway attempts preserve remaining time for direct recovery',async t=>{
  let clock=100000; t.mock.method(Date,'now',()=>clock);
  const endpoints=[];
  const result=await interpretSemanticMessage({message:'بكره',context:{},env:allProviders,fetchImpl:async url=>{
   endpoints.push(url);
-  if(url.includes('ai-gateway'))return response();
-  clock+=6100;return new Response('{}',{status:429});
+  if(url.includes('ai-gateway')){clock+=6100;return new Response('{}',{status:503});}
+  if(url.includes('generativelanguage.googleapis.com'))return response();
+  throw new Error('unexpected provider');
  }});
- assert.equal(result.provider,'vercel-ai-gateway');assert.equal(endpoints.length,3);
- assert.equal(endpoints.some(x=>x.includes('cloudflare')),false);
+ assert.equal(result.provider,'google-gemini');assert.equal(endpoints.length,3);
+ assert.ok(endpoints[0].includes('ai-gateway')&&endpoints[1].includes('ai-gateway'));
+ assert.ok(endpoints[2].includes('generativelanguage.googleapis.com'));
  assert.equal(result.telemetry.request_count,3);
 });
 test('a valid structured fallback completing after six seconds is not cut off while budget remains',async()=>{

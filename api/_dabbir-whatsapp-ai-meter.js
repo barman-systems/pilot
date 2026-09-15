@@ -53,6 +53,7 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
   if(!businessId||!key||key.startsWith('sb_publishable_'))return {ok:false,state:'METER_NOT_CONFIGURED'};
   const provider=clean(result?.provider,120)||'unknown';
   const gateway=provider==='vercel-ai-gateway';
+  const routingMode=clean(result?.telemetry?.routing_mode,80)||'DIRECT_ONLY';
   const body={
     p_business_id:businessId,
     p_operation_key:operationKey,
@@ -60,7 +61,7 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
     p_channel:'whatsapp',
     p_provider:provider,
     p_model:clean(result?.model,160)||null,
-    p_cost_mode:gateway?'PAID_FALLBACK':'FREE_FIRST_DIRECT',
+    p_cost_mode:gateway?'GATEWAY_PRIMARY':routingMode==='GATEWAY_PRIMARY_DIRECT_RECOVERY'?'DIRECT_RECOVERY':'DIRECT_ONLY',
     p_input_tokens:usage.inputTokens,
     p_output_tokens:usage.outputTokens,
     p_reasoning_tokens:usage.reasoningTokens,
@@ -72,11 +73,12 @@ async function recordUsage({businessId,operationKey,result,attempts,skippedAttem
       final_model:clean(result?.model,160)||null,
       auth_mode:clean(result?.auth_mode,80)||null,
       core_cost_mode:clean(result?.cost_mode,80)||null,
+      routing_mode:routingMode,
       gateway_user_attribution:gateway,
       attempts:attempts.slice(0,8),
       skipped_attempts:(skippedAttempts||[]).slice(0,8),
       provider_reliability:result?.telemetry?.provider_reliability||null,
-      billing_note:gateway?'Paid fallback is attributed to business_id in Vercel AI Gateway; exact report cost remains authoritative when response cost is absent.':'Direct-provider calls are metered by tokens; monetary cost is not guessed when the provider response has no billing amount.',
+      billing_note:gateway?'Gateway is the primary customer path and is attributed to business_id; exact report cost remains authoritative when response cost is absent.':routingMode==='GATEWAY_PRIMARY_DIRECT_RECOVERY'?'Direct provider served only as recovery after the primary Gateway path was unavailable; monetary cost is not guessed when no billing amount is returned.':'Direct-only provider call; monetary cost is not guessed when the provider response has no billing amount.',
     },
   };
   const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_record_ai_usage_v1`,{

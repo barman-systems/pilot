@@ -16,7 +16,6 @@ const ORDINAL_RE=/^(?:الخيار\s*)?(\d{1,2})$/u;
 const GATEWAY_ENDPOINT='https://ai-gateway.vercel.sh/v1/chat/completions';
 const V3_PROVIDER_MAX_REQUESTS=4;
 const V3_PROVIDER_TOTAL_TIMEOUT_MS=18_000;
-const V3_GATEWAY_RESERVATION_MS=6_000;
 const V3_GATEWAY_MODEL='openai/gpt-5.6-luna';
 
 function scopedServices(context){return arr(context?.services).filter(s=>(!s?.business_id||s.business_id===context?.business?.id)&&(!s?.branch_id||s.branch_id===context?.conversation?.branch_id));}
@@ -86,11 +85,9 @@ function createV3ProviderFetch({fetchImpl=fetch,env=process.env,now=Date.now}={}
   return async(url,options={})=>{
     const remaining=deadline-now();
     if(attempts>=V3_PROVIDER_MAX_REQUESTS||remaining<=0)throw Object.assign(new Error('SEMANTIC_PROVIDER_BUDGET'),{code:'SEMANTIC_PROVIDER_BUDGET'});
-    const reserve=(env?.VERCEL_ENV||env?.AI_GATEWAY_API_KEY||env?.VERCEL_OIDC_TOKEN)&&String(url)!==GATEWAY_ENDPOINT?V3_GATEWAY_RESERVATION_MS:0;
-    if(reserve&&(attempts>=3||remaining<=reserve))throw Object.assign(new Error('SEMANTIC_PROVIDER_RESERVED'),{code:'SEMANTIC_PROVIDER_RESERVED'});
     attempts++;
     const nextOptions=v3GatewayStructuredOptions(url,options);
-    const timeoutSignal=AbortSignal.timeout(Math.max(1,remaining-reserve));
+    const timeoutSignal=AbortSignal.timeout(Math.max(1,remaining));
     return fetchImpl(url,{...nextOptions,signal:nextOptions.signal?AbortSignal.any([timeoutSignal,nextOptions.signal]):timeoutSignal});
   };
 }
@@ -101,7 +98,7 @@ export async function interpretConversationTurnV3({context,previousState=null,ge
   const providerEnv=v3SemanticEnv(env),providerFetch=createV3ProviderFetch({fetchImpl,env:providerEnv});
   const result=await generate({project:'dabbir_businesses',semantic:'v3',language:'auto',message:clean(raw,2000),businessContext:JSON.stringify(providerContext(context,previousState,referenceTime)),history:roleHistory(context),meteringContext:{business:{id:context?.business?.id},conversation:{id:context?.conversation?.id},batch_message_created_at:referenceTime},env:providerEnv,fetchImpl:providerFetch});
   if(!result?.ok)throw Object.assign(new Error('V3_INTERPRETER_UNAVAILABLE'),{code:'V3_INTERPRETER_UNAVAILABLE',telemetry:result?.telemetry||null});
-  const x=normalizeModelContract(parseJsonOnly(result.reply));if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result?.telemetry||null});
+  const x=normalizeModelContract(parseJsonOnly(result.reply));if(!validModelContract(x,raw))throw Object.assign(new Error('V3_INTERPRETER_CONTRACT_INVALID'),{code:'V3_INTERPRETER_CONTRACT_INVALID',telemetry:result.telemetry||null});
   let serviceName=null;if(x.service_candidate?.label&&x.service_candidate?.surface&&x.service_candidate.confidence>=.65){const s=serviceByLabel(context,x.service_candidate.label);if(s)serviceName=serviceLabel(s);}
   const entities=x.entities.map(e=>({entity:e.entity,value:e.value,evidence:e.surface,confidence:e.confidence,correction:e.correction}));
   const serviceQuestion=x.side_questions.find(q=>q.type==='price'||q.type==='duration_minutes')||null;

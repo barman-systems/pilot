@@ -25,24 +25,22 @@ test('V3 Gateway fallback requests the exact schema on the dedicated structured 
   assert.deepEqual(body.response_format.json_schema.schema.required.sort(),['confidence','confirmation','entities','intent','invalidated_fields','requested_action','role','service_candidate','side_questions'].sort());
 });
 
-test('live provider shape reaches one structured Gateway request within four actual HTTP attempts',async()=>{
+test('live provider shape uses one structured Gateway-primary request and leaves direct recovery untouched',async()=>{
   const endpoints=[];let gatewayBody=null;
   const out=await interpretConversationTurnV3({context:context(),env:allProviders,fetchImpl:async(url,options)=>{
     endpoints.push(url);
-    if(url.includes('generativelanguage.googleapis.com')||url.includes('groq.com'))return new Response('{}',{status:429});
-    if(url.includes('cloudflare.com'))throw new TypeError('simulated network failure');
     if(url===GATEWAY){gatewayBody=JSON.parse(options.body);return response();}
-    throw new Error('unexpected endpoint');
+    throw new Error('direct provider must not be touched after healthy Gateway');
   }});
-  assert.equal(endpoints.length,4);
-  assert.equal(endpoints.filter(x=>x===GATEWAY).length,1);
-  assert.equal(out.telemetry.request_count,4);
+  assert.equal(endpoints.length,1);
+  assert.equal(endpoints[0],GATEWAY);
+  assert.equal(out.telemetry.request_count,1);
   assert.equal(out.provider,'vercel-ai-gateway');
   assert.equal(gatewayBody.response_format.type,'json_schema');
   assert.equal(gatewayBody.model,_v3InterpreterTest.V3_GATEWAY_MODEL);
 });
 
-test('invalid HTTP-200 Gateway semantics cannot create an unmetered fifth V3 request',async()=>{
+test('invalid HTTP-200 Gateway semantics stay inside the four-request cap and then use direct recovery',async()=>{
   const endpoints=[];
   await assert.rejects(interpretConversationTurnV3({context:context(),env:allProviders,fetchImpl:async(url)=>{
     endpoints.push(url);
@@ -57,5 +55,8 @@ test('invalid HTTP-200 Gateway semantics cannot create an unmetered fifth V3 req
     return true;
   });
   assert.equal(endpoints.length,_v3InterpreterTest.V3_PROVIDER_MAX_REQUESTS);
-  assert.equal(endpoints.filter(x=>x===GATEWAY).length,1,'secondary Gateway model must not become request #5');
+  assert.equal(endpoints.filter(x=>x===GATEWAY).length,2,'Gateway primary and its bounded secondary model consume only the first two requests');
+  assert.equal(endpoints.some(x=>x.includes('generativelanguage.googleapis.com')),true);
+  assert.equal(endpoints.some(x=>x.includes('groq.com')),true);
+  assert.equal(endpoints.some(x=>x.includes('cloudflare.com')),false,'the fifth provider request remains blocked by the hard cap');
 });
