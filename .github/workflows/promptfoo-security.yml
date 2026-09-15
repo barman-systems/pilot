@@ -2,19 +2,14 @@ name: DABBIR Promptfoo Security
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'api/**'
-      - 'integrations/**'
-      - 'security/promptfoo/**'
-      - '.github/workflows/promptfoo-security.yml'
 
+# Frozen from automatic PR execution by owner directive on 2026-09-15.
 permissions:
   contents: read
 
 jobs:
   promptfoo-security:
-    name: promptfoo-security
+    name: promptfoo-security-manual
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -23,7 +18,7 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Run local Promptfoo safety evaluation
+      - name: Run manual Promptfoo safety evaluation
         env:
           PROMPTFOO_DISABLE_TELEMETRY: '1'
           PROMPTFOO_DISABLE_UPDATE: '1'
@@ -33,11 +28,3 @@ jobs:
             -c security/promptfoo/promptfooconfig.yaml \
             --no-cache \
             -o promptfoo-results.json
-      - name: Upload Promptfoo result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: promptfoo-security-results
-          path: promptfoo-results.json
-          if-no-files-found: warn
-          retention-days: 7
