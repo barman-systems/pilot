@@ -8,6 +8,7 @@ const worker=fs.readFileSync(new URL('../scripts/barman-tool-agent.mjs',import.m
 const broker=fs.readFileSync(new URL('../api/barman-tool-agent-broker.js',import.meta.url),'utf8');
 const waitProduction=fs.readFileSync(new URL('../scripts/wait-dabbir-production-sha.mjs',import.meta.url),'utf8');
 const ci=fs.readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
+const premerge=fs.readFileSync(new URL('../scripts/barman-independent-premerge-gate.mjs',import.meta.url),'utf8');
 
 const baseClaims={
   iss:'https://token.actions.githubusercontent.com',
@@ -75,8 +76,12 @@ test('new test and migration files are included in change detection and commit s
   assert.match(worker,/git\(\['add','--',\.\.\.changed\]\)/);
 });
 
-test('required branch-protection test context is emitted only by pull_request CI',()=>{
-  assert.match(ci,/name:\s*\$\{\{\s*github\.event_name == 'pull_request' && 'test' \|\| 'ci-non-pr'\s*\}\}/);
+test('required branch-protection test context is emitted only by trusted BARMAN pre-merge gate',()=>{
+  assert.match(ci,/name:\s*\$\{\{\s*github\.event_name == 'pull_request' && 'candidate-ci' \|\| 'ci-non-pr'\s*\}\}/);
+  assert.doesNotMatch(ci,/github\.event_name == 'pull_request' && 'test'/);
+  assert.match(premerge,/export const STATUS_CONTEXT='test'/);
+  assert.match(premerge,/barman-promotion-attestation-gate/);
+  assert.match(premerge,/BARMAN_REQUIRED_TEST_PASS/);
   assert.match(ci,/Require terminal mobile release gates before merge/);
   assert.match(ci,/if:\s*github\.event_name == 'pull_request'/);
 });
