@@ -1,7 +1,7 @@
 import { SUPABASE_URL } from './_auth-core.js';
 import { supabaseKeyHeaders } from './_supabase-key-auth.js';
 
-export const AI_PROVIDER_RELIABILITY_VERSION='v2-probe-separated';
+export const AI_PROVIDER_RELIABILITY_VERSION='v3-gateway-zdr';
 export const AI_PROVIDER_COOLDOWN_CODE='AI_PROVIDER_COOLDOWN';
 export const AI_PROVIDER_ATTEMPT_TYPES=Object.freeze({CUSTOMER:'CUSTOMER',RECOVERY_PROBE:'RECOVERY_PROBE',BENCHMARK:'BENCHMARK'});
 const PROVIDERS=new Set(['google-gemini','groq','cloudflare-workers-ai','vercel-ai-gateway']);
@@ -25,6 +25,27 @@ export function providerForAiEndpoint(value=''){
   if(host==='api.cloudflare.com'&&url.pathname.includes('/ai/'))return 'cloudflare-workers-ai';
   if(host==='ai-gateway.vercel.sh')return 'vercel-ai-gateway';
   return null;
+}
+
+export function applyAiProviderEgressPolicy(provider,options={}){
+  if(provider!=='vercel-ai-gateway')return options;
+  if(!options?.body)throw Object.assign(new Error('AI_GATEWAY_PRIVACY_OPTIONS_REQUIRED'),{code:'AI_GATEWAY_PRIVACY_OPTIONS_REQUIRED'});
+  try{
+    const body=JSON.parse(String(options.body));
+    if(!body||typeof body!=='object'||Array.isArray(body))throw new Error('INVALID_BODY');
+    body.providerOptions={
+      ...(body.providerOptions||{}),
+      gateway:{
+        ...(body.providerOptions?.gateway||{}),
+        zeroDataRetention:true,
+        disallowPromptTraining:true,
+      },
+    };
+    return {...options,body:JSON.stringify(body)};
+  }catch(error){
+    if(error?.code==='AI_GATEWAY_PRIVACY_OPTIONS_REQUIRED')throw error;
+    throw Object.assign(new Error('AI_GATEWAY_PRIVACY_OPTIONS_REQUIRED'),{code:'AI_GATEWAY_PRIVACY_OPTIONS_REQUIRED'});
+  }
 }
 
 export function classifyAiProviderFailure({status=0,error=null}={}){
@@ -148,10 +169,11 @@ export async function reliableAiProviderFetch(url,options={},meta={}){
   if(attemptType==='CUSTOMER'&&decision==='PROBE')skipFromClaim({provider,model,attemptType,claim,trace,reason:'RECOVERY_PROBE_REQUIRED'});
   if(attemptType==='RECOVERY_PROBE'&&decision!=='PROBE')skipFromClaim({provider,model,attemptType,claim,trace,reason:'RECOVERY_PROBE_NOT_GRANTED'});
 
+  const outboundOptions=applyAiProviderEgressPolicy(provider,options);
   const started=Date.now();
   let response;
   try{
-    response=await transport(url,options);
+    response=await transport(url,outboundOptions);
   }catch(error){
     const latencyMs=Date.now()-started;
     const failureClass=classifyAiProviderFailure({error});
