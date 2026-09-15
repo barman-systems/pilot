@@ -41,12 +41,32 @@ test('V3 understanding and mutation tail fail closed when episode authority is m
   must(schema,/V3_ACTION_EPISODE_ID_MISMATCH/);
 });
 
-test('emergency handoff remains safety-first and does not fail closed on missing measurement metadata',()=>{
+test('non-conversation knowledge lifecycle events are never attached to the active episode',()=>{
+  const start=schema.indexOf('create or replace function dabbir_private.bind_understanding_episode_v1');
+  const end=schema.indexOf('create or replace function dabbir_private.bind_operator_episode_v1');
+  const binding=schema.slice(start,end);
+  must(binding,/new\.event_type not in \('UNDERSTOOD','COGNITIVE_PRESENTED','VERIFIED_ACTION'\)/);
+});
+
+test('emergency handoff correlation requires causal proof but never blocks the handoff',()=>{
   const start=schema.indexOf('create or replace function dabbir_private.bind_handoff_episode_v1');
   const end=schema.indexOf('create or replace function dabbir_private.bind_booking_funnel_episode_v1');
   const handoff=schema.slice(start,end);
+  must(handoff,/semantic_batch_id/);
+  must(handoff,/u\.batch_id=v_batch/);
+  must(handoff,/u\.metrics->>'engine'='V3'/);
+  must(handoff,/u\.episode_id=v_episode/);
+  must(handoff,/b\.state='PROCESSING'/);
   must(handoff,/new\.episode_id:=v_episode/);
   assert.doesNotMatch(handoff,/raise exception/i);
+});
+
+test('operator outbound evidence is not correlated from mutable current state',()=>{
+  const start=schema.indexOf('create or replace function dabbir_private.bind_operator_episode_v1');
+  const end=schema.indexOf('create or replace function dabbir_private.bind_action_episode_v1');
+  const operator=schema.slice(start,end);
+  assert.doesNotMatch(operator,/source_kind='outbound'/);
+  assert.doesNotMatch(operator,/dabbir_ai_conversation_state/);
 });
 
 test('late funnel evidence follows durable action sources instead of mutable current conversation state',()=>{
@@ -62,6 +82,8 @@ test('late funnel evidence follows durable action sources instead of mutable cur
 test('episode outcome is a read-only evidence projection and keeps completion source separate',()=>{
   must(projection,/create or replace view public\.dabbir_ai_booking_episode_outcomes_v1/);
   must(projection,/with \(security_invoker=true\)/);
+  must(projection,/HISTORICAL_HANDOFF_PARTIAL/);
+  must(projection,/CAUSAL_NATIVE/);
   must(projection,/VERIFIED_EXTERNAL/);
   must(projection,/COMMITTED/);
   must(projection,/HUMAN_RESOLVED/);
