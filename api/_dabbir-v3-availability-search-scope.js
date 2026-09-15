@@ -13,9 +13,7 @@ export function buildAvailabilitySearchScope({request,state,maxCandidates=12}={}
   if(!serviceId)return {ok:false,state:'NEED_GROUNDED_SERVICE'};
   if(!date)return {ok:false,state:'NEED_GROUNDED_DATE'};
   if(exact)return {ok:true,service_id:serviceId,date,mode:'EXACT',from:exact,to:exact,max_candidates:1,read_only:true};
-  // Semantic preferences intentionally do not become hidden numeric policy here.
-  // We query the grounded day and let reasoning rank returned real slots.
-  return {ok:true,service_id:serviceId,date,mode:'DAY',from:notBefore,to:notAfter,max_candidates:Math.max(1,Math.min(Number(maxCandidates)||12,24)),read_only:true};
+  return {ok:true,service_id:serviceId,date,mode:'DAY',from:notBefore,to:notAfter,max_candidates:Math.max(1,Math.min(Number(maxCandidates)||12,12)),read_only:true};
 }
 
 export function filterGroundedAvailabilityRows(rows,scope){
