@@ -1,3 +1,4 @@
+// Synchronize event proves the migration workflow is registered before merge.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
