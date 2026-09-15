@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const root=path.resolve(import.meta.dirname,'..');
 const schema=fs.readFileSync(path.join(root,'supabase/migrations/20260915125000_dabbir_episode_correlation_schema_v1.sql'),'utf8');
+const retro=fs.readFileSync(path.join(root,'supabase/migrations/20260915125050_dabbir_episode_funnel_retrobind_v1.sql'),'utf8');
 const projection=fs.readFileSync(path.join(root,'supabase/migrations/20260915125100_dabbir_episode_outcome_projection_v1.sql'),'utf8');
 const architecture=fs.readFileSync(path.join(root,'docs/architecture/DABBIR_EPISODE_CORRELATION_AUTHORITY_V1.md'),'utf8');
 
@@ -77,6 +78,15 @@ test('late funnel evidence follows durable action sources instead of mutable cur
   must(funnel,/new\.source_kind in \('appointment','payment'\)/);
   must(funnel,/l\.operation_type='booking\.create'/);
   assert.doesNotMatch(funnel,/dabbir_ai_conversation_state/);
+});
+
+test('booking creation retro-binds the earlier appointment evidence but reschedule and cancel cannot steal it',()=>{
+  must(retro,/new\.operation_type<>'booking\.create'/);
+  must(retro,/f\.appointment_id=new\.entity_id/);
+  must(retro,/f\.episode_id is null/);
+  must(retro,/f\.source_kind in \('appointment','payment'\)/);
+  assert.doesNotMatch(retro,/booking\.reschedule/);
+  assert.doesNotMatch(retro,/booking\.cancel/);
 });
 
 test('episode outcome is a read-only evidence projection and keeps completion source separate',()=>{
