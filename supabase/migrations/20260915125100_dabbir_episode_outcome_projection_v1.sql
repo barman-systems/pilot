@@ -62,6 +62,7 @@ select
   e.conversation_id,
   e.episode_id,
   case when e.episode_id like 'legacy-v3:%' then 'LEGACY_V3_DERIVED' else 'RUNTIME_NATIVE' end as correlation_epoch,
+  case when e.episode_id like 'legacy-v3:%' then 'HISTORICAL_HANDOFF_PARTIAL' else 'CAUSAL_NATIVE' end as handoff_correlation_mode,
   e.episode_started_at,
   e.last_understanding_at,
   e.initial_goal,
@@ -107,4 +108,4 @@ where e.latest_goal in ('BOOK_SERVICE','RESCHEDULE_BOOKING','CANCEL_BOOKING')
 grant select on public.dabbir_ai_booking_episode_outcomes_v1 to authenticated,service_role;
 
 comment on view public.dabbir_ai_booking_episode_outcomes_v1 is
-  'Derived booking episode truth. Committed evidence outranks handoff/planner labels; completed_by distinguishes AI, HUMAN and UNKNOWN. No writable outcome claim.';
+  'Derived booking episode truth. Committed evidence outranks handoff/planner labels; completed_by distinguishes AI, HUMAN and UNKNOWN. Historical handoff attribution is explicitly partial. No writable outcome claim.';
