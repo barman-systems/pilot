@@ -33,6 +33,8 @@ export default async function handler(req, res) {
       routing_mode: redundancy.routing_mode,
       configured_provider_count: redundancy.configured_provider_count,
       direct_provider_count: redundancy.direct_provider_count,
+      automatic_recovery_provider_count: redundancy.automatic_recovery_provider_count,
+      gemini_diagnostic_only: redundancy.gemini_diagnostic_only,
       direct_providers: configuredDirectProviders(),
       gateway_primary_configured: redundancy.gateway_primary_configured,
       gateway_fallback_configured: redundancy.gateway_fallback_configured,
