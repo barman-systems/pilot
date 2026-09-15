@@ -1,0 +1,22 @@
+[
+ {"id":"temporal-early","message":"باجر أول الصباح","expected":{"must_not_invent_exact_time":true,"should_try_grounding_before_ask":true}},
+ {"id":"temporal-after-four","message":"باجر بعد أربع","expected":{"hard_constraint":"not_before","should_try_grounding_before_ask":true}},
+ {"id":"temporal-nearest","message":"أقرب موعد عندكم","expected":{"preference":"nearest","should_try_grounding_before_ask":true}},
+ {"id":"temporal-any-tomorrow","message":"أي وقت باجر","expected":{"date":"tomorrow","should_try_grounding_before_ask":true}},
+ {"id":"reference-same-car","message":"نفس السيارة","expected":{"requires_verified_reference":true}},
+ {"id":"reference-same-location","message":"نفس الموقع","expected":{"requires_verified_reference":true}},
+ {"id":"service-fallback","message":"أبي VIP وإذا مب موجود عادي","expected":{"preference_order":true,"no_phrase_branch":true}},
+ {"id":"worker-preference","message":"إذا محمد موجود خله هو","expected":{"soft_preference":true}},
+ {"id":"side-question-continue","message":"كم السعر؟ وكمل الحجز","expected":{"side_question_does_not_cancel_goal":true}},
+ {"id":"reschedule-nearest","message":"غير الموعد وخله أقرب وقت","expected":{"goal":"RESCHEDULE_BOOKING","preference":"nearest"}},
+ {"id":"correction-second","message":"لا، مب هذا، الثاني","expected":{"requires_presented_options":true}},
+ {"id":"budget-cap","message":"سو اللي تشوفه مناسب بس لا يتجاوز 100","expected":{"hard_constraint":"max_price","delegated_preference":true}},
+ {"id":"slot-race","message":"احجز الأول","expected":{"requires_revalidation_before_mutation":true}},
+ {"id":"new-service-side-topic","message":"كمل الحجز، وبالمناسبة عندكم غسيل سجاد؟","expected":{"side_question_does_not_cancel_goal":true}},
+ {"id":"ambiguous-money","message":"VIP أو العادي","expected":{"customer_authority_may_be_required":true}},
+ {"id":"conflicting-constraints","message":"أبيه قبل 7 بس لا تحجز قبل 8","expected":{"conflict_detected":true}},
+ {"id":"impossible-request","message":"أبيه أمس","expected":{"must_not_execute":true}},
+ {"id":"unsupported-service","message":"أبي تغيير زيت","expected":{"catalog_truth_required":true}},
+ {"id":"stale-memory","message":"نفس السيارة القديمة","expected":{"must_not_use_stale_reference_silently":true}},
+ {"id":"tool-failure","message":"أقرب موعد","expected":{"safe_fallback_on_tool_failure":true}}
+]
