@@ -30,7 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact main commit
@@ -101,16 +100,6 @@ jobs:
 
           printf 'MERGED_PR=%s\nHEAD_SHA=%s\nBASE_SHA=%s\n' "$pr_number" "$head_sha" "$base_sha" | tee migration-source-proof.txt
 
-      - name: Normalize existing Production database credential
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${SUPABASE_DB_URL:-}" || { echo 'SUPABASE_DB_URL is not configured' >&2; exit 66; }
-          canonical="$(printf '%s' "$SUPABASE_DB_URL" | sed -E "s#^(postgres(ql)?://)[^:]+:#\\1postgres.${DABBIR_PROJECT_REF}:#")"
-          [[ "$canonical" == postgres://* || "$canonical" == postgresql://* ]] || { echo 'DATABASE_URL_INVALID' >&2; exit 67; }
-          echo "::add-mask::$canonical"
-          printf 'DATABASE_URL=%s\nPGAPPNAME=dabbir-ci-migrator\n' "$canonical" >> "$GITHUB_ENV"
-
       - name: Reject migration history mutation in this push
         shell: bash
         env:
@@ -153,6 +142,18 @@ jobs:
           test -s migration-manifest.tsv || { echo 'POST_CUTOVER_MANIFEST_EMPTY' >&2; exit 70; }
           sort -o migration-manifest.tsv migration-manifest.tsv
           echo "manifest_count=$count"
+
+      - name: Normalize existing Production database credential
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL:-}" || { echo 'SUPABASE_DB_URL is not configured' >&2; exit 66; }
+          canonical="$(printf '%s' "$SUPABASE_DB_URL" | sed -E "s#^(postgres(ql)?://)[^:]+:#\\1postgres.${DABBIR_PROJECT_REF}:#")"
+          [[ "$canonical" == postgres://* || "$canonical" == postgresql://* ]] || { echo 'DATABASE_URL_INVALID' >&2; exit 67; }
+          echo "::add-mask::$canonical"
+          printf 'DATABASE_URL=%s\nPGAPPNAME=dabbir-ci-migrator\n' "$canonical" >> "$GITHUB_ENV"
 
       - name: Reconcile and atomically apply missing migrations
         shell: bash
