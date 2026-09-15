@@ -136,9 +136,8 @@ test('promotion attestation is hard, OIDC-authenticated, exact-SHA and fail-clos
   let calls=0;
   const requiredWorkflows=[
     {name:'DABBIR CI',run_id:'11',conclusion:'success',head_sha:shaB},
-    {name:'DABBIR Security Gate',{id:12,conclusion:'success',head_sha:shaB}],
+    {name:'DABBIR Security Gate',run_id:'12',conclusion:'success',head_sha:shaB},
   ];
-  requiredWorkflows[1]={name:'DABBIR Security Gate',run_id:'12',conclusion:'success',head_sha:shaB};
   const result=await requirePromotionAttestation({
     repository:'barman-systems/pilot',prNumber:755,headSha:shaB,baseSha:shaA,requiredWorkflows,protectedPaths:['.github/workflows/ci.yml'],
     env:{ACTIONS_ID_TOKEN_REQUEST_URL:'https://oidc.example/token',ACTIONS_ID_TOKEN_REQUEST_TOKEN:'req'},
