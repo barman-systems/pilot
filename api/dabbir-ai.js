@@ -2,8 +2,8 @@ import { probeSemanticInterpreter } from './_dabbir-semantic-interpreter.js';
 import {probeCognitiveDialogue} from './_dabbir-cognitive-probe.js';
 import { accessTokenFromRequest, getVerifiedUser, requireSameOrigin } from './_auth-core.js';
 import { singleQueryValue } from './_request-query.js';
-import { configuredDirectProviders } from './_ai-provider-readiness.js';
-import { generateDABBIRAiReply, getDABBIRAiConfig, getDABBIRAiRedundancy } from './_ai-core.js';
+import { providerRoutingReadiness } from './_ai-provider-readiness.js';
+import { generateDABBIRAiReply, getDABBIRAiConfig } from './_ai-core.js';
 
 function json(res, status, body) {
   return res.status(status).setHeader('cache-control', 'no-store').json(body);
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const config = getDABBIRAiConfig();
-    const redundancy = getDABBIRAiRedundancy();
+    const readiness = providerRoutingReadiness();
     if (String(singleQueryValue(req, 'synthetic') || '') === '1') {
       // Synthetic probes call the real provider. Keep them on the same protected
       // write path as production AI so a public query cannot consume capacity.
@@ -30,13 +30,17 @@ export default async function handler(req, res) {
       configured: config.configured,
       auth_mode: config.auth_mode,
       cost_mode: config.cost_mode,
-      routing_mode: redundancy.routing_mode,
-      configured_provider_count: redundancy.configured_provider_count,
-      direct_provider_count: redundancy.direct_provider_count,
-      direct_providers: configuredDirectProviders(),
-      gateway_primary_configured: redundancy.gateway_primary_configured,
-      gateway_fallback_configured: redundancy.gateway_fallback_configured,
-      redundancy_ready: redundancy.redundancy_ready,
+      routing_mode: readiness.routing_mode,
+      configured_provider_count: readiness.configured_provider_count,
+      direct_provider_count: readiness.direct_provider_count,
+      direct_providers: readiness.direct_providers,
+      automatic_recovery_provider_count: readiness.automatic_recovery_provider_count,
+      automatic_recovery_providers: readiness.automatic_recovery_providers,
+      diagnostic_direct_provider_count: readiness.diagnostic_direct_provider_count,
+      diagnostic_direct_providers: readiness.diagnostic_direct_providers,
+      gateway_primary_configured: readiness.gateway_primary_configured,
+      gateway_fallback_configured: readiness.gateway_fallback_configured,
+      redundancy_ready: readiness.redundancy_ready,
       data_mode: 'SYNTHETIC_ONLY',
       external_side_effects: false,
     });
