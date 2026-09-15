@@ -1,0 +1,53 @@
+name: DABBIR Historical Exposure Audit
+
+on:
+  pull_request:
+    paths:
+      - 'test/dabbir-historical-exposure-audit.mjs'
+      - '.github/workflows/dabbir-historical-exposure-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  historical-exposure-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fetch every current branch, tag, and pull-request head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*'
+          git fetch --force origin '+refs/tags/*:refs/tags/*'
+          git fetch --force origin '+refs/pull/*/head:refs/remotes/pull/*' || true
+
+      - name: Use locked Node runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Scan Git history and retained GitHub surfaces without printing secrets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DABBIR_HISTORICAL_EXPOSURE_REPORT: historical-exposure-audit.json
+        run: node test/dabbir-historical-exposure-audit.mjs
+
+      - name: Upload redacted audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-historical-exposure-audit
+          path: historical-exposure-audit.json
+          if-no-files-found: error
+          retention-days: 14
