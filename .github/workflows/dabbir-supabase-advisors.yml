@@ -1,16 +1,15 @@
 name: DABBIR Supabase Advisors Watch
 
 on:
-  schedule:
-    - cron: '17 2 * * *'
   workflow_dispatch:
 
+# Frozen from automatic execution by owner directive on 2026-09-15.
 permissions:
   contents: read
 
 jobs:
   advisors:
-    name: supabase-advisors
+    name: supabase-advisors-manual
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -25,5 +24,5 @@ jobs:
         with:
           node-version-file: package.json
           package-manager-cache: false
-      - name: Check live Supabase advisor regressions
+      - name: Run manual Supabase advisor diagnostic
         run: node scripts/dabbir-supabase-advisors-gate.mjs
