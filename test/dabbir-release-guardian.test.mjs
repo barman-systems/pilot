@@ -8,9 +8,9 @@ const lineage=fs.readFileSync(new URL('../.github/workflows/dabbir-main-lineage-
 
 test('Vercel build gate stays lightweight while GitHub owns logical verification',()=>{
   assert.match(buildGate,/v5-vercel-build-only/);
-  assert.match(buildGate,/check:syntax/);
-  assert.doesNotMatch(buildGate,/audit:prod/);
-  assert.doesNotMatch(buildGate,/\['test'\]/);
+  assert.match(buildGate,/runNpm\(\['run', 'check:syntax'\], 'vercel-build-syntax'\)/);
+  assert.doesNotMatch(buildGate,/runNpm\(\['run',\s*'audit:prod'\]/);
+  assert.doesNotMatch(buildGate,/runNpm\(\['test'\]/);
   assert.match(buildGate,/process\.exit/);
 });
 
