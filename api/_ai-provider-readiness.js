@@ -1,5 +1,14 @@
+export function gatewayPrimaryConfigured(env = process.env) {
+  return Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
+}
+
 export function geminiAutomaticGenerationRecoveryEnabled(env = process.env) {
-  return String(env.DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED ?? '1').trim() !== '0';
+  const explicit = String(env.DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED ?? '').trim();
+  if (explicit === '1') return true;
+  if (explicit === '0') return false;
+  // Gateway-primary deployments fail closed: Gemini does not silently rejoin
+  // customer recovery merely because a diagnostic credential exists.
+  return !gatewayPrimaryConfigured(env);
 }
 
 export function configuredDiagnosticDirectProviders(env = process.env) {
@@ -27,13 +36,13 @@ export function configuredDirectProviders(env = process.env) {
 export function providerRoutingReadiness(env = process.env) {
   const automaticRecoveryProviders = configuredAutomaticRecoveryProviders(env);
   const diagnosticDirectProviders = configuredDiagnosticDirectProviders(env);
-  const gatewayPrimaryConfigured = Boolean(env.VERCEL_ENV || env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
-  const configuredProviderCount = automaticRecoveryProviders.length + (gatewayPrimaryConfigured ? 1 : 0);
+  const gatewayConfigured = gatewayPrimaryConfigured(env);
+  const configuredProviderCount = automaticRecoveryProviders.length + (gatewayConfigured ? 1 : 0);
 
   return {
-    routing_mode: gatewayPrimaryConfigured ? 'GATEWAY_PRIMARY_DIRECT_RECOVERY' : 'DIRECT_ONLY',
-    gateway_primary_configured: gatewayPrimaryConfigured,
-    gateway_fallback_configured: gatewayPrimaryConfigured,
+    routing_mode: gatewayConfigured ? 'GATEWAY_PRIMARY_DIRECT_RECOVERY' : 'DIRECT_ONLY',
+    gateway_primary_configured: gatewayConfigured,
+    gateway_fallback_configured: gatewayConfigured,
     automatic_recovery_providers: automaticRecoveryProviders,
     automatic_recovery_provider_count: automaticRecoveryProviders.length,
     direct_providers: automaticRecoveryProviders,
