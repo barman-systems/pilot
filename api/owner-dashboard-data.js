@@ -75,17 +75,52 @@ export function normalizeAiUsageForUi(payload){
   };
 }
 
-function serviceRoleKey(){
+export function normalizeProductTruthForUi(payload){
+  const source=payload&&typeof payload==='object'&&!Array.isArray(payload)?payload:{};
+  const delivery=source.posthog_delivery&&typeof source.posthog_delivery==='object'&&!Array.isArray(source.posthog_delivery)?source.posthog_delivery:{};
+  const allowedDeliveryStates=new Set(['HEALTHY','SYNCING','DEGRADED','NOT_CONFIGURED']);
+  const activity=Array.isArray(source.activity_breakdown)?source.activity_breakdown.map(row=>({
+    business_type:String(row?.business_type||'unknown').slice(0,80),
+    businesses_created:count(row?.businesses_created),
+    first_requests:count(row?.first_requests),
+    first_actions:count(row?.first_actions)
+  })):[];
+  return {
+    generated_at:source.generated_at||null,
+    authority:source.authority==='DABBIR_OPERATIONAL_TRUTH'?'DABBIR_OPERATIONAL_TRUTH':'UNKNOWN',
+    measurement_state:source.measurement_state==='COMPLETE'?'COMPLETE':'UNKNOWN',
+    signup_accounts:count(source.signup_accounts),
+    returning_users:count(source.returning_users),
+    businesses_created:count(source.businesses_created),
+    first_requests:count(source.first_requests),
+    first_actions:count(source.first_actions),
+    activity_breakdown:activity,
+    posthog_delivery:{
+      state:allowedDeliveryStates.has(delivery.state)?delivery.state:'UNKNOWN',
+      total:count(delivery.total),
+      delivered:count(delivery.delivered),
+      pending:count(delivery.pending),
+      failed:count(delivery.failed),
+      last_delivered_at:delivery.last_delivered_at||null
+    }
+  };
+}
+
+function serviceRoleKey(errorCode='OWNER_DATA_NOT_CONFIGURED'){
   const key=String(process.env.SUPABASE_SERVICE_ROLE_KEY||'').trim();
-  if(!key||key.startsWith('sb_publishable_'))throw Object.assign(new Error('OWNER_AI_USAGE_NOT_CONFIGURED'),{status:503});
+  if(!key||key.startsWith('sb_publishable_'))throw Object.assign(new Error(errorCode),{status:503});
   return key;
 }
 
-async function rootAiUsage(req){
+async function requireRootOwner(req){
   const auth=await ownerBroker(req,'identity',{});
   if(auth.status!==200||!auth.payload?.ok)throw Object.assign(new Error(auth.payload?.error||'OWNER_SESSION_REQUIRED'),{status:auth.status||401});
   if(auth.payload.payload?.authority_role!=='ROOT_OWNER')throw Object.assign(new Error('ROOT_OWNER_REQUIRED'),{status:403});
-  const key=serviceRoleKey();
+}
+
+async function rootAiUsage(req){
+  await requireRootOwner(req);
+  const key=serviceRoleKey('OWNER_AI_USAGE_NOT_CONFIGURED');
   if(!SUPABASE_URL)throw Object.assign(new Error('OWNER_AI_USAGE_NOT_CONFIGURED'),{status:503});
   const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_platform_ai_usage_snapshot_v1`,{
     method:'POST',
@@ -99,6 +134,22 @@ async function rootAiUsage(req){
   return normalizeAiUsageForUi(payload);
 }
 
+async function rootProductTruth(req){
+  await requireRootOwner(req);
+  const key=serviceRoleKey('OWNER_PRODUCT_TRUTH_NOT_CONFIGURED');
+  if(!SUPABASE_URL)throw Object.assign(new Error('OWNER_PRODUCT_TRUTH_NOT_CONFIGURED'),{status:503});
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/dabbir_platform_product_truth_snapshot_v1`,{
+    method:'POST',
+    headers:{apikey:key,authorization:`Bearer ${key}`,'content-type':'application/json'},
+    body:'{}',
+    signal:AbortSignal.timeout(10000)
+  });
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok)throw Object.assign(new Error('OWNER_PRODUCT_TRUTH_QUERY_FAILED'),{status:503});
+  if(!payload||typeof payload!=='object'||Array.isArray(payload))throw Object.assign(new Error('OWNER_PRODUCT_TRUTH_INVALID_RESPONSE'),{status:502});
+  return normalizeProductTruthForUi(payload);
+}
+
 export default async function handler(req,res){
   res.setHeader('cache-control','no-store, max-age=0');
   if(req.method!=='GET')return json(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'},{allow:'GET'});
@@ -107,10 +158,11 @@ export default async function handler(req,res){
   if(!sessionToken)return json(res,401,{ok:false,error:'OWNER_SESSION_REQUIRED'});
 
   const action=String(singleQueryValue(req,'action')||'overview').trim();
-  if(!['overview','search','executive','identity','customer360','operations','operation_entities','feedback','audit','ai_usage'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
+  if(!['overview','search','executive','identity','customer360','operations','operation_entities','feedback','audit','ai_usage','product_truth'].includes(action))return json(res,400,{ok:false,error:'UNKNOWN_ACTION'});
 
   try{
     if(action==='ai_usage')return json(res,200,{ok:true,ai_usage:await rootAiUsage(req)});
+    if(action==='product_truth')return json(res,200,{ok:true,product_truth:await rootProductTruth(req)});
     const body={};
     if(action==='search')body.q=String(singleQueryValue(req,'q')||'').trim().slice(0,160);
     if(action==='customer360'||action==='operation_entities'){
@@ -135,7 +187,8 @@ export default async function handler(req,res){
     return json(res,200,{...(p.payload||{}),ok:true});
   }catch(error){
     const status=Number.isInteger(error?.status)?error.status:503;
-    const safe=status===403?'ROOT_OWNER_REQUIRED':status===401?'OWNER_SESSION_REQUIRED':String(error?.message||'OWNER_DATA_FAILED').startsWith('OWNER_AI_USAGE_')?String(error.message):'OWNER_DATA_FAILED';
+    const message=String(error?.message||'OWNER_DATA_FAILED');
+    const safe=status===403?'ROOT_OWNER_REQUIRED':status===401?'OWNER_SESSION_REQUIRED':message.startsWith('OWNER_AI_USAGE_')||message.startsWith('OWNER_PRODUCT_TRUTH_')?message:'OWNER_DATA_FAILED';
     return json(res,status,{ok:false,error:safe});
   }
 }
