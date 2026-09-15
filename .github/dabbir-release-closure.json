@@ -11,7 +11,8 @@
     "test/dabbir-release-closure-guard.test.mjs"
   ],
   "allowed_head_refs": [
-    "fix/ai-provider-cost-registry-v1"
+    "fix/ai-provider-cost-registry-v1",
+    "security/runtime-exposure-hardening-20260915"
   ],
   "allowed_head_prefixes": [
     "guardian/revert-"
