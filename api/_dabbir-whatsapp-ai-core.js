@@ -15,14 +15,21 @@ const hash=value=>createHash('sha256').update(String(value)).digest('hex');
 
 function serviceKey(){return clean(process.env.SUPABASE_SERVICE_ROLE_KEY,8192)}
 function fmtWhen(value,timezone,lang){try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}catch{return clean(value,80)}}
+function fmtTime(value,timezone,lang){try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,hour:'numeric',minute:'2-digit'}).format(new Date(value))}catch{return clean(value,80)}}
+function fmtDate(value,timezone,lang){try{return new Intl.DateTimeFormat(lang==='ar'?'ar-AE':'en-AE',{timeZone:timezone,weekday:'long',day:'numeric',month:'long'}).format(new Date(value))}catch{return clean(value,80)}}
 function localStamp(value,timezone){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;}catch{return null}}
 function slotsText(slots,lang,requested=null){
-  const list=arr(slots).slice(0,3),lines=list.map((s,i)=>`${i+1}) ${fmtWhen(s.starts_at,s.timezone,lang)}${s.worker_name?(lang==='ar'?` مع ${s.worker_name}`:` with ${s.worker_name}`):''}`);
-  if(!lines.length)return lang==='ar'?'لا يوجد وقت متاح قريب من طلبك. أعطني وقتًا آخر يناسبك.':'No nearby slot is available. Send me another time that works for you.';
-  const requestedStamp=requested?.date&&requested?.time?`${requested.date}T${requested.time}`:null,timezone=list[0]?.timezone||requested?.timezone||null,firstStamp=timezone?localStamp(list[0]?.starts_at,timezone):null;
-  const shifted=!!requestedStamp&&!!firstStamp&&firstStamp>requestedStamp;
-  if(lang==='ar')return `${shifted?`الوقت اللي طلبته ${requested.time} غير متاح؛ أقرب المتاح:\n`:'المتاح:\n'}${lines.join('\n')}\nاختر الوقت المناسب.`;
-  return `${shifted?`The requested time ${requested.time} is unavailable; the nearest options are:\n`:'Available:\n'}${lines.join('\n')}\nChoose the time that works for you.`;
+  const list=arr(slots).slice(0,3);
+  if(!list.length)return lang==='ar'?'لا يوجد وقت متاح قريب من طلبك. أعطني وقتًا آخر يناسبك.':'No nearby slot is available. Send me another time that works for you.';
+  const timezone=list[0]?.timezone||requested?.timezone||'Asia/Dubai',stamps=list.map(s=>localStamp(s.starts_at,s.timezone||timezone)),sameDate=stamps.every(x=>x&&x.slice(0,10)===stamps[0]?.slice(0,10));
+  const lines=list.map((s,i)=>`${i+1}. ${sameDate?fmtTime(s.starts_at,s.timezone||timezone,lang):fmtWhen(s.starts_at,s.timezone||timezone,lang)}${s.worker_name?(lang==='ar'?` — ${s.worker_name}`:` — ${s.worker_name}`):''}`);
+  const requestedStamp=requested?.date&&requested?.time?`${requested.date}T${requested.time}`:null,firstStamp=stamps[0],shifted=!!requestedStamp&&!!firstStamp&&firstStamp>requestedStamp;
+  if(lang==='ar'){
+    const heading=shifted?`الوقت اللي طلبته ${requested.time} غير متاح. أقرب المواعيد${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`:`المواعيد المتاحة${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`;
+    return `${heading}\n\n${lines.join('\n')}\n\nاختر رقم الموعد (${lines.map((_,i)=>i+1).join('، ')}).`;
+  }
+  const heading=shifted?`The requested time ${requested.time} is unavailable. Nearest options${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`:`Available times${sameDate?` — ${fmtDate(list[0].starts_at,timezone,lang)}`:''}:`;
+  return `${heading}\n\n${lines.join('\n')}\n\nChoose the appointment number (${lines.map((_,i)=>i+1).join(', ')}).`;
 }
 export function bookingText(result,lang){
   const timezone=clean(result?.timezone,80);if(!timezone)throw Object.assign(new Error('BOOKING_TIMEZONE_UNVERIFIED'),{code:'BOOKING_TIMEZONE_UNVERIFIED'});
