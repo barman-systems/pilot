@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "active": true,
+  "closure_issue": 878,
+  "control_head_ref": "release-closure/control-878",
+  "control_title_prefix": "governance(release-closure):",
+  "control_allowed_paths": [
+    ".github/dabbir-release-closure.json",
+    ".github/scripts/dabbir-release-closure-guard.mjs",
+    ".github/workflows/barman-independent-premerge-gate.yml",
+    "test/dabbir-release-closure-guard.test.mjs"
+  ],
+  "allowed_head_refs": [
+    "fix/ai-provider-cost-registry-v1",
+    "security/p0a-secret-history-audit"
+  ],
+  "allowed_head_prefixes": [
+    "guardian/revert-"
+  ],
+  "guardian_title_prefix": "revert(guardian):"
+}
