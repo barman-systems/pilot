@@ -1,0 +1,69 @@
+name: DABBIR Preview Exposure Invalidation
+
+on:
+  push:
+    branches:
+      - security/runtime-exposure-hardening-20260915
+    paths:
+      - '.github/workflows/dabbir-preview-exposure-invalidation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  invalidate-old-previews:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: prj_HCTFdQo8Vc7FvZRdJ37H7KFYwpUq
+      VERCEL_TEAM_ID: team_pwfKq8jHuyW1XFVSZirAJiId
+      CLEAN_PREVIEW_SHA: a1344e1890f6c0de76406c9c372de287a9f60661
+    steps:
+      - name: Prove Vercel API authority and delete only pre-clean READY previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo 'VERCEL_TOKEN_MISSING'; exit 2; }
+          auth=(-H "Authorization: Bearer ${VERCEL_TOKEN}")
+          base="https://api.vercel.com"
+
+          tmp="$(mktemp)"
+          code="$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" \
+            "$base/v13/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_TEAM_ID&limit=100")"
+          echo "VERCEL_DEPLOYMENT_LIST_HTTP=$code"
+          [ "$code" = 200 ] || { jq -r '.error.code // .error.message // "VERCEL_API_DENIED"' "$tmp" 2>/dev/null || true; exit 3; }
+
+          clean_created="$(jq -r --arg sha "$CLEAN_PREVIEW_SHA" '.deployments[] | select(.meta.githubCommitSha == $sha) | .created' "$tmp" | head -1)"
+          test "$clean_created" != "" && test "$clean_created" != "null" || { echo 'CLEAN_PREVIEW_NOT_FOUND'; exit 4; }
+          echo "CLEAN_PREVIEW_CREATED=$clean_created"
+
+          mapfile -t ids < <(jq -r --argjson cutoff "$clean_created" '
+            .deployments[]
+            | select((.target == null or .target == "preview") and .state == "READY" and .created < $cutoff)
+            | .uid // .id
+          ' "$tmp")
+
+          echo "OLD_READY_PREVIEWS=${#ids[@]}"
+          deleted=0
+          for id in "${ids[@]}"; do
+            test -n "$id" || continue
+            detail="$(mktemp)"
+            dcode="$(curl -sS -o "$detail" -w '%{http_code}' "${auth[@]}" \
+              "$base/v13/deployments/$id?teamId=$VERCEL_TEAM_ID")"
+            [ "$dcode" = 200 ] || { echo "SKIP_UNREADABLE=$id:$dcode"; continue; }
+            target="$(jq -r '.target // "preview"' "$detail")"
+            sha="$(jq -r '.meta.githubCommitSha // ""' "$detail")"
+            created="$(jq -r '.created // 0' "$detail")"
+            if [ "$target" = production ] || [ "$sha" = "$CLEAN_PREVIEW_SHA" ] || [ "$created" -ge "$clean_created" ]; then
+              echo "SAFETY_SKIP=$id target=$target sha=$sha created=$created"
+              continue
+            fi
+            out="$(mktemp)"
+            delcode="$(curl -sS -X DELETE -o "$out" -w '%{http_code}' "${auth[@]}" \
+              "$base/v13/deployments/$id?teamId=$VERCEL_TEAM_ID")"
+            echo "DELETE=$id HTTP=$delcode"
+            [ "$delcode" = 200 ] || { jq -r '.error.code // .error.message // "DELETE_DENIED"' "$out" 2>/dev/null || true; exit 5; }
+            deleted=$((deleted+1))
+          done
+          echo "DELETED_OLD_PREVIEWS=$deleted"
