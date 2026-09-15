@@ -134,7 +134,7 @@ async function closeUnauthorized({repository,token,pr,decision,currentRunId}){
   if(clean(pr?.state)!=='closed'){
     await githubJson(repository,`/pulls/${number}`,token,{method:'PATCH',body:{state:'closed'}});
   }
-  console.error(`DABBIR_RELEASE_CLOSURE_AUTO_CLOSED pr=${number} head=${headRef||'unknown'} reason=${decision.reason} cancelled_runs=${cancelled}`);
+  console.log(`DABBIR_RELEASE_CLOSURE_AUTO_CLOSED pr=${number} head=${headRef||'unknown'} reason=${decision.reason} cancelled_runs=${cancelled}`);
   return {number,headRef,reason:decision.reason,cancelled};
 }
 
@@ -146,7 +146,10 @@ async function evaluatePr({repository,token,config,pr,currentRunId,close=true}){
     console.log(`DABBIR_RELEASE_CLOSURE_ALLOW pr=${pr.number} head=${clean(pr?.head?.ref)} reason=${decision.reason}`);
     return decision;
   }
-  if(close)await closeUnauthorized({repository,token,pr,decision,currentRunId});
+  if(close){
+    const closed=await closeUnauthorized({repository,token,pr,decision,currentRunId});
+    return {...decision,closed:true,cancelled:closed.cancelled};
+  }
   return decision;
 }
 
@@ -176,7 +179,9 @@ export async function runReleaseClosureGuard({env=process.env}={}){
   const currentRunId=clean(env.GITHUB_RUN_ID);
   if(!repository||!token||!eventName)throw new Error('RELEASE_CLOSURE_ENV_MISSING');
 
-  if(eventName==='push')return sweepOpenPullRequests({repository,token,config,currentRunId});
+  if(eventName==='push'||eventName==='workflow_run'){
+    return sweepOpenPullRequests({repository,token,config,currentRunId});
+  }
   if(!['pull_request_target','workflow_dispatch'].includes(eventName))throw new Error(`RELEASE_CLOSURE_EVENT_DENIED:${eventName}`);
 
   let pr=null;
@@ -184,12 +189,14 @@ export async function runReleaseClosureGuard({env=process.env}={}){
     const event=JSON.parse(fs.readFileSync(eventPath,'utf8'));
     pr=event?.pull_request||null;
   }
-  const number=Number(env.BARMAN_PREMERGE_PR_NUMBER||pr?.number||0);
+  const number=Number(env.RELEASE_CLOSURE_PR_NUMBER||env.BARMAN_PREMERGE_PR_NUMBER||pr?.number||0);
   if(!pr&&number)pr=await getPullRequest(repository,number,token);
   if(!pr)throw new Error('RELEASE_CLOSURE_PR_MISSING');
 
   const decision=await evaluatePr({repository,token,config,pr,currentRunId,close:true});
-  if(!decision.allowed)throw new Error(`${decision.reason}:pr=${pr.number}:head=${clean(pr?.head?.ref)}`);
+  if(!decision.allowed&&decision.closed!==true){
+    throw new Error(`${decision.reason}:pr=${pr.number}:head=${clean(pr?.head?.ref)}`);
+  }
   return decision;
 }
 
