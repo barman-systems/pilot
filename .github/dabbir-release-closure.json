@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active": true,
+  "active": false,
   "closure_issue": 878,
   "control_head_ref": "release-closure/control-878",
   "control_title_prefix": "governance(release-closure):",
@@ -10,12 +10,7 @@
     ".github/workflows/dabbir-release-guardian.yml",
     "test/dabbir-release-closure-guard.test.mjs"
   ],
-  "allowed_head_refs": [
-    "fix/ai-provider-cost-registry-v1",
-    "security/runtime-exposure-hardening-20260915"
-  ],
-  "allowed_head_prefixes": [
-    "guardian/revert-"
-  ],
+  "allowed_head_refs": [],
+  "allowed_head_prefixes": [],
   "guardian_title_prefix": "revert(guardian):"
 }
