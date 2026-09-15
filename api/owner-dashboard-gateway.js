@@ -1,6 +1,5 @@
 // The only authenticated HTML gateway for the owner workspace.
 import { renderOwnerCommandCenter } from './owner-command-center.js';
-import { injectOwnerProductTruth } from './_owner-product-truth-ui.js';
 import { ownerSessionToken } from './_owner-broker-client.js';
 import { singleQueryValue } from './_request-query.js';
 
@@ -35,13 +34,11 @@ export default async function handler(req, res) {
     if (!session) return redirectToOwner(res, true);
     // Explicit allowlist: session tokens and broker internals never enter HTML.
     const identity=Object.fromEntries(['authority_role','role_code','permissions','granular_permissions','access_scope','access_expires_at','mfa_required','display_name','expires_at'].map(key=>[key,session[key]]));
-    const lang=singleQueryValue(req,'lang');
-    const html=injectOwnerProductTruth(renderOwnerCommandCenter(identity,lang),identity,lang);
     res.statusCode=200;
     res.setHeader('content-type','text/html; charset=utf-8');
     res.setHeader('x-content-type-options','nosniff');
     res.setHeader('x-dabbir-owner-command-center','canonical');
-    return res.end(req.method==='HEAD'?'':html);
+    return res.end(req.method==='HEAD'?'':renderOwnerCommandCenter(identity,singleQueryValue(req,'lang')));
   } catch {
     // An unavailable broker is not evidence that an otherwise valid cookie expired.
     res.statusCode=503;res.setHeader('content-type','text/html; charset=utf-8');res.setHeader('retry-after','15');
