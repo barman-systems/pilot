@@ -60,6 +60,13 @@ test('explicit current cancellation remains eligible for the existing safe hando
   assert.equal(_v3RuntimeTest.authorityAction({state:{goal:'CANCEL_BOOKING',facts:[]},plan:{proposed_action:'READY_FOR_AUTHORITY'},authority}),'HANDOFF');
 });
 
+test('explicit current mutation outranks a side read in the same turn',()=>{
+  const i=interpretation({intent:'CANCEL_BOOKING',action:'CANCEL_BOOKING',serviceQuestions:[{field:'business_hours',evidence:'متى تسكر؟'}],dialogue:{message_role:'CANCELLATION',evidence:'ألغي الحجز، وبالمناسبة متى تسكر؟'}}),authority=_v3RuntimeTest.deriveCurrentTurnAuthority({interpretation:i});
+  assert.equal(authority.explicit_mutation,'CANCEL_BOOKING');assert.equal(authority.read,'BUSINESS_HOURS');
+  assert.equal(_v3RuntimeTest.executableReadIntent(authority),null);
+  assert.equal(_v3RuntimeTest.authorityAction({state:{goal:'CANCEL_BOOKING',facts:[]},plan:{proposed_action:'READY_FOR_AUTHORITY'},authority}),'HANDOFF');
+});
+
 test('business-hours reply is built only from approved owner knowledge',()=>{
   const context={knowledge:[{key:'business_hours',source:'owner_approved',confidence:1,value:{text:'Sunday 08:00-18:00; Monday 08:00-18:00; Tuesday 08:00-18:00; Wednesday 08:00-18:00; Thursday 08:00-18:00; Friday 08:00-18:00; Saturday 08:00-18:00'}}]};
   assert.equal(_v3RuntimeTest.businessHoursReply(context,'ar'),'ساعات العمل: من 08:00 إلى 18:00 يوميًا.');
