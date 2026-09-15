@@ -1,0 +1,69 @@
+name: DABBIR Full Backup
+
+on:
+  push:
+    branches:
+      - 'ops/dabbir-full-backup-20260915-1600'
+
+permissions:
+  contents: read
+
+env:
+  BACKUP_SOURCE_SHA: 8108616204977a4cd615d4e183bc8e40be51ac0b
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout backup branch with full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Fetch all repository refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          actual_main="$(git rev-parse origin/main)"
+          if [[ "$actual_main" != "$BACKUP_SOURCE_SHA" ]]; then
+            echo "Main moved after backup request. Refusing mixed-state backup." >&2
+            echo "expected=$BACKUP_SOURCE_SHA actual=$actual_main" >&2
+            exit 1
+          fi
+
+      - name: Build exact source snapshot and full git bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          short_sha="${BACKUP_SOURCE_SHA:0:12}"
+          git archive \
+            --format=zip \
+            --prefix="dabbir-main-${short_sha}/" \
+            --output="backup/dabbir-main-${short_sha}.zip" \
+            "$BACKUP_SOURCE_SHA"
+          git bundle create "backup/dabbir-full-history-${short_sha}.bundle" --all
+          git show-ref | sort > "backup/git-refs-${short_sha}.txt"
+          git log -1 --format='commit=%H%ncommit_time=%cI%nauthor=%an <%ae>%nsubject=%s' "$BACKUP_SOURCE_SHA" > "backup/manifest-${short_sha}.txt"
+          {
+            echo "repository=barman-systems/pilot"
+            echo "source_sha=$BACKUP_SOURCE_SHA"
+            echo "source_archive=dabbir-main-${short_sha}.zip"
+            echo "full_history_bundle=dabbir-full-history-${short_sha}.bundle"
+            echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "secrets_included=false"
+            echo "note=GitHub repository source/history backup only; Vercel/Supabase secret values and live databases are intentionally not exported."
+          } >> "backup/manifest-${short_sha}.txt"
+          (cd backup && sha256sum * > SHA256SUMS.txt)
+
+      - name: Upload DABBIR backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-full-backup-810861620497
+          path: backup/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
