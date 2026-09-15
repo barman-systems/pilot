@@ -1,19 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { injectOwnerProductTruth } from '../api/_owner-product-truth-ui.js';
+import { renderOwnerCommandCenter } from '../api/owner-command-center.js';
 import { normalizeProductTruthForUi } from '../api/owner-dashboard-data.js';
 
-const shell='<!doctype html><body><section id="home"><div class="grid"><section id="customerHealthPanel"></section></div></section></body></html>';
-
-test('product truth is embedded in the canonical owner dashboard for root owner only',()=>{
-  const root=injectOwnerProductTruth(shell,{authority_role:'ROOT_OWNER'},'ar');
+test('product truth is part of the canonical owner dashboard for root owner only',()=>{
+  const root=renderOwnerCommandCenter({authority_role:'ROOT_OWNER'},'ar');
   assert.match(root,/id="productTruthPanel"/);
   assert.match(root,/حقيقة المنتج/);
   assert.match(root,/owner-dashboard-data\?action=product_truth/);
+  assert.equal((root.match(/<script>/g)||[]).length,1);
 
-  const delegated=injectOwnerProductTruth(shell,{authority_role:'OWNER_DELEGATE'},'ar');
-  assert.equal(delegated,shell);
+  const delegated=renderOwnerCommandCenter({authority_role:'OWNER_DELEGATE'},'ar');
+  assert.doesNotMatch(delegated,/id="productTruthPanel"/);
+  assert.equal((delegated.match(/<script>/g)||[]).length,1);
 });
 
 test('product truth normalization keeps missing measurement distinct from zero',()=>{
