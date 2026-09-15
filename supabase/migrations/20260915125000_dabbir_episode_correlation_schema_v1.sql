@@ -111,12 +111,14 @@ set episode_id=m.episode_id
 from mapped m
 where f.id=m.id and m.episode_id is not null;
 
--- All existing V3 rows are backfilled before this is installed. Legacy/V2 is
--- intentionally nullable, but V3 understanding can never be uncorrelated again.
+-- All existing V3 UNDERSTOOD rows are backfilled before this is installed.
+-- Legacy/V2 remains nullable, but V3 understanding can never be uncorrelated.
 alter table public.dabbir_ai_understanding_events drop constraint if exists dabbir_ai_understanding_v3_episode_required;
 alter table public.dabbir_ai_understanding_events add constraint dabbir_ai_understanding_v3_episode_required
   check (coalesce(metrics->>'engine','')<>'V3' or episode_id is not null);
 
+-- Only semantic-flow evidence belongs to a conversation episode. Knowledge
+-- proposal/review lifecycle events intentionally remain unscoped.
 create or replace function dabbir_private.bind_understanding_episode_v1()
 returns trigger
 language plpgsql
@@ -125,13 +127,15 @@ set search_path=''
 as $$
 declare v_episode text;v_engine text;
 begin
+  if new.event_type not in ('UNDERSTOOD','COGNITIVE_PRESENTED','VERIFIED_ACTION') then return new; end if;
+
   select nullif(s.semantic_state#>>'{v3_runtime,episode_id}',''),nullif(s.semantic_state#>>'{v3_engine,engine}','')
     into v_episode,v_engine
   from public.dabbir_ai_conversation_state s
   where s.business_id=new.business_id and s.conversation_id=new.conversation_id;
 
   if new.episode_id is null then new.episode_id:=v_episode; end if;
-  if (coalesce(new.metrics->>'engine','')='V3' or v_engine='V3') and new.episode_id is null then raise exception 'V3_EPISODE_ID_REQUIRED'; end if;
+  if (coalesce(new.metrics->>'engine','')='V3' or (new.event_type='UNDERSTOOD' and v_engine='V3')) and new.episode_id is null then raise exception 'V3_EPISODE_ID_REQUIRED'; end if;
   if coalesce(new.metrics->>'engine','')='V3' and v_episode is not null and new.episode_id is distinct from v_episode then raise exception 'V3_EPISODE_ID_MISMATCH'; end if;
   return new;
 end;
@@ -141,7 +145,8 @@ drop trigger if exists dabbir_bind_understanding_episode on public.dabbir_ai_und
 create trigger dabbir_bind_understanding_episode before insert on public.dabbir_ai_understanding_events for each row execute function dabbir_private.bind_understanding_episode_v1();
 
 -- Pre-understanding PROCESSING/RETRY events may remain unscoped. DECIDE after a
--- V3 UNDERSTOOD event may not.
+-- V3 UNDERSTOOD event may not. Delayed outbound evidence is deliberately not
+-- attached from mutable current conversation state.
 create or replace function dabbir_private.bind_operator_episode_v1()
 returns trigger
 language plpgsql
@@ -162,10 +167,6 @@ begin
     select l.episode_id into v_episode from public.dabbir_ai_action_ledger l where l.business_id=new.business_id and l.id=new.source_id;
   elsif v_episode is null and new.source_kind='handoff' and new.source_id is not null then
     select h.episode_id into v_episode from public.dabbir_handoffs h where h.business_id=new.business_id and h.id=new.source_id;
-  elsif v_episode is null and new.source_kind='outbound' then
-    select nullif(s.semantic_state#>>'{v3_runtime,episode_id}','') into v_episode
-    from public.dabbir_ai_conversation_state s
-    where s.business_id=new.business_id and s.conversation_id=new.conversation_id;
   end if;
 
   if new.episode_id is null then new.episode_id:=v_episode; end if;
@@ -202,20 +203,39 @@ revoke all on function dabbir_private.bind_action_episode_v1() from public,anon,
 drop trigger if exists dabbir_bind_action_episode on public.dabbir_ai_action_ledger;
 create trigger dabbir_bind_action_episode before insert on public.dabbir_ai_action_ledger for each row execute function dabbir_private.bind_action_episode_v1();
 
--- Handoff safety outranks measurement: bind when possible, but never reject an
--- emergency handoff solely because episode metadata is unavailable.
+-- Handoff safety outranks measurement. Bind only when the canonical V3 episode
+-- was committed by the SAME message batch that is still being processed. This
+-- prevents a pre-commit interpreter/provider failure from being misattributed to
+-- the previous episode. If causal proof is absent, leave episode_id NULL.
 create or replace function dabbir_private.bind_handoff_episode_v1()
 returns trigger
 language plpgsql
 security definer
 set search_path=''
 as $$
-declare v_episode text;
+declare v_episode text;v_batch uuid;
 begin
-  if new.episode_id is null then
-    select nullif(s.semantic_state#>>'{v3_runtime,episode_id}','') into v_episode
-    from public.dabbir_ai_conversation_state s
-    where s.business_id=new.business_id and s.conversation_id=new.conversation_id;
+  if new.episode_id is not null then return new; end if;
+
+  select nullif(s.semantic_state#>>'{v3_runtime,episode_id}',''),s.semantic_batch_id
+    into v_episode,v_batch
+  from public.dabbir_ai_conversation_state s
+  where s.business_id=new.business_id and s.conversation_id=new.conversation_id;
+
+  if v_episode is not null and v_batch is not null
+     and exists(
+       select 1
+       from public.dabbir_ai_understanding_events u
+       join public.dabbir_message_batches b
+         on b.id=u.batch_id and b.business_id=u.business_id and b.conversation_id=u.conversation_id
+       where u.business_id=new.business_id
+         and u.conversation_id=new.conversation_id
+         and u.batch_id=v_batch
+         and u.event_type='UNDERSTOOD'
+         and u.metrics->>'engine'='V3'
+         and u.episode_id=v_episode
+         and b.state='PROCESSING'
+     ) then
     new.episode_id:=v_episode;
   end if;
   return new;
