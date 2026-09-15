@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {
   configuredAutomaticRecoveryProviders,
   configuredDiagnosticDirectProviders,
+  geminiAutomaticGenerationRecoveryEnabled,
   providerRoutingReadiness,
 } from '../api/_ai-provider-readiness.js';
 
@@ -32,6 +33,27 @@ test('production readiness reports actual automatic recovery authority, not ever
   assert.equal(readiness.diagnostic_direct_provider_count, 3);
   assert.equal(readiness.configured_provider_count, 3);
   assert.equal(readiness.redundancy_ready, true);
+});
+
+test('Gateway-primary fails closed for Gemini recovery when the retirement flag is absent', () => {
+  const gatewayPrimary = {
+    VERCEL_ENV: 'production',
+    GEMINI_API_KEY: 'diagnostic-only',
+  };
+  assert.equal(geminiAutomaticGenerationRecoveryEnabled(gatewayPrimary), false);
+  assert.deepEqual(configuredDiagnosticDirectProviders(gatewayPrimary), ['google-gemini']);
+  assert.deepEqual(configuredAutomaticRecoveryProviders(gatewayPrimary), []);
+
+  const directOnly = { GEMINI_API_KEY: 'direct-only' };
+  assert.equal(geminiAutomaticGenerationRecoveryEnabled(directOnly), true);
+  assert.deepEqual(configuredAutomaticRecoveryProviders(directOnly), ['google-gemini']);
+
+  const explicitGatewayOverride = {
+    ...gatewayPrimary,
+    DABBIR_GEMINI_GENERATION_RECOVERY_ENABLED: '1',
+  };
+  assert.equal(geminiAutomaticGenerationRecoveryEnabled(explicitGatewayOverride), true);
+  assert.deepEqual(configuredAutomaticRecoveryProviders(explicitGatewayOverride), ['google-gemini']);
 });
 
 test('Gemini can remain an explicit diagnostic provider without silently rejoining automatic recovery', () => {
