@@ -1,0 +1,246 @@
+name: DABBIR Migration Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/dabbir-migration-contract.mjs'
+      - '.github/workflows/dabbir-migration-deploy.yml'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  statuses: read
+
+concurrency:
+  group: dabbir-migration-deploy-main
+  cancel-in-progress: false
+
+env:
+  DABBIR_PROJECT_REF: fphpoysqdsceniwduxjq
+  DABBIR_MIGRATION_CUTOVER_VERSION: '20260915124900'
+
+jobs:
+  deploy:
+    name: DABBIR Migration Deploy
+    if: github.repository == 'barman-systems/pilot' && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact main commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Use locked Node runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Prove merged PR and exact-head gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "push" ]]
+          [[ "$GITHUB_REPOSITORY" == "barman-systems/pilot" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ "$GITHUB_ACTOR" =~ ^[A-Za-z0-9-]+$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+
+          gh_api() {
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com$1"
+          }
+
+          prs="$(gh_api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls?per_page=100")"
+          pr="$(jq -cer --arg sha "$GITHUB_SHA" '
+            [.[] | select(.merged_at != null and .base.ref == "main" and ((.merge_commit_sha // "") | ascii_downcase) == $sha)]
+            | if length == 1 then .[0] else error("MERGED_PR_PROVENANCE_REQUIRED") end
+          ' <<<"$prs")"
+          pr_number="$(jq -er '.number' <<<"$pr")"
+          head_sha="$(jq -er '.head.sha | ascii_downcase' <<<"$pr")"
+          base_sha="$(jq -er '.base.sha | ascii_downcase' <<<"$pr")"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          commit="$(gh_api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}")"
+          parent_count="$(jq -er '.parents | length' <<<"$commit")"
+          parent_sha="$(jq -er '.parents[0].sha | ascii_downcase' <<<"$commit")"
+          [[ "$parent_count" == "1" ]] || { echo 'SQUASH_MERGE_REQUIRED' >&2; exit 61; }
+          [[ "$parent_sha" == "$base_sha" ]] || { echo 'MERGE_BASE_FRESHNESS_MISMATCH' >&2; exit 62; }
+
+          statuses="$(gh_api "/repos/${GITHUB_REPOSITORY}/commits/${head_sha}/statuses?per_page=100")"
+          latest_state() { jq -er --arg context "$1" '[.[] | select(.context == $context)][0].state // "missing"' <<<"$statuses"; }
+          [[ "$(latest_state test)" == "success" ]] || { echo 'REQUIRED_TEST_STATUS_MISSING' >&2; exit 63; }
+          [[ "$(latest_state Vercel)" == "success" ]] || { echo 'REQUIRED_VERCEL_STATUS_MISSING' >&2; exit 64; }
+
+          runs="$(gh_api "/repos/${GITHUB_REPOSITORY}/actions/runs?event=pull_request&head_sha=${head_sha}&per_page=100")"
+          require_run() {
+            local name="$1"
+            jq -e --arg name "$name" --arg head "$head_sha" '
+              [.workflow_runs[] | select(.name == $name and ((.head_sha // "") | ascii_downcase) == $head)]
+              | sort_by(.created_at)
+              | last
+              | .status == "completed" and .conclusion == "success"
+            ' <<<"$runs" >/dev/null || { echo "REQUIRED_PR_WORKFLOW_MISSING:${name}" >&2; exit 65; }
+          }
+          require_run 'DABBIR CI'
+          require_run 'DABBIR Security Gate'
+
+          printf 'MERGED_PR=%s\nHEAD_SHA=%s\nBASE_SHA=%s\n' "$pr_number" "$head_sha" "$base_sha" | tee migration-source-proof.txt
+
+      - name: Normalize existing Production database credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL:-}" || { echo 'SUPABASE_DB_URL is not configured' >&2; exit 66; }
+          canonical="$(printf '%s' "$SUPABASE_DB_URL" | sed -E "s#^(postgres(ql)?://)[^:]+:#\\1postgres.${DABBIR_PROJECT_REF}:#")"
+          [[ "$canonical" == postgres://* || "$canonical" == postgresql://* ]] || { echo 'DATABASE_URL_INVALID' >&2; exit 67; }
+          echo "::add-mask::$canonical"
+          printf 'DATABASE_URL=%s\nPGAPPNAME=dabbir-ci-migrator\n' "$canonical" >> "$GITHUB_ENV"
+
+      - name: Reject migration history mutation in this push
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          before="$BEFORE_SHA"
+          if [[ ! "$before" =~ ^[0-9a-f]{40}$ ]] || [[ "$before" =~ ^0+$ ]]; then
+            before="$(git rev-parse "${GITHUB_SHA}^")"
+          fi
+          changes="$(mktemp)"
+          git diff --name-status "$before" "$GITHUB_SHA" -- supabase/migrations/ > "$changes"
+          while IFS=$'\t' read -r status path rest; do
+            [[ -z "${status:-}" ]] && continue
+            [[ "$status" == "A" ]] || { echo "IMMUTABLE_MIGRATION_HISTORY:${status}:${path}:${rest:-}" >&2; exit 68; }
+            node scripts/dabbir-migration-contract.mjs "$path" "$DABBIR_MIGRATION_CUTOVER_VERSION" >/dev/null
+          done < "$changes"
+
+      - name: Build exact post-cutover Git manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > migration-manifest.tsv
+          count=0
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            meta="$(node scripts/dabbir-migration-contract.mjs "$file" "$DABBIR_MIGRATION_CUTOVER_VERSION")"
+            version="$(jq -er '.version' <<<"$meta")"
+            name="$(jq -er '.name' <<<"$meta")"
+            sha256="$(sha256sum "$file" | awk '{print $1}')"
+            blob="$(git hash-object "$file")"
+            idem="dabbir-ci-v1:${GITHUB_REPOSITORY}:${version}:${sha256}:${blob}"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$version" "$name" "$idem" "$sha256" "$blob" "$file" >> migration-manifest.tsv
+            count=$((count+1))
+            (( count <= 500 )) || { echo 'POST_CUTOVER_MANIFEST_TOO_LARGE' >&2; exit 69; }
+          done < <(
+            find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print \
+              | awk -F/ -v c="$DABBIR_MIGRATION_CUTOVER_VERSION" '
+                  match($NF,/^([0-9]{14})_/,m) && m[1] > c {print}
+                ' \
+              | sort
+          )
+          test -s migration-manifest.tsv || { echo 'POST_CUTOVER_MANIFEST_EMPTY' >&2; exit 70; }
+          sort -o migration-manifest.tsv migration-manifest.tsv
+          echo "manifest_count=$count"
+
+      - name: Reconcile and atomically apply missing migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          created_by="dabbir-ci-migrator:${GITHUB_ACTOR}:${GITHUB_SHA}:run:${GITHUB_RUN_ID}"
+
+          psql_query() {
+            local query="$1"
+            docker run --rm \
+              -e DATABASE_URL -e PGAPPNAME \
+              postgres:17 \
+              sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "\t" -c "$1"' sh "$query"
+          }
+
+          while IFS=$'\t' read -r version name idem sha256 blob file; do
+            existing="$(psql_query "select name,coalesce(idempotency_key,''),coalesce(encode(extensions.digest(convert_to(statements[1],'UTF8'),'sha256'),'hex'),''),coalesce(encode(extensions.digest(convert_to('blob '||octet_length(convert_to(statements[1],'UTF8'))::text,'UTF8')||decode('00','hex')||convert_to(statements[1],'UTF8'),'sha1'),'hex'),'') from supabase_migrations.schema_migrations where version='${version}'")"
+            if [[ -n "$existing" ]]; then
+              IFS=$'\t' read -r db_name db_idem db_sha db_blob <<<"$existing"
+              [[ "$db_name" == "$name" && "$db_idem" == "$idem" && "$db_sha" == "$sha256" && "$db_blob" == "$blob" ]] \
+                || { echo "UNATTESTED_OR_DRIFTED_MIGRATION_VERSION:${version}" >&2; exit 71; }
+              echo "ATTESTED_REPLAY $version $name"
+              continue
+            fi
+
+            source_b64="$(base64 -w0 "$file")"
+            apply_sql="$(mktemp)"
+            cat > "$apply_sql" <<SQL
+select pg_advisory_xact_lock(hashtextextended('DABBIR_MIGRATION:${version}',0));
+do \$guard\$
+begin
+  if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
+    raise exception 'MIGRATION_VERSION_RACE:${version}';
+  end if;
+end
+\$guard\$;
+\\i /work/${file}
+insert into supabase_migrations.schema_migrations(version,statements,name,created_by,idempotency_key,rollback)
+values(
+  '${version}',
+  array[convert_from(decode('${source_b64}','base64'),'UTF8')]::text[],
+  '${name}',
+  '${created_by}',
+  '${idem}',
+  null::text[]
+);
+SQL
+            docker run --rm \
+              -e DATABASE_URL -e PGAPPNAME \
+              -v "$PWD:/work:ro" \
+              -v "$apply_sql:/tmp/apply.sql:ro" \
+              postgres:17 \
+              sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 --single-transaction -f /tmp/apply.sql'
+            rm -f "$apply_sql"
+            echo "APPLIED $version $name"
+          done < migration-manifest.tsv
+
+      - name: Require exact Production migration drift PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cut -f1-5 migration-manifest.tsv > repo-migration-manifest.tsv
+
+          query="select version,name,coalesce(idempotency_key,''),coalesce(encode(extensions.digest(convert_to(statements[1],'UTF8'),'sha256'),'hex'),''),coalesce(encode(extensions.digest(convert_to('blob '||octet_length(convert_to(statements[1],'UTF8'))::text,'UTF8')||decode('00','hex')||convert_to(statements[1],'UTF8'),'sha1'),'hex'),''),coalesce(created_by,'') from supabase_migrations.schema_migrations where version > '${DABBIR_MIGRATION_CUTOVER_VERSION}' order by version"
+          docker run --rm \
+            -e DATABASE_URL -e PGAPPNAME \
+            -v "$PWD:/work" \
+            postgres:17 \
+            sh -c 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF "\t" -c "$1" > /work/db-migration-manifest-with-actor.tsv' sh "$query"
+
+          awk -F $'\t' 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5}' db-migration-manifest-with-actor.tsv > db-migration-manifest.tsv
+          awk -F $'\t' '$6 !~ /^dabbir-ci-migrator:[A-Za-z0-9-]+:[0-9a-f]{40}:run:[0-9]+$/ {bad=1; print "UNATTESTED_CREATED_BY:" $1 ":" $6 > "/dev/stderr"} END{exit bad}' db-migration-manifest-with-actor.tsv
+          diff -u repo-migration-manifest.tsv db-migration-manifest.tsv || { echo 'DABBIR_MIGRATION_DRIFT_DETECTED' >&2; exit 72; }
+
+          rows="$(wc -l < db-migration-manifest.tsv | tr -d ' ')"
+          printf 'state=PASS\nrepository=%s\ncommit_sha=%s\nmanifest_count=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$rows" | tee migration-drift-proof.txt
+
+      - name: Upload non-secret migration proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabbir-migration-deploy-proof
+          path: |
+            migration-source-proof.txt
+            migration-drift-proof.txt
+            repo-migration-manifest.tsv
+          if-no-files-found: warn
+          retention-days: 14
