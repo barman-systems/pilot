@@ -59,9 +59,10 @@ test('Production DB credential stays confined to recovery proof and canonical mi
     .filter(name=>fs.readFileSync(path.join(dir,name),'utf8').includes('secrets.SUPABASE_DB_URL'))
     .sort();
   assert.deepEqual(users,['dabbir-migration-deploy.yml','dabbir-recovery-proof.yml']);
+  assert.equal((workflow.match(/secrets\.SUPABASE_DB_URL/g)||[]).length,1,'deploy workflow may reference the Production DB secret exactly once');
 });
 
-test('workflow proves merged PR, fresh base and exact candidate gates before database access',()=>{
+test('workflow proves source and validates the full Git manifest before the Production secret is injected',()=>{
   must(/MERGED_PR_PROVENANCE_REQUIRED/);
   must(/SQUASH_MERGE_REQUIRED/);
   must(/MERGE_BASE_FRESHNESS_MISMATCH/);
@@ -70,8 +71,12 @@ test('workflow proves merged PR, fresh base and exact candidate gates before dat
   must(/require_run 'DABBIR CI'/);
   must(/require_run 'DABBIR Security Gate'/);
   const proof=workflow.indexOf('Prove merged PR and exact-head gates');
+  const history=workflow.indexOf('Reject migration history mutation in this push');
+  const manifest=workflow.indexOf('Build exact post-cutover Git manifest');
   const credential=workflow.indexOf('Normalize existing Production database credential');
-  assert.ok(proof>=0&&credential>proof,'source proof must precede Production credential use');
+  assert.ok(proof>=0&&history>proof&&manifest>history&&credential>manifest,'Production secret must be unavailable until source and migration manifest validation finish');
+  const preCredential=workflow.slice(0,credential);
+  assert.doesNotMatch(preCredential,/secrets\.SUPABASE_DB_URL/,'secret expression must not appear before the dedicated injection step');
 });
 
 test('post-cutover migration history is add-only and unsafe source is rejected before execution',()=>{
