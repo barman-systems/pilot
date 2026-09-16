@@ -1,61 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {_webAiCoreTest} from '../api/_dabbir-conversation-web-transport.js';
 
 const read=path=>fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const exists=path=>fs.existsSync(new URL('../'+path,import.meta.url));
 const customer=read('api/chat-customer.js');
-const webCore=read('api/_dabbir-conversation-web-transport.js');
-const whatsappCore=read('api/_dabbir-whatsapp-ai-core.js');
+const journey=read('test/ai-full-customer-journey-v2.mjs');
 const migration=read('supabase/migrations/20260916023000_dabbir_conversation_brain_channel_parity_v1.sql');
 
-test('web customer path cannot own a second reply brain',()=>{
-  assert.doesNotMatch(customer,/chat-send\.js/);
-  assert.doesNotMatch(customer,/_ai-core\.js/);
-  assert.doesNotMatch(customer,/generateDABBIRAiReply/);
-  assert.match(customer,/processClaimedWebAiBatch/);
-  assert.match(customer,/dabbir_web_ai_persist_inbound_v1/);
-  assert.match(customer,/dabbir_whatsapp_ai_claim_dispatch/);
+test('production containment restores the previously verified grounded Web customer path',()=>{
+  assert.match(customer,/from 'node:stream'/);
+  assert.match(customer,/chatSendHandler from '\.\/chat-send\.js'/);
+  assert.match(customer,/return chatSendHandler\(delegateRequest\(req,body\),res\)/);
+  assert.doesNotMatch(customer,/processClaimedWebAiBatch/);
+  assert.doesNotMatch(customer,/dabbir_web_ai_persist_inbound_v1/);
+  assert.doesNotMatch(customer,/dabbir_whatsapp_ai_claim_dispatch/);
 });
 
-test('web and WhatsApp converge on the exact same canonical conversation runtime boundary',()=>{
-  assert.match(webCore,/from '\.\/_dabbir-conversation-runtime\.js'/);
-  assert.match(webCore,/runConversationRuntimeTurn\(\{/);
-  assert.match(whatsappCore,/from '\.\/_dabbir-conversation-runtime\.js'/);
-  assert.match(whatsappCore,/runConversationRuntimeTurn\(\{/);
-  for(const forbidden of ['_dabbir-conversation-v3-interpreter.js','_dabbir-conversation-v3-brain.js','generateDABBIRAiReply']){
-    assert.equal(webCore.includes(forbidden),false,`Web transport must not own ${forbidden}`);
-  }
+test('containment keeps authentication, tenant scope, Web-only scope and human takeover intact',()=>{
+  assert.match(customer,/requireSameOrigin\(req\)/);
+  assert.match(customer,/getVerifiedUser\(token\)/);
+  assert.match(customer,/m\.business_id===businessId&&\(!m\.status\|\|m\.status==='active'\)/);
+  assert.match(customer,/conversation\.channel_type!=='web'\|\|conversation\.demo_mode===true/);
+  assert.match(customer,/conversation\.state==='human_active'/);
+  assert.match(customer,/state:'human_active'/);
 });
 
-test('web transport persists a semantic receipt instead of faking a WhatsApp receipt',async()=>{
-  const calls=[];
-  const rpc=async(name,args)=>{
-    calls.push({name,args});
-    return {provider_message_id:'90000000-0000-4000-8000-000000000001',message:{id:'90000000-0000-4000-8000-000000000001',sender_type:'ai',body:args.p_body},state:'PERSISTED'};
-  };
-  const sent=await _webAiCoreTest.deliverWith(
-    rpc,
-    {batch_id:'10000000-0000-4000-8000-000000000001',lock_token:'20000000-0000-4000-8000-000000000001',semantic_version:7},
-    {conversation:{channel_type:'web'}},
-    'رد موثق',
-    'v3-reply',
-  );
-  assert.equal(calls.length,1);
-  assert.equal(calls[0].name,'dabbir_semantic_deliver_web_v1');
-  assert.equal(calls[0].args.p_version,7);
-  assert.equal(sent.providerMessageId,'90000000-0000-4000-8000-000000000001');
-  await assert.rejects(()=>_webAiCoreTest.deliverWith(rpc,{semantic_version:7},{conversation:{channel_type:'whatsapp'}},'x','reply'),/WEB_AI_DELIVERY_CHANNEL_INVALID/);
+test('unproven Web shared-runtime adapter is removed rather than left as dead authority',()=>{
+  assert.equal(exists('api/_dabbir-conversation-web-transport.js'),false);
 });
 
-test('database contract carries the same semantic batch/version proof across Web and WhatsApp',()=>{
-  assert.match(migration,/semantic_batch_id uuid references public\.dabbir_message_batches/);
-  assert.match(migration,/semantic_version bigint/);
-  assert.match(migration,/dabbir_messages_web_semantic_delivery_uq/);
-  assert.match(migration,/c\.channel_type not in \('whatsapp','web'\)/);
+test('already-applied channel-parity migration remains append-only history, not runtime promotion authority',()=>{
+  assert.match(migration,/dabbir_ai_context/);
+  assert.match(migration,/dabbir_semantic_deliver_web_v1/);
   assert.match(migration,/semantic_presentation_verified_v1/);
-  assert.match(migration,/channel='whatsapp'/);
   assert.match(migration,/channel='web'/);
-  assert.match(migration,/SEMANTIC_EXECUTE_PRESENTATION_CONTRACT_DRIFT/);
-  assert.doesNotMatch(migration,/insert into public\.dabbir_whatsapp_outbound_reservations[\s\S]*channel='web'/i);
+  assert.doesNotMatch(customer,/dabbir_semantic_deliver_web_v1/);
+});
+
+test('exact Production journey continues to require a real AI reply and governed return-to-AI',()=>{
+  assert.match(journey,/assert\(result\.json\?\.ai_message\?\.sender_type === 'ai', 'AI_REPLY_MISSING'\)/);
+  assert.match(journey,/20_ai_resumes_after_return/);
+  assert.match(journey,/AI_RESUME_FAILED_/);
 });
